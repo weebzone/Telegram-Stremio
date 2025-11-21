@@ -4,9 +4,28 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Telegram Stremio{% endblock %}</title>
+
+    <!-- Favicons and Web Manifest -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon-16x16.png">
+    <link rel="manifest" href="/static/site.webmanifest">
+    <link rel="shortcut icon" href="/static/favicon.ico" type="image/x-icon">
+    <meta name="theme-color" content="#22223b">
+
+    <!-- Optional: Improve SEO and social sharing -->
+    <meta name="description" content="Telegram Stremio - Manage and watch media via Telegram and Stremio integration.">
+    <meta property="og:title" content="Telegram Stremio">
+    <meta property="og:description" content="Manage and watch media via Telegram and Stremio integration.">
+    <meta property="og:type" content="website">
+    <meta property="og:image" content="/static/og-image.png">
+    <meta property="og:url" content="https://yourdomain.com/">
+    <meta name="twitter:card" content="summary_large_image">
+
+    <!-- Tailwind CSS and Font Awesome -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
-    
+
     <script>
         tailwind.config = {
             theme: {
@@ -47,7 +66,6 @@
                     </div>
                     {% endif %}
                 </div>
-                
                 <div class="flex items-center space-x-4">
                     <!-- Theme Selector -->
                     <div class="relative">
@@ -61,7 +79,6 @@
                             </select>
                         </form>
                     </div>
-                    
                     {% if current_user %}
                     <div class="flex items-center space-x-4">
                         <span class="text-sm theme-text-secondary">{{ current_user }}</span>
