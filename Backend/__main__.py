@@ -23,12 +23,12 @@ async def start_services():
         
         await StreamBot.start()
         StreamBot.username = StreamBot.me.username
-        LOGGER.info(f"Bot Client : [@{StreamBot.username}]")
+        LOGGER.info(f"Bot Client : []")
         await asleep(1.2)
 
         await Helper.start()
         Helper.username = Helper.me.username
-        LOGGER.info(f"Helper Bot Client : [@{Helper.username}]")
+        LOGGER.info(f"Helper Bot Client : []")
         await asleep(1.2)
 
         LOGGER.info("Initializing Multi Clients...")
