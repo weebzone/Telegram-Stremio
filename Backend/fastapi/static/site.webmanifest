@@ -1,0 +1,28 @@
+{
+  "name": "TStremio",
+  "short_name": "TStremio",
+  "description": "Telegram Stremio - Manage and watch media via Telegram and Stremio integration.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#22223b",
+  "theme_color": "#22223b",
+  "lang": "en",
+  "icons": [
+    {
+      "src": "/static/favicon-192x192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "/static/favicon-512x512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    },
+    {
+      "src": "/static/apple-touch-icon.png",
+      "type": "image/png",
+      "sizes": "180x180"
+    }
+  ]
+}

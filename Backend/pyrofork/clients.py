@@ -29,7 +29,7 @@ async def start_client(client_id, token):
             bot_token=token,
             sleep_threshold=100,
             no_updates=True,
-            in_memory=True
+            in_memory=False
         ).start()
         work_loads[client_id] = 0
         return client_id, client
