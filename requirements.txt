@@ -3,7 +3,8 @@ fastapi
 httpx
 motor
 parse-torrent-title
-pyrofork
+#pyrofork
+pyrotgfork
 python-dotenv
 pytz
 tgcrypto
