@@ -65,6 +65,12 @@ async def delete_message(chat_id: int, msg_id: int):
             
         except MessageDeleteForbidden:
             LOGGER.warning(f"Client {client.name} has NO PERMISSION (403) to delete in {chat_id}. Retrying with next client...")
+            try:
+                member_status = await client.get_chat_member(chat_id, "me")
+                LOGGER.warning(f"DEBUG: Client {client.name} Status in {chat_id}: {member_status.status}, Privileges: {member_status.privileges}")
+            except Exception as e:
+                LOGGER.warning(f"DEBUG: Could not fetch chat member status for {client.name}: {e}")
+            
             continue # Try next client
             
         except Exception as e:
