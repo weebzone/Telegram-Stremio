@@ -1,5 +1,5 @@
 from asyncio import sleep
-from pyrogram.errors import FloodWait
+from pyrogram.errors import FloodWait, MessageDeleteForbidden
 from Backend.logger import LOGGER
 from Backend.pyrofork.bot import Helper, multi_clients
 from itertools import cycle
@@ -50,7 +50,7 @@ async def delete_message(chat_id: int, msg_id: int):
         await sleep(2)
         LOGGER.info(f"Deleted message {msg_id} in {chat_id} using Client: {client.name}")
     except FloodWait as e:
-        LOGGER.warning(f"FloodWait for {e.value} seconds while deleting message {msg_id} in {chat_id}")
+        LOGGER.warning(f"FloodWait for {e.value} seconds while deleting message {msg_id} in {chat_id} using Client: {client.name}")
         await sleep(e.value)
     except Exception as e:
-        LOGGER.error(f"Error while deleting message {msg_id} in {chat_id}: {e}")
+        LOGGER.error(f"Error while deleting message {msg_id} in {chat_id} using Client: {client.name}: {e}")
