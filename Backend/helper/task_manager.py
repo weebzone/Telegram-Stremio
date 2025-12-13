@@ -1,7 +1,8 @@
 from asyncio import sleep
 from pyrogram.errors import FloodWait
 from Backend.logger import LOGGER
-from Backend.pyrofork.bot import Helper
+from Backend.pyrofork.bot import Helper, multi_clients
+from itertools import cycle
 
 async def edit_message(chat_id: int, msg_id: int, new_caption: str):
     try:
@@ -16,8 +17,6 @@ async def edit_message(chat_id: int, msg_id: int, new_caption: str):
         await sleep(e.value)
     except Exception as e:
         LOGGER.error(f"Error while editing message {msg_id} in {chat_id}: {e}")
-
-from itertools import cycle
 
 _client_cycle = None
 
