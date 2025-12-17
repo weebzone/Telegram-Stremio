@@ -13,8 +13,25 @@ async def update_server(background_tasks: BackgroundTasks, current_user: str = D
     Pull latest changes from git and restart.
     """
     try:
-        # Run git pull
-        process = subprocess.run(["git", "pull"], capture_output=True, text=True)
+        # Get current branch name
+        branch_process = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"], 
+            capture_output=True, 
+            text=True
+        )
+        
+        if branch_process.returncode != 0:
+            raise HTTPException(status_code=500, detail="Failed to detect current branch")
+        
+        current_branch = branch_process.stdout.strip()
+        
+        # Run git pull with explicit remote and branch
+        process = subprocess.run(
+            ["git", "pull", "origin", current_branch], 
+            capture_output=True, 
+            text=True
+        )
+        
         if process.returncode != 0:
             raise HTTPException(status_code=500, detail=f"Git pull failed: {process.stderr}")
         

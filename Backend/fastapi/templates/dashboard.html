@@ -635,6 +635,9 @@
                         }
                     });
                 }
+
+                // Update Bot Workloads
+                await updateBotWorkloads();
             }
         } catch (error) {
             console.error("Failed to refresh system stats:", error);
