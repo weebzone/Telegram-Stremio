@@ -143,7 +143,7 @@ async def get_system_stats(_: bool = Depends(require_auth)):
     return await get_system_stats_api()
 
 
-@app.include_router(admin_router, prefix="/api/admin", tags=["admin"])
+app.include_router(admin_router, prefix="/api/admin", tags=["admin"])
 
 
 @app.exception_handler(401)
