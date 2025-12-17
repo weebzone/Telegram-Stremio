@@ -13,7 +13,10 @@ from Backend.fastapi.routes.template_routes import (
     media_management_page, edit_media_page, public_status_page, stremio_guide_page
 )
 from Backend.fastapi.routes.api_routes import (
-    list_media_api, delete_media_api, update_media_api,
+    list_media_api, delete_media_api, update_media_api
+)
+from Backend.fastapi.routes.admin_routes import (
+    router as admin_router,
     delete_movie_quality_api, delete_tv_quality_api,
     delete_tv_episode_api, delete_tv_season_api,
     create_token_api, revoke_token_api, update_token_limits_api
@@ -140,6 +143,9 @@ async def get_bot_status(_: bool = Depends(require_auth)):
 async def get_system_stats(_: bool = Depends(require_auth)):
     from Backend.fastapi.routes.api_routes import get_system_stats_api
     return await get_system_stats_api()
+
+
+@app.include_router(admin_router, prefix="/api/admin", tags=["admin"])
 
 
 @app.exception_handler(401)

@@ -109,7 +109,7 @@
 
 <!-- Database Statistics Section -->
 <div class="mb-12">
-    <h2 class="text-2xl font-bold mb-6">Database Overview</h2>
+    <h2 class="text-2xl font-bold mb-6 text-center">Database Overview</h2>
     <div class="flex flex-wrap justify-center gap-6">
         {% if system_stats.databases %}
         {% for db_stat in system_stats.databases %}
@@ -152,6 +152,54 @@
             </div>
         </div>
         {% endfor %}
+
+        <!-- Admin Operations Card -->
+        <div class="theme-card rounded-xl p-6 shadow-xl w-full md:w-96">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-semibold">Admin Operations</h3>
+                <div class="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center text-red-600">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                </div>
+            </div>
+
+            <div class="space-y-3">
+                <button onclick="confirmAdminAction('update')"
+                    class="w-full text-left px-4 py-3 rounded-lg hover:bg-gray-50 text-sm font-medium text-gray-700 flex items-center transition-colors border border-transparent hover:border-gray-200">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 mr-3 text-blue-500" fill="none"
+                        viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                    </svg>
+                    Pull Updates
+                </button>
+
+                <button onclick="confirmAdminAction('restart')"
+                    class="w-full text-left px-4 py-3 rounded-lg hover:bg-gray-50 text-sm font-medium text-gray-700 flex items-center transition-colors border border-transparent hover:border-gray-200">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 mr-3 text-orange-500" fill="none"
+                        viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Restart Server
+                </button>
+
+                <button onclick="confirmAdminAction('fixmetadata')"
+                    class="w-full text-left px-4 py-3 rounded-lg hover:bg-gray-50 text-sm font-medium text-gray-700 flex items-center transition-colors border border-transparent hover:border-gray-200">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 mr-3 text-purple-500" fill="none"
+                        viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                    Fix Metadata
+                </button>
+            </div>
+        </div>
         {% else %}
         <div class="col-span-full text-center theme-text-secondary py-8">No database statistics available</div>
         {% endif %}
@@ -160,7 +208,7 @@
 
 <!-- Media Management Section -->
 <div class="mb-12">
-    <h2 class="text-2xl font-bold mb-6">Media Management</h2>
+    <h2 class="text-2xl font-bold mb-6 text-center">Media Management</h2>
     <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
         <a href="/media/manage?media_type=movie"
             class="block theme-card rounded-xl p-8 shadow-xl hover:shadow-2xl transition-all group">
@@ -685,5 +733,42 @@
             el.textContent = formatBytes(el.getAttribute('data-bytes'));
         });
     });
+</script>
+<script>
+    async function confirmAdminAction(action) {
+        let message = "";
+        let endpoint = "";
+
+        if (action === 'update') {
+            message = "Are you sure you want to pull the latest updates from Git? This will restart the server.";
+            endpoint = "/api/admin/update";
+        } else if (action === 'restart') {
+            message = "Are you sure you want to restart the server? Provide 5-10 seconds for it to come back online.";
+            endpoint = "/api/admin/restart";
+        } else if (action === 'fixmetadata') {
+            message = "Are you sure you want to run the Metadata Fixer? this runs in background.";
+            endpoint = "/api/admin/fixmetadata";
+        }
+
+        if (!confirm(message)) return;
+
+        try {
+            const response = await fetch(endpoint, { method: 'POST' });
+            if (response.ok) {
+                const data = await response.json();
+                showToast(data.message || 'Action initiated successfully');
+                if (action === 'update' || action === 'restart') {
+                    // Show a loading/reconnecting message? For now just reload
+                    setTimeout(() => window.location.reload(), 5000);
+                }
+            } else {
+                const data = await response.json();
+                showToast("Error: " + (data.detail || 'Action failed'));
+            }
+        } catch (error) {
+            console.error(error);
+            showToast("Failed to execute action");
+        }
+    }
 </script>
 {% endblock %}
