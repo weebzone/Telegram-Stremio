@@ -99,11 +99,7 @@ def get_resolution_priority(stream_name: str) -> int:
 
 
 # --- Dependencies ---
-async def verify_token(token: str):
-    token_data = await db.get_api_token(token)
-    if not token_data:
-        raise HTTPException(status_code=401, detail="Invalid or expired API token")
-    return token_data
+from Backend.fastapi.security.tokens import verify_token
 
 # --- Routes ---
 @router.get("/{token}/manifest.json")
@@ -313,7 +309,7 @@ async def get_streams(token: str, media_type: str, id: str, token_data: dict = D
             streams.append({
                 "name": stream_name,
                 "title": stream_title,
-                "url": f"{BASE_URL}/dl/{quality.get('id')}/video.mkv"
+                "url": f"{BASE_URL}/dl/{token}/{quality.get('id')}/video.mkv"
             })
 
     streams.sort(key=lambda s: get_resolution_priority(s.get("name", "")), reverse=True)

@@ -2,13 +2,14 @@ import math
 import secrets
 import mimetypes
 from typing import Tuple
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, Request, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 
 from Backend.helper.encrypt import decode_string
 from Backend.helper.exceptions import InvalidHash
 from Backend.helper.custom_dl import ByteStreamer
 from Backend.pyrofork.bot import StreamBot, work_loads, multi_clients
+from Backend.fastapi.security.tokens import verify_token
 
 router = APIRouter(tags=["Streaming"])
 class_cache = {}
@@ -35,9 +36,9 @@ def parse_range_header(range_header: str, file_size: int) -> Tuple[int, int]:
     return from_bytes, until_bytes
 
 
-@router.get("/dl/{id}/{name}")
-@router.head("/dl/{id}/{name}")
-async def stream_handler(request: Request, id: str, name: str):
+@router.get("/dl/{token}/{id}/{name}")
+@router.head("/dl/{token}/{id}/{name}")
+async def stream_handler(request: Request, token: str, id: str, name: str, token_data: dict = Depends(verify_token)):
     decoded_data = await decode_string(id)
     if not decoded_data.get("msg_id"):
         raise HTTPException(status_code=400, detail="Missing id")
