@@ -74,8 +74,6 @@
                 <div class="theme-card rounded-xl p-6 shadow-xl relative overflow-hidden">
                     <div class="flex items-center justify-between mb-4">
                         <h3 class="text-2xl font-semibold">Bot Workloads</h3>
-                        <span class="text-xs theme-text-secondary bg-gray-100 rounded-full px-2 py-1">Auto-updates every
-                            10s</span>
                     </div>
 
                     <div id="workload-content" class="space-y-3 max-h-80 overflow-y-auto pr-2 custom-scrollbar">
@@ -112,10 +110,10 @@
 <!-- Database Statistics Section -->
 <div class="mb-12">
     <h2 class="text-2xl font-bold mb-6">Database Overview</h2>
-    <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+    <div class="flex flex-wrap justify-center gap-6">
         {% if system_stats.databases %}
         {% for db_stat in system_stats.databases %}
-        <div class="theme-card rounded-xl p-6 shadow-xl">
+        <div class="theme-card rounded-xl p-6 shadow-xl w-full md:w-96">
             <div class="flex items-center justify-between mb-4">
                 <h3 class="text-lg font-semibold">{{ db_stat.db_name.replace("storage_", "Database ") }}</h3>
                 <div
@@ -461,7 +459,7 @@
 
     // Update immediately and then every 10s
     updateBotWorkloads();
-    setInterval(updateBotWorkloads, 10000);
+    setInterval(updateBotWorkloads, 120000);
 </script>
 
 <script>
@@ -575,8 +573,8 @@
         }
     }
 
-    // Auto-refresh every 60 seconds
-    setInterval(refreshSystemStats, 60000);
+    // Auto-refresh every 2 minutes
+    setInterval(refreshSystemStats, 120000);
 </script>
 <script>
     async function createToken(event) {
