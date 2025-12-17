@@ -108,8 +108,8 @@
 </div>
 
 <!-- Database Statistics Section -->
-<div class="mb-8">
-    <h2 class="text-2xl font-bold mb-6 text-center">Database Overview</h2>
+<div class="mb-8 mt-4">
+    <h2 class="text-2xl font-bold mb-6 text-center">Database and Commands</h2>
     <div class="grid lg:grid-cols-2 gap-8">
         {% if system_stats.databases %}
         {% for db_stat in system_stats.databases %}
@@ -159,7 +159,8 @@
         <div class="theme-card rounded-xl p-8 shadow-xl w-full flex flex-col h-full">
             <div class="flex items-center justify-between mb-6">
                 <h3 class="text-xl font-semibold">Admin Operations</h3>
-                <div class="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center text-red-600">
+                <div
+                    class="w-12 h-12 theme-primary rounded-lg flex items-center justify-center bg-opacity-20 text-primary">
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24"
                         stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
