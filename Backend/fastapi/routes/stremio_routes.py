@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from typing import Optional
 from urllib.parse import unquote
 from Backend.config import Telegram
@@ -97,9 +97,17 @@ def get_resolution_priority(stream_name: str) -> int:
     return 1
 
 
+
+# --- Dependencies ---
+async def verify_token(token: str):
+    token_data = await db.get_api_token(token)
+    if not token_data:
+        raise HTTPException(status_code=401, detail="Invalid or expired API token")
+    return token_data
+
 # --- Routes ---
-@router.get("/manifest.json")
-async def get_manifest():
+@router.get("/{token}/manifest.json")
+async def get_manifest(token: str, token_data: dict = Depends(verify_token)):
     return {
         "id": "telegram.media",
         "version": ADDON_VERSION,
@@ -160,9 +168,9 @@ async def get_manifest():
     }
 
 
-@router.get("/catalog/{media_type}/{id}/{extra:path}.json")
-@router.get("/catalog/{media_type}/{id}.json")
-async def get_catalog(media_type: str, id: str, extra: Optional[str] = None):
+@router.get("/{token}/catalog/{media_type}/{id}/{extra:path}.json")
+@router.get("/{token}/catalog/{media_type}/{id}.json")
+async def get_catalog(token: str, media_type: str, id: str, extra: Optional[str] = None, token_data: dict = Depends(verify_token)):
     if media_type not in ["movie", "series"]:
         raise HTTPException(status_code=404, detail="Invalid catalog type")
 
@@ -212,8 +220,8 @@ async def get_catalog(media_type: str, id: str, extra: Optional[str] = None):
     return {"metas": metas}
 
 
-@router.get("/meta/{media_type}/{id}.json")
-async def get_meta(media_type: str, id: str):
+@router.get("/{token}/meta/{media_type}/{id}.json")
+async def get_meta(token: str, media_type: str, id: str, token_data: dict = Depends(verify_token)):
     try:
         tmdb_id_str, db_index_str = id.split("-")
         tmdb_id, db_index = int(tmdb_id_str), int(db_index_str)
@@ -270,8 +278,8 @@ async def get_meta(media_type: str, id: str):
     return {"meta": meta_obj}
 
 
-@router.get("/stream/{media_type}/{id}.json")
-async def get_streams(media_type: str, id: str):
+@router.get("/{token}/stream/{media_type}/{id}.json")
+async def get_streams(token: str, media_type: str, id: str, token_data: dict = Depends(verify_token)):
     try:
         parts = id.split(":")
         base_id = parts[0]

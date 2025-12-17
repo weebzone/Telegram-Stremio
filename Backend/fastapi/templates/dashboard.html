@@ -182,57 +182,127 @@
             </div>
         </div>
 
-        <!-- Stremio Addon Section -->
+        <!-- Access Management Section -->
         <div class="theme-card rounded-xl p-8 shadow-xl">
             <div class="text-center mb-8">
                 <div class="w-16 h-16 theme-primary rounded-full flex items-center justify-center mx-auto mb-4 bg-opacity-20 text-primary">
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="white">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11.536 16.464l-4.786 1.768a3 3 0 01-3.951-3.951l1.768-4.786L14.464 11.536A6 6 0 0121 9z"></path>
                     </svg>
                 </div>
-                <h3 class="text-2xl font-bold mb-2">Stremio Addon</h3>
-                <p class="theme-text-secondary">Install the addon to access media content through Stremio</p>
+                <h3 class="text-2xl font-bold mb-2">Access Management</h3>
+                <p class="theme-text-secondary">Manage API tokens for Stremio addon access</p>
             </div>
 
-            <!-- Installation Section -->
-            <div class="bg-gray-50 rounded-lg p-6 mb-6">
-                <h4 class="text-lg font-semibold mb-4">Installation Instructions</h4>
-                <div class="space-y-3 theme-text-secondary">
-                    <div class="flex items-start space-x-3">
-                        <div class="w-6 h-6 theme-primary rounded-full flex items-center justify-center text-white text-sm font-semibold mt-0.5">1</div>
-                        <p>Copy the manifest URL below</p>
-                    </div>
-                    <div class="flex items-start space-x-3">
-                        <div class="w-6 h-6 theme-primary rounded-full flex items-center justify-center text-white text-sm font-semibold mt-0.5">2</div>
-                        <p>Open Stremio and go to Addons section</p>
-                    </div>
-                    <div class="flex items-start space-x-3">
-                        <div class="w-6 h-6 theme-primary rounded-full flex items-center justify-center text-white text-sm font-semibold mt-0.5">3</div>
-                        <p>Paste the URL in "Add Addon" field and install</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Manifest URL -->
-            <div class="bg-gray-50 rounded-lg p-4">
-                <label class="block text-sm font-medium theme-text-secondary mb-2">Manifest URL</label>
-                <div class="flex">
-                    <input 
-                        type="text" 
-                        value="{{ (request.base_url|string).replace('http:', 'https:') }}stremio/manifest.json" 
-                        readonly 
-                        id="manifest-url"
-                        class="flex-1 theme-card border border-gray-300 rounded-l-lg px-4 py-3 font-mono text-sm focus:outline-none focus:border-primary"
-                    />
-                    <button 
-                        onclick="copyToClipboard()"
-                        class="theme-primary text-white px-6 py-3 rounded-r-lg font-semibold hover:opacity-90 transition-colors duration-200"
-                    >
-                        Copy
+            <!-- Create Token Form -->
+            <div class="mb-8">
+                <form onsubmit="createToken(event)" class="flex gap-4">
+                    <input type="text" id="token-name" placeholder="Enter token name (e.g., Family iPad)" required
+                        class="flex-1 theme-card border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:border-primary">
+                    <button type="submit" 
+                        class="theme-primary text-white px-6 py-3 rounded-lg font-semibold hover:opacity-90 transition-colors duration-200 flex items-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+                        </svg>
+                        Create Token
                     </button>
-                </div>
+                </form>
+            </div>
+
+            <!-- Token List -->
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="border-b border-gray-200">
+                            <th class="py-4 px-4 font-semibold theme-text-secondary">Name</th>
+                            <th class="py-4 px-4 font-semibold theme-text-secondary">Manifest URL</th>
+                            <th class="py-4 px-4 font-semibold theme-text-secondary">Created</th>
+                            <th class="py-4 px-4 font-semibold theme-text-secondary text-right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for token in api_tokens %}
+                        <tr class="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                            <td class="py-4 px-4 font-medium">{{ token.name }}</td>
+                            <td class="py-4 px-4">
+                                <div class="flex items-center space-x-2">
+                                    <code class="text-sm bg-gray-100 px-2 py-1 rounded theme-text-secondary">.../stremio/{{ token.token }}/manifest.json</code>
+                                    <button onclick="copyUrl('{{ (request.base_url|string).replace('http:', 'https:') }}stremio/{{ token.token }}/manifest.json')" 
+                                        class="text-primary hover:text-opacity-80 p-1" title="Copy URL">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/>
+                                        </svg>
+                                    </button>
+                                </div>
+                            </td>
+                            <td class="py-4 px-4 theme-text-secondary text-sm">{{ token.created_at.strftime('%Y-%m-%d') }}</td>
+                            <td class="py-4 px-4 text-right">
+                                <button onclick="revokeToken('{{ token.token }}')" 
+                                    class="text-red-500 hover:text-red-700 font-medium text-sm px-3 py-1 rounded border border-red-200 hover:bg-red-50 transition-colors">
+                                    Revoke
+                                </button>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="4" class="py-8 text-center theme-text-secondary">No tokens found. Create one to get started.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
             </div>
         </div>
+
+<script>
+async function createToken(event) {
+    event.preventDefault();
+    const nameInput = document.getElementById('token-name');
+    const name = nameInput.value;
+    
+    try {
+        const response = await fetch('/api/tokens', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({name: name})
+        });
+        
+        if (response.ok) {
+            showToast('Token created successfully!');
+            setTimeout(() => window.location.reload(), 1000);
+        } else {
+            const data = await response.json();
+            showToast('Error: ' + data.detail);
+        }
+    } catch (error) {
+        showToast('Error creating token');
+    }
+}
+
+async function revokeToken(token) {
+    if (!confirm('Are you sure you want to revoke this token? The user will lose access immediately.')) return;
+    
+    try {
+        const response = await fetch('/api/tokens/' + token, {
+            method: 'DELETE'
+        });
+        
+        if (response.ok) {
+            showToast('Token revoked successfully!');
+            setTimeout(() => window.location.reload(), 1000);
+        } else {
+            showToast('Error revoking token');
+        }
+    } catch (error) {
+        showToast('Error revoking token');
+    }
+}
+
+function copyUrl(url) {
+    navigator.clipboard.writeText(url).then(function() {
+        showToast('Manifest URL copied to clipboard!');
+    });
+}
+</script>
     </main>
 </div>
 

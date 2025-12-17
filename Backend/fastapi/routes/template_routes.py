@@ -96,13 +96,17 @@ async def dashboard_page(request: Request, _: bool = Depends(require_auth)):
             "current_db_index": 1
         }
     
+
+    api_tokens = await db.get_all_api_tokens()
+
     return templates.TemplateResponse("dashboard.html", {
         "request": request,
         "theme": theme,
         "themes": get_all_themes(),
         "current_theme": theme_name,
         "current_user": current_user,
-        "system_stats": system_stats
+        "system_stats": system_stats,
+        "api_tokens": api_tokens
     })
     
 

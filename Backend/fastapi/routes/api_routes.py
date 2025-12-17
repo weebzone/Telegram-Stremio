@@ -162,3 +162,26 @@ async def delete_tv_season_api(tmdb_id: int, db_index: int, season: int):
             raise HTTPException(status_code=404, detail="Season not found")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# --- Token Management Routes ---
+
+async def create_token_api(name: dict):
+    try:
+        token_name = name.get("name")
+        if not token_name:
+             raise HTTPException(status_code=400, detail="Token name is required")
+        
+        new_token = await db.add_api_token(token_name)
+        return new_token
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+async def revoke_token_api(token: str):
+    try:
+        result = await db.revoke_api_token(token)
+        if result:
+            return {"message": "Token revoked successfully"}
+        else:
+            raise HTTPException(status_code=404, detail="Token not found")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

@@ -12,6 +12,8 @@ import re
 from Backend.helper.encrypt import decode_string, encode_string
 from Backend.helper.modal import Episode, MovieSchema, QualityDetail, Season, TVShowSchema
 from Backend.helper.task_manager import delete_message
+import secrets
+import string
 
 
 def convert_objectid_to_str(document: Dict[str, Any]) -> Dict[str, Any]:
@@ -800,17 +802,47 @@ class Database:
                                 create_task(delete_message(chat_id, msg_id))
                         except Exception as e:
                             LOGGER.error(f"Failed to queue file for deletion: {e}")
-                break
+            
+            result = await self.dbs[db_key]["tv"].delete_one({"tmdb_id": tmdb_id})
         
-        original_len = len(tv["seasons"])
-        tv["seasons"] = [s for s in tv["seasons"] if s.get("season_number") != season_number]
+        if result.deleted_count > 0:
+            LOGGER.info(f"Deleted season {season_number} of TV show {tmdb_id}.")
+            return True
+        return False
+
+    # -------------------------------
+    # API Token Methods
+    # -------------------------------
+
+    async def add_api_token(self, name: str) -> dict:
+        """Generates a random alphanumeric token (min 20 chars) and saves it."""
+        alphabet = string.ascii_letters + string.digits
+        token = ''.join(secrets.choice(alphabet) for _ in range(32))  # 32 chars > 20 chars
         
-        if len(tv["seasons"]) == original_len:
-            return False
+        token_doc = {
+            "name": name,
+            "token": token,
+            "created_at": datetime.utcnow()
+        }
         
-        tv['updated_on'] = datetime.utcnow()
-        result = await self.dbs[db_key]["tv"].replace_one({"tmdb_id": tmdb_id}, tv)
-        return result.modified_count > 0
+        await self.dbs["tracking"]["api_tokens"].insert_one(token_doc)
+        return convert_objectid_to_str(token_doc)
+
+    async def get_api_token(self, token: str) -> Optional[dict]:
+        """Retrieves token data."""
+        doc = await self.dbs["tracking"]["api_tokens"].find_one({"token": token})
+        return convert_objectid_to_str(doc) if doc else None
+
+    async def get_all_api_tokens(self) -> List[dict]:
+        """Lists all tokens."""
+        cursor = self.dbs["tracking"]["api_tokens"].find().sort("created_at", DESCENDING)
+        tokens = await cursor.to_list(None)
+        return [convert_objectid_to_str(token) for token in tokens]
+
+    async def revoke_api_token(self, token: str) -> bool:
+        """Deletes a token."""
+        result = await self.dbs["tracking"]["api_tokens"].delete_one({"token": token})
+        return result.deleted_count > 0
 
     async def delete_tv_quality(self, tmdb_id: int, db_index: int, season_number: int, episode_number: int, quality: str) -> bool:
         db_key = f"storage_{db_index}"
