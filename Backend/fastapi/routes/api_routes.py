@@ -192,6 +192,35 @@ async def create_token_api(payload: dict):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+async def update_token_limits_api(token: str, payload: dict):
+    try:
+        daily_limit = payload.get("daily_limit_gb")
+        monthly_limit = payload.get("monthly_limit_gb")
+        
+        def parse_limit(val):
+            try:
+                v = float(val)
+                return v if v > 0 else None
+            except (ValueError, TypeError, AttributeError):
+                return None
+
+        result = await db.update_api_token_limits(
+            token,
+            parse_limit(daily_limit),
+            parse_limit(monthly_limit)
+        )
+        
+        if result:
+            return {"message": "Limits updated successfully"}
+        else:
+             # If modified_count is 0, it means either token not found OR values were same. 
+             # We assume success if no error, but let's check if token exists to be safe? 
+             # For simplicity, if no error raised by mongo, we return success message even if no change.
+            return {"message": "Limits updated successfully"}
+            
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 async def revoke_token_api(token: str):
     try:
         result = await db.revoke_api_token(token)

@@ -246,18 +246,18 @@
                     <div class="w-full md:w-32">
                         <label class="block text-sm font-medium theme-text-secondary mb-1">Daily Limit</label>
                         <div class="relative">
-                            <input type="number" id="daily-limit" placeholder="GB" step="0.1" min="0"
-                                class="w-full theme-card border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:border-primary">
-                            <span class="absolute right-3 top-3 text-gray-400 text-sm">GB</span>
+                            <input type="number" id="daily-limit" placeholder="0" step="0.1" min="0"
+                                class="w-full theme-card border border-gray-300 rounded-lg pl-4 pr-12 py-3 focus:outline-none focus:border-primary">
+                            <span class="absolute right-8 top-3 text-gray-400 text-sm pointer-events-none">GB</span>
                         </div>
                     </div>
 
                     <div class="w-full md:w-32">
                         <label class="block text-sm font-medium theme-text-secondary mb-1">Monthly Limit</label>
                         <div class="relative">
-                            <input type="number" id="monthly-limit" placeholder="GB" step="0.1" min="0"
-                                class="w-full theme-card border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:border-primary">
-                            <span class="absolute right-3 top-3 text-gray-400 text-sm">GB</span>
+                            <input type="number" id="monthly-limit" placeholder="0" step="0.1" min="0"
+                                class="w-full theme-card border border-gray-300 rounded-lg pl-4 pr-12 py-3 focus:outline-none focus:border-primary">
+                            <span class="absolute right-8 top-3 text-gray-400 text-sm pointer-events-none">GB</span>
                         </div>
                     </div>
 
@@ -314,11 +314,15 @@
                                         viewBox="0 0 24 24" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                             d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
-                                    </svg>
-                                    <span class="text-sm underline">Copy Link</span>
+                                        <span class="text-sm underline">Copy Link</span>
                                 </button>
                             </td>
                             <td class="py-4 px-4 text-right">
+                                <button
+                                    onclick="openEditModal('{{ token.token }}', '{{ token.limits.daily_limit_gb|default(0) }}', '{{ token.limits.monthly_limit_gb|default(0) }}')"
+                                    class="text-blue-500 hover:text-blue-700 font-medium text-sm px-3 py-1 mr-2 rounded border border-blue-200 hover:bg-blue-50 transition-colors">
+                                    Edit
+                                </button>
                                 <button onclick="revokeToken('{{ token.token }}')"
                                     class="text-red-500 hover:text-red-700 font-medium text-sm px-3 py-1 rounded border border-red-200 hover:bg-red-50 transition-colors">
                                     Revoke
@@ -336,7 +340,81 @@
             </div>
         </div>
 
+        <!-- Edit Limit Modal -->
+        <div id="edit-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
+            <div class="bg-white rounded-lg p-6 w-full max-w-md shadow-xl transform transition-all">
+                <h3 class="text-lg font-bold mb-4 theme-text-primary">Edit Token Limits</h3>
+                <input type="hidden" id="edit-token-id">
+
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium theme-text-secondary mb-1">Daily Limit (GB)</label>
+                        <input type="number" id="edit-daily" placeholder="0 for unlimited" step="0.1" min="0"
+                            class="w-full theme-card border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:border-primary">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium theme-text-secondary mb-1">Monthly Limit (GB)</label>
+                        <input type="number" id="edit-monthly" placeholder="0 for unlimited" step="0.1" min="0"
+                            class="w-full theme-card border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:border-primary">
+                    </div>
+                </div>
+
+                <div class="mt-6 flex justify-end space-x-3">
+                    <button onclick="closeEditModal()"
+                        class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">Cancel</button>
+                    <button onclick="saveTokenLimits()"
+                        class="px-4 py-2 theme-primary text-white rounded-lg hover:opacity-90 transition-colors">Save
+                        Changes</button>
+                </div>
+            </div>
+        </div>
+
         <script>
+            let currentEditToken = null;
+
+            function openEditModal(token, daily, monthly) {
+                currentEditToken = token;
+                document.getElementById('edit-token-id').value = token;
+                document.getElementById('edit-daily').value = daily == 'None' ? 0 : daily;
+                document.getElementById('edit-monthly').value = monthly == 'None' ? 0 : monthly;
+
+                document.getElementById('edit-modal').classList.remove('hidden');
+            }
+
+            function closeEditModal() {
+                document.getElementById('edit-modal').classList.add('hidden');
+                currentEditToken = null;
+            }
+
+            async function saveTokenLimits() {
+                if (!currentEditToken) return;
+
+                const daily = document.getElementById('edit-daily').value;
+                const monthly = document.getElementById('edit-monthly').value;
+
+                try {
+                    const response = await fetch('/api/tokens/' + currentEditToken, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            daily_limit_gb: daily,
+                            monthly_limit_gb: monthly
+                        })
+                    });
+
+                    if (response.ok) {
+                        showToast('Limits updated successfully');
+                        setTimeout(() => window.location.reload(), 1000);
+                    } else {
+                        const data = await response.json();
+                        showToast('Error: ' + data.detail);
+                    }
+                } catch (e) {
+                    showToast('Error updating limits');
+                }
+                closeEditModal();
+            }
+
             async function createToken(event) {
                 event.preventDefault();
                 const nameInput = document.getElementById('token-name');

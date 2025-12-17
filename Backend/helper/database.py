@@ -892,6 +892,19 @@ class Database:
             }
         )
 
+    async def update_api_token_limits(self, token: str, daily_limit_gb: float, monthly_limit_gb: float) -> bool:
+        """Updates the bandwidth limits for an existing token."""
+        result = await self.dbs["tracking"]["api_tokens"].update_one(
+            {"token": token},
+            {"$set": {
+                "limits": {
+                    "daily_limit_gb": daily_limit_gb if daily_limit_gb else 0,
+                    "monthly_limit_gb": monthly_limit_gb if monthly_limit_gb else 0
+                }
+            }}
+        )
+        return result.modified_count > 0
+
     async def delete_tv_quality(self, tmdb_id: int, db_index: int, season_number: int, episode_number: int, quality: str) -> bool:
         db_key = f"storage_{db_index}"
         tv = await self.dbs[db_key]["tv"].find_one({"tmdb_id": tmdb_id})

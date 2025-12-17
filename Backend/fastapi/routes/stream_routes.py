@@ -54,7 +54,8 @@ async def stream_handler(request: Request, token: str, id: str, name: str, token
         request,
         chat_id=int(chat_id),
         id=int(decoded_data["msg_id"]),
-        secure_hash=file_hash
+        secure_hash=file_hash,
+        token_data=token_data
     )
 
 
@@ -63,6 +64,7 @@ async def media_streamer(
     chat_id: int,
     id: int,
     secure_hash: str,
+    token_data: dict = None
 ) -> StreamingResponse:
     range_header = request.headers.get("Range", "")
     index = min(work_loads, key=work_loads.get)
@@ -92,11 +94,45 @@ async def media_streamer(
     async def stream_generator(file_stream, token):
         start_time = time.time()
         byte_count = 0
-        update_interval = 120  # 2 minutes
+        update_interval = 60  # 1 minute
+
+        # Extract limits
+        limits = token_data.get("limits", {}) if token_data else {}
+        usage = token_data.get("usage", {}) if token_data else {}
+        
+        daily_limit_gb = limits.get("daily_limit_gb")
+        monthly_limit_gb = limits.get("monthly_limit_gb")
+        
+        # Initial usage (Bytes)
+        initial_daily_bytes = usage.get("daily", {}).get("bytes", 0)
+        initial_monthly_bytes = usage.get("monthly", {}).get("bytes", 0)
+        
+        # Session accumulator for limit checking
+        session_total = 0
 
         async for chunk in file_stream:
+            chunk_len = len(chunk)
+            byte_count += chunk_len
+            session_total += chunk_len
+            
+            # Check Limits (Enforce loop)
+            if daily_limit_gb and daily_limit_gb > 0:
+                current_daily_gb = (initial_daily_bytes + session_total) / (1024**3)
+                if current_daily_gb >= daily_limit_gb:
+                    # Update DB before killing
+                    if byte_count > 0:
+                        await db.update_token_usage(token, byte_count)
+                    # Stop stream
+                    return
+
+            if monthly_limit_gb and monthly_limit_gb > 0:
+                current_monthly_gb = (initial_monthly_bytes + session_total) / (1024**3)
+                if current_monthly_gb >= monthly_limit_gb:
+                    if byte_count > 0:
+                        await db.update_token_usage(token, byte_count)
+                    return
+
             yield chunk
-            byte_count += len(chunk)
             
             # Check interval
             if (time.time() - start_time) > update_interval:
