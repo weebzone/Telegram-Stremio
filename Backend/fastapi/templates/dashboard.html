@@ -28,7 +28,7 @@
 
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
         <!-- System Status Section -->
-        <div class="mb-12">
+        <div class="mb-8">
             <div class="grid lg:grid-cols-2 gap-8">
                 <!-- System Status Card -->
                 <div class="theme-card rounded-xl p-8 shadow-xl">
@@ -108,9 +108,9 @@
 </div>
 
 <!-- Database Statistics Section -->
-<div class="mb-12">
+<div class="mb-8">
     <h2 class="text-2xl font-bold mb-6 text-center">Database Overview</h2>
-    <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+    <div class="grid md:grid-cols-2 gap-8">
         {% if system_stats.databases %}
         {% for db_stat in system_stats.databases %}
         <div class="theme-card rounded-xl p-8 shadow-xl w-full flex flex-col h-full">
@@ -209,9 +209,9 @@
 </div>
 
 <!-- Media Management Section -->
-<div class="mb-12">
+<div class="mb-8">
     <h2 class="text-2xl font-bold mb-6 text-center">Media Management</h2>
-    <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+    <div class="grid md:grid-cols-2 gap-8">
         <a href="/media/manage?media_type=movie"
             class="block theme-card rounded-xl p-8 shadow-xl hover:shadow-2xl transition-all group">
             <div class="flex items-center">
@@ -493,7 +493,7 @@
 
     // Update immediately and then every 10s
     updateBotWorkloads();
-    setInterval(updateBotWorkloads, 120000);
+    const workloadsInterval = setInterval(updateBotWorkloads, 120000);
 </script>
 
 <script>
@@ -608,7 +608,7 @@
     }
 
     // Auto-refresh every 2 minutes
-    setInterval(refreshSystemStats, 120000);
+    const statsInterval = setInterval(refreshSystemStats, 120000);
 </script>
 <script>
     async function createToken(event) {
@@ -744,8 +744,14 @@
                 const data = await response.json();
                 showToast(data.message || 'Action initiated successfully');
                 if (action === 'update' || action === 'restart') {
-                    // Show a loading/reconnecting message? For now just reload
-                    setTimeout(() => window.location.reload(), 5000);
+                    // Stop auto-refreshes to prevent errors while server is down
+                    clearInterval(workloadsInterval);
+                    clearInterval(statsInterval);
+
+                    showToast('Server restarting... Auto-refresh paused for 3 minutes.');
+
+                    // Wait 3 minutes (180000ms) before reloading
+                    setTimeout(() => window.location.reload(), 180000);
                 }
             } else {
                 const data = await response.json();

@@ -51,5 +51,14 @@ def restart_process():
     For Docker, exiting usually triggers a container restart policy if set.
     """
     import time
+    import shutil
+    
     time.sleep(1) # Give time for response to be sent
-    os.execv(sys.executable, ['python3', '-m', 'Backend'])
+    
+    uv_path = shutil.which("uv")
+    if uv_path:
+        # Use os.execl which replaces the process
+        os.execl(uv_path, uv_path, "run", "-m", "Backend")
+    else:
+        # Fallback to python
+        os.execv(sys.executable, [sys.executable, '-m', 'Backend'])
