@@ -12,6 +12,9 @@ async def get_system_stats_api():
         total_movies = sum(stat.get("movie_count", 0) for stat in db_stats)
         total_tv_shows = sum(stat.get("tv_count", 0) for stat in db_stats)
         
+        # Get API token data for dashboard refresh
+        api_tokens = await db.get_all_api_tokens()
+        
         return {
             "server_status": "running",
             "uptime": get_readable_time(time() - StartTime),
@@ -22,7 +25,8 @@ async def get_system_stats_api():
             "tv_shows": total_tv_shows,
             "databases": db_stats,
             "total_databases": len(db_stats),
-            "current_db_index": db.current_db_index
+            "current_db_index": db.current_db_index,
+            "api_tokens": api_tokens
         }
     except Exception as e:
         print(f"System Stats API Error: {e}")

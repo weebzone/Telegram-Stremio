@@ -606,6 +606,35 @@
                         }
                     });
                 }
+
+                // Update API Token Usage Data
+                if (stats.api_tokens && Array.isArray(stats.api_tokens)) {
+                    stats.api_tokens.forEach((token, index) => {
+                        // Find all elements with data-bytes attributes for this token
+                        const tokenRows = document.querySelectorAll('tbody tr');
+
+                        // Get the token's row (skip the "No tokens found" row)
+                        if (tokenRows.length > index && !tokenRows[index].querySelector('[colspan]')) {
+                            const row = tokenRows[index];
+
+                            // Update daily usage
+                            const dailyUsageSpan = row.querySelector('td:nth-child(2) span.font-semibold');
+                            if (dailyUsageSpan && token.usage && token.usage.daily) {
+                                const dailyBytes = token.usage.daily.bytes || 0;
+                                dailyUsageSpan.setAttribute('data-bytes', dailyBytes);
+                                dailyUsageSpan.textContent = formatBytes(dailyBytes);
+                            }
+
+                            // Update monthly usage
+                            const monthlyUsageSpan = row.querySelector('td:nth-child(2) span.text-gray-500 span');
+                            if (monthlyUsageSpan && token.usage && token.usage.monthly) {
+                                const monthlyBytes = token.usage.monthly.bytes || 0;
+                                monthlyUsageSpan.setAttribute('data-bytes', monthlyBytes);
+                                monthlyUsageSpan.textContent = formatBytes(monthlyBytes);
+                            }
+                        }
+                    });
+                }
             }
         } catch (error) {
             console.error("Failed to refresh system stats:", error);
