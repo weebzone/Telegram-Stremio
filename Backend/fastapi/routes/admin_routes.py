@@ -8,11 +8,19 @@ from Backend.helper.metadata_manager import metadata_manager
 router = APIRouter()
 
 @router.post("/update")
-async def update_server(background_tasks: BackgroundTasks, current_user: str = Depends(get_current_user)):
+async def update_server(current_user: str = Depends(get_current_user)):
     """
-    Pull latest changes from git and restart.
+    Pull latest changes from git without restarting.
     """
     try:
+        # Get current commit before pulling
+        old_commit_process = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True,
+            text=True
+        )
+        old_commit = old_commit_process.stdout.strip() if old_commit_process.returncode == 0 else "unknown"
+        
         # Get current branch name
         branch_process = subprocess.run(
             ["git", "rev-parse", "--abbrev-ref", "HEAD"], 
@@ -35,9 +43,36 @@ async def update_server(background_tasks: BackgroundTasks, current_user: str = D
         if process.returncode != 0:
             raise HTTPException(status_code=500, detail=f"Git pull failed: {process.stderr}")
         
-        # Schedule restart
-        background_tasks.add_task(restart_process)
-        return {"message": "Update successful. Server restarting...", "git_output": process.stdout}
+        # Get new commit after pulling
+        new_commit_process = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True,
+            text=True
+        )
+        new_commit = new_commit_process.stdout.strip() if new_commit_process.returncode == 0 else "unknown"
+        
+        # Get commit message
+        commit_msg_process = subprocess.run(
+            ["git", "log", "-1", "--pretty=%B"],
+            capture_output=True,
+            text=True
+        )
+        commit_message = commit_msg_process.stdout.strip() if commit_msg_process.returncode == 0 else ""
+        
+        # Check if there were any updates
+        if old_commit == new_commit:
+            update_status = "Already up to date"
+        else:
+            update_status = f"Updated from {old_commit} to {new_commit}"
+        
+        return {
+            "message": update_status,
+            "old_commit": old_commit,
+            "new_commit": new_commit,
+            "commit_message": commit_message,
+            "git_output": process.stdout,
+            "note": "Updates pulled successfully. Use Restart Server if you want to apply changes."
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

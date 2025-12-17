@@ -768,7 +768,7 @@
         let endpoint = "";
 
         if (action === 'update') {
-            message = "Are you sure you want to pull the latest updates from Git? This will restart the server.";
+            message = "Pull the latest updates from Git? (This will NOT restart the server automatically)";
             endpoint = "/api/admin/update";
         } else if (action === 'restart') {
             message = "Are you sure you want to restart the server? Provide 5-10 seconds for it to come back online.";
@@ -784,16 +784,31 @@
             const response = await fetch(endpoint, { method: 'POST' });
             if (response.ok) {
                 const data = await response.json();
-                showToast(data.message || 'Action initiated successfully');
-                if (action === 'update' || action === 'restart') {
-                    // Stop auto-refreshes to prevent errors while server is down
-                    clearInterval(workloadsInterval);
-                    clearInterval(statsInterval);
 
-                    showToast('Server restarting... Auto-refresh paused for 3 minutes.');
+                // Special handling for update action to show commit info
+                if (action === 'update') {
+                    let updateMessage = data.message || 'Update completed';
+                    if (data.commit_message) {
+                        updateMessage += `\n\nLatest commit: ${data.commit_message}`;
+                    }
+                    if (data.note) {
+                        updateMessage += `\n\n${data.note}`;
+                    }
+                    alert(updateMessage);
+                    showToast(data.message);
+                } else {
+                    showToast(data.message || 'Action initiated successfully');
 
-                    // Wait 3 minutes (180000ms) before reloading
-                    setTimeout(() => window.location.reload(), 180000);
+                    if (action === 'restart') {
+                        // Stop auto-refreshes to prevent errors while server is down
+                        clearInterval(workloadsInterval);
+                        clearInterval(statsInterval);
+
+                        showToast('Server restarting... Auto-refresh paused for 3 minutes.');
+
+                        // Wait 3 minutes (180000ms) before reloading
+                        setTimeout(() => window.location.reload(), 180000);
+                    }
                 }
             } else {
                 const data = await response.json();
