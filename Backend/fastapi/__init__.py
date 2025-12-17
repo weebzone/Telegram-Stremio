@@ -4,6 +4,8 @@ import copy
 from Backend.config import Telegram
 from Backend.fastapi.main import app
 
+Port = Telegram.PORT
+
 # Configure Logging to suppress ProtocolError
 log_config = copy.deepcopy(uvicorn.config.LOGGING_CONFIG)
 
