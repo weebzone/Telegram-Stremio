@@ -113,12 +113,12 @@
     <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
         {% if system_stats.databases %}
         {% for db_stat in system_stats.databases %}
-        <div class="theme-card rounded-xl p-6 shadow-xl w-full">
-            <div class="flex items-center justify-between mb-4">
-                <h3 class="text-lg font-semibold">{{ db_stat.db_name.replace("storage_", "Database ") }}</h3>
+        <div class="theme-card rounded-xl p-8 shadow-xl w-full flex flex-col h-full">
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-xl font-semibold">{{ db_stat.db_name.replace("storage_", "Database ") }}</h3>
                 <div
-                    class="w-8 h-8 theme-primary rounded-lg flex items-center justify-center bg-opacity-20 text-primary">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24"
+                    class="w-12 h-12 theme-primary rounded-lg flex items-center justify-center bg-opacity-20 text-primary">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24"
                         stroke="white">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4">
@@ -127,26 +127,28 @@
                 </div>
             </div>
 
-            <div class="space-y-3">
-                <div class="flex justify-between text-sm">
-                    <span class="theme-text-secondary">Movies</span>
+            <div class="space-y-4 flex-grow">
+                <div class="flex justify-between items-center py-3 px-4 bg-gray-50 rounded-lg">
+                    <span class="font-medium theme-text-secondary">Movies</span>
                     <span id="db-movies-{{ loop.index0 }}" class="text-primary font-semibold">{{
                         "{:,}".format(db_stat.movie_count) }}</span>
                 </div>
-                <div class="flex justify-between text-sm">
-                    <span class="theme-text-secondary">TV Shows</span>
+                <div class="flex justify-between items-center py-3 px-4 bg-gray-50 rounded-lg">
+                    <span class="font-medium theme-text-secondary">TV Shows</span>
                     <span id="db-tv-{{ loop.index0 }}" class="text-primary font-semibold">{{
                         "{:,}".format(db_stat.tv_count) }}</span>
                 </div>
-                <div class="mt-4">
-                    <div class="flex justify-between text-sm mb-1">
-                        <span class="theme-text-secondary">Storage Used</span>
-                        <span id="db-storage-{{ loop.index0 }}" class="text-xs">{{ "%.1f"|format(db_stat.storageSize /
+
+                <div class="py-3 px-4 bg-gray-50 rounded-lg">
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="font-medium theme-text-secondary">Storage Used</span>
+                        <span id="db-storage-{{ loop.index0 }}" class="text-primary font-semibold text-sm">{{
+                            "%.1f"|format(db_stat.storageSize /
                             1024 / 1024) }} MB</span>
                     </div>
                     {% set storage_percent = (db_stat.storageSize / (500 * 1024 * 1024) * 100) | round %}
-                    <div class="w-full bg-gray-200 rounded-full h-2">
-                        <div class="theme-primary h-2 rounded-full" style="width: {{ storage_percent }}%"></div>
+                    <div class="w-full bg-gray-200 rounded-full h-2.5">
+                        <div class="theme-primary h-2.5 rounded-full" style="width: {{ storage_percent }}%"></div>
                     </div>
                 </div>
             </div>
@@ -154,11 +156,11 @@
         {% endfor %}
 
         <!-- Admin Operations Card -->
-        <div class="theme-card rounded-xl p-6 shadow-xl w-full">
-            <div class="flex items-center justify-between mb-4">
-                <h3 class="text-lg font-semibold">Admin Operations</h3>
-                <div class="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center text-red-600">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24"
+        <div class="theme-card rounded-xl p-8 shadow-xl w-full flex flex-col h-full">
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-xl font-semibold">Admin Operations</h3>
+                <div class="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center text-red-600">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24"
                         stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
@@ -168,9 +170,9 @@
                 </div>
             </div>
 
-            <div class="space-y-3">
+            <div class="space-y-4 flex-grow">
                 <button onclick="confirmAdminAction('update')"
-                    class="w-full text-left px-4 py-3 rounded-lg hover:bg-gray-50 text-sm font-medium text-gray-700 flex items-center transition-colors border border-transparent hover:border-gray-200">
+                    class="w-full text-left px-4 py-3 rounded-lg hover:bg-gray-50 text-sm font-medium text-gray-700 flex items-center transition-colors border border-transparent hover:border-gray-200 bg-gray-50">
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 mr-3 text-blue-500" fill="none"
                         viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -180,7 +182,7 @@
                 </button>
 
                 <button onclick="confirmAdminAction('restart')"
-                    class="w-full text-left px-4 py-3 rounded-lg hover:bg-gray-50 text-sm font-medium text-gray-700 flex items-center transition-colors border border-transparent hover:border-gray-200">
+                    class="w-full text-left px-4 py-3 rounded-lg hover:bg-gray-50 text-sm font-medium text-gray-700 flex items-center transition-colors border border-transparent hover:border-gray-200 bg-gray-50">
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 mr-3 text-orange-500" fill="none"
                         viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -190,7 +192,7 @@
                 </button>
 
                 <button onclick="confirmAdminAction('fixmetadata')"
-                    class="w-full text-left px-4 py-3 rounded-lg hover:bg-gray-50 text-sm font-medium text-gray-700 flex items-center transition-colors border border-transparent hover:border-gray-200">
+                    class="w-full text-left px-4 py-3 rounded-lg hover:bg-gray-50 text-sm font-medium text-gray-700 flex items-center transition-colors border border-transparent hover:border-gray-200 bg-gray-50">
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 mr-3 text-purple-500" fill="none"
                         viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
