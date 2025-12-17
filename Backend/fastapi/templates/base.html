@@ -45,73 +45,12 @@
         }
     </script>
     <style>
-        body {
-            background-color: {
-                    {
-                    theme.colors.background
-                }
-            }
-
-            ;
-
-            color: {
-                    {
-                    theme.colors.text
-                }
-            }
-
-            ;
-        }
-
-        .theme-card {
-            background-color: {
-                    {
-                    theme.colors.card
-                }
-            }
-
-            ;
-        }
-
-        .theme-primary {
-            background-color: {
-                    {
-                    theme.colors.primary
-                }
-            }
-
-            ;
-        }
-
-        .theme-secondary {
-            background-color: {
-                    {
-                    theme.colors.secondary
-                }
-            }
-
-            ;
-        }
-
-        .theme-accent {
-            background-color: {
-                    {
-                    theme.colors.accent
-                }
-            }
-
-            ;
-        }
-
-        .theme-text-secondary {
-            color: {
-                    {
-                    theme.colors.text_secondary
-                }
-            }
-
-            ;
-        }
+        body { background-color: {{ theme.colors.background }}; color: {{ theme.colors.text }}; }
+        .theme-card { background-color: {{ theme.colors.card }}; }
+        .theme-primary { background-color: {{ theme.colors.primary }}; }
+        .theme-secondary { background-color: {{ theme.colors.secondary }}; }
+        .theme-accent { background-color: {{ theme.colors.accent }}; }
+        .theme-text-secondary { color: {{ theme.colors.text_secondary }}; }
     </style>
 </head>
 
