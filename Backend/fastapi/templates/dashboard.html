@@ -10,17 +10,18 @@
             <div class="flex items-center justify-between">
                 <div class="flex items-center space-x-4">
                     <h1 class="text-3xl font-bold text-primary">System Overview</h1>
-                    <button onclick="refreshSystemStats()"
-                        class="p-2 rounded-full hover:bg-gray-100 text-gray-500 hover:text-primary transition-colors focus:outline-none group relative"
-                        title="Refresh Stats">
-                        <svg id="refresh-icon" xmlns="http://www.w3.org/2000/svg"
-                            class="w-6 h-6 group-hover:rotate-180 transition-transform duration-500" fill="none"
-                            viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                        </svg>
-                    </button>
                 </div>
+                <button onclick="refreshSystemStats()"
+                    class="flex items-center space-x-2 px-4 py-2 rounded-lg theme-primary text-white hover:opacity-90 transition-all shadow-md active:scale-95 group focus:outline-none"
+                    title="Refresh System Stats">
+                    <svg id="refresh-icon" xmlns="http://www.w3.org/2000/svg"
+                        class="w-5 h-5 group-hover:rotate-180 transition-transform duration-500" fill="none"
+                        viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    <span class="font-medium">Refresh Data</span>
+                </button>
             </div>
         </div>
     </header>
@@ -577,61 +578,62 @@
     // Auto-refresh every 60 seconds
     setInterval(refreshSystemStats, 60000);
 </script>
-async function createToken(event) {
-event.preventDefault();
-const nameInput = document.getElementById('token-name');
-const dailyInput = document.getElementById('daily-limit');
-const monthlyInput = document.getElementById('monthly-limit');
+<script>
+    async function createToken(event) {
+        event.preventDefault();
+        const nameInput = document.getElementById('token-name');
+        const dailyInput = document.getElementById('daily-limit');
+        const monthlyInput = document.getElementById('monthly-limit');
 
-const payload = {
-name: nameInput.value,
-daily_limit_gb: dailyInput.value,
-monthly_limit_gb: monthlyInput.value
-};
+        const payload = {
+            name: nameInput.value,
+            daily_limit_gb: dailyInput.value,
+            monthly_limit_gb: monthlyInput.value
+        };
 
-try {
-const response = await fetch('/api/tokens', {
-method: 'POST',
-headers: { 'Content-Type': 'application/json' },
-body: JSON.stringify(payload)
-});
+        try {
+            const response = await fetch('/api/tokens', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
 
-if (response.ok) {
-showToast('Token created successfully!');
-setTimeout(() => window.location.reload(), 1000);
-} else {
-const data = await response.json();
-showToast('Error: ' + data.detail);
-}
-} catch (error) {
-showToast('Error creating token');
-}
-}
+            if (response.ok) {
+                showToast('Token created successfully!');
+                setTimeout(() => window.location.reload(), 1000);
+            } else {
+                const data = await response.json();
+                showToast('Error: ' + data.detail);
+            }
+        } catch (error) {
+            showToast('Error creating token');
+        }
+    }
 
-async function revokeToken(token) {
-if (!confirm('Are you sure you want to revoke this token? The user will lose access immediately.')) return;
+    async function revokeToken(token) {
+        if (!confirm('Are you sure you want to revoke this token? The user will lose access immediately.')) return;
 
-try {
-const response = await fetch('/api/tokens/' + token, {
-method: 'DELETE'
-});
+        try {
+            const response = await fetch('/api/tokens/' + token, {
+                method: 'DELETE'
+            });
 
-if (response.ok) {
-showToast('Token revoked successfully!');
-setTimeout(() => window.location.reload(), 1000);
-} else {
-showToast('Error revoking token');
-}
-} catch (error) {
-showToast('Error revoking token');
-}
-}
+            if (response.ok) {
+                showToast('Token revoked successfully!');
+                setTimeout(() => window.location.reload(), 1000);
+            } else {
+                showToast('Error revoking token');
+            }
+        } catch (error) {
+            showToast('Error revoking token');
+        }
+    }
 
-function copyUrl(url) {
-navigator.clipboard.writeText(url).then(function () {
-showToast('Manifest URL copied to clipboard!');
-});
-}
+    function copyUrl(url) {
+        navigator.clipboard.writeText(url).then(function () {
+            showToast('Manifest URL copied to clipboard!');
+        });
+    }
 </script>
 </main>
 </div>
