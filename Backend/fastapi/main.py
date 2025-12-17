@@ -15,7 +15,8 @@ from Backend.fastapi.routes.template_routes import (
 from Backend.fastapi.routes.api_routes import (
     list_media_api, delete_media_api, update_media_api,
     delete_movie_quality_api, delete_tv_quality_api,
-    delete_tv_episode_api, delete_tv_season_api
+    delete_tv_episode_api, delete_tv_season_api,
+    create_token_api, revoke_token_api
 )
 
 app = FastAPI(
@@ -114,6 +115,16 @@ async def delete_tv_episode(tmdb_id: int, db_index: int, season: int, episode: i
 @app.delete("/api/media/delete-tv-season")
 async def delete_tv_season(tmdb_id: int, db_index: int, season: int, _: bool = Depends(require_auth)):
     return await delete_tv_season_api(tmdb_id, db_index, season)
+
+
+
+@app.post("/api/tokens")
+async def create_token(name: dict, _: bool = Depends(require_auth)):
+    return await create_token_api(name)
+
+@app.delete("/api/tokens/{token}")
+async def revoke_token(token: str, _: bool = Depends(require_auth)):
+    return await revoke_token_api(token)
 
 
 @app.get("/api/system/workloads")
