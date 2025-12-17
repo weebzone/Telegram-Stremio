@@ -15,7 +15,7 @@ if "filters" not in log_config:
 
 # 1. Add Filter Definition
 log_config["filters"]["protocol_filter"] = {
-    "()": "Backend.fastapi.filters.ProtocolErrorFilter"
+    "()": "Backend.helper.logging_filters.ProtocolErrorFilter"
 }
 
 # 2. Add Filter to Handlers
