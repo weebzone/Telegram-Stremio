@@ -69,8 +69,40 @@
                     </div>
                 </div>
 
-                <div class="text-center theme-text-secondary py-4">No workload data available</div>
-                {% endif %}
+                <!-- Bot Workload Section -->
+                <div class="theme-card rounded-xl p-6 shadow-xl relative overflow-hidden">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-2xl font-semibold">Bot Workloads</h3>
+                        <span class="text-xs theme-text-secondary bg-gray-100 rounded-full px-2 py-1">Auto-updates every
+                            10s</span>
+                    </div>
+
+                    <div id="workload-content" class="space-y-3 max-h-80 overflow-y-auto pr-2 custom-scrollbar">
+                        <div id="bot-list" class="space-y-3">
+                            <div class="text-center theme-text-secondary py-4">Loading bot status...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <style>
+                    .custom-scrollbar::-webkit-scrollbar {
+                        width: 6px;
+                    }
+
+                    .custom-scrollbar::-webkit-scrollbar-track {
+                        background: #f1f1f1;
+                        border-radius: 4px;
+                    }
+
+                    .custom-scrollbar::-webkit-scrollbar-thumb {
+                        background: #888;
+                        border-radius: 4px;
+                    }
+
+                    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+                        background: #555;
+                    }
+                </style>
             </div>
         </div>
 </div>
