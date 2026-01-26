@@ -12,6 +12,9 @@ class Telegram:
     BASE_URL = getenv("BASE_URL", "").rstrip('/')
     PORT = int(getenv("PORT", "8000"))
 
+    PARALLEL = int(getenv("PARALLEL", "1"))
+    PRE_FETCH = int(getenv("PRE_FETCH", "1"))
+
     AUTH_CHANNEL = [channel.strip() for channel in (getenv("AUTH_CHANNEL") or "").split(",") if channel.strip()]
     DATABASE = [db.strip() for db in (getenv("DATABASE") or "").split(",") if db.strip()]
 

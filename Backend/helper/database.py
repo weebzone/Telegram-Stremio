@@ -1,7 +1,9 @@
+import secrets
+import string
 from asyncio import create_task
 from bson import ObjectId
 import motor.motor_asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from pydantic import ValidationError
 from pymongo import ASCENDING, DESCENDING
 from typing import Dict, List, Optional, Tuple, Any
@@ -902,3 +904,89 @@ class Database:
                     "dataSize": db_stats.get("dataSize", 0)
                 })
         return stats
+
+
+
+    # -------------------------------
+    # API Token Methods
+    # -------------------------------
+
+    async def add_api_token(self, name: str, daily_limit_gb: float = None, monthly_limit_gb: float = None) -> dict:
+        alphabet = string.ascii_letters + string.digits
+        token = ''.join(secrets.choice(alphabet) for _ in range(32))
+        
+        token_doc = {
+            "name": name,
+            "token": token,
+            "created_at": datetime.utcnow(),
+            "limits": {
+                "daily_limit_gb": daily_limit_gb if daily_limit_gb else 0,
+                "monthly_limit_gb": monthly_limit_gb if monthly_limit_gb else 0
+            },
+            "usage": {
+                "total_bytes": 0,
+                "daily": {"date": datetime.now(timezone.utc).strftime("%Y-%m-%d"), "bytes": 0},
+                "monthly": {"month": datetime.now(timezone.utc).strftime("%Y-%m"), "bytes": 0}
+            }
+        }
+        
+        await self.dbs["tracking"]["api_tokens"].insert_one(token_doc)
+        return convert_objectid_to_str(token_doc)
+
+    async def get_api_token(self, token: str) -> Optional[dict]:
+        doc = await self.dbs["tracking"]["api_tokens"].find_one({"token": token})
+        return convert_objectid_to_str(doc) if doc else None
+
+    async def get_all_api_tokens(self) -> List[dict]:
+        cursor = self.dbs["tracking"]["api_tokens"].find().sort("created_at", DESCENDING)
+        tokens = await cursor.to_list(None)
+        return [convert_objectid_to_str(token) for token in tokens]
+
+    async def revoke_api_token(self, token: str) -> bool:
+        result = await self.dbs["tracking"]["api_tokens"].delete_one({"token": token})
+        return result.deleted_count > 0
+
+    async def update_token_usage(self, token: str, bytes_delta: int):
+        today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        month_str = datetime.now(timezone.utc).strftime("%Y-%m")
+        
+        token_doc = await self.dbs["tracking"]["api_tokens"].find_one({"token": token})
+        if not token_doc:
+             return
+
+        current_daily = token_doc.get("usage", {}).get("daily", {})
+        if current_daily.get("date") != today_str:
+            await self.dbs["tracking"]["api_tokens"].update_one(
+                {"token": token},
+                {"$set": {"usage.daily": {"date": today_str, "bytes": 0}}}
+            )
+
+        current_monthly = token_doc.get("usage", {}).get("monthly", {})
+        if current_monthly.get("month") != month_str:
+            await self.dbs["tracking"]["api_tokens"].update_one(
+                {"token": token},
+                {"$set": {"usage.monthly": {"month": month_str, "bytes": 0}}}
+            )
+
+        await self.dbs["tracking"]["api_tokens"].update_one(
+            {"token": token},
+            {
+                "$inc": {
+                    "usage.total_bytes": bytes_delta,
+                    "usage.daily.bytes": bytes_delta,
+                    "usage.monthly.bytes": bytes_delta
+                }
+            }
+        )
+
+    async def update_api_token_limits(self, token: str, daily_limit_gb: float, monthly_limit_gb: float) -> bool:
+        result = await self.dbs["tracking"]["api_tokens"].update_one(
+            {"token": token},
+            {"$set": {
+                "limits": {
+                    "daily_limit_gb": daily_limit_gb if daily_limit_gb else 0,
+                    "monthly_limit_gb": monthly_limit_gb if monthly_limit_gb else 0
+                }
+            }}
+        )
+        return result.modified_count > 0

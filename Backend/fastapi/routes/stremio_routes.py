@@ -1,10 +1,11 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from typing import Optional
 from urllib.parse import unquote
 from Backend.config import Telegram
 from Backend import db, __version__
 import PTN
 from datetime import datetime, timezone, timedelta
+from Backend.fastapi.security.tokens import verify_token
 
 
 # --- Configuration ---
@@ -106,8 +107,8 @@ def get_resolution_priority(stream_name: str) -> int:
     return 1
 
 # --- Routes ---
-@router.get("/manifest.json")
-async def get_manifest():
+@router.get("/{token}/manifest.json")
+async def get_manifest(token: str, token_data: dict = Depends(verify_token)):
     if Telegram.HIDE_CATALOG:
         resources = ["stream"]
         catalogs = []
@@ -175,12 +176,14 @@ async def get_manifest():
     }
 
 
-@router.get("/catalog/{media_type}/{id}/{extra:path}.json")
-@router.get("/catalog/{media_type}/{id}.json")
-async def get_catalog(media_type: str, id: str, extra: Optional[str] = None):
+
+
+@router.get("/{token}/catalog/{media_type}/{id}/{extra:path}.json")
+@router.get("/{token}/catalog/{media_type}/{id}.json")
+async def get_catalog(token: str, media_type: str, id: str, extra: Optional[str] = None, token_data: dict = Depends(verify_token)):
     if Telegram.HIDE_CATALOG:
         raise HTTPException(status_code=404, detail="Catalog disabled")
-    
+
     if media_type not in ["movie", "series"]:
         raise HTTPException(status_code=404, detail="Invalid catalog type")
 
@@ -230,10 +233,10 @@ async def get_catalog(media_type: str, id: str, extra: Optional[str] = None):
     return {"metas": metas}
 
 
-@router.get("/meta/{media_type}/{id}.json")
-async def get_meta(media_type: str, id: str):
+@router.get("/{token}/meta/{media_type}/{id}.json")
+async def get_meta(token: str, media_type: str, id: str, token_data: dict = Depends(verify_token)):
     if Telegram.HIDE_CATALOG:
-        raise HTTPException(status_code=404, detail="Meta disabled")
+        raise HTTPException(status_code=404, detail="Catalog disabled")
     try:
         imdb_id = id
     except (ValueError, IndexError):
@@ -292,14 +295,39 @@ async def get_meta(media_type: str, id: str):
         meta_obj["videos"] = videos
     return {"meta": meta_obj}
 
-@router.get("/stream/{media_type}/{id}.json")
-async def get_streams(media_type: str, id: str):
+@router.get("/{token}/stream/{media_type}/{id}.json")
+async def get_streams(
+    token: str,
+    media_type: str,
+    id: str,
+    token_data: dict = Depends(verify_token)
+):
+
+    if token_data.get("limit_exceeded"):
+        limit_type = token_data["limit_exceeded"]
+
+        title = (
+            "🚫 Daily Limit Reached – Upgrade Required"
+            if limit_type == "daily"
+            else "🚫 Monthly Limit Reached – Upgrade Required"
+        )
+
+        return {
+            "streams": [
+                {
+                    "name": "Limit Reached",
+                    "title": title,
+                    "url": token_data["limit_video"]
+                }
+            ]
+        }
+
+
     try:
         parts = id.split(":")
         imdb_id = parts[0]
         season_num = int(parts[1]) if len(parts) > 1 else None
         episode_num = int(parts[2]) if len(parts) > 2 else None
-
     except (ValueError, IndexError):
         raise HTTPException(status_code=400, detail="Invalid Stremio ID format")
 
@@ -315,17 +343,22 @@ async def get_streams(media_type: str, id: str):
     streams = []
     for quality in media_details.get("telegram", []):
         if quality.get("id"):
-            filename = quality.get('name', '')
-            quality_str = quality.get('quality', 'HD')
-            size = quality.get('size', '')
+            filename = quality.get("name", "")
+            quality_str = quality.get("quality", "HD")
+            size = quality.get("size", "")
 
-            stream_name, stream_title = format_stream_details(filename, quality_str, size)
+            stream_name, stream_title = format_stream_details(
+                filename, quality_str, size
+            )
 
             streams.append({
                 "name": stream_name,
                 "title": stream_title,
-                "url": f"{BASE_URL}/dl/{quality.get('id')}/video.mkv"
+                "url": f"{BASE_URL}/dl/{token}/{quality.get('id')}/video.mkv"
             })
 
-    streams.sort(key=lambda s: get_resolution_priority(s.get("name", "")), reverse=True)
+    streams.sort(
+        key=lambda s: get_resolution_priority(s.get("name", "")),
+        reverse=True
+    )
     return {"streams": streams}

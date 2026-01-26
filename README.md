@@ -219,6 +219,8 @@ All environment variables for this project are defined in the `config.env` file.
 | **`OWNER_ID`** | Your **Telegram user ID**. This ID has full administrative access. |
 | **`REPLACE_MODE`** | When `true`, new files replace existing files of the same quality. When `false`, multiple files of the same quality are allowed. |
 | **`HIDE_CATALOG`** | When `true`, the default Telegram Stremio Catalog is hidden, and streams only show in the Cinemata catalog (i.e., Cinemata addon is mandatory). Default is `false`. |
+| **`PARALLEL`** | Controls the number of parallel chunks/connections used during streaming. Higher values can improve download speed and reduce buffering but will increase CPU, memory usage, and Telegram API load. Default is `1` (for this you should have more Multi Tokens). |
+| **`PRE_FETCH`** | Enables prefetching of upcoming stream chunks before they are requested by the player. Higher values allow smoother playback and faster seeking at the cost of extra bandwidth and memory usage. Default is `1` (for this you should have more Multi Tokens). |
 
 ### 🗄️ Storage
 
