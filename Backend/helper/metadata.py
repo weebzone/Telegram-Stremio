@@ -165,6 +165,7 @@ async def metadata(filename: str, channel: int, msg_id) -> dict | None:
         return None
 
     # Skip split/multipart files
+    # if Telegram.SKIP_MULTIPART:
     multipart_pattern = compile(r'(?:part|cd|disc|disk)[s._-]*\d+(?=\.\w+$)', IGNORECASE)
     if multipart_pattern.search(filename):
         LOGGER.info(f"Skipping {filename}: seems to be a split/multipart file")
@@ -400,10 +401,10 @@ async def fetch_movie_metadata(title, encoded_string, year=None, quality=None, d
 
         if default_id.startswith("tt"):
             imdb_id = default_id
-            use_tmdb = False                       # force IMDb
+            use_tmdb = False                       
         elif default_id.isdigit():
             tmdb_id = int(default_id)
-            use_tmdb = True                        # force TMDb
+            use_tmdb = True                       
 
     # -------------------------------------------------------
     # 2. IF NO DEFAULT ID → SEARCH IMDb FIRST

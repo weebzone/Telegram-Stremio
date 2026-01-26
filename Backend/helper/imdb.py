@@ -8,7 +8,6 @@ BASE_URL = "https://v3-cinemeta.strem.io"
 _client: Optional[httpx.AsyncClient] = None
 _client_lock = asyncio.Lock()
 
-
 async def _get_client() -> httpx.AsyncClient:
     global _client
     async with _client_lock:
@@ -19,7 +18,6 @@ async def _get_client() -> httpx.AsyncClient:
             )
         return _client
 
-
 def extract_first_year(year_string) -> int:
     if not year_string:
         return 0
@@ -29,12 +27,7 @@ def extract_first_year(year_string) -> int:
         return int(year_match.group(1))
     return 0
 
-
 async def search_title(query: str, type: str) -> Optional[Dict[str, Any]]:
-    """
-    Query Cinemeta search endpoint for a title.
-    type = 'tvSeries' or 'movie' (your code uses 'tvSeries' for TV)
-    """
     client = await _get_client()
     cinemeta_type = "series" if type == "tvSeries" else type
     url = f"{BASE_URL}/catalog/{cinemeta_type}/imdb/search={query}.json"
@@ -56,7 +49,6 @@ async def search_title(query: str, type: str) -> Optional[Dict[str, Any]]:
     except Exception:
         return None
 
-
 async def get_detail(imdb_id: str, media_type: str) -> Optional[Dict[str, Any]]:
     client = await _get_client()
     cinemeta_type = "series" if media_type in ["tvSeries", "tv"] else "movie"
@@ -73,7 +65,6 @@ async def get_detail(imdb_id: str, media_type: str) -> Optional[Dict[str, Any]]:
         if not meta:
             return None
 
-        # ---- Extract year ----
         year_value = 0
         for field in ["year", "releaseInfo", "released"]:
             if meta.get(field):
@@ -102,11 +93,7 @@ async def get_detail(imdb_id: str, media_type: str) -> Optional[Dict[str, Any]]:
     except Exception:
         return None
 
-
 async def get_season(imdb_id: str, season_id: int, episode_id: int) -> Optional[Dict[str, Any]]:
-    """
-    Return episode meta for a specific season/episode using Cinemeta series endpoint.
-    """
     client = await _get_client()
     try:
         url = f"{BASE_URL}/meta/series/{imdb_id}.json"

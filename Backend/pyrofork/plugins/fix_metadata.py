@@ -43,7 +43,7 @@ async def cancel_fix(_, query):
 # -------------------------------
 # MAIN COMMAND (REWRITTEN - Balanced)
 # -------------------------------
-@Client.on_message(filters.command("fixmetadata") & filters.private & CustomFilters.owner, group=10)
+# @Client.on_message(filters.command("fixmetadata") & filters.private & CustomFilters.owner, group=10)
 async def fix_metadata_handler(_, message):
     global CANCEL_REQUESTED
     CANCEL_REQUESTED = False

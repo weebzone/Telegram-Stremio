@@ -7,7 +7,7 @@ from Backend.logger import LOGGER
 async def ping():
 
     sleep_time = 1200
-    manifest_url = f"{Telegram.BASE_URL}/stremio/manifest.json"
+    manifest_url = f"{Telegram.BASE_URL}/api/system/stats"
 
     while True:
         await asyncio.sleep(sleep_time)

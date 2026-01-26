@@ -12,6 +12,9 @@ class Telegram:
     BASE_URL = getenv("BASE_URL", "").rstrip('/')
     PORT = int(getenv("PORT", "8000"))
 
+    PARALLEL = int(getenv("PARALLEL", "1"))
+    PRE_FETCH = int(getenv("PRE_FETCH", "1"))
+
     AUTH_CHANNEL = [channel.strip() for channel in (getenv("AUTH_CHANNEL") or "").split(",") if channel.strip()]
     DATABASE = [db.strip() for db in (getenv("DATABASE") or "").split(",") if db.strip()]
 
@@ -21,7 +24,10 @@ class Telegram:
     UPSTREAM_BRANCH = getenv("UPSTREAM_BRANCH", "")
 
     OWNER_ID = int(getenv("OWNER_ID", "5422223708"))
+    
     REPLACE_MODE = getenv("REPLACE_MODE", "true").lower() == "true"
+    HIDE_CATALOG = getenv("HIDE_CATALOG", "false").lower() == "true"
+    # SKIP_MULTIPART = getenv("SKIP_MULTIPART", "true").lower() == "true"
 
     ADMIN_USERNAME = getenv("ADMIN_USERNAME", "fyvio")
     ADMIN_PASSWORD = getenv("ADMIN_PASSWORD", "fyvio")

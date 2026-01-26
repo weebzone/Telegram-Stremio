@@ -1,7 +1,9 @@
+import secrets
+import string
 from asyncio import create_task
 from bson import ObjectId
 import motor.motor_asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from pydantic import ValidationError
 from pymongo import ASCENDING, DESCENDING
 from typing import Dict, List, Optional, Tuple, Any
@@ -9,7 +11,7 @@ from typing import Dict, List, Optional, Tuple, Any
 from Backend.logger import LOGGER
 from Backend.config import Telegram
 import re
-from Backend.helper.encrypt import decode_string, encode_string
+from Backend.helper.encrypt import decode_string
 from Backend.helper.modal import Episode, MovieSchema, QualityDetail, Season, TVShowSchema
 from Backend.helper.task_manager import delete_message
 
@@ -142,8 +144,6 @@ class Database:
 
         return results, dbs_checked, total_count
 
-
-
     async def _move_document(
         self, collection_name: str, document: dict, old_db_index: int
     ) -> bool:
@@ -168,7 +168,6 @@ class Database:
         await self.update_current_db_index()
         LOGGER.info(f"Switched to storage_{self.current_db_index}")
         return await func(*args)
-
 
     # -------------------------------
     # Multi Database Method for insert/update/delete/list
@@ -297,7 +296,6 @@ class Database:
         existing_qualities = existing_movie.get("telegram", [])
 
         if Telegram.REPLACE_MODE:
-            # delete all same-quality entries
             to_delete = [q for q in existing_qualities if q.get("quality") == target_quality]
 
             for q in to_delete:
@@ -498,8 +496,6 @@ class Database:
             "tv_shows": [convert_objectid_to_str(result) for result in results],
         }
 
-
-
     async def search_documents(
             self, 
             query: str, 
@@ -590,62 +586,67 @@ class Database:
 
 
     async def get_media_details(
-        self, tmdb_id: int, db_index: int,
-        season_number: Optional[int] = None, episode_number: Optional[int] = None
+        self, 
+        imdb_id: str,
+        season_number: Optional[int] = None, 
+        episode_number: Optional[int] = None
     ) -> Optional[dict]:
-        db_key = f"storage_{db_index}"
-        if episode_number is not None and season_number is not None:
-            tv_show = await self.dbs[db_key]["tv"].find_one({"tmdb_id": tmdb_id})
-            if not tv_show:
-                return None
-            for season in tv_show.get("seasons", []):
-                if season.get("season_number") == season_number:
-                    for episode in season.get("episodes", []):
-                        if episode.get("episode_number") == episode_number:
-                            details = convert_objectid_to_str(episode)
+
+        for db_idx in range(self.current_db_index, 0, -1):
+            db_key = f"storage_{db_idx}"
+            
+            if episode_number is not None and season_number is not None:
+                tv_show = await self.dbs[db_key]["tv"].find_one({"imdb_id": imdb_id})
+                if tv_show:
+                    for season in tv_show.get("seasons", []):
+                        if season.get("season_number") == season_number:
+                            for episode in season.get("episodes", []):
+                                if episode.get("episode_number") == episode_number:
+                                    details = convert_objectid_to_str(episode)
+                                    details.update({
+                                        "imdb_id": imdb_id,
+                                        "type": "tv",
+                                        "season_number": season_number,
+                                        "episode_number": episode_number,
+                                        "backdrop": episode.get("episode_backdrop"),
+                                        "db_index": db_idx
+                                    })
+                                    return details
+            
+            elif season_number is not None:
+                tv_show = await self.dbs[db_key]["tv"].find_one({"imdb_id": imdb_id})
+                if tv_show:
+                    for season in tv_show.get("seasons", []):
+                        if season.get("season_number") == season_number:
+                            details = convert_objectid_to_str(season)
                             details.update({
-                                "tmdb_id": tmdb_id,
+                                "imdb_id": imdb_id,
                                 "type": "tv",
                                 "season_number": season_number,
-                                "episode_number": episode_number,
-                                "backdrop": episode.get("episode_backdrop")
+                                "db_index": db_idx
                             })
                             return details
-            return None
-
-        elif season_number is not None:
-            tv_show = await self.dbs[db_key]["tv"].find_one({"tmdb_id": tmdb_id})
-            if not tv_show:
-                return None
-            for season in tv_show.get("seasons", []):
-                if season.get("season_number") == season_number:
-                    details = convert_objectid_to_str(season)
-                    details.update({
-                        "tmdb_id": tmdb_id,
-                        "type": "tv",
-                        "season_number": season_number
-                    })
-                    return details
-            return None
-
-        else:
-            tv_doc = await self.dbs[db_key]["tv"].find_one({"tmdb_id": tmdb_id})
-            if tv_doc:
-                tv_doc = convert_objectid_to_str(tv_doc)
-                tv_doc["type"] = "tv"
-                return tv_doc
-            movie_doc = await self.dbs[db_key]["movie"].find_one({"tmdb_id": tmdb_id})
-            if movie_doc:
-                movie_doc = convert_objectid_to_str(movie_doc)
-                movie_doc["type"] = "movie"
-                return movie_doc
-            return None
-
+            
+            else:
+                tv_doc = await self.dbs[db_key]["tv"].find_one({"imdb_id": imdb_id})
+                if tv_doc:
+                    tv_doc = convert_objectid_to_str(tv_doc)
+                    tv_doc["type"] = "tv"
+                    tv_doc["db_index"] = db_idx
+                    return tv_doc
+                
+                movie_doc = await self.dbs[db_key]["movie"].find_one({"imdb_id": imdb_id})
+                if movie_doc:
+                    movie_doc = convert_objectid_to_str(movie_doc)
+                    movie_doc["type"] = "movie"
+                    movie_doc["db_index"] = db_idx
+                    return movie_doc
+        
+        return None
 
     # -------------------------------
     # DB Method for Edit Post
     # -------------------------------
-
 
     async def get_document(self, media_type: str, tmdb_id: int, db_index: int) -> Optional[Dict[str, Any]]:
         db_key = f"storage_{db_index}"
@@ -903,3 +904,89 @@ class Database:
                     "dataSize": db_stats.get("dataSize", 0)
                 })
         return stats
+
+
+
+    # -------------------------------
+    # API Token Methods
+    # -------------------------------
+
+    async def add_api_token(self, name: str, daily_limit_gb: float = None, monthly_limit_gb: float = None) -> dict:
+        alphabet = string.ascii_letters + string.digits
+        token = ''.join(secrets.choice(alphabet) for _ in range(32))
+        
+        token_doc = {
+            "name": name,
+            "token": token,
+            "created_at": datetime.utcnow(),
+            "limits": {
+                "daily_limit_gb": daily_limit_gb if daily_limit_gb else 0,
+                "monthly_limit_gb": monthly_limit_gb if monthly_limit_gb else 0
+            },
+            "usage": {
+                "total_bytes": 0,
+                "daily": {"date": datetime.now(timezone.utc).strftime("%Y-%m-%d"), "bytes": 0},
+                "monthly": {"month": datetime.now(timezone.utc).strftime("%Y-%m"), "bytes": 0}
+            }
+        }
+        
+        await self.dbs["tracking"]["api_tokens"].insert_one(token_doc)
+        return convert_objectid_to_str(token_doc)
+
+    async def get_api_token(self, token: str) -> Optional[dict]:
+        doc = await self.dbs["tracking"]["api_tokens"].find_one({"token": token})
+        return convert_objectid_to_str(doc) if doc else None
+
+    async def get_all_api_tokens(self) -> List[dict]:
+        cursor = self.dbs["tracking"]["api_tokens"].find().sort("created_at", DESCENDING)
+        tokens = await cursor.to_list(None)
+        return [convert_objectid_to_str(token) for token in tokens]
+
+    async def revoke_api_token(self, token: str) -> bool:
+        result = await self.dbs["tracking"]["api_tokens"].delete_one({"token": token})
+        return result.deleted_count > 0
+
+    async def update_token_usage(self, token: str, bytes_delta: int):
+        today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        month_str = datetime.now(timezone.utc).strftime("%Y-%m")
+        
+        token_doc = await self.dbs["tracking"]["api_tokens"].find_one({"token": token})
+        if not token_doc:
+             return
+
+        current_daily = token_doc.get("usage", {}).get("daily", {})
+        if current_daily.get("date") != today_str:
+            await self.dbs["tracking"]["api_tokens"].update_one(
+                {"token": token},
+                {"$set": {"usage.daily": {"date": today_str, "bytes": 0}}}
+            )
+
+        current_monthly = token_doc.get("usage", {}).get("monthly", {})
+        if current_monthly.get("month") != month_str:
+            await self.dbs["tracking"]["api_tokens"].update_one(
+                {"token": token},
+                {"$set": {"usage.monthly": {"month": month_str, "bytes": 0}}}
+            )
+
+        await self.dbs["tracking"]["api_tokens"].update_one(
+            {"token": token},
+            {
+                "$inc": {
+                    "usage.total_bytes": bytes_delta,
+                    "usage.daily.bytes": bytes_delta,
+                    "usage.monthly.bytes": bytes_delta
+                }
+            }
+        )
+
+    async def update_api_token_limits(self, token: str, daily_limit_gb: float, monthly_limit_gb: float) -> bool:
+        result = await self.dbs["tracking"]["api_tokens"].update_one(
+            {"token": token},
+            {"$set": {
+                "limits": {
+                    "daily_limit_gb": daily_limit_gb if daily_limit_gb else 0,
+                    "monthly_limit_gb": monthly_limit_gb if monthly_limit_gb else 0
+                }
+            }}
+        )
+        return result.modified_count > 0

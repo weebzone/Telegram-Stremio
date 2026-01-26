@@ -1,7 +1,6 @@
 from pyrogram import Client
 from Backend.config import Telegram
 
-
 StreamBot = Client(
     name='bot',
     api_id=Telegram.API_ID,
@@ -13,7 +12,6 @@ StreamBot = Client(
     max_concurrent_transmissions=10
 )
 
-
 Helper = Client(
     "helper",
     api_id=Telegram.API_ID,
@@ -24,6 +22,6 @@ Helper = Client(
     max_concurrent_transmissions=10
 )
 
-
 multi_clients = {}
 work_loads = {}
+client_dc_map = {} 
