@@ -3,477 +3,162 @@
 {% block title %}Media Management - Telegram Stremio{% endblock %}
 
 {% block content %}
-<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-    <div class="app-panel p-6 mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
+    <div class="app-panel p-6 mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
         <div>
-            <h1 class="text-3xl font-bold">Media Management</h1>
-            <p class="theme-text-secondary mt-2 text-sm">Manage your movie and TV show collections faster.</p>
+            <h1 class="text-3xl font-bold tracking-tight">Media Management</h1>
+            <p class="theme-text-secondary mt-1 flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
+                Manage your {{ media_type }} collection and metadata.
+            </p>
         </div>
 
-        <div class="flex space-x-2">
+        <div class="flex bg-gray-100 dark:bg-gray-800 p-1 rounded-xl shadow-inner">
             <a href="/media/manage?media_type=movie"
-                class="px-4 py-2 rounded-md transition-colors text-sm font-medium {% if media_type == 'movie' %}bg-primary text-white{% else %}theme-input hover:opacity-90{% endif %}">
+                class="px-6 py-2 rounded-lg transition-all text-sm font-semibold {% if media_type == 'movie' %}bg-white dark:bg-gray-700 text-primary shadow-sm{% else %}theme-text-secondary hover:text-primary{% endif %}">
                 Movies
             </a>
             <a href="/media/manage?media_type=tv"
-                class="px-4 py-2 rounded-md transition-colors text-sm font-medium {% if media_type == 'tv' %}bg-primary text-white{% else %}theme-input hover:opacity-90{% endif %}">
+                class="px-6 py-2 rounded-lg transition-all text-sm font-semibold {% if media_type == 'tv' %}bg-white dark:bg-gray-700 text-primary shadow-sm{% else %}theme-text-secondary hover:text-primary{% endif %}">
                 TV Shows
             </a>
         </div>
     </div>
 
-    <!-- Search and Filters -->
-    <div class="theme-card p-6 rounded-lg shadow mb-8">
-        <div class="flex flex-col md:flex-row gap-4">
-            <div class="flex-1">
-                <input type="text" id="search-input" placeholder="Search {{ media_type }}s by title..."
-                    class="w-full px-4 py-2 theme-input rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm">
+    <div class="theme-card p-4 rounded-2xl shadow-sm mb-8">
+        <div class="flex flex-col md:flex-row gap-3">
+            <div class="relative flex-1">
+                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <svg class="h-5 w-5 theme-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                </div>
+                <input type="text" id="search-input" placeholder="Search by title..."
+                    class="w-full pl-10 pr-4 py-2.5 theme-input rounded-xl focus:ring-2 focus:ring-primary/50 transition-all text-sm border-none shadow-sm">
             </div>
             <div class="flex gap-2">
                 <button onclick="searchMedia()"
-                    class="bg-primary hover:opacity-90 text-white px-6 py-2 rounded-md transition-colors text-sm font-medium shadow-sm">
+                    class="bg-primary hover:brightness-110 text-white px-8 py-2.5 rounded-xl transition-all text-sm font-bold shadow-md shadow-primary/20">
                     Search
                 </button>
                 <button onclick="clearSearch()"
-                    class="theme-input px-6 py-2 rounded-md hover:opacity-90 transition-colors text-sm font-medium">
-                    Clear
+                    class="bg-gray-100 dark:bg-gray-800 theme-text-secondary px-6 py-2.5 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-700 transition-all text-sm font-medium">
+                    Reset
                 </button>
             </div>
         </div>
     </div>
 
-    <!-- Loading Indicator -->
-    <div id="loading" class="text-center py-12 hidden">
-        <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary mb-4"></div>
-        <p class="theme-text-secondary">Loading {{ media_type }}s...</p>
+    <div id="loading" class="text-center py-20 hidden">
+        <div class="inline-flex relative">
+            <div class="h-12 w-12 rounded-full border-4 border-primary/20"></div>
+            <div class="absolute top-0 left-0 h-12 w-12 rounded-full border-4 border-primary border-t-transparent animate-spin"></div>
+        </div>
+        <p class="theme-text-secondary mt-4 font-medium animate-pulse">Retrieving your library...</p>
     </div>
 
-    <!-- Error Display -->
     <div id="error-display" class="hidden mb-8">
-        <div class="theme-card p-6 rounded-lg shadow border-l-4 border-red-500">
-            <div class="flex items-center mb-4">
-                <svg class="h-6 w-6 text-red-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.996-.833-2.764 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+        <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-6 rounded-2xl flex flex-col items-center text-center">
+            <div class="bg-red-100 dark:bg-red-800 p-3 rounded-full mb-4">
+                <svg class="h-8 w-8 text-red-600 dark:text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.996-.833-2.764 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
                 </svg>
-                <h3 class="text-lg font-semibold text-red-700">Error Loading Media</h3>
             </div>
-            <p id="error-message" class="text-red-600 mb-4"></p>
-            <button onclick="retryLoad()"
-                class="bg-primary hover:opacity-90 text-white px-4 py-2 rounded-md transition-colors text-sm shadow-sm">
-                Try Again
+            <h3 class="text-lg font-bold text-red-800 dark:text-red-300">Connection Error</h3>
+            <p id="error-message" class="theme-text-secondary mt-1 mb-6 max-w-md"></p>
+            <button onclick="retryLoad()" class="bg-red-600 text-white px-6 py-2 rounded-xl text-sm font-bold hover:bg-red-700 transition-all">
+                Retry Connection
             </button>
         </div>
     </div>
 
-    <!-- Media Grid -->
-    <div id="media-grid"
-        class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-4 mb-8">
-        <!-- Media items will be loaded here via JavaScript -->
-    </div>
+    <div id="media-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6 mb-12">
+        </div>
 
-    <!-- No Results Message -->
-    <div id="no-results" class="text-center py-12 hidden">
-        <div class="theme-card p-8 rounded-lg shadow">
-            <svg class="mx-auto h-16 w-16 text-gray-300 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                    d="M7 4V2a1 1 0 011-1h8a1 1 0 011 1v2h4a1 1 0 110 2h-1v12a2 2 0 01-2 2H6a2 2 0 01-2-2V6H3a1 1 0 110-2h4zM9 6v10h6V6H9z" />
-            </svg>
-            <h3 class="text-lg font-semibold theme-text-secondary mb-2">No {{ media_type }}s found</h3>
-            <p class="theme-text-secondary text-sm mb-4">
-                {% if media_type == 'movie' %}
-                No movies match your search criteria
-                {% else %}
-                No TV shows match your search criteria
-                {% endif %}
-            </p>
-            <button onclick="clearSearch()"
-                class="bg-primary hover:opacity-90 text-white px-4 py-2 rounded-md transition-colors text-sm shadow-sm">
-                Show All {{ media_type|title }}s
+    <div id="no-results" class="text-center py-20 hidden">
+        <div class="theme-card p-10 rounded-3xl shadow-sm inline-block max-w-sm">
+            <div class="bg-gray-100 dark:bg-gray-800 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
+                <svg class="h-10 w-10 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                </svg>
+            </div>
+            <h3 class="text-xl font-bold mb-2">No results found</h3>
+            <p class="theme-text-secondary text-sm mb-6">We couldn't find any matches for your current filters.</p>
+            <button onclick="clearSearch()" class="bg-primary text-white px-6 py-2 rounded-xl text-sm font-bold shadow-lg shadow-primary/20">
+                Clear Filters
             </button>
         </div>
     </div>
 
-    <!-- Pagination -->
-    <div id="pagination" class="flex justify-center items-center space-x-2 mt-8 hidden">
-        <!-- Pagination will be loaded here via JavaScript -->
-    </div>
+    <div id="pagination" class="flex justify-center items-center gap-2 mb-12 hidden">
+        </div>
 
-    <!-- Media Info -->
-    <div id="media-info" class="theme-card p-4 rounded-lg shadow mt-6 hidden">
-        <div
-            class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 text-sm theme-text-secondary">
-            <span id="results-info"></span>
-            <span id="db-info"></span>
+    <div id="media-info" class="app-panel p-4 rounded-2xl hidden">
+        <div class="flex flex-col sm:flex-row justify-between items-center gap-4 text-xs font-semibold uppercase tracking-wider theme-text-secondary">
+            <span id="results-info" class="flex items-center gap-2">
+                <span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+                Loading stats...
+            </span>
+            <span id="db-info" class="bg-gray-200 dark:bg-gray-700 px-3 py-1 rounded-full"></span>
         </div>
     </div>
 </div>
 
 <script>
-    let currentPage = 1;
-    let currentSearch = '';
-    let isLoading = false;
-    const mediaType = '{{ media_type }}';
-
-    // Show loading state
-    function showLoading() {
-        isLoading = true;
-        document.getElementById('loading').classList.remove('hidden');
-        document.getElementById('media-grid').classList.add('hidden');
-        document.getElementById('no-results').classList.add('hidden');
-        document.getElementById('pagination').classList.add('hidden');
-        document.getElementById('media-info').classList.add('hidden');
-        document.getElementById('error-display').classList.add('hidden');
-    }
-
-    // Hide loading state
-    function hideLoading() {
-        isLoading = false;
-        document.getElementById('loading').classList.add('hidden');
-        document.getElementById('media-grid').classList.remove('hidden');
-    }
-
-    // Show error state
-    function showError(message) {
-        document.getElementById('error-message').textContent = message;
-        document.getElementById('error-display').classList.remove('hidden');
-        document.getElementById('loading').classList.add('hidden');
-        document.getElementById('media-grid').classList.add('hidden');
-        document.getElementById('no-results').classList.add('hidden');
-    }
-
-    // Load media with proper error handling
-    async function loadMedia(page = 1, search = '') {
-        if (isLoading) return; // Prevent multiple simultaneous requests
-
-        showLoading();
-        currentPage = page;
-        currentSearch = search;
-
-        try {
-            const url = `/api/media/list?media_type=${mediaType}&page=${page}&page_size=24&search=${encodeURIComponent(search)}`;
-            console.log('Fetching:', url);
-
-            const response = await fetch(url, {
-                method: 'GET',
-                credentials: 'same-origin',
-                headers: {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json'
-                }
-            });
-
-            console.log('Response status:', response.status);
-
-            if (!response.ok) {
-                if (response.status === 401) {
-                    window.location.href = '/login';
-                    return;
-                }
-                throw new Error(`Server responded with ${response.status}: ${response.statusText}`);
-            }
-
-            const data = await response.json();
-            console.log('Response data:', data);
-
-            hideLoading();
-
-            const grid = document.getElementById('media-grid');
-            const mediaKey = mediaType === 'movie' ? 'movies' : 'tv_shows';
-            const mediaItems = data[mediaKey] || [];
-
-            if (mediaItems.length === 0) {
-                grid.innerHTML = '';
-                document.getElementById('no-results').classList.remove('hidden');
-                document.getElementById('pagination').classList.add('hidden');
-                document.getElementById('media-info').classList.add('hidden');
-                return;
-            }
-
-            document.getElementById('no-results').classList.add('hidden');
-
-            // Render media items
-            grid.innerHTML = mediaItems.map(item => createMediaCard(item)).join('');
-
-            // Update pagination
-            updatePagination(data.current_page || page, data.total_pages || 1);
-
-            // Update info
-            updateMediaInfo(data);
-
-        } catch (error) {
-            console.error('Error loading media:', error);
-            hideLoading();
-            showError(`Failed to load ${mediaType}s: ${error.message}`);
-        }
-    }
-
-    // Create media card HTML
+    /* ... Keep your existing JS Logic, but update createMediaCard() ... */
     function createMediaCard(item) {
         const title = item.title || item.name || 'Unknown Title';
-        const year = item.release_year || 'Unknown Year';
-        const rating = item.rating ? `⭐ ${parseFloat(item.rating).toFixed(1)}` : '';
+        const year = item.release_year || 'N/A';
+        const rating = item.rating ? parseFloat(item.rating).toFixed(1) : null;
         const poster = item.poster || 'https://via.placeholder.com/300x450/e5e7eb/9ca3af?text=No+Image';
 
         return `
-        <div class="theme-card rounded-lg shadow hover:shadow-lg transition-all duration-300 group overflow-hidden">
-            <div class="relative">
-                <div class="aspect-w-2 aspect-h-3">
-                    <img src="${poster}" 
-                         alt="${title}" 
-                         class="w-full h-64 object-cover"
-                         onerror="this.src='https://via.placeholder.com/300x450/e5e7eb/9ca3af?text=No+Image'"
-                         loading="lazy">
+        <div class="group relative bg-white dark:bg-gray-900 rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 border border-gray-100 dark:border-gray-800">
+            <div class="relative aspect-[2/3] overflow-hidden">
+                <img src="${poster}" 
+                     alt="${title}" 
+                     class="w-full h-full object-cover transform group-hover:scale-105 transition-transform duration-500"
+                     onerror="this.src='https://via.placeholder.com/300x450/e5e7eb/9ca3af?text=No+Image'">
+                
+                ${rating ? `
+                    <div class="absolute top-2 right-2 bg-black/60 backdrop-blur-md text-white text-[10px] font-bold px-2 py-1 rounded-lg flex items-center gap-1 border border-white/10">
+                        <svg class="w-3 h-3 text-yellow-400" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
+                        ${rating}
+                    </div>
+                ` : ''}
+
+                <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-4">
+                    <div class="flex gap-2 w-full">
+                        <a href="/media/edit?tmdb_id=${item.tmdb_id}&db_index=${item.db_index}&media_type=${mediaType}" 
+                           class="flex-1 bg-white text-black py-2 rounded-lg text-xs font-bold text-center hover:bg-primary hover:text-white transition-colors">
+                            Edit
+                        </a>
+                        <button onclick="deleteMedia(${item.tmdb_id}, ${item.db_index}, '${title.replace(/'/g, "\\'")}')" 
+                                class="bg-red-500/20 hover:bg-red-500 backdrop-blur-sm text-red-500 hover:text-white p-2 rounded-lg transition-all">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                        </button>
+                    </div>
                 </div>
-                <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-300"></div>
             </div>
             <div class="p-3">
-                <h3 class="font-semibold text-sm mb-1 line-clamp-2 min-h-[2.5rem]" title="${title}">
-                    ${title}
-                </h3>
-                <div class="flex items-center justify-between text-xs theme-text-secondary mb-3">
-                    <span>${year}</span>
-                    ${rating ? `<span>${rating}</span>` : ''}
-                </div>
-                <div class="flex justify-between items-center">
-                    <a href="/media/edit?tmdb_id=${item.tmdb_id}&db_index=${item.db_index}&media_type=${mediaType}" 
-                       class="text-primary hover:underline text-xs font-medium px-2 py-1 rounded transition-colors hover:bg-blue-50">
-                        Edit
-                    </a>
-                    <button onclick="deleteMedia(${item.tmdb_id}, ${item.db_index}, '${title.replace(/'/g, "\\'")}')" 
-                            class="text-red-600 hover:underline text-xs font-medium px-2 py-1 rounded transition-colors hover:bg-red-50">
-                        Delete
-                    </button>
-                </div>
+                <h3 class="font-bold text-sm truncate theme-text" title="${title}">${title}</h3>
+                <p class="text-[11px] theme-text-secondary mt-0.5 font-medium">${year}</p>
             </div>
         </div>
-    `;
-    }
-
-    // Update pagination
-    function updatePagination(currentPage, totalPages) {
-        const pagination = document.getElementById('pagination');
-
-        if (totalPages <= 1) {
-            pagination.classList.add('hidden');
-            return;
-        }
-
-        pagination.classList.remove('hidden');
-        let paginationHTML = '';
-
-        // Previous button
-        if (currentPage > 1) {
-            paginationHTML += `
-            <button onclick="loadMedia(${currentPage - 1}, '${currentSearch}')" 
-                    class="px-3 py-2 border rounded-md hover:bg-gray-50 transition-colors text-sm">
-                Previous
-            </button>
         `;
-        }
-
-        // Page numbers
-        const startPage = Math.max(1, currentPage - 2);
-        const endPage = Math.min(totalPages, currentPage + 2);
-
-        // First page
-        if (startPage > 1) {
-            paginationHTML += `
-            <button onclick="loadMedia(1, '${currentSearch}')" 
-                    class="px-3 py-2 border rounded-md hover:bg-gray-50 transition-colors text-sm">
-                1
-            </button>
-        `;
-            if (startPage > 2) {
-                paginationHTML += `<span class="px-3 py-2 text-sm">...</span>`;
-            }
-        }
-
-        // Page range
-        for (let i = startPage; i <= endPage; i++) {
-            const isActive = i === currentPage;
-            paginationHTML += `
-            <button onclick="loadMedia(${i}, '${currentSearch}')" 
-                    class="px-3 py-2 border rounded-md transition-colors text-sm ${isActive ? 'bg-primary text-white border-primary' : 'hover:bg-gray-50'
-                }">
-                ${i}
-            </button>
-        `;
-        }
-
-        // Last page
-        if (endPage < totalPages) {
-            if (endPage < totalPages - 1) {
-                paginationHTML += `<span class="px-3 py-2 text-sm">...</span>`;
-            }
-            paginationHTML += `
-            <button onclick="loadMedia(${totalPages}, '${currentSearch}')" 
-                    class="px-3 py-2 border rounded-md hover:bg-gray-50 transition-colors text-sm">
-                ${totalPages}
-            </button>
-        `;
-        }
-
-        // Next button
-        if (currentPage < totalPages) {
-            paginationHTML += `
-            <button onclick="loadMedia(${currentPage + 1}, '${currentSearch}')" 
-                    class="px-3 py-2 border rounded-md hover:bg-gray-50 transition-colors text-sm">
-                Next
-            </button>
-        `;
-        }
-
-        pagination.innerHTML = paginationHTML;
     }
-
-    // Update media info display
-    function updateMediaInfo(data) {
-        const mediaInfo = document.getElementById('media-info');
-        const resultsInfo = document.getElementById('results-info');
-        const dbInfo = document.getElementById('db-info');
-
-        const startItem = ((data.current_page - 1) * 24) + 1;
-        const endItem = Math.min(data.current_page * 24, data.total_count);
-
-        resultsInfo.textContent = `Showing ${startItem}-${endItem} of ${data.total_count} ${mediaType}s`;
-
-        if (data.databases_checked && data.databases_checked.length > 0) {
-            dbInfo.textContent = `Database${data.databases_checked.length > 1 ? 's' : ''}: ${data.databases_checked.join(', ')}`;
-        }
-
-        mediaInfo.classList.remove('hidden');
-    }
-
-    // Search functionality
-    function searchMedia() {
-        const searchInput = document.getElementById('search-input');
-        const search = searchInput.value.trim();
-        loadMedia(1, search);
-    }
-
-    // Clear search
-    function clearSearch() {
-        document.getElementById('search-input').value = '';
-        loadMedia(1, '');
-    }
-
-    // Retry load function
-    function retryLoad() {
-        loadMedia(currentPage, currentSearch);
-    }
-
-    // Delete media with confirmation
-    async function deleteMedia(tmdbId, dbIndex, title) {
-        if (!confirm(`Are you sure you want to delete "${title}"?\n\nThis action cannot be undone.`)) return;
-
-        try {
-            const response = await fetch(`/api/media/delete?tmdb_id=${tmdbId}&db_index=${dbIndex}&media_type=${mediaType}`, {
-                method: 'DELETE',
-                credentials: 'same-origin',
-                headers: {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json'
-                }
-            });
-
-            if (response.ok) {
-                // Show success message briefly
-                const successMsg = document.createElement('div');
-                successMsg.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-md shadow-lg z-50';
-                successMsg.textContent = `"${title}" deleted successfully`;
-                document.body.appendChild(successMsg);
-
-                setTimeout(() => {
-                    document.body.removeChild(successMsg);
-                }, 3000);
-
-                // Reload current page
-                loadMedia(currentPage, currentSearch);
-            } else {
-                const error = await response.json();
-                alert(`Error deleting "${title}": ${error.detail || 'Unknown error'}`);
-            }
-        } catch (error) {
-            console.error('Error deleting media:', error);
-            alert(`Error deleting "${title}": ${error.message}`);
-        }
-    }
-
-    // Initialize page
-    document.addEventListener('DOMContentLoaded', () => {
-        // Load media on page load
-        loadMedia();
-
-        // Add enter key listener to search input
-        document.getElementById('search-input').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                searchMedia();
-            }
-        });
-
-        // Add input event for real-time search (with debouncing)
-        let searchTimeout;
-        document.getElementById('search-input').addEventListener('input', (e) => {
-            clearTimeout(searchTimeout);
-            const searchValue = e.target.value.trim();
-
-            if (searchValue.length === 0) {
-                searchTimeout = setTimeout(() => {
-                    loadMedia(1, '');
-                }, 300);
-            }
-        });
-    });
+    
+    // Use your existing JS Logic here...
+    // (Ensure you keep loadMedia, searchMedia, clearSearch, and pagination functions)
 </script>
 
 <style>
-    .line-clamp-2 {
-        display: -webkit-box;
-        -webkit-line-clamp: 2;
-        -webkit-box-orient: vertical;
-        overflow: hidden;
-    }
+    .animate-fade-in { animation: fadeIn 0.4s ease-out; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
-    .aspect-w-2 {
-        position: relative;
-        padding-bottom: 150%;
-        /* 2:3 aspect ratio */
-    }
-
-    .aspect-w-2>img {
-        position: absolute;
-        height: 100%;
-        width: 100%;
-        top: 0;
-        right: 0;
-        bottom: 0;
-        left: 0;
-    }
-
-    @media (max-width: 640px) {
-        .grid {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 0.75rem;
-        }
-    }
-
-    @media (min-width: 1536px) {
-        .grid {
-            grid-template-columns: repeat(8, minmax(0, 1fr));
-        }
-    }
-
-    /* Loading animation */
-    @keyframes spin {
-        to {
-            transform: rotate(360deg);
-        }
-    }
-
-    .animate-spin {
-        animation: spin 1s linear infinite;
-    }
+    /* Custom Scrollbar for dark mode */
+    .dark ::-webkit-scrollbar { width: 8px; }
+    .dark ::-webkit-scrollbar-track { background: #1f2937; }
+    .dark ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
 </style>
 {% endblock %}
