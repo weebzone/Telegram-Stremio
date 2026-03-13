@@ -3,39 +3,108 @@
 {% block title %}Stremio Setup Guide - Telegram Stremio{% endblock %}
 
 {% block content %}
-<div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+<div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 animate-fade-in">
     <section class="app-panel p-6 md:p-8">
-        <h1 class="text-3xl font-bold">Stremio Addon Setup</h1>
-        <p class="theme-text-secondary mt-2">Install the Telegram Stremio addon to access your media through Stremio.</p>
-    </section>
-
-    <section class="app-panel p-6">
-        <div class="flex items-start gap-4">
-            <span class="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center text-sm font-bold">1</span>
-            <div class="w-full">
-                <h3 class="text-lg font-semibold mb-2">Copy the Addon URL</h3>
-                <p class="theme-text-secondary text-sm mb-3">Copy the manifest URL below to your clipboard.</p>
-                <div class="theme-input rounded-md p-3 font-mono text-xs sm:text-sm break-all flex items-center justify-between gap-3">
-                    <span id="addon-url">{{ request.base_url }}stremio/manifest.json</span>
-                    <button onclick="copyToClipboard('addon-url')" class="text-primary hover:underline whitespace-nowrap">Copy</button>
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+                <h1 class="text-3xl font-bold tracking-tight">Stremio Addon Setup</h1>
+                <p class="theme-text-secondary mt-1">Connect your Telegram media library to the Stremio ecosystem.</p>
+            </div>
+            <div class="hidden md:block">
+                <div class="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
+                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
                 </div>
             </div>
         </div>
     </section>
 
-    <section class="space-y-4">
-        <div class="app-panel p-6"><div class="flex items-start gap-4"><span class="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center text-sm font-bold">2</span><div><h3 class="font-semibold text-lg">Open Stremio</h3><p class="theme-text-secondary text-sm mt-1">Launch Stremio on your device.</p></div></div></div>
-        <div class="app-panel p-6"><div class="flex items-start gap-4"><span class="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center text-sm font-bold">3</span><div><h3 class="font-semibold text-lg">Go to Addons</h3><p class="theme-text-secondary text-sm mt-1">Navigate to the Addons section from the main menu.</p></div></div></div>
-        <div class="app-panel p-6"><div class="flex items-start gap-4"><span class="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center text-sm font-bold">4</span><div><h3 class="font-semibold text-lg">Install the addon</h3><p class="theme-text-secondary text-sm mt-1">Paste the URL and confirm install.</p><div class="mt-3 rounded-md border border-primary/30 bg-primary/10 p-3 text-sm"><strong>Tip:</strong> Stremio must reach this server address.</div></div></div></div>
-    </section>
+    <div class="space-y-4">
+        <section class="theme-card p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 transition-all hover:shadow-md">
+            <div class="flex items-start gap-5">
+                <span class="flex-shrink-0 w-10 h-10 rounded-xl bg-primary text-white flex items-center justify-center font-bold shadow-lg shadow-primary/20">1</span>
+                <div class="w-full">
+                    <h3 class="text-lg font-bold mb-1">Copy Addon Manifest URL</h3>
+                    <p class="theme-text-secondary text-sm mb-4">Use this unique URL to register your library within the Stremio app.</p>
+                    
+                    <div class="relative group">
+                        <div class="theme-input rounded-xl p-4 font-mono text-xs sm:text-sm break-all flex items-center justify-between gap-4 bg-gray-50/50 dark:bg-gray-800/50 border-none shadow-inner">
+                            <span id="addon-url" class="theme-text font-medium">{{ request.base_url }}stremio/manifest.json</span>
+                            <button onclick="copyToClipboard('addon-url')" 
+                                    class="bg-primary/10 hover:bg-primary text-primary hover:text-white px-4 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap">
+                                Copy Link
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
 
-    <section class="app-panel p-6">
-        <h2 class="text-xl font-semibold mb-3">Additional Information</h2>
-        <ul class="space-y-2 text-sm theme-text-secondary">
-            <li><strong class="text-text">Network:</strong> Server must be reachable from your Stremio device.</li>
-            <li><strong class="text-text">Content:</strong> Movies and TV shows from your configured database are supported.</li>
-            <li><strong class="text-text">Sync:</strong> Library updates are reflected automatically.</li>
-        </ul>
+        <div class="grid grid-cols-1 gap-4">
+            <div class="theme-card p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800">
+                <div class="flex items-start gap-5">
+                    <span class="flex-shrink-0 w-10 h-10 rounded-xl bg-gray-100 dark:bg-gray-800 theme-text-secondary flex items-center justify-center font-bold">2</span>
+                    <div>
+                        <h3 class="font-bold text-lg">Launch Stremio</h3>
+                        <p class="theme-text-secondary text-sm">Open Stremio on your Desktop, Android, or Android TV device.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="theme-card p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800">
+                <div class="flex items-start gap-5">
+                    <span class="flex-shrink-0 w-10 h-10 rounded-xl bg-gray-100 dark:bg-gray-800 theme-text-secondary flex items-center justify-center font-bold">3</span>
+                    <div>
+                        <h3 class="font-bold text-lg">Navigate to Addons</h3>
+                        <p class="theme-text-secondary text-sm">Open the sidebar/menu and select the "Addons" puzzle icon.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="theme-card p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800">
+                <div class="flex items-start gap-5">
+                    <span class="flex-shrink-0 w-10 h-10 rounded-xl bg-gray-100 dark:bg-gray-800 theme-text-secondary flex items-center justify-center font-bold">4</span>
+                    <div class="w-full">
+                        <h3 class="font-bold text-lg">Paste & Install</h3>
+                        <p class="theme-text-secondary text-sm">Paste the URL into the search/install box and confirm the prompt.</p>
+                        
+                        <div class="mt-4 flex items-center gap-3 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200/50 dark:border-amber-800/30 text-amber-800 dark:text-amber-200 text-xs">
+                            <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <p><strong>Note:</strong> Ensure your Stremio device can ping this server's IP address.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <section class="app-panel p-6 md:p-8 rounded-3xl">
+        <h2 class="text-xl font-bold mb-5 flex items-center gap-2">
+            <svg class="w-5 h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            Technical Details
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-6">
+            <div class="space-y-1">
+                <span class="text-[10px] font-bold uppercase tracking-widest text-primary">Protocol</span>
+                <p class="text-sm theme-text font-medium">Stremio Addon SDK v3</p>
+                <p class="text-xs theme-text-secondary">Fully compatible with official clients.</p>
+            </div>
+            <div class="space-y-1">
+                <span class="text-[10px] font-bold uppercase tracking-widest text-primary">Capabilities</span>
+                <p class="text-sm theme-text font-medium">Catalog & Streams</p>
+                <p class="text-xs theme-text-secondary">Automatic metadata enrichment via TMDB.</p>
+            </div>
+            <div class="space-y-1">
+                <span class="text-[10px] font-bold uppercase tracking-widest text-primary">Synchronization</span>
+                <p class="text-sm theme-text font-medium">Instant Updates</p>
+                <p class="text-xs theme-text-secondary">Library changes reflect without re-installing.</p>
+            </div>
+        </div>
     </section>
 </div>
 
@@ -45,19 +114,26 @@ function copyToClipboard(elementId) {
     const text = element.textContent;
 
     navigator.clipboard.writeText(text).then(() => {
-        const button = element.nextElementSibling;
+        const button = event.currentTarget;
         const originalText = button.textContent;
+        
         button.textContent = 'Copied!';
-        button.classList.add('text-green-500');
+        button.classList.remove('bg-primary/10', 'text-primary');
+        button.classList.add('bg-green-500', 'text-white');
 
         setTimeout(() => {
             button.textContent = originalText;
-            button.classList.remove('text-green-500');
+            button.classList.add('bg-primary/10', 'text-primary');
+            button.classList.remove('bg-green-500', 'text-white');
         }, 2000);
     }).catch(err => {
         console.error('Failed to copy: ', err);
-        alert('Failed to copy to clipboard');
     });
 }
 </script>
+
+<style>
+    .animate-fade-in { animation: fadeIn 0.4s ease-out; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+</style>
 {% endblock %}
