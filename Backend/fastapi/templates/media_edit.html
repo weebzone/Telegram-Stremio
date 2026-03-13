@@ -3,945 +3,245 @@
 {% block title %}Edit {{ media_type|title }} - Fyvio Backend{% endblock %}
 
 {% block content %}
-<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
-    <div class="app-panel p-5 sm:p-6 mb-6 sm:mb-8">
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
-            <a href="/media/manage?media_type={{ media_type }}"
-                class="text-primary hover:underline flex items-center text-sm sm:text-base">
-                <svg class="w-4 h-4 sm:w-5 sm:h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
-                </svg>
-                Back to {{ media_type|title }}s
-            </a>
-            <span class="text-xs theme-text-secondary">TMDB: {{ tmdb_id }} • DB: {{ db_index }}</span>
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+    <div class="app-panel p-5 mb-8">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div class="space-y-1">
+                <a href="/media/manage?media_type={{ media_type }}"
+                    class="group inline-flex items-center text-primary font-medium hover:text-primary/80 transition-colors">
+                    <i data-lucide="chevron-left" class="w-5 h-5 mr-1 group-hover:-translate-x-1 transition-transform"></i>
+                    Back to {{ media_type|title }}s
+                </a>
+                <h1 class="text-2xl sm:text-3xl font-extrabold mt-2 tracking-tight">Edit {{ media_type|title }}</h1>
+            </div>
+            <div class="flex items-center gap-2 bg-white/5 px-4 py-2 rounded-xl border border-white/10 self-start sm:self-center">
+                <i data-lucide="database" class="w-4 h-4 theme-text-secondary"></i>
+                <span class="text-xs font-mono theme-text-secondary uppercase">TMDB: {{ tmdb_id }} <span class="mx-1">•</span> DB: {{ db_index }}</span>
+            </div>
         </div>
-        <h1 class="text-2xl sm:text-3xl font-bold mt-3">Edit {{ media_type|title }}</h1>
-        <p class="theme-text-secondary text-sm sm:text-base mt-1">Update metadata, artwork and stream quality entries.</p>
     </div>
 
-    <!-- Media Preview -->
     {% if media_details %}
-    <div class="theme-card rounded-lg shadow mb-6 sm:mb-8 overflow-hidden">
+    <div class="app-panel overflow-hidden mb-8 border-none bg-zinc-900 shadow-2xl">
+        <div class="relative">
+            {% if media_details.backdrop %}
+            <div class="absolute inset-0 h-full w-full">
+                <img src="{{ media_details.backdrop }}" class="w-full h-full object-cover opacity-40">
+                <div class="absolute inset-0 bg-gradient-to-t from-zinc-900 via-zinc-900/60 to-transparent"></div>
+            </div>
+            {% endif %}
 
-        <!-- Mobile Layout (Stack vertically) -->
-        <div class="block sm:hidden">
-            <!-- Poster Section -->
-            <div class="bg-gradient-to-br from-gray-800 to-gray-900 p-6">
-                <div class="flex flex-col items-center text-center">
-                    <img src="{{ media_details.poster or '/static/placeholder.jpg' }}" alt="{{ media_details.title }}"
-                        class="w-32 h-48 object-cover rounded-lg shadow-xl border-4 border-white mb-4"
-                        onerror="this.src='https://via.placeholder.com/300x450/e5e7eb/9ca3af?text=No+Image'">
-                    <h2 class="text-xl font-bold text-white mb-2">{{ media_details.title }}</h2>
-                    <div class="flex flex-wrap justify-center items-center gap-2 mb-3">
-                        {% if media_details.rating %}
-                        <span class="bg-yellow-500 text-black px-2 py-1 rounded text-sm font-bold">
-                            ⭐ {{ media_details.rating }}
-                        </span>
-                        {% endif %}
-                        <span class="text-white text-sm bg-white/20 px-2 py-1 rounded">{{ media_details.release_year
-                            }}</span>
+            <div class="relative p-6 sm:p-10 flex flex-col md:flex-row gap-8 items-center md:items-end">
+                <div class="flex-shrink-0 relative group">
+                    <img src="{{ media_details.poster or '/static/placeholder.jpg' }}" 
+                         alt="{{ media_details.title }}"
+                         class="w-48 md:w-56 rounded-2xl shadow-2xl border border-white/10 transition-transform group-hover:scale-[1.02] duration-300"
+                         onerror="this.src='https://via.placeholder.com/300x450/e5e7eb/9ca3af?text=No+Image'">
+                    {% if media_details.rating %}
+                    <div class="absolute top-3 right-3 bg-yellow-500 text-black font-bold px-2 py-1 rounded-lg text-xs flex items-center gap-1 shadow-lg">
+                        <i data-lucide="star" class="w-3 h-3 fill-current"></i> {{ media_details.rating }}
                     </div>
-                    <div class="flex flex-wrap justify-center gap-1">
-                        {% for genre in media_details.genres[:4] %}
-                        <span class="bg-white/20 text-white px-2 py-1 rounded-full text-xs">{{ genre }}</span>
+                    {% endif %}
+                </div>
+
+                <div class="flex-1 text-center md:text-left space-y-4">
+                    <div class="space-y-2">
+                        <h2 class="text-3xl md:text-5xl font-black text-white leading-tight">{{ media_details.title }}</h2>
+                        <p class="text-lg text-zinc-300 font-medium">{{ media_details.release_year }}</p>
+                    </div>
+                    
+                    <div class="flex flex-wrap justify-center md:justify-start gap-2">
+                        {% for genre in media_details.genres[:6] %}
+                        <span class="px-3 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/5 text-xs font-semibold text-white/90">
+                            {{ genre }}
+                        </span>
                         {% endfor %}
                     </div>
+
+                    {% if media_details.description %}
+                    <p class="text-zinc-400 text-sm md:text-base leading-relaxed max-w-3xl line-clamp-3 md:line-clamp-none">
+                        {{ media_details.description }}
+                    </p>
+                    {% endif %}
                 </div>
             </div>
-
-            <!-- Backdrop Section -->
-            {% if media_details.backdrop %}
-            <div class="relative h-48 overflow-hidden">
-                <img src="{{ media_details.backdrop }}" alt="{{ media_details.title }} backdrop"
-                    class="w-full h-full object-cover" onerror="this.style.display='none'">
-                <div class="absolute inset-0 bg-black/30"></div>
-            </div>
-            {% endif %}
         </div>
-
-        <!-- Desktop Layout (Original backdrop style) -->
-        <div class="hidden sm:block">
-            {% if media_details.backdrop %}
-            <div class="relative h-64 md:h-80 bg-gradient-to-r from-gray-900 to-gray-700">
-                <img src="{{ media_details.backdrop }}" alt="{{ media_details.title }} backdrop"
-                    class="w-full h-full object-cover opacity-60" onerror="this.style.display='none'">
-                <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent"></div>
-                <div class="absolute bottom-0 left-0 right-0 p-6">
-                    <div class="flex items-end gap-6">
-                        <img src="{{ media_details.poster or '/static/placeholder.jpg' }}"
-                            alt="{{ media_details.title }}"
-                            class="w-32 md:w-48 h-48 md:h-72 object-cover rounded-lg shadow-2xl border-4 border-white"
-                            onerror="this.src='https://via.placeholder.com/300x450/e5e7eb/9ca3af?text=No+Image'">
-                        <div class="text-white flex-1">
-                            <h2 class="text-2xl md:text-4xl font-bold mb-2">{{ media_details.title }}</h2>
-                            <div class="flex flex-wrap items-center gap-4 mb-4">
-                                {% if media_details.rating %}
-                                <span class="bg-yellow-500 text-black px-2 py-1 rounded text-sm font-bold">
-                                    ⭐ {{ media_details.rating }}
-                                </span>
-                                {% endif %}
-                                <span class="text-lg">{{ media_details.release_year }}</span>
-
-                            </div>
-                            <div class="flex flex-wrap gap-2">
-                                {% for genre in media_details.genres[:6] %}
-                                <span class="bg-white/20 backdrop-blur-sm text-white px-3 py-1 rounded-full text-sm">{{
-                                    genre }}</span>
-                                {% endfor %}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            {% else %}
-            <!-- Fallback without backdrop for desktop -->
-            <div class="p-6">
-                <div class="flex items-start gap-6">
-                    <div class="flex-shrink-0">
-                        <img src="{{ media_details.poster or '/static/placeholder.jpg' }}"
-                            alt="{{ media_details.title }}" class="w-48 h-72 object-cover rounded-lg shadow-lg"
-                            onerror="this.src='https://via.placeholder.com/300x450/e5e7eb/9ca3af?text=No+Image'">
-                    </div>
-                    <div class="flex-1">
-                        <h2 class="text-2xl font-bold mb-2">{{ media_details.title }}</h2>
-                        <p class="theme-text-secondary mb-4">{{ media_details.release_year }} • Rating: {{
-                            media_details.rating or 'N/A' }}</p>
-                        <div class="flex flex-wrap gap-2 mb-4">
-                            {% for genre in media_details.genres[:6] %}
-                            <span class="bg-gray-200 text-gray-700 px-2 py-1 rounded-full text-sm">{{ genre }}</span>
-                            {% endfor %}
-                        </div>
-                    </div>
-                </div>
-            </div>
-            {% endif %}
-        </div>
-
-        <!-- Description (common for both layouts) -->
-        {% if media_details.description %}
-        <div class="px-4 sm:px-6 pb-4 sm:pb-6">
-            <h3 class="text-base sm:text-lg font-semibold mb-2">Overview</h3>
-            <p class="theme-text-secondary leading-relaxed text-sm sm:text-base">{{ media_details.description }}</p>
-        </div>
-        {% endif %}
     </div>
     {% endif %}
 
-    <!-- Edit Form -->
-    <div class="theme-card p-4 sm:p-6 rounded-lg shadow mb-6 sm:mb-8">
-        <h3 class="text-lg sm:text-xl font-semibold mb-4 sm:mb-6">Edit Details</h3>
-        <form onsubmit="updateMedia(event)" id="edit-form">
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 mb-6">
-                <div class="sm:col-span-2">
-                    <label class="block text-sm font-medium mb-2">Title *</label>
-                    <input type="text" id="title" name="title"
-                        value="{{ media_details.title if media_details else '' }}"
-                        class="w-full px-3 py-2 text-sm theme-input rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
-                        required>
-                </div>
-                <div>
-                    <label class="block text-sm font-medium mb-2">Release Year *</label>
-                    <input type="number" id="release_year" name="release_year"
-                        value="{{ media_details.release_year if media_details else '' }}"
-                        class="w-full px-3 py-2 text-sm theme-input rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
-                        required>
-                </div>
-                <div>
-                    <label class="block text-sm font-medium mb-2">Rating (0-10)</label>
-                    <input type="number" step="0.1" min="0" max="10" id="rating" name="rating"
-                        value="{{ media_details.rating if media_details else '' }}"
-                        class="w-full px-3 py-2 text-sm theme-input rounded-md focus:outline-none focus:ring-2 focus:ring-primary">
-                </div>
-                <div class="sm:col-span-2">
-                    <label class="block text-sm font-medium mb-2">Logo URL</label>
-                    <input type="url" id="logo" name="logo" value="{{ media_details.logo if media_details else '' }}"
-                        class="w-full px-3 py-2 text-sm theme-input rounded-md focus:outline-none focus:ring-2 focus:ring-primary">
+    <div class="app-panel p-6 sm:p-8 mb-8">
+        <div class="flex items-center gap-3 mb-8 border-b border-white/5 pb-4">
+            <div class="p-2 rounded-lg bg-primary/10">
+                <i data-lucide="edit-3" class="w-6 h-6 text-primary"></i>
+            </div>
+            <h3 class="text-xl font-bold">Metadata Details</h3>
+        </div>
+
+        <form onsubmit="updateMedia(event)" id="edit-form" class="space-y-8">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="md:col-span-2 space-y-2">
+                    <label class="text-sm font-semibold theme-text-secondary ml-1">Title *</label>
+                    <input type="text" id="title" name="title" value="{{ media_details.title if media_details else '' }}"
+                        class="theme-input w-full px-4 py-3 rounded-xl focus:ring-2 focus:ring-primary/50 transition-all outline-none border-white/10" required>
                 </div>
 
-                <div class="sm:col-span-2">
-                    <label class="block text-sm font-medium mb-2">Poster URL</label>
-                    <input type="url" id="poster" name="poster"
-                        value="{{ media_details.poster if media_details else '' }}"
-                        class="w-full px-3 py-2 text-sm theme-input rounded-md focus:outline-none focus:ring-2 focus:ring-primary">
+                <div class="space-y-2">
+                    <label class="text-sm font-semibold theme-text-secondary ml-1">Release Year</label>
+                    <input type="number" id="release_year" name="release_year" value="{{ media_details.release_year if media_details else '' }}"
+                        class="theme-input w-full px-4 py-3 rounded-xl focus:ring-2 focus:ring-primary/50 transition-all outline-none border-white/10" required>
                 </div>
-                <div class="sm:col-span-2">
-                    <label class="block text-sm font-medium mb-2">Backdrop URL</label>
-                    <input type="url" id="backdrop" name="backdrop"
-                        value="{{ media_details.backdrop if media_details else '' }}"
-                        class="w-full px-3 py-2 text-sm theme-input rounded-md focus:outline-none focus:ring-2 focus:ring-primary">
+                <div class="space-y-2">
+                    <label class="text-sm font-semibold theme-text-secondary ml-1">Rating (0-10)</label>
+                    <input type="number" step="0.1" min="0" max="10" id="rating" name="rating" value="{{ media_details.rating if media_details else '' }}"
+                        class="theme-input w-full px-4 py-3 rounded-xl focus:ring-2 focus:ring-primary/50 transition-all outline-none border-white/10">
+                </div>
+
+                <div class="md:col-span-2 space-y-4">
+                    <div class="space-y-2">
+                        <label class="text-sm font-semibold theme-text-secondary ml-1 flex items-center gap-2">
+                            <i data-lucide="image" class="w-4 h-4"></i> Poster URL
+                        </label>
+                        <input type="url" id="poster" name="poster" value="{{ media_details.poster if media_details else '' }}"
+                            class="theme-input w-full px-4 py-3 rounded-xl focus:ring-2 focus:ring-primary/50 transition-all outline-none border-white/10 font-mono text-xs">
+                    </div>
+                    <div class="space-y-2">
+                        <label class="text-sm font-semibold theme-text-secondary ml-1 flex items-center gap-2">
+                            <i data-lucide="monitor" class="w-4 h-4"></i> Backdrop URL
+                        </label>
+                        <input type="url" id="backdrop" name="backdrop" value="{{ media_details.backdrop if media_details else '' }}"
+                            class="theme-input w-full px-4 py-3 rounded-xl focus:ring-2 focus:ring-primary/50 transition-all outline-none border-white/10 font-mono text-xs">
+                    </div>
+                </div>
+
+                <div class="md:col-span-2 space-y-2">
+                    <label class="text-sm font-semibold theme-text-secondary ml-1">Overview</label>
+                    <textarea id="description" name="description" rows="4"
+                        class="theme-input w-full px-4 py-3 rounded-xl focus:ring-2 focus:ring-primary/50 transition-all outline-none border-white/10">{{ media_details.description if media_details else '' }}</textarea>
+                </div>
+
+                <div class="md:col-span-2 space-y-2">
+                    <label class="text-sm font-semibold theme-text-secondary ml-1">Genres (comma-separated)</label>
+                    <input type="text" id="genres" name="genres" value="{% if media_details and media_details.genres %}{{ media_details.genres|join(', ') }}{% endif %}"
+                        class="theme-input w-full px-4 py-3 rounded-xl focus:ring-2 focus:ring-primary/50 transition-all outline-none border-white/10" placeholder="Action, Thriller...">
                 </div>
             </div>
 
-            <div class="mb-6">
-                <label class="block text-sm font-medium mb-2">Description</label>
-                <textarea id="description" name="description" rows="3"
-                    class="w-full px-3 py-2 text-sm theme-input rounded-md focus:outline-none focus:ring-2 focus:ring-primary">{{ media_details.description if media_details else '' }}</textarea>
-            </div>
-
-            <div class="mb-6">
-                <label class="block text-sm font-medium mb-2">Genres (comma-separated)</label>
-                <input type="text" id="genres" name="genres"
-                    value="{% if media_details and media_details.genres %}{{ media_details.genres|join(', ') }}{% endif %}"
-                    class="w-full px-3 py-2 text-sm theme-input rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
-                    placeholder="Action, Comedy, Drama">
-            </div>
-
-            <div class="flex flex-col sm:flex-row justify-end gap-2 sm:gap-4">
+            <div class="flex flex-col sm:flex-row justify-end gap-3 pt-4 border-t border-white/5">
                 <button type="button" onclick="window.history.back()"
-                    class="w-full sm:w-auto px-6 py-2 theme-input rounded-md hover:bg-gray-50 transition-colors text-sm">
+                    class="px-8 py-3 rounded-xl theme-text-secondary hover:bg-white/5 transition-colors font-semibold">
                     Cancel
                 </button>
                 <button type="submit"
-                    class="w-full sm:w-auto bg-primary hover:opacity-90 text-white px-6 py-2 rounded-md transition-colors text-sm shadow-sm">
-                    Save Changes
+                    class="flex items-center justify-center gap-2 px-8 py-3 bg-primary hover:bg-primary/90 text-white font-bold rounded-xl transition-all shadow-lg shadow-primary/20">
+                    <i data-lucide="save" class="w-4 h-4"></i> Save Changes
                 </button>
             </div>
         </form>
     </div>
 
-    <!-- Quality Management -->
     {% if media_details %}
-    <div class="theme-card p-4 sm:p-6 rounded-lg shadow">
-        <h3 class="text-lg sm:text-xl font-semibold mb-4 sm:mb-6">Available Content</h3>
-
-        {% if media_type == 'movie' and media_details.telegram %}
-        <!-- Movie Qualities (sorted by quality) -->
-        <div class="space-y-3">
-            {% set sorted_qualities = media_details.telegram|sort(attribute='quality') %}
-            {% for quality in sorted_qualities %}
-            <div
-                class="flex flex-col sm:flex-row sm:items-center justify-between p-3 sm:p-4 bg-gray-50 rounded-lg border gap-3 sm:gap-0">
-                <div class="flex-1">
-                    <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
-                        <span
-                            class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800 w-fit">
-                            {{ quality.quality }}
-                        </span>
-                        <span class="text-sm text-gray-600">{{ quality.size }}</span>
-                    </div>
-                    <p class="text-sm text-gray-500 mt-2 sm:mt-1 break-all">{{ quality.name }}</p>
+    <div class="app-panel p-6 sm:p-8">
+        <div class="flex items-center justify-between mb-8 border-b border-white/5 pb-4">
+            <div class="flex items-center gap-3">
+                <div class="p-2 rounded-lg bg-green-500/10 text-green-500">
+                    <i data-lucide="layers" class="w-6 h-6"></i>
                 </div>
-                <div class="flex gap-2">
-                    <button onclick="copyStreamLink('{{ quality.id }}', '{{ quality.name }}')"
-                        class="self-start sm:self-center text-green-600 hover:text-green-800 hover:bg-green-50 px-3 py-1 rounded transition-colors text-sm"
-                        title="Copy direct stream link">
-                        📋 Copy Link
-                    </button>
-                    <button onclick="runSpeedTest('{{ quality.id }}', 'movie', '{{ quality.quality }}')"
-                        class="self-start sm:self-center text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-3 py-1 rounded transition-colors text-sm">
-                        🚀 Speed Test
-                    </button>
-                    <button onclick="deleteQuality('{{ quality.id }}')"
-                        class="self-start sm:self-center text-red-600 hover:text-red-800 hover:bg-red-50 px-3 py-1 rounded transition-colors text-sm">
-                        Delete
-                    </button>
-                </div>
+                <h3 class="text-xl font-bold">Storage & Streams</h3>
             </div>
-            {% endfor %}
         </div>
 
-        {% elif media_type == 'tv' and media_details.seasons %}
-        <!-- TV Show Seasons and Episodes (sorted) -->
-        <div class="space-y-4 sm:space-y-6">
-            {% for season in media_details.seasons|sort(attribute='season_number') %}
-            <div class="border border-gray-200 rounded-lg overflow-hidden">
-                <!-- Season Header -->
-                <div
-                    class="bg-gradient-to-r from-blue-50 to-indigo-50 px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200">
-                    <div class="flex items-center justify-between">
-                        <h4 class="text-base sm:text-lg font-semibold text-gray-900">Season {{ season.season_number }}
-                        </h4>
-                        <div class="flex items-center gap-2 sm:gap-4">
-                            <span class="text-xs sm:text-sm text-gray-600">{{ season.episodes|length }} episode{{ 's' if
-                                season.episodes|length != 1 else '' }}</span>
-                            <button onclick="toggleSeason({{ loop.index0 }})"
-                                class="text-blue-600 hover:text-blue-800 transition-colors p-1">
-                                <svg id="season-arrow-{{ loop.index0 }}"
-                                    class="w-4 h-4 sm:w-5 sm:h-5 transform transition-transform" fill="none"
-                                    stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M19 9l-7 7-7-7"></path>
-                                </svg>
-                            </button>
+        {% if media_type == 'movie' and media_details.telegram %}
+            <div class="grid grid-cols-1 gap-4">
+                {% for quality in media_details.telegram|sort(attribute='quality') %}
+                <div class="flex flex-col sm:flex-row items-center justify-between p-4 bg-white/5 border border-white/10 rounded-2xl gap-4">
+                    <div class="flex items-center gap-4">
+                        <div class="h-10 w-10 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-500 font-bold">
+                            {{ quality.quality }}
+                        </div>
+                        <div>
+                            <p class="font-bold text-sm break-all">{{ quality.name }}</p>
+                            <p class="text-xs theme-text-secondary">{{ quality.size }} • Direct Stream ID: {{ quality.id[:8] }}...</p>
                         </div>
                     </div>
-                </div>
-
-                <!-- Episodes List (sorted by episode number) -->
-                <div id="season-content-{{ loop.index0 }}" class="season-content">
-                    <div class="divide-y divide-gray-100">
-                        {% for episode in season.episodes|sort(attribute='episode_number') %}
-                        <div class="p-3 sm:p-4 hover:bg-gray-50 transition-colors">
-                            <div class="flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-4">
-                                <!-- Episode Number -->
-                                <div
-                                    class="flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 rounded-lg flex items-center justify-center mx-auto sm:mx-0">
-                                    <span class="text-sm font-bold text-blue-800">{{ episode.episode_number }}</span>
-                                </div>
-
-                                <!-- Episode Info -->
-                                <div class="flex-1 min-w-0">
-                                    <h5 class="text-sm font-medium text-gray-900 mb-2 text-center sm:text-left">{{
-                                        episode.title }}</h5>
-
-                                    <!-- Episode Qualities (sorted by quality) -->
-                                    {% if episode.telegram %}
-                                    <div class="space-y-2">
-                                        {% set sorted_episode_qualities = episode.telegram|sort(attribute='quality') %}
-                                        {% for quality in sorted_episode_qualities %}
-                                        <div
-                                            class="flex flex-col sm:flex-row sm:items-center justify-between bg-white border border-gray-200 rounded-md p-3 gap-2 sm:gap-0">
-                                            <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-                                                <span
-                                                    class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-green-100 text-green-800 w-fit">
-                                                    {{ quality.quality }}
-                                                </span>
-                                                <span class="text-xs text-gray-500">{{ quality.size }}</span>
-                                                <span class="text-xs text-gray-400 break-all">{{ quality.name }}</span>
-                                            </div>
-                                            <div class="flex gap-2">
-                                                <button
-                                                    onclick="copyStreamLink('{{ quality.id }}', '{{ quality.name }}')"
-                                                    class="self-start sm:self-center text-green-600 hover:text-green-800 hover:bg-green-50 px-2 py-1 rounded transition-colors text-xs"
-                                                    title="Copy direct stream link">
-                                                    📋 Copy
-                                                </button>
-                                                <button
-                                                    onclick="runSpeedTest('{{ quality.id }}', 'tv', '{{ quality.quality }}')"
-                                                    class="self-start sm:self-center text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-2 py-1 rounded transition-colors text-xs">
-                                                    🚀 Speed Test
-                                                </button>
-                                                <button
-                                                    onclick="deleteTVQuality({{ season.season_number }}, {{ episode.episode_number }}, '{{ quality.id }}')"
-                                                    class="self-start sm:self-center text-red-600 hover:text-red-800 hover:bg-red-50 px-2 py-1 rounded transition-colors text-xs">
-                                                    Delete
-                                                </button>
-                                            </div>
-                                        </div>
-                                        {% endfor %}
-                                    </div>
-                                    {% else %}
-                                    <p class="text-xs text-gray-400 text-center sm:text-left">No qualities available</p>
-                                    {% endif %}
-                                </div>
-
-                                <!-- Episode Actions -->
-                                <div class="flex-shrink-0 flex justify-center sm:justify-start">
-                                    <button
-                                        onclick="deleteTVEpisode({{ season.season_number }}, {{ episode.episode_number }})"
-                                        class="text-red-600 hover:text-red-800 hover:bg-red-50 px-2 py-1 rounded text-xs transition-colors">
-                                        Delete Episode
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                        {% endfor %}
-                    </div>
-
-                    <!-- Season Actions -->
-                    <div class="px-3 sm:px-4 py-3 bg-gray-50 border-t border-gray-200 text-center sm:text-left">
-                        <button onclick="deleteTVSeason({{ season.season_number }})"
-                            class="text-red-600 hover:text-red-800 hover:bg-red-100 px-3 py-1 rounded text-sm transition-colors">
-                            Delete Entire Season
+                    <div class="flex items-center gap-2 w-full sm:w-auto">
+                        <button onclick="copyStreamLink('{{ quality.id }}', '{{ quality.name }}')"
+                            class="flex-1 sm:flex-none flex items-center justify-center gap-1 px-3 py-2 rounded-lg bg-green-500/10 text-green-500 hover:bg-green-500/20 transition-all text-xs font-bold uppercase tracking-wider">
+                            <i data-lucide="copy" class="w-3.5 h-3.5"></i> Link
+                        </button>
+                        <button onclick="deleteQuality('{{ quality.id }}')"
+                            class="p-2 rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-all">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
                         </button>
                     </div>
                 </div>
+                {% endfor %}
             </div>
-            {% endfor %}
-        </div>
+
+        {% elif media_type == 'tv' and media_details.seasons %}
+            <div class="space-y-4">
+                {% for season in media_details.seasons|sort(attribute='season_number') %}
+                <div class="bg-white/5 border border-white/10 rounded-2xl overflow-hidden">
+                    <button onclick="toggleSeason({{ loop.index0 }})" class="w-full flex items-center justify-between p-5 hover:bg-white/5 transition-colors">
+                        <div class="flex items-center gap-3">
+                            <span class="h-8 w-8 rounded-lg bg-primary/20 text-primary flex items-center justify-center font-bold text-xs">S{{ season.season_number }}</span>
+                            <span class="font-bold">Season {{ season.season_number }}</span>
+                            <span class="text-xs theme-text-secondary px-2 py-0.5 rounded-full bg-white/5 border border-white/10">{{ season.episodes|length }} EP</span>
+                        </div>
+                        <i id="season-arrow-{{ loop.index0 }}" data-lucide="chevron-down" class="w-5 h-5 transition-transform"></i>
+                    </button>
+
+                    <div id="season-content-{{ loop.index0 }}" class="season-content border-t border-white/5">
+                        <div class="p-4 space-y-3">
+                            {% for episode in season.episodes|sort(attribute='episode_number') %}
+                            <div class="p-4 bg-zinc-800/50 rounded-xl border border-white/5 space-y-3">
+                                <div class="flex items-center justify-between">
+                                    <h5 class="text-sm font-bold flex items-center gap-2">
+                                        <span class="text-primary font-mono">E{{ episode.episode_number }}</span> {{ episode.title }}
+                                    </h5>
+                                    <button onclick="deleteTVEpisode({{ season.season_number }}, {{ episode.episode_number }})"
+                                            class="text-red-400 hover:text-red-300 text-xs font-semibold px-2 py-1">Delete Ep</button>
+                                </div>
+                                
+                                <div class="grid grid-cols-1 gap-2">
+                                    {% for quality in episode.telegram|sort(attribute='quality') %}
+                                    <div class="flex items-center justify-between bg-black/20 p-2 px-3 rounded-lg border border-white/5">
+                                        <div class="flex items-center gap-3">
+                                            <span class="text-[10px] font-black bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded">{{ quality.quality }}</span>
+                                            <span class="text-xs theme-text-secondary font-mono truncate max-w-[150px] sm:max-w-xs">{{ quality.name }}</span>
+                                        </div>
+                                        <div class="flex gap-2">
+                                            <button onclick="copyStreamLink('{{ quality.id }}', '{{ quality.name }}')" class="text-green-400 hover:text-green-300 p-1"><i data-lucide="link" class="w-3.5 h-3.5"></i></button>
+                                            <button onclick="deleteTVQuality({{ season.season_number }}, {{ episode.episode_number }}, '{{ quality.id }}')" class="text-red-400 hover:text-red-300 p-1"><i data-lucide="x" class="w-3.5 h-3.5"></i></button>
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            {% endfor %}
+                            
+                            <div class="pt-4 mt-2 border-t border-white/5 text-right">
+                                <button onclick="deleteTVSeason({{ season.season_number }})" class="text-xs font-bold text-red-500/70 hover:text-red-500 uppercase tracking-widest">
+                                    Delete Entire Season {{ season.season_number }}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
         {% else %}
-        <div class="text-center py-8">
-            <svg class="mx-auto h-12 w-12 text-gray-300 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                    d="M7 4V2a1 1 0 011-1h8a1 1 0 011 1v2h4a1 1 0 110 2h-1v12a2 2 0 01-2-2V6H3a1 1 0 110-2h4zM9 6v10h6V6H9z" />
-            </svg>
-            <p class="theme-text-secondary text-sm sm:text-base">No content available</p>
-        </div>
+            <div class="text-center py-12 bg-white/5 rounded-2xl border-2 border-dashed border-white/5">
+                <i data-lucide="inbox" class="w-12 h-12 theme-text-secondary mx-auto mb-3"></i>
+                <p class="theme-text-secondary font-medium">No streams or episodes mapped yet.</p>
+            </div>
         {% endif %}
     </div>
     {% endif %}
 </div>
 
 <script>
-    const tmdbId = {{ tmdb_id }};
-    const dbIndex = {{ db_index }};
-    const mediaType = '{{ media_type }}';
-
-    // Toggle season visibility
-    function toggleSeason(seasonIndex) {
-        const content = document.getElementById(`season-content-${seasonIndex}`);
-        const arrow = document.getElementById(`season-arrow-${seasonIndex}`);
-
-        if (content.style.display === 'none') {
-            content.style.display = 'block';
-            arrow.style.transform = 'rotate(0deg)';
-        } else {
-            content.style.display = 'none';
-            arrow.style.transform = 'rotate(-90deg)';
-        }
-    }
-
-    // Update media
-    async function updateMedia(event) {
-        event.preventDefault();
-
-        const formData = new FormData(event.target);
-        const updateData = {};
-
-        // Convert form data to object
-        for (let [key, value] of formData.entries()) {
-            if (key === 'genres') {
-                updateData[key] = value.split(',').map(g => g.trim()).filter(g => g);
-            } else if (key === 'rating' || key === 'release_year' || key === 'runtime') {
-                updateData[key] = value ? parseFloat(value) : null;
-            } else {
-                updateData[key] = value || null;
-            }
-        }
-
-        try {
-            const response = await fetch(`/api/media/update?tmdb_id=${tmdbId}&db_index=${dbIndex}&media_type=${mediaType}`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(updateData)
-            });
-
-            if (response.ok) {
-                showSuccessMessage('Media updated successfully');
-                setTimeout(() => location.reload(), 1000);
-            } else {
-                const error = await response.json();
-                showErrorMessage(`Error updating media: ${error.detail || 'Unknown error'}`);
-            }
-        } catch (error) {
-            console.error('Error updating media:', error);
-            showErrorMessage('Error updating media. Please try again.');
-        }
-    }
-
-    // Delete name from movie
-    async function deleteQuality(id) {
-        if (!confirm(`Are you sure you want to delete the ${id} ?`)) return;
-
-        try {
-            const response = await fetch(`/api/media/delete-quality?tmdb_id=${tmdbId}&db_index=${dbIndex}&id=${encodeURIComponent(id)}`, {
-                method: 'DELETE'
-            });
-
-            if (response.ok) {
-                showSuccessMessage(`${id} deleted successfully`);
-                setTimeout(() => location.reload(), 1000);
-            } else {
-                const error = await response.json();
-                showErrorMessage(`Error deleting : ${error.detail || 'Unknown error'}`);
-            }
-        } catch (error) {
-            console.error('Error deleting :', error);
-            showErrorMessage('Error deleting . Please try again.');
-        }
-    }
-
-    // Delete TV quality
-    async function deleteTVQuality(season, episode, id) {
-        if (!confirm(`Are you sure you want to delete the ${id} from Season ${season} Episode ${episode}?`)) return;
-
-        try {
-            const response = await fetch(`/api/media/delete-tv-quality?tmdb_id=${tmdbId}&db_index=${dbIndex}&season=${season}&episode=${episode}&id=${encodeURIComponent(id)}`, {
-                method: 'DELETE'
-            });
-
-            if (response.ok) {
-                showSuccessMessage(`${id} deleted successfully`);
-                setTimeout(() => location.reload(), 1000);
-            } else {
-                const error = await response.json();
-                showErrorMessage(`Error deleting : ${error.detail || 'Unknown error'}`);
-            }
-        } catch (error) {
-            console.error('Error deleting :', error);
-            showErrorMessage('Error deleting. Please try again.');
-        }
-    }
-
-    // Delete TV episode
-    async function deleteTVEpisode(season, episode) {
-        if (!confirm(`Are you sure you want to delete Season ${season} Episode ${episode}?\n\nThis will remove the entire episode and all its qualities.`)) return;
-
-        try {
-            const response = await fetch(`/api/media/delete-tv-episode?tmdb_id=${tmdbId}&db_index=${dbIndex}&season=${season}&episode=${episode}`, {
-                method: 'DELETE'
-            });
-
-            if (response.ok) {
-                showSuccessMessage(`Episode ${episode} deleted successfully`);
-                setTimeout(() => location.reload(), 1000);
-            } else {
-                const error = await response.json();
-                showErrorMessage(`Error deleting episode: ${error.detail || 'Unknown error'}`);
-            }
-        } catch (error) {
-            console.error('Error deleting episode:', error);
-            showErrorMessage('Error deleting episode. Please try again.');
-        }
-    }
-
-    // Delete TV season
-    async function deleteTVSeason(season) {
-        if (!confirm(`Are you sure you want to delete the entire Season ${season}?\n\nThis will remove all episodes and qualities in this season. This action cannot be undone.`)) return;
-
-        try {
-            const response = await fetch(`/api/media/delete-tv-season?tmdb_id=${tmdbId}&db_index=${dbIndex}&season=${season}`, {
-                method: 'DELETE'
-            });
-
-            if (response.ok) {
-                showSuccessMessage(`Season ${season} deleted successfully`);
-                setTimeout(() => location.reload(), 1000);
-            } else {
-                const error = await response.json();
-                showErrorMessage(`Error deleting season: ${error.detail || 'Unknown error'}`);
-            }
-        } catch (error) {
-            console.error('Error deleting season:', error);
-            showErrorMessage('Error deleting season. Please try again.');
-        }
-    }
-
-    // Show success message
-    function showSuccessMessage(message) {
-        const msg = document.createElement('div');
-        msg.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 sm:px-6 py-3 rounded-lg shadow-lg z-50 flex items-center max-w-sm';
-        msg.innerHTML = `
-        <svg class="w-4 h-4 sm:w-5 sm:h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-        </svg>
-        <span class="text-sm">${message}</span>
-    `;
-        document.body.appendChild(msg);
-        setTimeout(() => {
-            if (document.body.contains(msg)) {
-                document.body.removeChild(msg);
-            }
-        }, 4000);
-    }
-
-    // Show error message
-    function showErrorMessage(message) {
-        const msg = document.createElement('div');
-        msg.className = 'fixed top-4 right-4 bg-red-500 text-white px-4 sm:px-6 py-3 rounded-lg shadow-lg z-50 flex items-center max-w-sm';
-        msg.innerHTML = `
-        <svg class="w-4 h-4 sm:w-5 sm:h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-        </svg>
-        <span class="text-sm">${message}</span>
-    `;
-        document.body.appendChild(msg);
-        setTimeout(() => {
-            if (document.body.contains(msg)) {
-                document.body.removeChild(msg);
-            }
-        }, 5000);
-    }
-
-    // Initialize page
     document.addEventListener('DOMContentLoaded', () => {
-        // Initialize all seasons as collapsed except the first one
-        document.querySelectorAll('.season-content').forEach((content, index) => {
-            if (index > 0) {
-                content.style.display = 'none';
-                document.getElementById(`season-arrow-${index}`).style.transform = 'rotate(-90deg)';
-            }
-        });
+        lucide.createIcons();
     });
-
-    // Copy direct stream link to clipboard
-    function copyStreamLink(qualityId, fileName) {
-        // Try to find token from existing manifest URLs on the dashboard,
-        // fall back to prompting the user.
-        const base = window.location.origin;
-
-        // Ask user which token to use (pulled from cookies or prompt)
-        const token = getCopylinkToken();
-        if (!token) {
-            showErrorMessage('No API token found. Please copy the link from the Dashboard page.');
-            return;
-        }
-
-        const encodedName = encodeURIComponent(fileName || 'stream');
-        const url = `${base}/dl/${token}/${qualityId}/${encodedName}`;
-        navigator.clipboard.writeText(url).then(() => {
-            showSuccessMessage('Stream link copied to clipboard!');
-        }).catch(() => {
-            // Fallback: show the URL in a prompt
-            prompt('Copy this stream link:', url);
-        });
-    }
-
-    function getCopylinkToken() {
-        // Check sessionStorage / localStorage for a cached token
-        return sessionStorage.getItem('api_token') || localStorage.getItem('api_token') || null;
-    }
 </script>
-
-<style>
-    .season-content {
-        transition: all 0.3s ease;
-    }
-
-    .break-all {
-        word-break: break-all;
-        overflow-wrap: break-word;
-    }
-
-    @keyframes spin {
-        to {
-            transform: rotate(360deg);
-        }
-    }
-
-    .st-spin {
-        animation: spin 1s linear infinite;
-    }
-</style>
-
-<!-- ===== SPEED TEST MODAL ===== -->
-<div id="speed-test-modal" class="fixed inset-0 z-50 hidden" aria-modal="true" role="dialog">
-    <!-- Backdrop -->
-    <div class="absolute inset-0 bg-black/60" style="backdrop-filter:blur(4px)" onclick="closeSpeedTest()"></div>
-
-    <!-- Panel -->
-    <div class="absolute left-1/2 top-1/2 w-full max-w-2xl mx-4 bg-white rounded-2xl shadow-2xl overflow-hidden"
-        style="transform:translate(-50%,-50%)">
-
-        <!-- Header -->
-        <div
-            class="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-blue-600 to-indigo-600">
-            <div>
-                <h2 class="text-lg font-bold text-white">🚀 DC Speed Test</h2>
-                <p id="st-label" class="text-xs text-blue-100 mt-0.5"></p>
-            </div>
-            <button onclick="closeSpeedTest()"
-                class="text-white/70 hover:text-white text-3xl leading-none transition-colors">&times;</button>
-        </div>
-
-        <!-- Body -->
-        <div class="px-6 py-6 min-h-[200px]">
-            <!-- Spinner -->
-            <div id="st-spinner" class="flex flex-col items-center gap-4 py-10">
-                <div class="w-14 h-14 rounded-full border-4 border-blue-100 border-t-blue-600 st-spin"></div>
-                <p class="text-sm text-gray-500">Testing all DC clients simultaneously&hellip;</p>
-                <p class="text-xs text-gray-400">Downloading 100 MB from each bot client</p>
-            </div>
-
-            <!-- Results table -->
-            <div id="st-results" class="hidden">
-                <div class="overflow-x-auto rounded-xl border border-gray-200">
-                    <table class="w-full text-sm">
-                        <thead class="bg-gray-50 text-left">
-                            <tr>
-                                <th class="px-4 py-3 font-semibold text-gray-600 text-xs uppercase tracking-wider">Bot /
-                                    DC</th>
-                                <th class="px-4 py-3 font-semibold text-gray-600 text-xs uppercase tracking-wider">Ping
-                                </th>
-                                <th class="px-4 py-3 font-semibold text-gray-600 text-xs uppercase tracking-wider">Speed
-                                </th>
-                                <th class="px-4 py-3 font-semibold text-gray-600 text-xs uppercase tracking-wider">Time
-                                </th>
-                                <th class="px-4 py-3 font-semibold text-gray-600 text-xs uppercase tracking-wider">
-                                    Downloaded</th>
-                                <th class="px-4 py-3 font-semibold text-gray-600 text-xs uppercase tracking-wider">
-                                    Status</th>
-                            </tr>
-                        </thead>
-                        <tbody id="st-tbody" class="divide-y divide-gray-100 bg-white"></tbody>
-                    </table>
-                </div>
-                <p id="st-summary" class="text-xs text-gray-400 mt-3 text-right"></p>
-            </div>
-
-            <!-- Error banner -->
-            <div id="st-error" class="hidden bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700">
-            </div>
-        </div>
-
-        <!-- Footer -->
-        <div class="flex justify-end gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50">
-            <button id="st-rerun-btn" onclick="rerunSpeedTest()"
-                class="hidden px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-                🔄 Re-run
-            </button>
-            <button onclick="closeSpeedTest()"
-                class="px-4 py-2 text-sm font-medium border border-gray-300 rounded-lg hover:bg-gray-100 transition-colors">
-                Close
-            </button>
-        </div>
-    </div>
-</div>
-
-<script>
-    // ─── Speed Test JS ────────────────────────────────────────────────────────────
-    let _stQualityId = null;
-    let _stMediaType = null;
-    let _stLabel = null;
-
-    async function runSpeedTest(qualityId, mediaTypeArg, label) {
-        _stQualityId = qualityId;
-        _stMediaType = mediaTypeArg;
-        _stLabel = label;
-        _openModal(label);
-        await _exec();
-    }
-
-    async function rerunSpeedTest() {
-        if (!_stQualityId) return;
-        _resetUI(_stLabel);
-        await _exec();
-    }
-
-    function _openModal(label) {
-        document.getElementById('speed-test-modal').classList.remove('hidden');
-        document.body.style.overflow = 'hidden';
-        _resetUI(label);
-    }
-
-    function _resetUI(label) {
-        document.getElementById('st-label').textContent = label ? `File: ${label}` : '';
-        document.getElementById('st-spinner').classList.remove('hidden');
-        document.getElementById('st-results').classList.add('hidden');
-        document.getElementById('st-error').classList.add('hidden');
-        document.getElementById('st-rerun-btn').classList.add('hidden');
-        document.getElementById('st-tbody').innerHTML = '';
-        document.getElementById('st-summary').textContent = '';
-    }
-
-    function closeSpeedTest() {
-        document.getElementById('speed-test-modal').classList.add('hidden');
-        document.body.style.overflow = '';
-    }
-
-    function _pingClass(ms) {
-        if (ms === null) return 'text-gray-400';
-        if (ms < 100) return 'text-green-600 font-semibold';
-        if (ms < 300) return 'text-yellow-600 font-semibold';
-        return 'text-red-600 font-semibold';
-    }
-
-    function _speedClass(mbps) {
-        if (mbps === null) return 'text-gray-400';
-        if (mbps >= 20) return 'text-green-600 font-bold';
-        if (mbps >= 5) return 'text-yellow-600 font-bold';
-        return 'text-red-600 font-bold';
-    }
-
-    function _miniBar(value, max, color) {
-        if (!value || !max) return '';
-        const pct = Math.min(100, (value / max) * 100).toFixed(1);
-        return `<div class="w-full bg-gray-100 rounded-full h-1.5 mt-1">
-              <div class="${color} h-1.5 rounded-full transition-all" style="width:${pct}%"></div>
-            </div>`;
-    }
-
-    async function _exec() {
-        const params = new URLSearchParams({
-            quality_id: _stQualityId,
-            tmdb_id: tmdbId,
-            db_index: dbIndex,
-            media_type: mediaType   // from template context (movie/tv)
-        });
-
-        // Close any old connection
-        if (window._stEventSource) {
-            window._stEventSource.close();
-            window._stEventSource = null;
-        }
-
-        let maxSpeed = 1;
-        let completedCount = 0;
-        let totalCount = 0;
-        const allResults = [];
-        const pendingRows = {};
-
-        const es = new EventSource(`/api/system/speedtest/stream?${params}`);
-        window._stEventSource = es;
-
-        function updateSummary() {
-            const best = allResults.filter(r => r.speed_mbps).sort((a, b) => b.speed_mbps - a.speed_mbps)[0];
-            const summaryEl = document.getElementById('st-summary');
-            if (best) {
-                summaryEl.textContent = `🏆 Fastest: DC ${best.dc_id} — ${best.speed_mbps.toFixed(2)} MB/s  |  ${completedCount}/${totalCount} client(s) done`;
-            } else {
-                summaryEl.textContent = `${completedCount}/${totalCount} client(s) done`;
-            }
-        }
-
-        es.onmessage = (e) => {
-            let msg;
-            try { msg = JSON.parse(e.data); } catch { return; }
-
-            if (msg.type === 'error') {
-                es.close();
-                document.getElementById('st-spinner').classList.add('hidden');
-                document.getElementById('st-error').textContent = `Speed test stream error: ${msg.message}`;
-                document.getElementById('st-error').classList.remove('hidden');
-                document.getElementById('st-rerun-btn').classList.remove('hidden');
-                return;
-            }
-
-            if (msg.type === 'start') {
-                totalCount = msg.total;
-                document.getElementById('st-spinner').classList.add('hidden');
-                document.getElementById('st-results').classList.remove('hidden');
-
-                if (msg.target_dc && msg.target_dc !== "?") {
-                    document.getElementById('st-label').innerHTML += ` &nbsp;|&nbsp; Target DC: <span class="text-white font-semibold">${msg.target_dc}</span>`;
-                }
-
-                const tbody = document.getElementById('st-tbody');
-                tbody.innerHTML = '';
-                for (let i = 0; i < totalCount; i++) {
-                    const tr = document.createElement('tr');
-                    tr.className = 'animate-pulse';
-                    tr.innerHTML = `
-                        <td class="px-4 py-3 font-medium text-gray-400">🔄 Bot ${i + 1}</td>
-                        <td class="px-4 py-3"><span class="text-gray-300">testing…</span></td>
-                        <td class="px-4 py-3"><span class="text-gray-300">testing…</span></td>
-                        <td class="px-4 py-3 text-gray-300">—</td>
-                        <td class="px-4 py-3 text-gray-300">—</td>
-                        <td class="px-4 py-3"><span class="px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-400">Pending</span></td>`;
-                    tbody.appendChild(tr);
-                    pendingRows[i] = tr;
-                }
-                updateSummary();
-            }
-
-            if (msg.type === 'progress') {
-                const r = msg.data;
-                const tr = pendingRows[r.client_index];
-                if (tr) {
-                    maxSpeed = Math.max(maxSpeed, r.speed_mbps || 0, 1);
-
-                    const ping = r.ping_ms !== null ? `<span class="${_pingClass(r.ping_ms)}">${r.ping_ms} ms</span>` : '<span class="text-gray-400">—</span>';
-                    const speed = r.speed_mbps !== null
-                        ? `<span class="${_speedClass(r.speed_mbps)}">${r.speed_mbps.toFixed(2)} MB/s</span>
-                           ${_miniBar(r.speed_mbps, maxSpeed, r.speed_mbps >= 20 ? 'bg-green-500' : r.speed_mbps >= 5 ? 'bg-yellow-400' : 'bg-red-400')}`
-                        : '<span class="text-gray-400">—</span>';
-                    const taken = r.time_taken_sec !== null ? `${r.time_taken_sec.toFixed(2)}s` : '—';
-                    const bytes = r.bytes_downloaded ? `${(r.bytes_downloaded / 1048576).toFixed(2)} MB` : '—';
-
-                    // Update the innerHTML of the pending row cells
-                    tr.innerHTML = `
-                        <td class="px-4 py-3 font-medium text-gray-700">🔄 Bot ${r.client_index + 1} &nbsp;<span class="text-xs text-gray-400">(DC&nbsp;${r.dc_id})</span></td>
-                        <td class="px-4 py-3">${ping}</td>
-                        <td class="px-4 py-3">${speed}</td>
-                        <td class="px-4 py-3 text-gray-600 text-sm">${taken}</td>
-                        <td class="px-4 py-3 text-gray-500 text-xs">${bytes}</td>
-                        <td class="px-4 py-3"><span class="px-2 py-0.5 rounded-full text-xs bg-blue-100 text-blue-700 animate-pulse">Running…</span></td>`;
-                }
-            }
-
-            if (msg.type === 'result') {
-                completedCount = msg.completed;
-                totalCount = msg.total;
-                const r = msg.data;
-                allResults.push(r);
-
-                maxSpeed = Math.max(maxSpeed, r.speed_mbps || 0, 1);
-
-                const isErr = !!r.error && !r.speed_mbps;
-                // Currently best logic isn't perfect until all finish, but we try
-                const medal = '';
-                const dc = `Bot ${r.client_index + 1} &nbsp;<span class="text-xs text-gray-400">(DC&nbsp;${r.dc_id})</span>`;
-                const ping = r.ping_ms !== null ? `<span class="${_pingClass(r.ping_ms)}">${r.ping_ms} ms</span>` : '<span class="text-gray-400">—</span>';
-                const speed = r.speed_mbps !== null
-                    ? `<span class="${_speedClass(r.speed_mbps)}">${r.speed_mbps.toFixed(2)} MB/s</span>
-                       ${_miniBar(r.speed_mbps, maxSpeed, r.speed_mbps >= 20 ? 'bg-green-500' : r.speed_mbps >= 5 ? 'bg-yellow-400' : 'bg-red-400')}`
-                    : '<span class="text-gray-400">—</span>';
-                const taken = r.time_taken_sec !== null ? `${r.time_taken_sec.toFixed(2)}s` : '—';
-                const bytes = r.bytes_downloaded ? `${(r.bytes_downloaded / 1048576).toFixed(2)} MB` : '—';
-                const badge = isErr
-                    ? `<span class="px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">Error</span>`
-                    : `<span class="px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">✓ OK</span>`;
-
-                const tr = document.createElement('tr');
-                tr.className = `hover:bg-blue-50 transition-colors ${isErr ? 'opacity-60' : ''}`;
-                tr.innerHTML = `
-                    <td class="px-4 py-3 font-medium">${medal}${dc}</td>
-                    <td class="px-4 py-3">${ping}</td>
-                    <td class="px-4 py-3">${speed}${isErr ? `<div class="text-xs text-red-500 mt-1">${r.error}</div>` : ''}</td>
-                    <td class="px-4 py-3 text-gray-600 text-sm">${taken}</td>
-                    <td class="px-4 py-3 text-gray-500 text-xs">${bytes}</td>
-                    <td class="px-4 py-3">${badge}</td>`;
-
-                if (pendingRows[r.client_index]) {
-                    pendingRows[r.client_index].replaceWith(tr);
-                    delete pendingRows[r.client_index];
-                } else {
-                    document.getElementById('st-tbody').appendChild(tr);
-                }
-
-                updateSummary();
-            }
-
-            if (msg.type === 'done') {
-                es.close();
-                window._stEventSource = null;
-
-                // Re-sort everything to put fastest at the top with a medal
-                allResults.sort((a, b) => (b.speed_mbps || 0) - (a.speed_mbps || 0));
-
-                const tbody = document.getElementById('st-tbody');
-                tbody.innerHTML = '';
-
-                for (let i = 0; i < allResults.length; i++) {
-                    const r = allResults[i];
-                    const isErr = !!r.error && !r.speed_mbps;
-                    const medal = i === 0 && !isErr ? '🥇 ' : '';
-                    const dc = `Bot ${r.client_index + 1} &nbsp;<span class="text-xs text-gray-400">(DC&nbsp;${r.dc_id})</span>`;
-                    const ping = r.ping_ms !== null ? `<span class="${_pingClass(r.ping_ms)}">${r.ping_ms} ms</span>` : '<span class="text-gray-400">—</span>';
-                    const speed = r.speed_mbps !== null
-                        ? `<span class="${_speedClass(r.speed_mbps)}">${r.speed_mbps.toFixed(2)} MB/s</span>
-                           ${_miniBar(r.speed_mbps, maxSpeed, r.speed_mbps >= 20 ? 'bg-green-500' : r.speed_mbps >= 5 ? 'bg-yellow-400' : 'bg-red-400')}`
-                        : '<span class="text-gray-400">—</span>';
-                    const taken = r.time_taken_sec !== null ? `${r.time_taken_sec.toFixed(2)}s` : '—';
-                    const bytes = r.bytes_downloaded ? `${(r.bytes_downloaded / 1048576).toFixed(2)} MB` : '—';
-                    const badge = isErr
-                        ? `<span class="px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">Error</span>`
-                        : `<span class="px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">✓ OK</span>`;
-
-                    const tr = document.createElement('tr');
-                    tr.className = `hover:bg-blue-50 transition-colors ${isErr ? 'opacity-60' : ''}`;
-                    tr.innerHTML = `
-                        <td class="px-4 py-3 font-medium">${medal}${dc}</td>
-                        <td class="px-4 py-3">${ping}</td>
-                        <td class="px-4 py-3">${speed}${isErr ? `<div class="text-xs text-red-500 mt-1">${r.error}</div>` : ''}</td>
-                        <td class="px-4 py-3 text-gray-600 text-sm">${taken}</td>
-                        <td class="px-4 py-3 text-gray-500 text-xs">${bytes}</td>
-                        <td class="px-4 py-3">${badge}</td>`;
-                    tbody.appendChild(tr);
-                }
-
-                document.getElementById('st-rerun-btn').classList.remove('hidden');
-                updateSummary();
-            }
-        };
-
-        es.onerror = (err) => {
-            es.close();
-            window._stEventSource = null;
-            if (completedCount === 0) {
-                document.getElementById('st-spinner').classList.add('hidden');
-                document.getElementById('st-error').textContent = 'Live tracking connection failed or interrupted.';
-                document.getElementById('st-error').classList.remove('hidden');
-            }
-            document.getElementById('st-rerun-btn').classList.remove('hidden');
-        };
-    }
-
-    // Close on Escape key
-    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSpeedTest(); });
-</script>
-
 {% endblock %}
