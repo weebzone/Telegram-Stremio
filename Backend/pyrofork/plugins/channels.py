@@ -8,16 +8,15 @@ Commands (owner-only, private chat):
 
 Changes take effect immediately (no restart needed) and are persisted to MongoDB.
 
-Drop this file into  Backend/pyrofork/plugins/channels.py
 """
 
 from pyrogram import filters, Client, enums
 from pyrogram.types import Message
 from pyrogram.errors import ChannelPrivate, ChatAdminRequired, PeerIdInvalid
 
+from Backend import db
 from Backend.helper.custom_filter import CustomFilters
 from Backend.logger import LOGGER
-from Backend import db
 from Backend.config import Telegram
 
 
@@ -27,7 +26,6 @@ CHANNEL_DOC_ID = "auth_channels"
 
 
 async def _load_channels_from_db():
-    """Load persisted channels from tracking DB and merge with env var channels."""
     try:
         doc = await db.dbs["tracking"]["config"].find_one({"_id": CHANNEL_DOC_ID})
         if doc and "channels" in doc:
@@ -44,7 +42,6 @@ async def _load_channels_from_db():
 
 
 async def _save_channels_to_db():
-    """Persist the current AUTH_CHANNEL list to tracking DB."""
     try:
         await db.dbs["tracking"]["config"].update_one(
             {"_id": CHANNEL_DOC_ID},
@@ -59,7 +56,6 @@ async def _save_channels_to_db():
 
 @Client.on_message(filters.command('channels') & filters.private & CustomFilters.owner, group=10)
 async def list_channels(client: Client, message: Message):
-    """List all active AUTH_CHANNELs with their names."""
     if not Telegram.AUTH_CHANNEL:
         await message.reply_text(
             "📭 No AUTH_CHANNELs configured.\n\n"
@@ -71,7 +67,7 @@ async def list_channels(client: Client, message: Message):
 
     lines = []
     for i, ch_id in enumerate(Telegram.AUTH_CHANNEL, 1):
-        name = ch_id  # fallback
+        name = ch_id
         try:
             chat = await client.get_chat(int(ch_id))
             name = getattr(chat, "title", ch_id)
@@ -90,7 +86,6 @@ async def list_channels(client: Client, message: Message):
 
 @Client.on_message(filters.command('addchannel') & filters.private & CustomFilters.owner, group=10)
 async def add_channel(client: Client, message: Message):
-    """Add a channel to AUTH_CHANNELs. Bot must be admin in the channel."""
     args = message.text.split(maxsplit=1)
     if len(args) < 2:
         await message.reply_text(
@@ -105,7 +100,6 @@ async def add_channel(client: Client, message: Message):
 
     ch_id = args[1].strip()
 
-    # Validate it's a number
     try:
         int(ch_id)
     except ValueError:
@@ -117,7 +111,6 @@ async def add_channel(client: Client, message: Message):
         )
         return
 
-    # Check if already added
     if ch_id in Telegram.AUTH_CHANNEL:
         await message.reply_text(
             f"ℹ️ Channel <code>{ch_id}</code> is already in AUTH_CHANNELs.",
@@ -126,7 +119,6 @@ async def add_channel(client: Client, message: Message):
         )
         return
 
-    # Validate bot has access
     status_msg = await message.reply_text(
         "🔍 Validating channel access…",
         quote=True,
@@ -157,7 +149,6 @@ async def add_channel(client: Client, message: Message):
         )
         return
 
-    # Add to runtime list and persist
     Telegram.AUTH_CHANNEL.append(ch_id)
     await _save_channels_to_db()
 
@@ -175,10 +166,8 @@ async def add_channel(client: Client, message: Message):
 
 @Client.on_message(filters.command('removechannel') & filters.private & CustomFilters.owner, group=10)
 async def remove_channel(client: Client, message: Message):
-    """Remove a channel from AUTH_CHANNELs."""
     args = message.text.split(maxsplit=1)
     if len(args) < 2:
-        # Show current channels for easy selection
         if Telegram.AUTH_CHANNEL:
             lines = []
             for ch_id in Telegram.AUTH_CHANNEL:
@@ -212,7 +201,6 @@ async def remove_channel(client: Client, message: Message):
         )
         return
 
-    # Get channel name before removing
     ch_name = ch_id
     try:
         chat = await client.get_chat(int(ch_id))

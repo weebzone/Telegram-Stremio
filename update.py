@@ -53,5 +53,9 @@ if UPSTREAM_REPO:
 
     if update.returncode == 0:
         log_info("Successfully updated with latest commits!!")
+        commit_check = srun(["git", "rev-parse", "HEAD"], capture_output=True, text=True)
+        if commit_check.returncode == 0:
+            commit_id = commit_check.stdout.strip()
+            log_info(f"Latest commit ID: {commit_id}")
     else:
         log_error("❌ Update failed! Retry or ask for support.")

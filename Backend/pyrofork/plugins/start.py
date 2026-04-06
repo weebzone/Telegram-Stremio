@@ -11,13 +11,9 @@ print("DEBUG: start.py PLUGIN LOADED SUCCESSFULLY!")
 async def send_start_message(client: Client, message: Message):
     try:
         user_id = (message.from_user.id if message.from_user else None) or (message.sender_chat.id if message.sender_chat else None) or message.chat.id
-        print(f"DEBUG: Received /start command from {user_id}")
-        # await message.reply_text("DEBUG: Bot received the start command.")
-        
         base_url = Telegram.BASE_URL
         addon_url = f"{base_url}/stremio/manifest.json"
 
-        # If subscriptions are NOT enabled
         if not Telegram.SUBSCRIPTION:
             # Generate or fetch API token for free user
             user_name = (message.from_user.first_name or message.from_user.username or f"User {user_id}") if message.from_user else f"Chat {user_id}"

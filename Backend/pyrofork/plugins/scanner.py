@@ -7,8 +7,6 @@ Commands (owner-only, private chat):
     /rescan        — Wipe DB entries for AUTH_CHANNELs, then full re-index
     /scanstatus    — Show progress of any running scan
     /cancelscan    — Abort a running scan gracefully
-
-Drop this file into  Backend/pyrofork/plugins/scanner.py
 """
 
 import asyncio
@@ -56,9 +54,8 @@ class _ScanState:
 
 scan_state = _ScanState()
 
-# How often we edit the progress message (avoid FloodWait on edits)
-PROGRESS_EVERY = 15  # messages processed between edits
-RATE_LIMIT_DELAY = 0.3  # seconds between get_messages calls
+PROGRESS_EVERY = 15  
+RATE_LIMIT_DELAY = 0.3 
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────
@@ -104,7 +101,7 @@ async def _update_progress(force: bool = False):
     except FloodWait as e:
         await asyncio.sleep(e.value)
     except Exception:
-        pass  # non-critical
+        pass  
 
 
 async def _scan_channel(client: Client, chat_id: int):
@@ -134,8 +131,8 @@ async def _scan_channel(client: Client, chat_id: int):
     LOGGER.info(f"[Scanner] Starting scan of {s.channel_name} ({chat_id})")
 
     BATCH_SIZE = 200
-    MAX_EMPTY_BATCHES = 5      # stop after 5 consecutive empty batches
-    MAX_ID_CAP = 500_000       # hard safety cap
+    MAX_EMPTY_BATCHES = 5      
+    MAX_ID_CAP = 500_000      
     empty_streak = 0
     current = 1
 

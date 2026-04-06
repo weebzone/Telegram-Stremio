@@ -8,8 +8,6 @@ Commands (owner-only, private chat):
     /dbcheck purge          — Find and delete orphaned entries
     /exportchannels         — Export AUTH_CHANNEL list as JSON
     /importchannels <json>  — Import channels from JSON
-
-Drop this file into  Backend/pyrofork/plugins/utilities.py
 """
 
 import asyncio

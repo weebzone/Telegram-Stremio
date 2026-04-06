@@ -27,7 +27,6 @@ class Telegram:
     
     REPLACE_MODE = getenv("REPLACE_MODE", "true").lower() == "true"
     HIDE_CATALOG = getenv("HIDE_CATALOG", "false").lower() == "true"
-    # SKIP_MULTIPART = getenv("SKIP_MULTIPART", "true").lower() == "true"
 
     ADMIN_USERNAME = getenv("ADMIN_USERNAME", "fyvio")
     ADMIN_PASSWORD = getenv("ADMIN_PASSWORD", "fyvio")

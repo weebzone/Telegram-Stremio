@@ -10,6 +10,9 @@ from pyrogram import filters, Client
 from pyrogram.types import Message
 from pyrogram.errors import FloodWait
 from pyrogram.enums.parse_mode import ParseMode
+from Backend.helper.encrypt import encode_string
+from Backend.helper.encrypt import encode_string
+from Backend.helper.metadata import extract_default_id
 
 
 file_queue = Queue()
@@ -84,20 +87,15 @@ async def file_edited_handler(client: Client, message: Message):
                 size = get_readable_file_size(file.file_size)
                 channel = str(message.chat.id).replace("-100", "")
 
-                from Backend.helper.metadata import extract_default_id
                 override_id = extract_default_id(message.caption) if message.caption else None
 
-                # Only proceed if we found a valid manual overide ID in the caption update
                 if override_id:
                     LOGGER.info(f"Detected override ID '{override_id}' in edited message {msg_id}")
                     
-                    from Backend.helper.encrypt import encode_string
                     stream_id_hash = await encode_string({"chat_id": int(channel), "msg_id": msg_id})
                     
-                    # Wipe the old streaming quality reference from the old associated media
                     await db.delete_media_by_stream_id(stream_id_hash)
 
-                    # Reprocess metadata completely
                     metadata_info = await metadata(clean_filename(title), int(channel), msg_id, override_id=override_id)
                     if metadata_info is None:
                         LOGGER.warning(f"Metadata failed for edited file: {title} (ID: {msg_id})")
@@ -107,18 +105,15 @@ async def file_edited_handler(client: Client, message: Message):
                     if not title.endswith(('.mkv', '.mp4')):
                         title += '.mkv'
 
-                    # Add the new quality to the correct DB movie/show
                     await file_queue.put((metadata_info, int(channel), msg_id, size, title))
             else:
-                pass # ignore edits on other types
+                pass
         except Exception as e:
             LOGGER.error(f"Error handling edited generic file {message.id}: {e}")
 
 @Client.on_deleted_messages(filters.channel)
 async def file_deleted_handler(client: Client, messages: list[Message]):
-    # pyrogram provides a list of deleted messages.
     try:
-        from Backend.helper.encrypt import encode_string
         
         for message in messages:
             if message.chat and str(message.chat.id) in Telegram.AUTH_CHANNEL:
