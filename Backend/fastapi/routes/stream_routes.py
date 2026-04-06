@@ -259,7 +259,19 @@ async def media_streamer(
     target_dc = file_id.dc_id
     LOGGER.debug(f"File msg_id={msg_id} is in DC {target_dc}")
 
-    index = select_best_client(target_dc)
+    def _score(idx: int) -> int:
+        from Backend.pyrofork.bot import work_loads, client_failures
+        return work_loads.get(idx, 0) + 3 * client_failures.get(idx, 0)
+
+    # Multi-connection striping: get all matching bots in DC, otherwise fallback globally
+    dc_clients = [idx for idx, dc in client_dc_map.items() if dc == target_dc and idx in multi_clients]
+    if dc_clients:
+        client_pool = sorted(dc_clients, key=_score)
+    else:
+        client_pool = [select_best_client(target_dc)]
+
+    # Primary client is the healthiest one
+    index = client_pool[0]
     tg_client = multi_clients[index]
 
     if tg_client not in _streamer_by_client:
@@ -316,6 +328,7 @@ async def media_streamer(
         meta=meta,
         parallelism=parallelism,
         request=request,
+        client_pool=client_pool,
     )
 
     asyncio.create_task(track_usage_from_stats(stream_id, token, token_data))

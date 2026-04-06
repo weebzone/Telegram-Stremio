@@ -35,99 +35,213 @@
 
         .theme-card {
             background-color: {{ theme.colors.card }};
-            color: {{ theme.colors.text }};
         }
 
-        .theme-primary {
-            background-color: {{ theme.colors.primary }};
-        }
-
-        .theme-secondary {
-            background-color: {{ theme.colors.secondary }};
-        }
-
-        .theme-accent {
-            background-color: {{ theme.colors.accent }};
-        }
-
-        .theme-text-secondary {
-            color: {{ theme.colors.text_secondary }};
+        .active-link {
+            background-color: rgba(255,255,255,0.08);
+            color: var(--tw-color-primary);
         }
     </style>
 </head>
 
 <body class="min-h-screen flex flex-col">
-    <!-- Navigation -->
-    <nav class="theme-card shadow-lg border-b text-text">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between items-center h-16">
-                <div class="flex items-center space-x-4">
-                    <h1 class="text-2xl font-bold text-primary">Telegram Stremio</h1>
-                    {% if current_user %}
-                    <div class="hidden md:flex space-x-4">
-                        <a href="/"
-                            class="text-text hover:text-primary px-3 py-2 rounded-md transition-colors">Dashboard</a>
-                        <a href="/media/manage"
-                            class="text-text hover:text-primary px-3 py-2 rounded-md transition-colors">Media</a>
-                        <a href="/admin/dashboard"
-                            class="text-text hover:text-primary px-3 py-2 rounded-md transition-colors">Admin</a>
-                        <a href="/admin/subscriptions"
-                            class="text-text hover:text-primary px-3 py-2 rounded-md transition-colors">Sub Manage</a>
-                        <a href="/admin/access"
-                            class="text-text hover:text-primary px-3 py-2 rounded-md transition-colors">Access</a>
-                    </div>
-                    {% endif %}
-                </div>
 
-                <div class="flex items-center space-x-4">
-                    <!-- Theme Selector -->
-                    <div class="relative">
-                        <form method="post" action="/set-theme" id="theme-form">
-                            <select name="theme" onchange="document.getElementById('theme-form').submit()"
-                                class="theme-card border border-gray-300 rounded-md px-3 py-2 text-sm">
-                                {% for theme_key, theme_data in themes.items() %}
-                                <option value="{{ theme_key }}" {% if current_theme==theme_key %}selected{% endif %}>
-                                    {{ theme_data.name }}
-                                </option>
-                                {% endfor %}
-                            </select>
-                        </form>
-                    </div>
+<!-- NAVBAR -->
+<nav class="theme-card border-b shadow-sm sticky top-0 z-50 backdrop-blur">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex justify-between items-center h-16">
 
-                    {% if current_user %}
-                    <div class="flex items-center space-x-4">
-                        <span class="text-sm theme-text-secondary">{{ current_user }}</span>
-                        <a href="/logout"
-                            class="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 transition-colors">Logout</a>
-                    </div>
-                    {% else %}
-                    <a href="/login"
-                        class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md transition-colors">Login</a>
-                    {% endif %}
+            <!-- LEFT -->
+            <div class="flex items-center gap-6">
+                <h1 class="text-xl md:text-2xl font-bold text-primary flex items-center gap-2">
+                    <i class="fas fa-paper-plane"></i>
+                    Telegram Stremio
+                </h1>
+
+                {% if current_user %}
+                <div class="hidden md:flex items-center gap-2">
+                    <a href="/" class="nav-link {% if request.url.path == '/' %}active-link{% endif %}">
+                        <i class="fas fa-home"></i> Dashboard
+                    </a>
+                    <a href="/media/manage" class="nav-link {% if '/media' in request.url.path %}active-link{% endif %}">
+                        <i class="fas fa-photo-film"></i> Media
+                    </a>
+                    <a href="/admin/dashboard" class="nav-link {% if '/admin/dashboard' in request.url.path %}active-link{% endif %}">
+                        <i class="fas fa-chart-line"></i> Admin
+                    </a>
+                    <a href="/admin/subscriptions" class="nav-link {% if '/subscriptions' in request.url.path %}active-link{% endif %}">
+                        <i class="fas fa-credit-card"></i> Subscriptions
+                    </a>
+                    <a href="/admin/access" class="nav-link {% if '/access' in request.url.path %}active-link{% endif %}">
+                        <i class="fas fa-user-shield"></i> Access
+                    </a>
                 </div>
+                {% endif %}
+            </div>
+
+            <!-- RIGHT -->
+            <div class="flex items-center gap-3 relative">
+
+                <!-- THEME -->
+                <form method="post" action="/set-theme" id="theme-form">
+                    <select name="theme" onchange="this.form.submit()"
+                        class="theme-card border rounded-md px-2 py-1 text-sm">
+                        {% for theme_key, theme_data in themes.items() %}
+                        <option value="{{ theme_key }}" {% if current_theme==theme_key %}selected{% endif %}>
+                            {{ theme_data.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </form>
+
+                {% if current_user %}
+                <!-- PROFILE DROPDOWN -->
+                <div class="relative">
+                    <button id="profile-btn" class="flex items-center gap-2 text-sm">
+                        <i class="fas fa-user-circle text-lg"></i>
+                        <span class="hidden sm:block">{{ current_user }}</span>
+                        <i class="fas fa-chevron-down text-xs"></i>
+                    </button>
+
+                    <div id="profile-menu" class="hidden absolute right-0 mt-2 w-40 theme-card border rounded-lg shadow-lg py-2">
+                        <a href="#" class="dropdown-link">Profile</a>
+                        <a href="#" class="dropdown-link">Settings</a>
+                        <a href="/logout" class="dropdown-link text-red-500">Logout</a>
+                    </div>
+                </div>
+                {% else %}
+                <a href="/login"
+                    class="bg-blue-600 text-white px-3 py-1.5 rounded-md hover:bg-blue-700 text-sm transition">
+                    Login
+                </a>
+                {% endif %}
+
+                <!-- MOBILE BUTTON -->
+                <button id="menu-btn" class="md:hidden text-xl">
+                    <i class="fas fa-bars"></i>
+                </button>
             </div>
         </div>
-    </nav>
+    </div>
 
-    <!-- Main Content -->
-    <main class="flex-1">
-        {% block content %}{% endblock %}
-    </main>
+    <!-- MOBILE MENU -->
+    {% if current_user %}
+    <div id="mobile-menu" class="hidden md:hidden px-4 pb-4 animate-slideDown">
+        <div class="flex flex-col gap-2">
+            <a href="/" class="mobile-link">Dashboard</a>
+            <a href="/media/manage" class="mobile-link">Media</a>
+            <a href="/admin/dashboard" class="mobile-link">Admin</a>
+            <a href="/admin/subscriptions" class="mobile-link">Subscriptions</a>
+            <a href="/admin/access" class="mobile-link">Access</a>
+        </div>
+    </div>
+    {% endif %}
+</nav>
 
-    <!-- Footer -->
-    <footer class="theme-card border-t mt-auto text-text">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-            <div class="flex justify-between items-center">
-                <p class="theme-text-secondary text-sm">© 2025 Telegram Stremio. All rights reserved.</p>
-                <div class="flex space-x-4">
-                    <a href="/status"
-                        class="theme-text-secondary hover:text-primary text-sm transition-colors">Status</a>
-                    <a href="/stremio" class="theme-text-secondary hover:text-primary text-sm transition-colors">Stremio
-                        Guide</a>
-                </div>
+<!-- MAIN -->
+<main class="flex-1">
+    {% block content %}{% endblock %}
+</main>
+
+<!-- FOOTER -->
+<footer class="theme-card border-t mt-auto text-text">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div class="flex flex-col md:flex-row justify-between items-center gap-3">
+            <p class="theme-text-secondary text-sm">© 2026 Telegram Stremio. All rights reserved.</p>
+            <div class="flex gap-4">
+                <a href="/status" class="footer-link">Status</a>
+                <a href="/stremio" class="footer-link">Stremio Guide</a>
             </div>
         </div>
-    </footer>
+    </div>
+</footer>
+
+<!-- STYLES -->
+<style>
+    .theme-primary { background-color: {{ theme.colors.primary }}; }
+    .theme-secondary { background-color: {{ theme.colors.secondary }}; }
+    .theme-accent { background-color: {{ theme.colors.accent }}; }
+    .theme-text-secondary { color: {{ theme.colors.text_secondary }}; }
+
+    .nav-link {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 10px;
+        border-radius: 6px;
+        font-size: 14px;
+        transition: 0.2s;
+    }
+
+    .nav-link:hover {
+        background-color: rgba(255,255,255,0.05);
+        color: var(--tw-color-primary);
+    }
+
+    .mobile-link {
+        padding: 10px;
+        border-radius: 6px;
+        font-size: 14px;
+    }
+
+    .mobile-link:hover {
+        background-color: rgba(255,255,255,0.05);
+    }
+
+    .dropdown-link {
+        display: block;
+        padding: 8px 12px;
+        font-size: 14px;
+    }
+
+    .dropdown-link:hover {
+        background-color: rgba(255,255,255,0.05);
+    }
+
+    .footer-link {
+        font-size: 14px;
+        transition: 0.2s;
+    }
+
+    .footer-link:hover {
+        color: var(--tw-color-primary);
+    }
+
+    @keyframes slideDown {
+        from { opacity: 0; transform: translateY(-10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    .animate-slideDown {
+        animation: slideDown 0.25s ease;
+    }
+</style>
+
+<!-- SCRIPT -->
+<script>
+    const btn = document.getElementById('menu-btn');
+    const menu = document.getElementById('mobile-menu');
+    const profileBtn = document.getElementById('profile-btn');
+    const profileMenu = document.getElementById('profile-menu');
+
+    if (btn) {
+        btn.addEventListener('click', () => {
+            menu.classList.toggle('hidden');
+        });
+    }
+
+    if (profileBtn) {
+        profileBtn.addEventListener('click', () => {
+            profileMenu.classList.toggle('hidden');
+        });
+    }
+
+    document.addEventListener('click', (e) => {
+        if (profileBtn && !profileBtn.contains(e.target) && !profileMenu.contains(e.target)) {
+            profileMenu.classList.add('hidden');
+        }
+    });
+</script>
+
 </body>
-
 </html>

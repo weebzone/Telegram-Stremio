@@ -2,7 +2,7 @@ import asyncio
 import time
 import secrets
 from collections import deque
-from typing import Dict, List, Union, Optional, Tuple
+from typing import Dict, List, Union, Optional, Tuple, AsyncGenerator
 import traceback
 from fastapi import Request
 from pyrogram import Client, raw, utils
@@ -117,19 +117,20 @@ class ByteStreamer:
 
     async def prefetch_stream(
         self,
-        file_id: FileId,
+        file_id,
         client_index: int,
         offset: int,
         first_part_cut: int,
         last_part_cut: int,
         part_count: int,
         chunk_size: int,
-        prefetch: int = 3,
-        stream_id: Optional[str] = None,
-        meta: Optional[dict] = None,
-        parallelism: int = 2,
-        request: Optional[Request] = None,
-    ):
+        prefetch: int,
+        stream_id: str,
+        meta: dict,
+        parallelism: int = 1,
+        request = None,
+        client_pool: list = None,
+    ) -> AsyncGenerator[bytes, None]:
         if not stream_id:
             stream_id = secrets.token_hex(8)
 
@@ -160,47 +161,59 @@ class ByteStreamer:
         q: asyncio.Queue = asyncio.Queue(maxsize=queue_maxsize)
         stop_event = asyncio.Event()
 
-        media_session = await self._get_media_session(file_id)
+        multi_clients = getattr(self, "_multi_clients", None)
+        if multi_clients is None:
+            from Backend.pyrofork.bot import multi_clients
+            
+        client_pool = client_pool or [client_index]
+        
+        active_pool = []
+        pool_sessions = {}
+        for c in client_pool:
+            c_streamer = ByteStreamer._instances.get(c)
+            if c_streamer is None and c in multi_clients:
+                c_streamer = ByteStreamer(multi_clients[c], c)
+            if c_streamer:
+                try:
+                    pool_sessions[c] = await c_streamer._get_media_session(file_id)
+                    active_pool.append(c)
+                except Exception as e:
+                    LOGGER.error("Could not get session for bot %s: %s", c, e)
+                    
+        if not active_pool:
+            active_pool = [client_index]
+            pool_sessions[client_index] = await self._get_media_session(file_id)
+            
+        LOGGER.debug("Striping stream %s across clients: %s", stream_id, active_pool)
+
         location = await self._get_location(file_id)
 
         async def fetch_chunk_with_retries(seq_idx: int, off: int) -> Tuple[int, Optional[bytes]]:
-            """Fetch one chunk with timeout, exponential back-off, and bot fallback.
-
-            Retry schedule (max 3 tries):
-              tries 0    → same bot / same session, 15 s timeout each
-              tries 1-2  → try a healthier fallback bot (if available),
-                           still with 15 s timeout
-            On every TimeoutError the primary client's failure counter is incremented
-            so select_best_client will avoid it for future requests.
+            """Fetch one chunk with timeout, exponential back-off, and round-robin bot striping.
             """
+            primary_client_idx = active_pool[seq_idx % len(active_pool)]
+            primary_session = pool_sessions[primary_client_idx]
+            
             tries = 0
             while tries < 3 and not stop_event.is_set():
-                # --- choose which media session to use this attempt ---
-                use_session = media_session
-                use_client_idx = client_index
-                if tries >= 1 and len(multi_clients) > 1:
-                    # Pick the best *other* client by score = workload + 3×failures
+                use_session = primary_session
+                use_client_idx = primary_client_idx
+                
+                if tries >= 1 and len(active_pool) > 1:
                     def _score(idx):
                         return work_loads.get(idx, 0) + 3 * client_failures.get(idx, 0)
                     fallback_idx = min(
-                        (i for i in multi_clients if i != client_index),
+                        (i for i in active_pool if i != primary_client_idx),
                         key=_score,
                         default=None,
                     )
                     if fallback_idx is not None:
-                        fb_streamer = ByteStreamer._instances.get(fallback_idx)
-                        if fb_streamer is None:
-                            fb_streamer = ByteStreamer(multi_clients[fallback_idx], fallback_idx)
-                        try:
-                            use_session = await fb_streamer._get_media_session(file_id)
-                            use_client_idx = fallback_idx
-                            LOGGER.debug(
-                                "Chunk fallback: seq=%s try=%s primary=%s → fallback=%s",
-                                seq_idx, tries, client_index, fallback_idx,
-                            )
-                        except Exception:
-                            use_session = media_session  # revert if fallback session fails
-                            use_client_idx = client_index
+                        use_session = pool_sessions[fallback_idx]
+                        use_client_idx = fallback_idx
+                        LOGGER.debug(
+                            "Chunk fallback: seq=%s try=%s primary=%s → fallback=%s",
+                            seq_idx, tries, primary_client_idx, fallback_idx,
+                        )
 
                 # --- attempt the fetch with a hard timeout ---
                 try:
@@ -218,8 +231,8 @@ class ByteStreamer:
                         return seq_idx, None
 
                     # If we succeeded via a fallback, mark primary as degraded
-                    if use_client_idx != client_index:
-                        client_failures[client_index] = client_failures.get(client_index, 0) + 1
+                    if use_client_idx != primary_client_idx:
+                        client_failures[primary_client_idx] = client_failures.get(primary_client_idx, 0) + 1
                     return seq_idx, chunk_bytes
 
                 except asyncio.TimeoutError:
@@ -241,7 +254,7 @@ class ByteStreamer:
 
             LOGGER.error(
                 "Failed to fetch chunk seq=%s off=%s after 3 retries, client=%s",
-                seq_idx, off, client_index,
+                seq_idx, off, primary_client_idx,
             )
             return seq_idx, None
 
