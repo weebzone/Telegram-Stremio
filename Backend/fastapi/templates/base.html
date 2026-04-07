@@ -17,21 +17,10 @@
                         primary: '{{ theme.colors.primary }}',
                         secondary: '{{ theme.colors.secondary }}',
                         accent: '{{ theme.colors.accent }}',
-                        background: '#0f172a', // Enforced dark base for glassmorphism
-                        card: 'rgba(255, 255, 255, 0.03)',
-                        text: '#f8fafc',
-                        'text-secondary': '#94a3b8'
-                    },
-                    animation: {
-                        'blob': 'blob 7s infinite',
-                    },
-                    keyframes: {
-                        blob: {
-                            '0%': { transform: 'translate(0px, 0px) scale(1)' },
-                            '33%': { transform: 'translate(30px, -50px) scale(1.1)' },
-                            '66%': { transform: 'translate(-20px, 20px) scale(0.9)' },
-                            '100%': { transform: 'translate(0px, 0px) scale(1)' },
-                        }
+                        background: '{{ theme.colors.background }}',
+                        card: '{{ theme.colors.card }}',
+                        text: '{{ theme.colors.text }}',
+                        'text-secondary': '{{ theme.colors.text_secondary }}'
                     }
                 }
             }
@@ -40,98 +29,65 @@
 
     <style>
         body {
-            background-color: theme('colors.background');
-            color: theme('colors.text');
-            /* Smooth dark gradient base */
-            background-image: radial-gradient(at 0% 0%, rgba(30, 27, 75, 0.8) 0px, transparent 50%),
-                              radial-gradient(at 100% 0%, rgba(15, 23, 42, 0.8) 0px, transparent 50%);
-            background-attachment: fixed;
+            background-color: {{ theme.colors.background }};
+            color: {{ theme.colors.text }};
         }
 
-        /* Glassmorphism Base Classes */
-        .glass-panel {
-            background: rgba(255, 255, 255, 0.03);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
-            border: 1px solid rgba(255, 255, 255, 0.05);
-            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
-        }
-
-        .glass-input {
-            background: rgba(0, 0, 0, 0.2);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            color: white;
-            transition: all 0.3s ease;
-        }
-
-        .glass-input:focus {
-            background: rgba(0, 0, 0, 0.3);
-            border-color: rgba(139, 92, 246, 0.5); /* Purple focus */
-            outline: none;
-            box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2);
+        .theme-card {
+            background-color: {{ theme.colors.card }};
         }
 
         .active-link {
-            background: linear-gradient(to right, rgba(255,255,255,0.1), rgba(255,255,255,0.02));
-            border-left: 3px solid var(--tw-color-primary, #8b5cf6);
-            color: white;
+            background-color: rgba(255,255,255,0.08);
+            color: var(--tw-color-primary);
         }
-
-        /* Custom Scrollbar */
-        ::-webkit-scrollbar { width: 8px; height: 8px; }
-        ::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); }
-        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
     </style>
 </head>
 
-<body class="min-h-screen flex flex-col relative overflow-x-hidden font-sans antialiased">
+<body class="min-h-screen flex flex-col">
 
-<div class="fixed inset-0 w-full h-full pointer-events-none z-[-1] overflow-hidden">
-    <div class="absolute top-0 -left-4 w-72 h-72 bg-purple-500 rounded-full mix-blend-multiply filter blur-[128px] opacity-20 animate-blob"></div>
-    <div class="absolute top-0 -right-4 w-72 h-72 bg-blue-500 rounded-full mix-blend-multiply filter blur-[128px] opacity-20 animate-blob animation-delay-2000"></div>
-    <div class="absolute -bottom-8 left-20 w-72 h-72 bg-indigo-500 rounded-full mix-blend-multiply filter blur-[128px] opacity-20 animate-blob animation-delay-4000"></div>
-</div>
-
-<nav class="glass-panel sticky top-0 z-50 border-b border-white/5">
+<!-- NAVBAR -->
+<nav class="theme-card border-b shadow-sm sticky top-0 z-50 backdrop-blur">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="flex justify-between items-center h-20">
+        <div class="flex justify-between items-center h-16">
 
-            <div class="flex items-center gap-8">
-                <h1 class="text-xl md:text-2xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500 flex items-center gap-3 tracking-tight">
-                    <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center border border-white/10 shadow-lg shadow-purple-500/10">
-                        <i class="fas fa-paper-plane text-purple-400 text-lg"></i>
-                    </div>
-                    TG Stremio
+            <!-- LEFT -->
+            <div class="flex items-center gap-6">
+                <h1 class="text-xl md:text-2xl font-bold text-primary flex items-center gap-2">
+                    <i class="fas fa-paper-plane"></i>
+                    Telegram Stremio
                 </h1>
 
                 {% if current_user %}
-                <div class="hidden lg:flex items-center gap-1 bg-black/20 p-1.5 rounded-2xl border border-white/5">
+                <div class="hidden md:flex items-center gap-2">
                     <a href="/" class="nav-link {% if request.url.path == '/' %}active-link{% endif %}">
-                        <i class="fas fa-home w-4 text-center"></i> Dashboard
+                        <i class="fas fa-home"></i> Dashboard
                     </a>
                     <a href="/media/manage" class="nav-link {% if '/media' in request.url.path %}active-link{% endif %}">
-                        <i class="fas fa-photo-film w-4 text-center"></i> Media
+                        <i class="fas fa-photo-film"></i> Media
                     </a>
                     <a href="/admin/dashboard" class="nav-link {% if '/admin/dashboard' in request.url.path %}active-link{% endif %}">
-                        <i class="fas fa-chart-line w-4 text-center"></i> Admin
+                        <i class="fas fa-chart-line"></i> Admin
                     </a>
                     <a href="/admin/subscriptions" class="nav-link {% if '/subscriptions' in request.url.path %}active-link{% endif %}">
-                        <i class="fas fa-credit-card w-4 text-center"></i> Subscriptions
+                        <i class="fas fa-credit-card"></i> Subscriptions
                     </a>
                     <a href="/admin/access" class="nav-link {% if '/access' in request.url.path %}active-link{% endif %}">
-                        <i class="fas fa-user-shield w-4 text-center"></i> Access
+                        <i class="fas fa-user-shield"></i> Access
                     </a>
                 </div>
                 {% endif %}
             </div>
 
-            <div class="flex items-center gap-4 relative">
-                <form method="post" action="/set-theme" id="theme-form" class="hidden sm:block">
+            <!-- RIGHT -->
+            <div class="flex items-center gap-3 relative">
+
+                <!-- THEME -->
+                <form method="post" action="/set-theme" id="theme-form">
                     <select name="theme" onchange="this.form.submit()"
-                        class="glass-input rounded-xl px-4 py-2 text-sm cursor-pointer appearance-none pr-8 relative">
+                        class="theme-card border rounded-md px-2 py-1 text-sm">
                         {% for theme_key, theme_data in themes.items() %}
-                        <option value="{{ theme_key }}" {% if current_theme==theme_key %}selected{% endif %} class="bg-slate-900 text-white">
+                        <option value="{{ theme_key }}" {% if current_theme==theme_key %}selected{% endif %}>
                             {{ theme_data.name }}
                         </option>
                         {% endfor %}
@@ -139,124 +95,114 @@
                 </form>
 
                 {% if current_user %}
+                <!-- PROFILE DROPDOWN -->
                 <div class="relative">
-                    <button id="profile-btn" class="flex items-center gap-3 text-sm hover:bg-white/5 px-3 py-2 rounded-xl transition-all border border-transparent hover:border-white/10">
-                        <div class="w-8 h-8 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center shadow-lg">
-                            <i class="fas fa-user text-white text-xs"></i>
-                        </div>
-                        <span class="hidden sm:block font-medium text-gray-200">{{ current_user }}</span>
-                        <i class="fas fa-chevron-down text-xs text-gray-400"></i>
+                    <button id="profile-btn" class="flex items-center gap-2 text-sm">
+                        <i class="fas fa-user-circle text-lg"></i>
+                        <span class="hidden sm:block">{{ current_user }}</span>
+                        <i class="fas fa-chevron-down text-xs"></i>
                     </button>
 
-                    <div id="profile-menu" class="hidden absolute right-0 mt-3 w-48 glass-panel rounded-xl py-2 transform origin-top-right transition-all">
-                        <div class="px-4 py-2 border-b border-white/5 mb-1 sm:hidden">
-                            <p class="text-xs text-gray-400">Logged in as</p>
-                            <p class="text-sm font-semibold truncate">{{ current_user }}</p>
-                        </div>
-                        <a href="/logout" class="dropdown-link text-red-400 hover:text-red-300 hover:bg-red-500/10 flex items-center gap-2">
-                            <i class="fas fa-sign-out-alt"></i> Logout
-                        </a>
+                    <div id="profile-menu" class="hidden absolute right-0 mt-2 w-40 theme-card border rounded-lg shadow-lg py-2">
+                        <a href="/logout" class="dropdown-link text-red-500">Logout</a>
                     </div>
                 </div>
                 {% else %}
                 <a href="/login"
-                    class="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-2 rounded-xl hover:from-blue-500 hover:to-indigo-500 text-sm font-semibold transition-all shadow-lg shadow-blue-500/20 border border-blue-500/30">
+                    class="bg-blue-600 text-white px-3 py-1.5 rounded-md hover:bg-blue-700 text-sm transition">
                     Login
                 </a>
                 {% endif %}
 
-                <button id="menu-btn" class="lg:hidden w-10 h-10 rounded-xl glass-panel flex items-center justify-center text-gray-300 hover:text-white transition-colors">
+                <!-- MOBILE BUTTON -->
+                <button id="menu-btn" class="md:hidden text-xl">
                     <i class="fas fa-bars"></i>
                 </button>
             </div>
         </div>
     </div>
 
+    <!-- MOBILE MENU -->
     {% if current_user %}
-    <div id="mobile-menu" class="hidden lg:hidden px-4 pb-6 pt-2 animate-slideDown border-t border-white/5 bg-black/40 backdrop-blur-2xl absolute w-full left-0 shadow-2xl">
-        <div class="flex flex-col gap-1 max-w-7xl mx-auto">
-            <a href="/" class="mobile-link"><i class="fas fa-home w-6"></i> Dashboard</a>
-            <a href="/media/manage" class="mobile-link"><i class="fas fa-photo-film w-6"></i> Media</a>
-            <a href="/admin/dashboard" class="mobile-link"><i class="fas fa-chart-line w-6"></i> Admin</a>
-            <a href="/admin/subscriptions" class="mobile-link"><i class="fas fa-credit-card w-6"></i> Subscriptions</a>
-            <a href="/admin/access" class="mobile-link"><i class="fas fa-user-shield w-6"></i> Access</a>
+    <div id="mobile-menu" class="hidden md:hidden px-4 pb-4 animate-slideDown">
+        <div class="flex flex-col gap-2">
+            <a href="/" class="mobile-link">Dashboard</a>
+            <a href="/media/manage" class="mobile-link">Media</a>
+            <a href="/admin/dashboard" class="mobile-link">Admin</a>
+            <a href="/admin/subscriptions" class="mobile-link">Subscriptions</a>
+            <a href="/admin/access" class="mobile-link">Access</a>
         </div>
     </div>
     {% endif %}
 </nav>
 
-<main class="flex-1 relative z-10 w-full">
+<!-- MAIN -->
+<main class="flex-1">
     {% block content %}{% endblock %}
 </main>
 
-<footer class="mt-auto border-t border-white/5 glass-panel z-10 relative">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div class="flex flex-col md:flex-row justify-between items-center gap-4">
-            <div class="flex items-center gap-3">
-                <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center border border-white/10">
-                    <i class="fas fa-paper-plane text-purple-400 text-sm"></i>
-                </div>
-                <p class="text-gray-400 text-sm font-medium">© 2026 Telegram Stremio. All rights reserved.</p>
-            </div>
-            <div class="flex gap-6">
-                <a href="/status" class="footer-link">System Status</a>
+<!-- FOOTER -->
+<footer class="theme-card border-t mt-auto text-text">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div class="flex flex-col md:flex-row justify-between items-center gap-3">
+            <p class="theme-text-secondary text-sm">© 2026 Telegram Stremio. All rights reserved.</p>
+            <div class="flex gap-4">
+                <a href="/status" class="footer-link">Status</a>
                 <a href="/stremio" class="footer-link">Stremio Guide</a>
             </div>
         </div>
     </div>
 </footer>
 
+<!-- STYLES -->
 <style>
+    .theme-primary { background-color: {{ theme.colors.primary }}; }
+    .theme-secondary { background-color: {{ theme.colors.secondary }}; }
+    .theme-accent { background-color: {{ theme.colors.accent }}; }
+    .theme-text-secondary { color: {{ theme.colors.text_secondary }}; }
+
     .nav-link {
         display: flex;
         align-items: center;
-        gap: 8px;
-        padding: 8px 16px;
-        border-radius: 12px;
+        gap: 6px;
+        padding: 6px 10px;
+        border-radius: 6px;
         font-size: 14px;
-        font-weight: 500;
-        color: #94a3b8;
-        transition: all 0.2s ease;
-    }
-
-    .nav-link:hover {
-        color: white;
-        background-color: rgba(255,255,255,0.05);
-    }
-
-    .mobile-link {
-        display: flex;
-        align-items: center;
-        padding: 12px 16px;
-        border-radius: 12px;
-        font-size: 15px;
-        font-weight: 500;
-        color: #e2e8f0;
         transition: 0.2s;
     }
 
+    .nav-link:hover {
+        background-color: rgba(255,255,255,0.05);
+        color: var(--tw-color-primary);
+    }
+
+    .mobile-link {
+        padding: 10px;
+        border-radius: 6px;
+        font-size: 14px;
+    }
+
     .mobile-link:hover {
-        background-color: rgba(255,255,255,0.08);
-        color: white;
+        background-color: rgba(255,255,255,0.05);
     }
 
     .dropdown-link {
         display: block;
-        padding: 10px 16px;
+        padding: 8px 12px;
         font-size: 14px;
-        font-weight: 500;
-        transition: 0.2s;
+    }
+
+    .dropdown-link:hover {
+        background-color: rgba(255,255,255,0.05);
     }
 
     .footer-link {
         font-size: 14px;
-        color: #94a3b8;
-        font-weight: 500;
         transition: 0.2s;
     }
 
     .footer-link:hover {
-        color: #c084fc;
+        color: var(--tw-color-primary);
     }
 
     @keyframes slideDown {
@@ -265,10 +211,11 @@
     }
 
     .animate-slideDown {
-        animation: slideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        animation: slideDown 0.25s ease;
     }
 </style>
 
+<!-- SCRIPT -->
 <script>
     const btn = document.getElementById('menu-btn');
     const menu = document.getElementById('mobile-menu');
