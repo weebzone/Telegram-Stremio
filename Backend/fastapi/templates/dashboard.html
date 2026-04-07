@@ -672,7 +672,13 @@
                 const allStreams = data.active_streams || [];
                 const container = document.getElementById('active-streams-container');
                 // Only show streams that are actively sending data
-                const liveStreams = allStreams.filter(s => s.status === 'active' && (s.total_bytes || 0) > 0);
+                const now = Date.now() / 1000;
+
+                const liveStreams = allStreams.filter(s =>
+                    s.status === 'active' &&
+                    (s.total_bytes || 0) > 0 &&
+                    (now - (s.start_ts || now)) < 15
+                );
 
                 if (liveStreams.length === 0) {
                     container.innerHTML = `<div class="p-8 text-center bg-gray-50 border border-dashed rounded-lg">
