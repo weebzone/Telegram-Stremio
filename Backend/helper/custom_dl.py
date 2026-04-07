@@ -6,7 +6,7 @@ from typing import Dict, List, Union, Optional, Tuple, AsyncGenerator
 import traceback
 from fastapi import Request
 from pyrogram import Client, raw, utils
-from pyrogram.errors import AuthBytesInvalid, FileReferenceExpired
+from pyrogram.errors import AuthBytesInvalid
 from pyrogram.file_id import FileId, FileType, ThumbnailSource
 from pyrogram.session import Session, Auth
 from Backend.logger import LOGGER
@@ -23,17 +23,20 @@ def get_adaptive_chunk_size(client_index: int) -> int:
     """Return the best chunk size (bytes) for this client based on recent speed.
 
     Speed tiers:
-      < 10 MB/s  →   1 MB  (floor — never go below this; 512 KB is too slow)
-      10-30 MB/s →   2 MB
-      > 30 MB/s  →   4 MB  (maximise throughput on fast sessions)
+      < 5  MB/s  → 512 KB  (small chunks, faster first-byte on slow sessions)
+      5-20 MB/s  →   1 MB  (default)
+      20-60 MB/s →   2 MB  (fewer round-trips on fast sessions)
+      > 60 MB/s  →   4 MB  (maximise throughput on very fast sessions)
     """
     speed = client_avg_mbps.get(client_index, 0.0)
-    if speed >= 30:
+    if speed >= 60:
         return 4 * 1024 * 1024
-    if speed >= 10:
+    if speed >= 20:
         return 2 * 1024 * 1024
-    # Unknown speed or < 10 MB/s → 1 MB floor (never start at 512 KB)
-    return 1 * 1024 * 1024
+    if speed >= 5:
+        return 1 * 1024 * 1024
+    # Unknown speed or < 5 MB/s → start conservative
+    return 512 * 1024
 
 class ByteStreamer:
     CHUNK_SIZE = 1024 * 1024  # 1 MB
@@ -183,22 +186,19 @@ class ByteStreamer:
             
         LOGGER.debug("Striping stream %s across clients: %s", stream_id, active_pool)
 
-        # Mutable reference so FileReferenceExpired handler can refresh it
-        location_ref = [await self._get_location(file_id)]
+        location = await self._get_location(file_id)
 
         async def fetch_chunk_with_retries(seq_idx: int, off: int) -> Tuple[int, Optional[bytes]]:
             """Fetch one chunk with timeout, exponential back-off, and round-robin bot striping.
-
-            Returns (seq_idx, bytes) on success or (seq_idx, None) on unrecoverable failure.
             """
             primary_client_idx = active_pool[seq_idx % len(active_pool)]
             primary_session = pool_sessions[primary_client_idx]
-
+            
             tries = 0
             while tries < 3 and not stop_event.is_set():
                 use_session = primary_session
                 use_client_idx = primary_client_idx
-
+                
                 if tries >= 1 and len(active_pool) > 1:
                     def _score(idx):
                         return work_loads.get(idx, 0) + 3 * client_failures.get(idx, 0)
@@ -220,50 +220,20 @@ class ByteStreamer:
                     r = await asyncio.wait_for(
                         use_session.send(
                             raw.functions.upload.GetFile(
-                                location=location_ref[0], offset=off, limit=chunk_size
+                                location=location, offset=off, limit=chunk_size
                             )
                         ),
                         timeout=15.0,
                     )
                     chunk_bytes = getattr(r, "bytes", None) if r else None
-
-                    # Empty bytes means Telegram returned nothing — treat as a
-                    # transient failure and retry (don't give up immediately).
-                    if chunk_bytes == b"" or chunk_bytes is None:
-                        tries += 1
-                        LOGGER.warning(
-                            "Chunk empty seq=%s off=%s try=%s client=%s — retrying",
-                            seq_idx, off, tries, use_client_idx,
-                        )
-                        # No sleep here — empty usually means EOF probe past file end;
-                        # sleeping would stall the event loop unnecessarily.
-                        continue
+                    
+                    if chunk_bytes == b"":
+                        return seq_idx, None
 
                     # If we succeeded via a fallback, mark primary as degraded
                     if use_client_idx != primary_client_idx:
                         client_failures[primary_client_idx] = client_failures.get(primary_client_idx, 0) + 1
                     return seq_idx, chunk_bytes
-
-                except FileReferenceExpired:
-                    # File reference is stale — refresh and retry once
-                    LOGGER.warning(
-                        "FileReferenceExpired seq=%s off=%s client=%s — refreshing file location",
-                        seq_idx, off, use_client_idx,
-                    )
-                    try:
-                        # Clear cache so get_file_properties fetches a fresh message
-                        msg_id = getattr(file_id, "local_id", None)
-                        if msg_id and msg_id in self._file_id_cache:
-                            del self._file_id_cache[msg_id]
-                        chat_id_local = getattr(file_id, "chat_id", None)
-                        if msg_id and chat_id_local:
-                            fresh_fid = await self.get_file_properties(chat_id_local, msg_id)
-                            location_ref[0] = await self._get_location(fresh_fid)
-                            LOGGER.info("Refreshed file location after FileReferenceExpired")
-                    except Exception as ref_err:
-                        LOGGER.error("Could not refresh file reference: %s", ref_err)
-                    tries += 1
-                    await asyncio.sleep(min(0.5 * (2 ** (tries - 1)), 10.0))
 
                 except asyncio.TimeoutError:
                     tries += 1
@@ -272,15 +242,15 @@ class ByteStreamer:
                         "Chunk timeout seq=%s off=%s try=%s client=%s",
                         seq_idx, off, tries, use_client_idx,
                     )
-                    await asyncio.sleep(min(0.5 * (2 ** (tries - 1)), 10.0))
-
                 except Exception as e:
                     tries += 1
                     LOGGER.debug(
                         "Fetch chunk error seq=%s off=%s try=%s client=%s err=%s",
                         seq_idx, off, tries, use_client_idx, getattr(e, "args", e),
                     )
-                    await asyncio.sleep(min(0.5 * (2 ** (tries - 1)), 10.0))
+
+                # Exponential back-off: 0.5 s, 1 s, 2 s, 4 s, 8 s, 10 s (cap)
+                await asyncio.sleep(min(0.5 * (2 ** (tries - 1)), 10.0))
 
             LOGGER.error(
                 "Failed to fetch chunk seq=%s off=%s after 3 retries, client=%s",
@@ -298,11 +268,7 @@ class ByteStreamer:
                 scheduled_tasks = {}
                 results_buffer = {}
                 next_to_put = 0
-                # Drive as many concurrent fetches as we have active bots so all
-                # clients are kept busy.  Cap at a sane upper bound to avoid
-                # overwhelming the queue.
-                max_parallel = max(parallelism, len(active_pool), 1)
-                max_parallel = min(max_parallel, 24)  # hard cap
+                max_parallel = max(1, parallelism)
 
                 initial = min(part_count, max_parallel)
                 for i in range(initial):
@@ -340,14 +306,8 @@ class ByteStreamer:
                             scheduled_tasks.pop(completed_seq, None)
 
                             if chunk_bytes is None:
-                                LOGGER.error(
-                                    "Unrecoverable chunk failure stream=%s seq=%s — terminating stream cleanly.",
-                                    stream_id, seq_idx,
-                                )
-                                # Signal end-of-stream so the player retries from its
-                                # own buffer rather than playing corrupted silence.
-                                await q.put((None, None))
-                                return
+                                LOGGER.error("Chunk fetch returned empty for stream=%s seq=%s. Filling with zero bytes.", stream_id, seq_idx)
+                                chunk_bytes = b"\x00" * chunk_size
 
                             results_buffer[seq_idx] = chunk_bytes
 

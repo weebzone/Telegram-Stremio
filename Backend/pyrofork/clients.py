@@ -27,11 +27,9 @@ async def start_client(client_id, token):
             api_id=Telegram.API_ID,
             api_hash=Telegram.API_HASH,
             bot_token=token,
-            sleep_threshold=60,
+            sleep_threshold=100,
             no_updates=True,
-            in_memory=True,
-            workers=8,
-            max_concurrent_transmissions=20,
+            in_memory=True
         ).start()
         
         try:
