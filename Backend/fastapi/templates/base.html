@@ -1,244 +1,428 @@
 <!DOCTYPE html>
 <html lang="en" class="dark">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Telegram Stremio{% endblock %}</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}Telegram Stremio{% endblock %}</title>
 
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"/>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"/>
 
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    colors: {
-                        primary: '{{ theme.colors.primary }}',
-                        secondary: '{{ theme.colors.secondary }}',
-                        accent: '{{ theme.colors.accent }}',
-                        background: '{{ theme.colors.background }}',
-                        card: '{{ theme.colors.card }}',
-                        text: '{{ theme.colors.text }}',
-                        'text-secondary': '{{ theme.colors.text_secondary }}'
-                    }
-                }
+<style>
+:root {
+    --primary: {{ theme.colors.primary }};
+    --secondary: {{ theme.colors.secondary }};
+    --accent: {{ theme.colors.accent }};
+    --bg: {{ theme.colors.background }};
+    --card: {{ theme.colors.card }};
+    --border: {{ theme.colors.border }}; /* Added theme border */
+    --text: {{ theme.colors.text }};
+    --text-sec: {{ theme.colors.text_secondary }};
+}
+
+body {
+    background-color: var(--bg);
+    color: var(--text);
+    background-image: 
+        radial-gradient(circle at 15% 10%, color-mix(in srgb, var(--primary) 12%, transparent), transparent 40%),
+        radial-gradient(circle at 85% 80%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 40%),
+        radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--card) 40%, transparent), transparent 60%);
+    background-attachment: fixed;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+/* GLASS PANELS */
+.glass-panel {
+    background: color-mix(in srgb, var(--card) 45%, transparent);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--border);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+}
+
+.glass-pill { border-radius: 9999px; }
+
+/* NAV LINKS */
+.nav-link {
+    color: var(--text-sec);
+    border-radius: 9999px;
+    padding: 0.5rem 1.25rem;
+    transition: color 0.3s ease;
+    position: relative;
+    z-index: 1;
+    white-space: nowrap;
+    font-weight: 600;
+}
+
+/* FIX: Text becomes dark background color when pill is behind it for readability */
+.nav-link:hover, .nav-link.active-page {
+    color: var(--bg) !important; 
+}
+
+/* ACTIVE PILL */
+#active-pill {
+    position: absolute;
+    background: var(--primary);
+    border-radius: 9999px;
+    transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 0;
+    box-shadow: 0 0 15px color-mix(in srgb, var(--primary) 40%, transparent);
+}
+
+    .toast {
+        pointer-events: auto;
+        min-width: 260px;
+        max-width: 360px;
+        border: 1px solid var(--border);
+        background: color-mix(in srgb, var(--card) 88%, transparent);
+        color: var(--text);
+        box-shadow: 0 18px 40px rgba(0,0,0,0.2);
+        border-radius: 1rem;
+        padding: 0.9rem 1rem;
+        display: flex;
+        align-items: flex-start;
+        gap: 0.75rem;
+        backdrop-filter: blur(14px);
+        animation: toast-in 220ms ease-out;
+    }
+
+    .toast.success { border-color: color-mix(in srgb, #22c55e 35%, var(--border)); }
+    .toast.error { border-color: color-mix(in srgb, #ef4444 35%, var(--border)); }
+    .toast.info { border-color: color-mix(in srgb, var(--primary) 35%, var(--border)); }
+
+    .toast-title {
+        font-weight: 800;
+        font-size: 0.9rem;
+        line-height: 1.2;
+    }
+
+    .toast-message {
+        margin-top: 0.15rem;
+        font-size: 0.82rem;
+        color: var(--text-secondary);
+        line-height: 1.35;
+    }
+
+    @keyframes toast-in {
+        from { opacity: 0; transform: translateY(-10px) scale(0.98); }
+        to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    @keyframes toast-out {
+        from { opacity: 1; transform: translateY(0) scale(1); }
+        to { opacity: 0; transform: translateY(-8px) scale(0.98); }
+    }
+
+/* Mobile improvement */
+@media (max-width: 640px) {
+    #toast-container {
+        top: 5rem;
+        left: 0.75rem;
+        right: 0.75rem;
+    }
+
+    .toast {
+        max-width: none;
+        width: 100%;
+    }
+}
+    
+/* THEME SELECT */
+.theme-select {
+    appearance: none;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 0.5rem 2rem 0.5rem 1rem;
+    font-size: 0.875rem;
+    cursor: pointer;
+}
+
+/* OVERLAY */
+#overlay {
+    backdrop-filter: blur(8px);
+    background: rgba(0,0,0,0.4);
+    transition: opacity 0.3s ease;
+}
+
+/* SCROLL ANIMATION - Fixed "Jumping" issue */
+.nav-scrolled { 
+    transform: translate(-50%, -5px) scale(0.97); 
+    background: color-mix(in srgb, var(--card) 80%, transparent);
+}
+
+#mobile-menu { will-change: max-height, opacity; }
+</style>
+
+<script>
+tailwind.config = {
+    darkMode: 'class',
+    theme: {
+        extend: {
+            colors: {
+                primary: 'var(--primary)',
+                secondary: 'var(--secondary)',
+                accent: 'var(--accent)',
+                background: 'var(--bg)',
+                card: 'var(--card)',
+                border: 'var(--border)',
+                text: 'var(--text)',
+                'text-secondary': 'var(--text-sec)'
             }
         }
-    </script>
-
-    <style>
-        body {
-            background-color: {{ theme.colors.background }};
-            color: {{ theme.colors.text }};
-        }
-
-        .theme-card {
-            background-color: {{ theme.colors.card }};
-        }
-
-        .active-link {
-            background-color: rgba(255,255,255,0.08);
-            color: var(--tw-color-primary);
-        }
-    </style>
+    }
+}
+</script>
 </head>
 
-<body class="min-h-screen flex flex-col">
+<body class="pt-24 pb-12 antialiased">
 
-<!-- NAVBAR -->
-<nav class="theme-card border-b shadow-sm sticky top-0 z-50 backdrop-blur">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="flex justify-between items-center h-16">
+<div id="overlay" class="fixed inset-0 z-40 opacity-0 pointer-events-none"></div>
 
-            <!-- LEFT -->
-            <div class="flex items-center gap-6">
-                <h1 class="text-xl md:text-2xl font-bold text-primary flex items-center gap-2">
-                    <i class="fas fa-paper-plane"></i>
-                    Telegram Stremio
-                </h1>
-
-                {% if current_user %}
-                <div class="hidden md:flex items-center gap-2">
-                    <a href="/" class="nav-link {% if request.url.path == '/' %}active-link{% endif %}">
-                        <i class="fas fa-home"></i> Dashboard
-                    </a>
-                    <a href="/media/manage" class="nav-link {% if '/media' in request.url.path %}active-link{% endif %}">
-                        <i class="fas fa-photo-film"></i> Media
-                    </a>
-                    <a href="/admin/dashboard" class="nav-link {% if '/admin/dashboard' in request.url.path %}active-link{% endif %}">
-                        <i class="fas fa-chart-line"></i> Admin
-                    </a>
-                    <a href="/admin/subscriptions" class="nav-link {% if '/subscriptions' in request.url.path %}active-link{% endif %}">
-                        <i class="fas fa-credit-card"></i> Subscriptions
-                    </a>
-                    <a href="/admin/access" class="nav-link {% if '/access' in request.url.path %}active-link{% endif %}">
-                        <i class="fas fa-user-shield"></i> Access
-                    </a>
-                </div>
-                {% endif %}
-            </div>
-
-            <!-- RIGHT -->
-            <div class="flex items-center gap-3 relative">
-
-                <!-- THEME -->
-                <form method="post" action="/set-theme" id="theme-form">
-                    <select name="theme" onchange="this.form.submit()"
-                        class="theme-card border rounded-md px-2 py-1 text-sm">
-                        {% for theme_key, theme_data in themes.items() %}
-                        <option value="{{ theme_key }}" {% if current_theme==theme_key %}selected{% endif %}>
-                            {{ theme_data.name }}
-                        </option>
-                        {% endfor %}
-                    </select>
-                </form>
-
-                {% if current_user %}
-                <!-- PROFILE DROPDOWN -->
-                <div class="relative">
-                    <button id="profile-btn" class="flex items-center gap-2 text-sm">
-                        <i class="fas fa-user-circle text-lg"></i>
-                        <span class="hidden sm:block">{{ current_user }}</span>
-                        <i class="fas fa-chevron-down text-xs"></i>
-                    </button>
-
-                    <div id="profile-menu" class="hidden absolute right-0 mt-2 w-40 theme-card border rounded-lg shadow-lg py-2">
-                        <a href="/logout" class="dropdown-link text-red-500">Logout</a>
-                    </div>
-                </div>
-                {% else %}
-                <a href="/login"
-                    class="bg-blue-600 text-white px-3 py-1.5 rounded-md hover:bg-blue-700 text-sm transition">
-                    Login
-                </a>
-                {% endif %}
-
-                <!-- MOBILE BUTTON -->
-                <button id="menu-btn" class="md:hidden text-xl">
-                    <i class="fas fa-bars"></i>
-                </button>
-            </div>
+<nav id="navbar" class="fixed top-6 left-1/2 -translate-x-1/2 w-[95%] max-w-6xl z-50 glass-panel glass-pill px-5 py-3 flex justify-between items-center transition-all duration-300">
+    
+    <a href="/" class="flex items-center gap-3 shrink-0">
+        <div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center shadow-[0_0_15px_var(--primary)]">
+            <i class="fa-solid fa-play text-white text-xs"></i>
         </div>
-    </div>
+        <span class="text-lg md:text-xl font-extrabold tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-primary to-accent">
+            TG Stremio
+        </span>
+    </a>
 
-    <!-- MOBILE MENU -->
     {% if current_user %}
-    <div id="mobile-menu" class="hidden md:hidden px-4 pb-4 animate-slideDown">
-        <div class="flex flex-col gap-2">
-            <a href="/" class="mobile-link">Dashboard</a>
-            <a href="/media/manage" class="mobile-link">Media</a>
-            <a href="/admin/dashboard" class="mobile-link">Admin</a>
-            <a href="/admin/subscriptions" class="mobile-link">Subscriptions</a>
-            <a href="/admin/access" class="mobile-link">Access</a>
-        </div>
+    <div id="nav-container" class="hidden md:flex absolute left-1/2 -translate-x-1/2 items-center gap-1 p-1 bg-black/10 rounded-full border border-white/5">
+        <div id="active-pill" class="pointer-events-none"></div>
+        <a href="/" class="nav-link">Home</a>
+        <a href="/media/manage" class="nav-link">Media</a>
+        <a href="/admin/dashboard" class="nav-link">Admin</a>
+        <a href="/admin/subscriptions" class="nav-link">Subs</a>
+        <a href="/admin/access" class="nav-link">Access</a>
     </div>
     {% endif %}
+
+    <div class="flex items-center gap-3">
+        {% if current_user %}
+            <button id="menu-btn" class="md:hidden w-10 h-10 flex items-center justify-center text-xl hover:bg-white/10 rounded-full transition">
+                <i id="menu-icon" class="fa-solid fa-bars"></i>
+            </button>
+
+            <div class="relative">
+                <button id="user-btn" class="w-10 h-10 rounded-full bg-primary/20 hover:bg-primary/30 flex items-center justify-center text-primary text-lg transition border border-primary/30">
+                    <i class="fa-solid fa-user"></i>
+                </button>
+
+                <div id="user-dropdown" class="absolute right-0 top-14 w-64 glass-panel rounded-2xl p-4 opacity-0 scale-95 pointer-events-none transition-all duration-200 origin-top-right z-50">
+                    <div class="mb-3 border-b border-white/10 pb-3">
+                        <p class="text-sm font-bold text-text">{{ current_user }}</p>
+                        <p class="text-[10px] text-green-400 font-bold uppercase tracking-wider flex items-center gap-1">
+                            <span class="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span> Online
+                        </p>
+                    </div>
+
+                    <form method="post" action="/set-theme" class="mb-4">
+                        <label class="text-[10px] uppercase text-text-secondary font-bold mb-1 block ml-2">App Theme</label>
+                        <select name="theme" onchange="this.form.submit()" class="theme-select w-full">
+                            {% for theme_key, theme_data in themes.items() %}
+                            <option value="{{ theme_key }}" {% if current_theme==theme_key %}selected{% endif %}>
+                                {{ theme_data.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </form>
+
+                    <a href="/logout" class="block text-center bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white px-4 py-2.5 rounded-xl text-sm font-bold transition-all">
+                        Logout
+                    </a>
+                </div>
+            </div>
+        {% else %}
+            <a href="/login" class="bg-primary hover:bg-primary/80 text-white px-6 py-2 rounded-full text-sm font-bold transition shadow-lg shadow-primary/20">
+                Login
+            </a>
+        {% endif %}
+    </div>
+
+    <div id="mobile-menu" class="absolute top-[calc(100%+12px)] left-0 w-full overflow-hidden max-h-0 opacity-0 transition-all duration-300 ease-in-out md:hidden z-40">
+        <div class="glass-panel mx-2 rounded-3xl p-4 flex flex-col gap-2">
+            <a href="/" class="px-4 py-3 rounded-xl hover:bg-primary hover:text-background transition flex items-center gap-3 font-semibold"><i class="fa-solid fa-house"></i> Home</a>
+            <a href="/media/manage" class="px-4 py-3 rounded-xl hover:bg-primary hover:text-background transition flex items-center gap-3 font-semibold"><i class="fa-solid fa-clapperboard"></i> Media</a>
+            <a href="/admin/dashboard" class="px-4 py-3 rounded-xl hover:bg-primary hover:text-background transition flex items-center gap-3 font-semibold"><i class="fa-solid fa-chart-line"></i> Admin</a>
+            <a href="/admin/subscriptions" class="px-4 py-3 rounded-xl hover:bg-primary hover:text-background transition flex items-center gap-3 font-semibold"><i class="fa-solid fa-credit-card"></i> Subs</a>
+            <a href="/admin/access" class="px-4 py-3 rounded-xl hover:bg-primary hover:text-background transition flex items-center gap-3 font-semibold"><i class="fa-solid fa-shield"></i> Access</a>
+        </div>
+    </div>
 </nav>
 
-<!-- MAIN -->
-<main class="flex-1">
+<main class="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">
     {% block content %}{% endblock %}
 </main>
 
-<!-- FOOTER -->
-<footer class="theme-card border-t mt-auto text-text">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div class="flex flex-col md:flex-row justify-between items-center gap-3">
-            <p class="theme-text-secondary text-sm">© 2026 Telegram Stremio. All rights reserved.</p>
-            <div class="flex gap-4">
-                <a href="/status" class="footer-link">Status</a>
-                <a href="/stremio" class="footer-link">Stremio Guide</a>
-            </div>
+<footer class="mt-auto w-full max-w-5xl mx-auto px-6 py-8">
+    <div class="glass-panel rounded-3xl p-6 flex flex-col md:flex-row justify-between items-center gap-4">
+        <div class="flex items-center gap-2">
+            <i class="fa-brands fa-telegram text-primary text-xl"></i>
+            <p class="text-text-secondary text-sm">© 2026 Telegram Stremio</p>
         </div>
     </div>
 </footer>
-
-<!-- STYLES -->
-<style>
-    .theme-primary { background-color: {{ theme.colors.primary }}; }
-    .theme-secondary { background-color: {{ theme.colors.secondary }}; }
-    .theme-accent { background-color: {{ theme.colors.accent }}; }
-    .theme-text-secondary { color: {{ theme.colors.text_secondary }}; }
-
-    .nav-link {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        padding: 6px 10px;
-        border-radius: 6px;
-        font-size: 14px;
-        transition: 0.2s;
-    }
-
-    .nav-link:hover {
-        background-color: rgba(255,255,255,0.05);
-        color: var(--tw-color-primary);
-    }
-
-    .mobile-link {
-        padding: 10px;
-        border-radius: 6px;
-        font-size: 14px;
-    }
-
-    .mobile-link:hover {
-        background-color: rgba(255,255,255,0.05);
-    }
-
-    .dropdown-link {
-        display: block;
-        padding: 8px 12px;
-        font-size: 14px;
-    }
-
-    .dropdown-link:hover {
-        background-color: rgba(255,255,255,0.05);
-    }
-
-    .footer-link {
-        font-size: 14px;
-        transition: 0.2s;
-    }
-
-    .footer-link:hover {
-        color: var(--tw-color-primary);
-    }
-
-    @keyframes slideDown {
-        from { opacity: 0; transform: translateY(-10px); }
-        to { opacity: 1; transform: translateY(0); }
-    }
-
-    .animate-slideDown {
-        animation: slideDown 0.25s ease;
-    }
-</style>
-
-<!-- SCRIPT -->
+    
+<div id="toast-container"
+     class="fixed top-4 right-4 z-[9999] space-y-3 pointer-events-none"></div>
+    
 <script>
-    const btn = document.getElementById('menu-btn');
-    const menu = document.getElementById('mobile-menu');
-    const profileBtn = document.getElementById('profile-btn');
-    const profileMenu = document.getElementById('profile-menu');
+const btn = document.getElementById('menu-btn');
+const mobileMenu = document.getElementById('mobile-menu');
+const overlay = document.getElementById('overlay');
+const icon = document.getElementById('menu-icon');
+const navbar = document.getElementById('navbar');
+const userBtn = document.getElementById('user-btn');
+const userDropdown = document.getElementById('user-dropdown');
+const navContainer = document.getElementById('nav-container');
 
-    if (btn) {
-        btn.addEventListener('click', () => {
-            menu.classList.toggle('hidden');
-        });
+let isMenuOpen = false;
+let isUserOpen = false;
+
+// --- MENU & DROPDOWN TOGGLE ---
+function toggleMenu() {
+    isMenuOpen = !isMenuOpen;
+    if(isUserOpen) closeUser();
+    if (isMenuOpen) {
+        mobileMenu.style.maxHeight = mobileMenu.scrollHeight + "px";
+        mobileMenu.style.opacity = "1";
+        overlay.style.opacity = "1";
+        overlay.classList.remove("pointer-events-none");
+        icon.classList.replace("fa-bars","fa-xmark");
+    } else closeMenu();
+}
+
+function closeMenu() {
+    mobileMenu.style.maxHeight = "0px";
+    mobileMenu.style.opacity = "0";
+    icon.classList.replace("fa-xmark","fa-bars");
+    isMenuOpen = false;
+    checkOverlay();
+}
+
+function toggleUser(e) {
+    if(e) e.stopPropagation();
+    isUserOpen = !isUserOpen;
+    if(isMenuOpen) closeMenu();
+    if (isUserOpen) {
+        userDropdown.classList.remove("opacity-0", "scale-95", "pointer-events-none");
+        overlay.style.opacity = "1";
+        overlay.classList.remove("pointer-events-none");
+    } else closeUser();
+}
+
+function closeUser() {
+    if(userDropdown) userDropdown.classList.add("opacity-0", "scale-95", "pointer-events-none");
+    isUserOpen = false;
+    checkOverlay();
+}
+
+function checkOverlay() {
+    if (!isMenuOpen && !isUserOpen) {
+        overlay.style.opacity = "0";
+        overlay.classList.add("pointer-events-none");
+    }
+}
+    function showToast(message, type = 'info', title = '') {
+        const container = document.getElementById('toast-container');
+        if (!container) return;
+
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+
+        const icon = type === 'success'
+            ? 'fa-circle-check'
+            : type === 'error'
+                ? 'fa-triangle-exclamation'
+                : 'fa-circle-info';
+
+        toast.innerHTML = `
+            <i class="fa-solid ${icon} mt-0.5"></i>
+            <div class="min-w-0">
+                ${title ? `<div class="toast-title">${escapeHtml(title)}</div>` : ''}
+                <div class="toast-message">${escapeHtml(message)}</div>
+            </div>
+        `;
+
+        container.appendChild(toast);
+
+        setTimeout(() => {
+            toast.style.animation = 'toast-out 180ms ease-in forwards';
+            setTimeout(() => {
+                if (toast.parentNode) toast.parentNode.removeChild(toast);
+            }, 200);
+        }, 2600);
     }
 
-    if (profileBtn) {
-        profileBtn.addEventListener('click', () => {
-            profileMenu.classList.toggle('hidden');
-        });
+    // GLOBAL SAFE ESCAPE (important!)
+    function escapeHtml(str) {
+        return String(str || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
     }
+    
+// Events
+if(btn) btn.onclick = toggleMenu;
+if(userBtn) userBtn.onclick = toggleUser;
+overlay.onclick = () => { closeMenu(); closeUser(); };
 
-    document.addEventListener('click', (e) => {
-        if (profileBtn && !profileBtn.contains(e.target) && !profileMenu.contains(e.target)) {
-            profileMenu.classList.add('hidden');
-        }
+window.addEventListener("scroll", () => {
+    if (isMenuOpen) closeMenu();
+    if (isUserOpen) closeUser();
+    navbar.classList.toggle("nav-scrolled", window.scrollY > 20);
+});
+
+document.addEventListener("keydown", e => {
+    if (e.key === "Escape") { closeMenu(); closeUser(); }
+});
+
+if (userDropdown) {
+    userDropdown.addEventListener("click", e => e.stopPropagation());
+}
+
+// --- SMART ACTIVE PILL LOGIC ---
+const links = document.querySelectorAll(".nav-link");
+const pill = document.getElementById("active-pill");
+let activeLink = null;
+
+function movePill(el) {
+    if(!pill || !el) return;
+    const r = el.getBoundingClientRect();
+    const pr = el.parentElement.getBoundingClientRect();
+    pill.style.width = r.width + "px";
+    pill.style.height = r.height + "px";
+    pill.style.left = (r.left - pr.left) + "px";
+    pill.style.top = (r.top - pr.top) + "px";
+}
+
+window.addEventListener('load', () => {
+    const current = window.location.pathname;
+    activeLink = [...links].find(l => l.getAttribute("href") === current) || links[0];
+    if(activeLink) {
+        activeLink.classList.add('active-page');
+        movePill(activeLink);
+    }
+});
+
+links.forEach(l => {
+    l.addEventListener("mouseenter", () => movePill(l));
+});
+
+// Returns pill to active page when mouse leaves the navbar
+if(navContainer) {
+    navContainer.addEventListener("mouseleave", () => {
+        if(activeLink) movePill(activeLink);
     });
+}
 </script>
 
 </body>
