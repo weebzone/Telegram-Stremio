@@ -3,192 +3,670 @@
 {% block title %}Subscription Management - Telegram Stremio{% endblock %}
 
 {% block content %}
-<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-    <div class="mb-8 flex justify-between items-center">
-        <div>
-            <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Subscription Management</h1>
-            <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">Manage subscription plans and view or edit active
-                users.</p>
-        </div>
-    </div>
+<style>
+    .subs-shell {
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+    }
 
-    <!-- Subscription Plans Section -->
-    <div class="mb-10">
-        <div class="flex items-center justify-between mb-4">
-            <h2 class="text-xl font-semibold text-gray-800 dark:text-gray-200">Subscription Plans</h2>
-            <button onclick="openPlanModal()"
-                class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors shadow-sm flex items-center">
-                <i class="fas fa-plus mr-2"></i> Add Plan
-            </button>
+    .page-hero,
+    .section-panel,
+    .table-shell,
+    .mobile-user-card,
+    .empty-state,
+    .modal-glass {
+        background: color-mix(in srgb, var(--card) 50%, transparent);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border: 1px solid var(--border);
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.22);
+    }
+
+    .page-hero,
+    .section-panel,
+    .table-shell,
+    .empty-state {
+        border-radius: 1.5rem;
+    }
+
+    .hero-glow {
+        position: relative;
+        overflow: hidden;
+        isolation: isolate;
+    }
+
+    .hero-glow::before {
+        content: "";
+        position: absolute;
+        inset: -30% auto auto -10%;
+        width: 16rem;
+        height: 16rem;
+        border-radius: 9999px;
+        background: color-mix(in srgb, var(--primary) 18%, transparent);
+        filter: blur(50px);
+        z-index: -1;
+        pointer-events: none;
+    }
+
+    .hero-glow::after {
+        content: "";
+        position: absolute;
+        inset: auto -5% -35% auto;
+        width: 14rem;
+        height: 14rem;
+        border-radius: 9999px;
+        background: color-mix(in srgb, var(--accent) 16%, transparent);
+        filter: blur(50px);
+        z-index: -1;
+        pointer-events: none;
+    }
+
+    .section-title {
+        color: var(--text);
+    }
+
+    .section-muted {
+        color: var(--text-sec);
+    }
+
+    .glass-btn {
+        border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+        background: color-mix(in srgb, var(--card) 70%, transparent);
+        color: var(--text);
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
+        transition: all 0.25s ease;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+    }
+
+    .glass-btn:hover {
+        transform: translateY(-1px);
+        border-color: color-mix(in srgb, var(--primary) 35%, var(--border));
+        box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
+    }
+
+    .glass-btn-primary {
+        background: linear-gradient(
+            135deg,
+            color-mix(in srgb, var(--primary) 88%, white 8%),
+            color-mix(in srgb, var(--accent) 82%, var(--primary) 18%)
+        );
+        color: white;
+        border: 1px solid color-mix(in srgb, var(--primary) 50%, transparent);
+        box-shadow: 0 10px 26px color-mix(in srgb, var(--primary) 22%, transparent);
+    }
+
+    .glass-btn-primary:hover {
+        filter: brightness(1.05);
+        box-shadow: 0 14px 34px color-mix(in srgb, var(--primary) 28%, transparent);
+    }
+
+    .glass-btn-danger {
+        background: color-mix(in srgb, #ef4444 20%, transparent);
+        color: #fecaca;
+        border-color: color-mix(in srgb, #ef4444 40%, transparent);
+    }
+
+    .glass-btn-warning {
+        background: color-mix(in srgb, #f59e0b 20%, transparent);
+        color: #fde68a;
+        border-color: color-mix(in srgb, #f59e0b 40%, transparent);
+    }
+
+    .glass-btn-success {
+        background: color-mix(in srgb, #22c55e 18%, transparent);
+        color: #bbf7d0;
+        border-color: color-mix(in srgb, #22c55e 40%, transparent);
+    }
+
+    .glass-input,
+    .glass-select {
+        width: 100%;
+        border-radius: 1rem;
+        border: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
+        background: color-mix(in srgb, var(--bg) 68%, transparent);
+        color: var(--text);
+        padding: 0.85rem 1rem;
+        outline: none;
+        transition: all 0.2s ease;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);
+    }
+
+    .glass-input::placeholder {
+        color: color-mix(in srgb, var(--text-sec) 85%, transparent);
+    }
+
+    .glass-input:focus,
+    .glass-select:focus {
+        border-color: color-mix(in srgb, var(--primary) 65%, var(--border));
+        box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 12%, transparent);
+    }
+
+    .plan-card {
+        position: relative;
+        overflow: hidden;
+        border-radius: 1.5rem;
+        background: linear-gradient(
+            180deg,
+            color-mix(in srgb, var(--card) 72%, transparent),
+            color-mix(in srgb, var(--card) 48%, transparent)
+        );
+        border: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
+        backdrop-filter: blur(18px);
+        -webkit-backdrop-filter: blur(18px);
+        box-shadow: 0 12px 30px rgba(0,0,0,0.18);
+        transition: transform 0.28s ease, border-color 0.28s ease, box-shadow 0.28s ease;
+    }
+
+    .plan-card::before {
+        content: "";
+        position: absolute;
+        inset: -25% auto auto -5%;
+        width: 8rem;
+        height: 8rem;
+        border-radius: 9999px;
+        background: color-mix(in srgb, var(--primary) 18%, transparent);
+        filter: blur(36px);
+        pointer-events: none;
+    }
+
+    .plan-card:hover {
+        transform: translateY(-4px);
+        border-color: color-mix(in srgb, var(--primary) 30%, var(--border));
+        box-shadow: 0 18px 42px rgba(0,0,0,0.24);
+    }
+
+    .plan-actions {
+        opacity: 0;
+        transform: translateY(-4px);
+        transition: all 0.22s ease;
+    }
+
+    .plan-card:hover .plan-actions {
+        opacity: 1;
+        transform: translateY(0);
+    }
+
+    .metric-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        padding: 0.45rem 0.8rem;
+        border-radius: 9999px;
+        font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 0.03em;
+        border: 1px solid transparent;
+    }
+
+    .badge-active {
+        background: color-mix(in srgb, #22c55e 16%, transparent);
+        color: #86efac;
+        border-color: color-mix(in srgb, #22c55e 28%, transparent);
+    }
+
+    .badge-expired {
+        background: color-mix(in srgb, #ef4444 14%, transparent);
+        color: #fca5a5;
+        border-color: color-mix(in srgb, #ef4444 26%, transparent);
+    }
+
+    .table-shell {
+        overflow: hidden;
+    }
+
+    .subs-table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+    }
+
+    .subs-table thead th {
+        background: color-mix(in srgb, var(--bg) 65%, transparent);
+        color: var(--text-sec);
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        border-bottom: 1px solid color-mix(in srgb, var(--border) 92%, transparent);
+    }
+
+    .subs-table tbody tr {
+        transition: background 0.22s ease;
+    }
+
+    .subs-table tbody tr:hover {
+        background: color-mix(in srgb, var(--primary) 6%, transparent);
+    }
+
+    .subs-table td {
+        border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+        color: var(--text);
+    }
+
+    .subs-table tbody tr:last-child td {
+        border-bottom: none;
+    }
+
+    .action-chip {
+        border-radius: 9999px;
+        padding: 0.45rem 0.8rem;
+        font-size: 0.72rem;
+        font-weight: 700;
+        border: 1px solid transparent;
+        transition: all 0.2s ease;
+        white-space: nowrap;
+    }
+
+    .action-chip:hover {
+        transform: translateY(-1px);
+    }
+
+    .mobile-user-card {
+        border-radius: 1.35rem;
+        padding: 1rem;
+    }
+
+    .mobile-user-card + .mobile-user-card {
+        margin-top: 0.9rem;
+    }
+
+    .mobile-grid {
+        display: none;
+    }
+
+    .pagination-shell {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        flex-wrap: wrap;
+    }
+
+    .pagination-text {
+        color: var(--text-sec);
+    }
+
+    .pagination-btn {
+        min-width: 92px;
+    }
+
+    .modal-backdrop {
+        background: rgba(4, 8, 18, 0.58);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+    }
+
+    .modal-glass {
+        border-radius: 1.6rem;
+        padding: 1.4rem;
+        border: 1px solid color-mix(in srgb, var(--border) 95%, transparent);
+        width: min(92vw, 30rem);
+    }
+
+    .modal-field label {
+        color: var(--text-sec);
+        font-size: 0.82rem;
+        font-weight: 700;
+        margin-bottom: 0.55rem;
+        display: block;
+    }
+
+    .text-soft {
+        color: var(--text-sec);
+    }
+
+    .no-scrollbar::-webkit-scrollbar {
+        display: none;
+    }
+
+    .no-scrollbar {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+    }
+
+    @media (max-width: 1024px) {
+        .subs-table th,
+        .subs-table td {
+            padding-left: 1rem;
+            padding-right: 1rem;
+        }
+    }
+
+    @media (max-width: 767px) {
+        .desktop-table-wrap {
+            display: none;
+        }
+
+        .mobile-grid {
+            display: block;
+        }
+
+        .page-hero {
+            padding: 1.25rem;
+            border-radius: 1.35rem;
+        }
+
+        .section-panel {
+            padding: 1rem;
+            border-radius: 1.35rem;
+        }
+
+        .pagination-shell {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .pagination-shell .controls {
+            width: 100%;
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            gap: 0.6rem;
+            align-items: center;
+        }
+
+        .pagination-btn {
+            width: 100%;
+        }
+
+        .plan-actions {
+            opacity: 1;
+            transform: none;
+        }
+    }
+</style>
+
+<div class="subs-shell py-2 sm:py-4">
+    <!-- Hero -->
+    <section class="page-hero hero-glow p-5 sm:p-6 lg:p-8">
+        <div class="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+                <div class="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-bold tracking-[0.18em] uppercase mb-3"
+                     style="border-color: color-mix(in srgb, var(--primary) 28%, var(--border)); color: var(--text-sec); background: color-mix(in srgb, var(--primary) 10%, transparent);">
+                    <i class="fas fa-layer-group text-[11px]" style="color: var(--primary);"></i>
+                    Subscription Control Center
+                </div>
+                <h1 class="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight section-title">
+                    Subscription Management
+                </h1>
+                <p class="mt-2 text-sm sm:text-base section-muted max-w-2xl">
+                    Create plans, manage users, and monitor active or expired subscriptions.
+                </p>
+            </div>
+
+            <div class="flex flex-wrap gap-3">
+                <button onclick="openPlanModal()" class="glass-btn glass-btn-primary rounded-2xl px-5 py-3 text-sm font-bold inline-flex items-center gap-2">
+                    <i class="fas fa-plus"></i>
+                    Add Plan
+                </button>
+                <button onclick="fetchSubscribers()" class="glass-btn rounded-2xl px-5 py-3 text-sm font-bold inline-flex items-center gap-2">
+                    <i class="fas fa-rotate-right"></i>
+                    Refresh Users
+                </button>
+            </div>
         </div>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6" id="plans-container">
-            <div class="col-span-3 text-center text-gray-500 py-8">
+    </section>
+
+    <!-- Plans -->
+    <section class="section-panel p-4 sm:p-5 lg:p-6">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
+            <div>
+                <h2 class="text-lg sm:text-xl font-bold section-title">Subscription Plans</h2>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5" id="plans-container">
+            <div class="empty-state col-span-full text-center px-6 py-10 text-soft">
                 <i class="fas fa-spinner fa-spin mr-2"></i> Loading plans...
             </div>
         </div>
-    </div>
+    </section>
 
-    <!-- User Subscriptions Section -->
-    <div class="mb-10">
-        <div class="flex items-center justify-between mb-3">
-            <h2 class="text-xl font-semibold text-gray-800 dark:text-gray-200">User Subscriptions</h2>
-            <button onclick="fetchSubscribers()"
-                class="bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 px-4 py-2 rounded-md text-sm font-medium transition-colors shadow-sm flex items-center">
-                <i class="fas fa-sync-alt mr-2"></i> Refresh
-            </button>
+    <!-- Users -->
+    <section class="section-panel p-4 sm:p-5 lg:p-6">
+        <div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 mb-5">
+            <div>
+                <h2 class="text-lg sm:text-xl font-bold section-title">User Subscriptions</h2>
+                <p class="text-sm section-muted mt-1">Search, filter, paginate, and manage subscription access.</p>
+            </div>
+
+            <div class="w-full lg:w-auto grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <input
+                    id="sub-search"
+                    type="text"
+                    placeholder="Search by name, username or ID..."
+                    class="glass-input"
+                    oninput="subPage=1; renderSubPage()"
+                >
+                <select id="sub-filter" class="glass-select" onchange="subPage=1; renderSubPage()">
+                    <option value="all">All Status</option>
+                    <option value="active">Active</option>
+                    <option value="expired">Expired</option>
+                </select>
+                <select id="sub-page-size" class="glass-select" onchange="subPage=1; renderSubPage()">
+                    <option value="10">10 / page</option>
+                    <option value="25">25 / page</option>
+                    <option value="50">50 / page</option>
+                </select>
+            </div>
         </div>
 
-        <!-- Search & Filter bar -->
-        <div class="flex flex-wrap gap-3 mb-3 items-center">
-            <input id="sub-search" type="text" placeholder="🔍 Search by name, username or ID…"
-                class="flex-1 min-w-[200px] border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-primary bg-white dark:bg-gray-800 text-text"
-                oninput="renderSubPage()">
-            <select id="sub-filter"
-                class="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none bg-white dark:bg-gray-800 text-text"
-                onchange="renderSubPage()">
-                <option value="all">All Status</option>
-                <option value="active">🟢 Active</option>
-                <option value="expired">🔴 Expired</option>
-            </select>
-            <select id="sub-page-size"
-                class="border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none bg-white dark:bg-gray-800 text-text"
-                onchange="subPage=1; renderSubPage()">
-                <option value="10">10 / page</option>
-                <option value="25">25 / page</option>
-                <option value="50">50 / page</option>
-            </select>
-        </div>
-
-        <div class="theme-card border rounded-xl overflow-hidden shadow-sm">
-            <div class="overflow-x-auto">
-                <table class="w-full text-sm text-left">
-                    <thead class="text-xs uppercase bg-gray-50 dark:bg-gray-800 dark:text-gray-300 border-b">
+        <!-- Desktop table -->
+        <div class="desktop-table-wrap table-shell">
+            <div class="overflow-x-auto no-scrollbar">
+                <table class="subs-table min-w-[780px] text-sm">
+                    <thead>
                         <tr>
-                            <th class="px-6 py-4 font-semibold">User Details</th>
-                            <th class="px-6 py-4 font-semibold text-center">Status</th>
-                            <th class="px-6 py-4 font-semibold text-center">Expiry Date</th>
-                            <th class="px-6 py-4 font-semibold text-right">Actions</th>
+                            <th class="px-6 py-4 text-left font-semibold">User Details</th>
+                            <th class="px-6 py-4 text-center font-semibold">Status</th>
+                            <th class="px-6 py-4 text-center font-semibold">Expiry</th>
+                            <th class="px-6 py-4 text-right font-semibold">Actions</th>
                         </tr>
                     </thead>
-                    <tbody id="subscribers-tbody" class="divide-y divide-gray-100 dark:divide-gray-800">
+                    <tbody id="subscribers-tbody">
                         <tr>
-                            <td colspan="4" class="px-6 py-8 text-center text-gray-500"><i
-                                    class="fas fa-spinner fa-spin mr-2"></i> Loading...</td>
+                            <td colspan="4" class="px-6 py-8 text-center text-soft">
+                                <i class="fas fa-spinner fa-spin mr-2"></i> Loading...
+                            </td>
                         </tr>
                     </tbody>
                 </table>
             </div>
         </div>
 
-        <!-- Pagination -->
-        <div class="flex items-center justify-between mt-3 text-sm text-text opacity-70" id="sub-pagination">
-            <span id="sub-page-info"></span>
-            <div class="flex gap-2">
-                <button id="sub-btn-prev" onclick="subChangePage(-1)"
-                    class="px-3 py-1 rounded border border-gray-300 hover:bg-gray-100 transition">‹ Prev</button>
-                <span id="sub-page-num" class="px-3 py-1 font-semibold"></span>
-                <button id="sub-btn-next" onclick="subChangePage(1)"
-                    class="px-3 py-1 rounded border border-gray-300 hover:bg-gray-100 transition">Next ›</button>
+        <!-- Mobile cards -->
+        <div id="subscribers-mobile" class="mobile-grid mt-1">
+            <div class="empty-state text-center px-4 py-8 text-soft">
+                <i class="fas fa-spinner fa-spin mr-2"></i> Loading...
             </div>
         </div>
-    </div>
+
+        <!-- Pagination -->
+        <div class="pagination-shell mt-5" id="sub-pagination">
+            <div id="sub-page-info" class="pagination-text text-sm"></div>
+            <div class="controls">
+                <button id="sub-btn-prev" onclick="subChangePage(-1)"
+                    class="glass-btn pagination-btn rounded-xl px-4 py-2.5 text-sm font-semibold">
+                    ‹ Prev
+                </button>
+                <span id="sub-page-num" class="text-sm font-bold text-center section-title px-2"></span>
+                <button id="sub-btn-next" onclick="subChangePage(1)"
+                    class="glass-btn pagination-btn rounded-xl px-4 py-2.5 text-sm font-semibold">
+                    Next ›
+                </button>
+            </div>
+        </div>
+    </section>
 </div>
 
 <!-- Plan Modal -->
-<div id="plan-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
-    <div class="relative top-20 mx-auto p-5 border shadow-lg rounded-md theme-card sm:w-11/12 md:max-w-md">
-        <div class="mt-3 text-center">
-            <h3 class="text-lg leading-6 font-medium text-gray-900 dark:text-white mb-2" id="plan-modal-title">Add New
-                Plan</h3>
-            <div class="mt-2 text-left">
-                <form id="plan-form" onsubmit="submitPlanForm(event)">
-                    <input type="hidden" id="plan-id">
-                    <div class="mb-4">
-                        <label class="block text-gray-700 dark:text-gray-300 text-sm font-bold mb-2">Duration
-                            (Days)</label>
-                        <input type="number" id="plan-days"
-                            class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none dark:bg-gray-700 dark:text-white dark:border-gray-600"
-                            required min="1">
-                    </div>
-                    <div class="mb-4">
-                        <label class="block text-gray-700 dark:text-gray-300 text-sm font-bold mb-2">Price (₹)</label>
-                        <input type="number" id="plan-price"
-                            class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none dark:bg-gray-700 dark:text-white dark:border-gray-600"
-                            required min="0" step="0.01">
-                    </div>
-                    <div class="flex justify-end gap-2 mt-6">
-                        <button type="button" onclick="closePlanModal()"
-                            class="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded shadow">Cancel</button>
-                        <button type="submit"
-                            class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded shadow">Save Plan</button>
-                    </div>
-                </form>
+<div id="plan-modal" class="fixed inset-0 hidden z-50 modal-backdrop items-center justify-center p-4">
+    <div class="modal-glass">
+        <div class="flex items-start justify-between gap-4 mb-5">
+            <div>
+                <h3 class="text-xl font-bold section-title" id="plan-modal-title">Add New Plan</h3>
+                <p class="text-sm text-soft mt-1">Create or update a subscription plan.</p>
             </div>
+            <button onclick="closePlanModal()" class="glass-btn rounded-full w-10 h-10 flex items-center justify-center">
+                <i class="fas fa-xmark"></i>
+            </button>
         </div>
+
+        <form id="plan-form" onsubmit="submitPlanForm(event)" class="space-y-4">
+            <input type="hidden" id="plan-id">
+
+            <div class="modal-field">
+                <label for="plan-days">Duration (Days)</label>
+                <input type="number" id="plan-days" class="glass-input" required min="1">
+            </div>
+
+            <div class="modal-field">
+                <label for="plan-price">Price (₹)</label>
+                <input type="number" id="plan-price" class="glass-input" required min="0" step="0.01">
+            </div>
+
+            <div class="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-2">
+                <button type="button" onclick="closePlanModal()" class="glass-btn rounded-2xl px-5 py-3 text-sm font-bold">
+                    Cancel
+                </button>
+                <button type="submit" class="glass-btn glass-btn-primary rounded-2xl px-5 py-3 text-sm font-bold">
+                    Save Plan
+                </button>
+            </div>
+        </form>
     </div>
 </div>
 
 <!-- User Action Modal -->
-<div id="user-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
-    <div class="relative top-20 mx-auto p-5 border shadow-lg rounded-md theme-card sm:w-11/12 md:max-w-md">
-        <div class="mt-3 text-center">
-            <h3 class="text-lg leading-6 font-medium text-gray-900 dark:text-white mb-2" id="user-modal-title">Manage
-                User</h3>
-            <div class="text-sm text-gray-500 dark:text-gray-400 mb-4" id="user-modal-desc"></div>
-            <div class="mt-2 text-left">
-                <form id="user-form" onsubmit="submitUserForm(event)">
-                    <input type="hidden" id="manage-user-id">
-                    <input type="hidden" id="manage-action">
-                    <div class="mb-4" id="days-input-group">
-                        <label class="block text-gray-700 dark:text-gray-300 text-sm font-bold mb-2">Days to <span
-                                id="days-action-label"></span></label>
-                        <input type="number" id="manage-days"
-                            class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 focus:outline-none dark:bg-gray-700 dark:text-white dark:border-gray-600"
-                            min="1" value="30">
-                    </div>
-                    <div class="flex justify-end gap-2 mt-6">
-                        <button type="button" onclick="closeUserModal()"
-                            class="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded shadow">Cancel</button>
-                        <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded shadow"
-                            id="btn-user-save">Confirm</button>
-                    </div>
-                </form>
+<div id="user-modal" class="fixed inset-0 hidden z-50 modal-backdrop items-center justify-center p-4">
+    <div class="modal-glass">
+        <div class="flex items-start justify-between gap-4 mb-5">
+            <div>
+                <h3 class="text-xl font-bold section-title" id="user-modal-title">Manage User</h3>
+                <div class="text-sm text-soft mt-1" id="user-modal-desc"></div>
             </div>
+            <button onclick="closeUserModal()" class="glass-btn rounded-full w-10 h-10 flex items-center justify-center">
+                <i class="fas fa-xmark"></i>
+            </button>
         </div>
+
+        <form id="user-form" onsubmit="submitUserForm(event)" class="space-y-4">
+            <input type="hidden" id="manage-user-id">
+            <input type="hidden" id="manage-action">
+
+            <div class="modal-field" id="days-input-group">
+                <label for="manage-days">Days to <span id="days-action-label"></span></label>
+                <input type="number" id="manage-days" class="glass-input" min="1" value="30">
+            </div>
+
+            <div class="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-2">
+                <button type="button" onclick="closeUserModal()" class="glass-btn rounded-2xl px-5 py-3 text-sm font-bold">
+                    Cancel
+                </button>
+                <button type="submit" class="glass-btn glass-btn-primary rounded-2xl px-5 py-3 text-sm font-bold" id="btn-user-save">
+                    Confirm
+                </button>
+            </div>
+        </form>
     </div>
 </div>
 
 <script>
-    // ---- Plans ----
+    let allUsers = [];
+    let subPage = 1;
+
+    function formatExpiry(expiryValue) {
+        if (!expiryValue) return 'N/A';
+        const d = new Date(expiryValue);
+        return d.toLocaleDateString('en-IN', {
+            timeZone: 'Asia/Kolkata',
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric'
+        }) + ' ' + d.toLocaleTimeString('en-IN', {
+            timeZone: 'Asia/Kolkata',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    }
+
+    function getUserDisplayName(u) {
+        let name = u.first_name || '';
+        if (u.username) name += (name ? ' ' : '') + `(@${u.username})`;
+        if (!name) name = `User ${u._id}`;
+        return name;
+    }
+
+    function getStatusBadge(status) {
+        return status === 'active'
+            ? '<span class="metric-badge badge-active"><i class="fas fa-circle text-[8px]"></i> Active</span>'
+            : '<span class="metric-badge badge-expired"><i class="fas fa-circle text-[8px]"></i> Expired</span>';
+    }
+
     async function fetchPlans() {
+        const container = document.getElementById('plans-container');
+        container.innerHTML = `
+            <div class="empty-state col-span-full text-center px-6 py-10 text-soft">
+                <i class="fas fa-spinner fa-spin mr-2"></i> Loading plans...
+            </div>
+        `;
         try {
             const res = await fetch('/api/admin/subscriptions/plans');
-            const container = document.getElementById('plans-container');
-            if (res.ok) {
-                const data = await res.json();
-                const plans = data.data || data.plans || [];
-                if (!plans.length) {
-                    container.innerHTML = '<div class="col-span-3 text-center text-gray-500 py-8">No plans found. Create one.</div>';
-                    return;
-                }
-                container.innerHTML = plans.map(p => `
-          <div class="theme-card rounded-xl border p-6 shadow-sm relative group">
-            <div class="absolute right-4 top-4 hidden group-hover:flex gap-2">
-              <button onclick="openPlanModal('${p._id}', ${p.days}, ${p.price})" class="text-blue-500 hover:text-blue-700"><i class="fas fa-edit"></i></button>
-              <button onclick="deletePlan('${p._id}')" class="text-red-500 hover:text-red-700"><i class="fas fa-trash"></i></button>
-            </div>
-            <div class="flex items-center">
-              <div class="flex-shrink-0 bg-yellow-100 dark:bg-yellow-900/30 p-3 rounded-lg">
-                <i class="fas fa-calendar-alt text-xl text-yellow-600 dark:text-yellow-400"></i>
-              </div>
-              <div class="ml-4">
-                <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">${p.days} Days Plan</h3>
-                <p class="text-2xl font-bold text-gray-900 dark:text-white">₹${p.price}</p>
-              </div>
-            </div>
-          </div>`).join('');
+            if (!res.ok) throw new Error('Failed to fetch plans');
+
+            const data = await res.json();
+            const plans = data.data || data.plans || [];
+
+            if (!plans.length) {
+                container.innerHTML = `
+                    <div class="empty-state col-span-full text-center px-6 py-10 text-soft">
+                        <i class="fas fa-box-open text-2xl mb-3"></i>
+                        <div class="font-semibold mb-1">No plans found</div>
+                        <div class="text-sm">Create your first subscription plan.</div>
+                    </div>
+                `;
+                return;
             }
-        } catch (err) { console.error(err); }
+
+            container.innerHTML = plans.map(p => `
+                <div class="plan-card p-5 sm:p-6">
+                    <div class="plan-actions absolute right-4 top-4 flex gap-2">
+                        <button onclick="openPlanModal('${p._id}', ${p.days}, ${p.price})"
+                            class="glass-btn rounded-full w-9 h-9 flex items-center justify-center" title="Edit plan">
+                            <i class="fas fa-pen text-sm"></i>
+                        </button>
+                        <button onclick="deletePlan('${p._id}')"
+                            class="glass-btn glass-btn-danger rounded-full w-9 h-9 flex items-center justify-center" title="Delete plan">
+                            <i class="fas fa-trash text-sm"></i>
+                        </button>
+                    </div>
+
+                    <div class="flex items-start gap-4">
+                        <div class="w-14 h-14 rounded-2xl flex items-center justify-center shrink-0"
+                             style="background: color-mix(in srgb, var(--primary) 16%, transparent); border: 1px solid color-mix(in srgb, var(--primary) 24%, transparent);">
+                            <i class="fas fa-calendar-alt text-xl" style="color: var(--primary);"></i>
+                        </div>
+
+                        <div class="min-w-0">
+                            <div class="text-sm font-semibold section-muted">${p.days} Days Plan</div>
+                            <div class="mt-1 text-3xl font-extrabold section-title tracking-tight">₹${p.price}</div>
+                            <div class="mt-3 inline-flex items-center gap-2 text-xs font-bold rounded-full px-3 py-1"
+                                 style="background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--text-sec); border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);">
+                                <i class="fas fa-bolt" style="color: var(--accent);"></i>
+                                Premium Access
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        } catch (err) {
+            console.error(err);
+            container.innerHTML = `
+                <div class="empty-state col-span-full text-center px-6 py-10 text-soft">
+                    <i class="fas fa-triangle-exclamation mr-2"></i> Failed to load plans.
+                </div>
+            `;
+        }
     }
 
     function openPlanModal(id = '', days = '', price = '') {
@@ -196,33 +674,63 @@
         document.getElementById('plan-days').value = days;
         document.getElementById('plan-price').value = price;
         document.getElementById('plan-modal-title').innerText = id ? 'Edit Plan' : 'Add New Plan';
-        document.getElementById('plan-modal').classList.remove('hidden');
+
+        const modal = document.getElementById('plan-modal');
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        document.body.classList.add('overflow-hidden');
     }
-    function closePlanModal() { document.getElementById('plan-modal').classList.add('hidden'); }
+
+    function closePlanModal() {
+        const modal = document.getElementById('plan-modal');
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+        document.body.classList.remove('overflow-hidden');
+    }
 
     async function submitPlanForm(e) {
         e.preventDefault();
+
         const id = document.getElementById('plan-id').value;
-        const payload = { days: parseInt(document.getElementById('plan-days').value), price: parseFloat(document.getElementById('plan-price').value) };
-        const res = await fetch(id ? `/api/admin/subscriptions/plans/${id}` : '/api/admin/subscriptions/plans', {
-            method: id ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
-        });
-        if (res.ok) { closePlanModal(); fetchPlans(); } else alert('Failed to save plan.');
+        const payload = {
+            days: parseInt(document.getElementById('plan-days').value),
+            price: parseFloat(document.getElementById('plan-price').value)
+        };
+
+        try {
+            const res = await fetch(id ? `/api/admin/subscriptions/plans/${id}` : '/api/admin/subscriptions/plans', {
+                method: id ? 'PUT' : 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (!res.ok) throw new Error('Failed to save plan');
+
+            closePlanModal();
+            fetchPlans();
+        } catch (err) {
+            console.error(err);
+            showToast('Failed to save plan.', 'error', 'Save Failed');
+        }
     }
 
     async function deletePlan(id) {
         if (!confirm('Delete this plan?')) return;
-        const res = await fetch(`/api/admin/subscriptions/plans/${id}`, { method: 'DELETE' });
-        if (res.ok) fetchPlans(); else alert('Failed to delete.');
+
+        try {
+            const res = await fetch(`/api/admin/subscriptions/plans/${id}`, { method: 'DELETE' });
+            if (!res.ok) throw new Error('Failed');
+            fetchPlans();
+        } catch (err) {
+            console.error(err);
+            showToast('Failed to delete plan.', 'error', 'Delete Failed');
+        }
     }
 
-    // ---- Subscribers with Search + Pagination ----
-    let allUsers = [];
-    let subPage = 1;
-
     function getSubFiltered() {
-        const q = document.getElementById('sub-search').value.toLowerCase();
+        const q = document.getElementById('sub-search').value.toLowerCase().trim();
         const status = document.getElementById('sub-filter').value;
+
         return allUsers.filter(u => {
             const name = ((u.first_name || '') + ' ' + (u.username || '') + ' ' + (u._id || '')).toLowerCase();
             const matchQ = !q || name.includes(q);
@@ -231,113 +739,290 @@
         });
     }
 
+    function renderDesktopRows(slice) {
+        const tbody = document.getElementById('subscribers-tbody');
+
+        if (!slice.length) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="4" class="px-6 py-10 text-center text-soft">
+                        No users match your search.
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+
+        tbody.innerHTML = slice.map(u => {
+            const expiry = formatExpiry(u.subscription_expiry);
+            const name = getUserDisplayName(u);
+            const safeName = name.replace(/'/g, "\\'");
+            const statusBadge = getStatusBadge(u.subscription_status);
+
+            return `
+                <tr>
+                    <td class="px-6 py-4">
+                        <div class="font-semibold section-title">${name}</div>
+                        <div class="text-xs text-soft mt-1">ID: ${u._id}</div>
+                    </td>
+                    <td class="px-6 py-4 text-center">${statusBadge}</td>
+                    <td class="px-6 py-4 text-center text-sm section-title">${expiry}</td>
+                    <td class="px-6 py-4">
+                        <div class="flex justify-end gap-2 flex-wrap">
+                            <button onclick="openUserModal(${u._id}, '${safeName}', 'extend')"
+                                class="action-chip glass-btn-success">
+                                Extend
+                            </button>
+                            <button onclick="openUserModal(${u._id}, '${safeName}', 'reduce')"
+                                class="action-chip glass-btn-warning">
+                                Reduce
+                            </button>
+                            <button onclick="openUserModal(${u._id}, '${safeName}', 'delete')"
+                                class="action-chip glass-btn-danger">
+                                Revoke
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    function renderMobileCards(slice) {
+        const mobileWrap = document.getElementById('subscribers-mobile');
+
+        if (!slice.length) {
+            mobileWrap.innerHTML = `
+                <div class="empty-state text-center px-4 py-8 text-soft">
+                    No users match your search.
+                </div>
+            `;
+            return;
+        }
+
+        mobileWrap.innerHTML = slice.map(u => {
+            const expiry = formatExpiry(u.subscription_expiry);
+            const name = getUserDisplayName(u);
+            const safeName = name.replace(/'/g, "\\'");
+            const statusBadge = getStatusBadge(u.subscription_status);
+
+            return `
+                <div class="mobile-user-card">
+                    <div class="flex items-start justify-between gap-3 mb-3">
+                        <div class="min-w-0">
+                            <div class="font-semibold section-title break-words">${name}</div>
+                            <div class="text-xs text-soft mt-1 break-all">ID: ${u._id}</div>
+                        </div>
+                        <div class="shrink-0">${statusBadge}</div>
+                    </div>
+
+                    <div class="grid grid-cols-1 gap-3 mb-4">
+                        <div class="rounded-2xl px-4 py-3"
+                             style="background: color-mix(in srgb, var(--bg) 55%, transparent); border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);">
+                            <div class="text-[11px] uppercase tracking-[0.14em] text-soft font-bold mb-1">Expiry</div>
+                            <div class="text-sm font-semibold section-title">${expiry}</div>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-3 gap-2">
+                        <button onclick="openUserModal(${u._id}, '${safeName}', 'extend')"
+                            class="action-chip glass-btn-success w-full">
+                            Extend
+                        </button>
+                        <button onclick="openUserModal(${u._id}, '${safeName}', 'reduce')"
+                            class="action-chip glass-btn-warning w-full">
+                            Reduce
+                        </button>
+                        <button onclick="openUserModal(${u._id}, '${safeName}', 'delete')"
+                            class="action-chip glass-btn-danger w-full">
+                            Revoke
+                        </button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
     function renderSubPage() {
         const filtered = getSubFiltered();
         const pageSize = parseInt(document.getElementById('sub-page-size').value);
         const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
         if (subPage > totalPages) subPage = totalPages;
-        const start = (subPage - 1) * pageSize;
+
+        const start = filtered.length ? (subPage - 1) * pageSize : 0;
         const slice = filtered.slice(start, start + pageSize);
 
-        document.getElementById('sub-page-info').textContent = `Showing ${start + 1}–${Math.min(start + pageSize, filtered.length)} of ${filtered.length}`;
+        document.getElementById('sub-page-info').textContent =
+            filtered.length
+                ? `Showing ${start + 1}–${Math.min(start + pageSize, filtered.length)} of ${filtered.length}`
+                : 'Showing 0 of 0';
+
         document.getElementById('sub-page-num').textContent = `Page ${subPage} / ${totalPages}`;
-        document.getElementById('sub-btn-prev').disabled = subPage <= 1;
-        document.getElementById('sub-btn-next').disabled = subPage >= totalPages;
 
-        const tbody = document.getElementById('subscribers-tbody');
-        if (!slice.length) {
-            tbody.innerHTML = '<tr><td colspan="4" class="px-6 py-8 text-center text-gray-500">No users match your search.</td></tr>';
-            return;
-        }
+        const prevBtn = document.getElementById('sub-btn-prev');
+        const nextBtn = document.getElementById('sub-btn-next');
 
-        tbody.innerHTML = slice.map(u => {
-            const statusColor = u.subscription_status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
-            let expiry = 'N/A';
-            if (u.subscription_expiry) {
-                const d = new Date(u.subscription_expiry);
-                expiry = d.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' }) +
-                    ' ' + d.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' });
-            }
-            let name = u.first_name || '';
-            if (u.username) name += (name ? ' ' : '') + `(@${u.username})`;
-            if (!name) name = `User ${u._id}`;
-            const safeName = name.replace(/'/g, "\\'");
-            return `<tr class="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-        <td class="px-6 py-4">
-          <div class="font-medium text-gray-900 dark:text-gray-100">${name}</div>
-          <div class="text-xs text-gray-500">ID: ${u._id}</div>
-        </td>
-        <td class="px-6 py-4 text-center">
-          <span class="px-2 py-1 rounded ${statusColor} text-xs font-bold uppercase tracking-wider">${u.subscription_status}</span>
-        </td>
-        <td class="px-6 py-4 text-center text-sm">${expiry}</td>
-        <td class="px-6 py-4 text-right">
-          <div class="flex justify-end gap-2 flex-wrap">
-            <button onclick="openUserModal(${u._id}, '${safeName}', 'extend')"
-              class="bg-green-50 text-green-600 hover:bg-green-100 px-2 py-1 rounded text-xs font-medium border border-green-200">Extend</button>
-            <button onclick="openUserModal(${u._id}, '${safeName}', 'reduce')"
-              class="bg-yellow-50 text-yellow-600 hover:bg-yellow-100 px-2 py-1 rounded text-xs font-medium border border-yellow-200">Reduce</button>
-            <button onclick="openUserModal(${u._id}, '${safeName}', 'delete')"
-              class="bg-red-50 text-red-600 hover:bg-red-100 px-2 py-1 rounded text-xs font-medium border border-red-200">Revoke</button>
-          </div>
-        </td>
-      </tr>`;
-        }).join('');
+        prevBtn.disabled = subPage <= 1;
+        nextBtn.disabled = subPage >= totalPages;
+
+        prevBtn.style.opacity = subPage <= 1 ? '0.45' : '1';
+        nextBtn.style.opacity = subPage >= totalPages ? '0.45' : '1';
+
+        renderDesktopRows(slice);
+        renderMobileCards(slice);
     }
 
-    function subChangePage(dir) { subPage += dir; renderSubPage(); }
+    function subChangePage(dir) {
+        const filtered = getSubFiltered();
+        const pageSize = parseInt(document.getElementById('sub-page-size').value);
+        const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+
+        subPage += dir;
+        if (subPage < 1) subPage = 1;
+        if (subPage > totalPages) subPage = totalPages;
+
+        renderSubPage();
+    }
 
     async function fetchSubscribers() {
-        document.getElementById('subscribers-tbody').innerHTML =
-            '<tr><td colspan="4" class="px-6 py-8 text-center text-gray-500"><i class="fas fa-spinner fa-spin mr-2"></i> Loading...</td></tr>';
+        document.getElementById('subscribers-tbody').innerHTML = `
+            <tr>
+                <td colspan="4" class="px-6 py-8 text-center text-soft">
+                    <i class="fas fa-spinner fa-spin mr-2"></i> Loading...
+                </td>
+            </tr>
+        `;
+
+        document.getElementById('subscribers-mobile').innerHTML = `
+            <div class="empty-state text-center px-4 py-8 text-soft">
+                <i class="fas fa-spinner fa-spin mr-2"></i> Loading...
+            </div>
+        `;
+
         try {
             const res = await fetch('/api/admin/subscriptions/users');
-            if (res.ok) {
-                const data = await res.json();
-                allUsers = data.data || [];
-                subPage = 1;
-                renderSubPage();
-            }
-        } catch (err) { console.error(err); }
+            if (!res.ok) throw new Error('Failed to fetch users');
+
+            const data = await res.json();
+            allUsers = data.data || [];
+            subPage = 1;
+            renderSubPage();
+        } catch (err) {
+            console.error(err);
+
+            document.getElementById('subscribers-tbody').innerHTML = `
+                <tr>
+                    <td colspan="4" class="px-6 py-8 text-center text-soft">
+                        <i class="fas fa-triangle-exclamation mr-2"></i> Failed to load users.
+                    </td>
+                </tr>
+            `;
+
+            document.getElementById('subscribers-mobile').innerHTML = `
+                <div class="empty-state text-center px-4 py-8 text-soft">
+                    <i class="fas fa-triangle-exclamation mr-2"></i> Failed to load users.
+                </div>
+            `;
+        }
     }
 
     function openUserModal(userId, userName, action) {
         document.getElementById('manage-user-id').value = userId;
         document.getElementById('manage-action').value = action;
-        let title = '', desc = '', btnColor = 'bg-blue-600 hover:bg-blue-700', showDays = true;
+
+        let title = '';
+        let desc = '';
+        let btnClasses = 'glass-btn glass-btn-primary rounded-2xl px-5 py-3 text-sm font-bold';
+        let showDays = true;
+
         if (action === 'extend') {
-            title = 'Extend Subscription'; desc = `Add days to <b>${userName}</b>'s subscription.`;
-            document.getElementById('days-action-label').innerText = 'Add';
+            title = 'Extend Subscription';
+            desc = `Add extra days to <b>${userName}</b>'s subscription.`;
+            document.getElementById('days-action-label').innerText = 'add';
+            btnClasses = 'glass-btn glass-btn-success rounded-2xl px-5 py-3 text-sm font-bold';
         } else if (action === 'reduce') {
-            title = 'Reduce Subscription'; desc = `Remove days from <b>${userName}</b>'s subscription.`;
-            document.getElementById('days-action-label').innerText = 'Subtract'; btnColor = 'bg-yellow-600 hover:bg-yellow-700';
+            title = 'Reduce Subscription';
+            desc = `Subtract days from <b>${userName}</b>'s subscription.`;
+            document.getElementById('days-action-label').innerText = 'subtract';
+            btnClasses = 'glass-btn glass-btn-warning rounded-2xl px-5 py-3 text-sm font-bold';
         } else {
-            title = 'Revoke Subscription'; desc = `<b>Warning:</b> This will revoke <b>${userName}</b>'s subscription entirely.`;
-            showDays = false; btnColor = 'bg-red-600 hover:bg-red-700';
+            title = 'Revoke Subscription';
+            desc = `<b>Warning:</b> This will remove <b>${userName}</b>'s subscription access completely.`;
+            showDays = false;
+            btnClasses = 'glass-btn glass-btn-danger rounded-2xl px-5 py-3 text-sm font-bold';
         }
+
         document.getElementById('user-modal-title').innerText = title;
         document.getElementById('user-modal-desc').innerHTML = desc;
-        document.getElementById('days-input-group').className = showDays ? 'mb-4' : 'hidden';
-        document.getElementById('btn-user-save').className = `${btnColor} text-white px-4 py-2 rounded shadow`;
-        if (!showDays) { document.getElementById('manage-days').value = 0; document.getElementById('manage-days').removeAttribute('required'); }
-        else document.getElementById('manage-days').setAttribute('required', 'required');
-        document.getElementById('user-modal').classList.remove('hidden');
+        document.getElementById('days-input-group').style.display = showDays ? 'block' : 'none';
+        document.getElementById('btn-user-save').className = btnClasses;
+
+        if (!showDays) {
+            document.getElementById('manage-days').value = 0;
+            document.getElementById('manage-days').removeAttribute('required');
+        } else {
+            document.getElementById('manage-days').setAttribute('required', 'required');
+            if (!document.getElementById('manage-days').value || document.getElementById('manage-days').value === '0') {
+                document.getElementById('manage-days').value = 30;
+            }
+        }
+
+        const modal = document.getElementById('user-modal');
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        document.body.classList.add('overflow-hidden');
     }
 
-    function closeUserModal() { document.getElementById('user-modal').classList.add('hidden'); }
+    function closeUserModal() {
+        const modal = document.getElementById('user-modal');
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+        document.body.classList.remove('overflow-hidden');
+    }
 
     async function submitUserForm(e) {
         e.preventDefault();
+
         const userId = document.getElementById('manage-user-id').value;
         const action = document.getElementById('manage-action').value;
         const days = document.getElementById('manage-days').value;
-        const res = await fetch(`/api/admin/subscriptions/users/${userId}/manage`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action, days: parseInt(days) || 0 })
-        });
-        if (res.ok) { closeUserModal(); fetchSubscribers(); } else alert('Failed to update user.');
+
+        try {
+            const res = await fetch(`/api/admin/subscriptions/users/${userId}/manage`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action, days: parseInt(days) || 0 })
+            });
+
+            if (!res.ok) throw new Error('Failed to update user');
+
+            closeUserModal();
+            showToast('Subscription updated successfully.', 'success', 'Updated');
+            fetchSubscribers();
+        } catch (err) {
+            console.error(err);
+            showToast('Failed to update user subscription.', 'error', 'Update Failed');
+        }
     }
 
-    document.addEventListener('DOMContentLoaded', () => { fetchPlans(); fetchSubscribers(); });
+    document.addEventListener('click', (e) => {
+        const planModal = document.getElementById('plan-modal');
+        const userModal = document.getElementById('user-modal');
+
+        if (e.target === planModal) closePlanModal();
+        if (e.target === userModal) closeUserModal();
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            closePlanModal();
+            closeUserModal();
+        }
+    });
+
+    document.addEventListener('DOMContentLoaded', () => {
+        fetchPlans();
+        fetchSubscribers();
+    });
 </script>
 {% endblock %}
