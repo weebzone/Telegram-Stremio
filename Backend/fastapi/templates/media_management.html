@@ -3,109 +3,162 @@
 {% block title %}Media Management - Telegram Stremio{% endblock %}
 
 {% block content %}
-<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+<div class="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
     <!-- Header -->
-    <div class="mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-            <h1 class="text-3xl font-bold">Media Management</h1>
-            <p class="theme-text-secondary mt-2">Manage your movie and TV show collections</p>
-        </div>
+    <section class="glass-panel rounded-3xl p-5 sm:p-6 lg:p-8 mb-6 sm:mb-8">
+        <div class="flex flex-col gap-5">
+            <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+                <div>
+                    <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/10 bg-white/5 text-xs font-semibold text-text-secondary mb-3">
+                        <i class="fa-solid fa-clapperboard text-primary"></i>
+                        Library Control
+                    </div>
+                    <h1 class="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-text">
+                        Media Management
+                    </h1>
+                    <p class="mt-2 text-sm sm:text-base text-text-secondary max-w-2xl">
+                        Manage your movie and TV show collections with search, filters, edit, and delete controls.
+                    </p>
+                </div>
 
-        <div class="flex space-x-2">
-            <a href="/media/manage?media_type=movie"
-                class="px-4 py-2 rounded-md transition-colors text-sm font-medium {% if media_type == 'movie' %}bg-blue-600 text-white{% else %}theme-card border hover:bg-gray-50{% endif %}">
-                Movies
-            </a>
-            <a href="/media/manage?media_type=tv"
-                class="px-4 py-2 rounded-md transition-colors text-sm font-medium {% if media_type == 'tv' %}bg-blue-600 text-white{% else %}theme-card border hover:bg-gray-50{% endif %}">
-                TV Shows
-            </a>
+                <div class="flex flex-wrap gap-2">
+                    <a href="/media/manage?media_type=movie"
+                       class="inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold transition border
+                              {% if media_type == 'movie' %}
+                              bg-primary text-white border-primary shadow-lg shadow-primary/20
+                              {% else %}
+                              glass-panel text-text hover:bg-white/10 border-white/10
+                              {% endif %}">
+                        <i class="fa-solid fa-film"></i>
+                        Movies
+                    </a>
+                    <a href="/media/manage?media_type=tv"
+                       class="inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold transition border
+                              {% if media_type == 'tv' %}
+                              bg-primary text-white border-primary shadow-lg shadow-primary/20
+                              {% else %}
+                              glass-panel text-text hover:bg-white/10 border-white/10
+                              {% endif %}">
+                        <i class="fa-solid fa-tv"></i>
+                        TV Shows
+                    </a>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                    <p class="text-[11px] uppercase tracking-wider text-text-secondary font-bold">Current view</p>
+                    <p class="mt-1 text-sm font-semibold text-text capitalize">{{ media_type }}</p>
+                </div>
+                <div class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                    <p class="text-[11px] uppercase tracking-wider text-text-secondary font-bold">Actions</p>
+                    <p class="mt-1 text-sm font-semibold text-text">Search, Edit, Delete</p>
+                </div>
+            </div>
         </div>
-    </div>
+    </section>
 
     <!-- Search and Filters -->
-    <div class="theme-card p-6 rounded-lg shadow mb-8">
-        <div class="flex flex-col md:flex-row gap-4">
+    <section class="glass-panel rounded-3xl p-4 sm:p-6 mb-6 sm:mb-8">
+        <div class="flex flex-col lg:flex-row gap-4 lg:items-center">
             <div class="flex-1">
-                <input type="text" id="search-input" placeholder="Search {{ media_type }}s by title..."
-                    class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm">
+                <label for="search-input" class="block text-xs font-bold uppercase tracking-wider text-text-secondary mb-2">
+                    Search {{ media_type|title }}
+                </label>
+                <div class="relative">
+                    <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-text-secondary text-sm"></i>
+                    <input type="text"
+                           id="search-input"
+                           placeholder="Search {{ media_type }}s by title..."
+                           class="w-full pl-11 pr-4 py-3 rounded-2xl bg-background text-text placeholder:text-text-secondary border border-border focus:outline-none focus:ring-2 focus:ring-primary/60 focus:border-primary transition shadow-sm">
+                </div>
             </div>
-            <div class="flex gap-2">
+
+            <div class="flex flex-col sm:flex-row gap-3 lg:pt-7">
                 <button onclick="searchMedia()"
-                    class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-md transition-colors text-sm font-medium shadow-sm">
+                        class="inline-flex justify-center items-center gap-2 bg-primary hover:bg-primary/90 text-white px-5 py-3 rounded-2xl transition font-bold shadow-lg shadow-primary/20">
+                    <i class="fa-solid fa-magnifying-glass"></i>
                     Search
                 </button>
                 <button onclick="clearSearch()"
-                    class="border border-gray-300 px-6 py-2 rounded-md hover:bg-gray-50 transition-colors text-sm font-medium">
+                        class="inline-flex justify-center items-center gap-2 glass-panel hover:bg-white/10 text-text px-5 py-3 rounded-2xl transition font-bold border border-white/10">
+                    <i class="fa-solid fa-rotate-left"></i>
                     Clear
                 </button>
             </div>
         </div>
-    </div>
+    </section>
 
     <!-- Loading Indicator -->
-    <div id="loading" class="text-center py-12 hidden">
-        <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary mb-4"></div>
-        <p class="theme-text-secondary">Loading {{ media_type }}s...</p>
+    <div id="loading" class="hidden text-center py-16">
+        <div class="inline-flex items-center justify-center w-14 h-14 rounded-full border border-white/10 glass-panel mb-4">
+            <div class="animate-spin rounded-full h-7 w-7 border-b-2 border-primary"></div>
+        </div>
+        <p class="text-text-secondary">Loading {{ media_type }}s...</p>
     </div>
 
     <!-- Error Display -->
-    <div id="error-display" class="hidden mb-8">
-        <div class="theme-card p-6 rounded-lg shadow border-l-4 border-red-500">
-            <div class="flex items-center mb-4">
-                <svg class="h-6 w-6 text-red-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.996-.833-2.764 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                </svg>
-                <h3 class="text-lg font-semibold text-red-700">Error Loading Media</h3>
+    <div id="error-display" class="hidden mb-6 sm:mb-8">
+        <div class="glass-panel rounded-3xl p-5 sm:p-6 border border-red-500/30">
+            <div class="flex items-start gap-3">
+                <div class="w-11 h-11 rounded-2xl bg-red-500/15 flex items-center justify-center shrink-0">
+                    <i class="fa-solid fa-triangle-exclamation text-red-400"></i>
+                </div>
+                <div class="flex-1">
+                    <h3 class="text-lg font-bold text-red-300">Error Loading Media</h3>
+                    <p id="error-message" class="mt-2 text-sm text-red-200/90"></p>
+                    <button onclick="retryLoad()"
+                            class="mt-4 inline-flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-4 py-2.5 rounded-2xl transition font-bold shadow-lg shadow-primary/20">
+                        <i class="fa-solid fa-rotate-right"></i>
+                        Try Again
+                    </button>
+                </div>
             </div>
-            <p id="error-message" class="text-red-600 mb-4"></p>
-            <button onclick="retryLoad()"
-                class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md transition-colors text-sm shadow-sm">
-                Try Again
-            </button>
         </div>
     </div>
 
     <!-- Media Grid -->
     <div id="media-grid"
-        class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-4 mb-8">
-        <!-- Media items will be loaded here via JavaScript -->
+         class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4 sm:gap-5 mb-6 sm:mb-8">
+        <!-- Media items will be loaded here -->
     </div>
 
-    <!-- No Results Message -->
-    <div id="no-results" class="text-center py-12 hidden">
-        <div class="theme-card p-8 rounded-lg shadow">
-            <svg class="mx-auto h-16 w-16 text-gray-300 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                    d="M7 4V2a1 1 0 011-1h8a1 1 0 011 1v2h4a1 1 0 110 2h-1v12a2 2 0 01-2 2H6a2 2 0 01-2-2V6H3a1 1 0 110-2h4zM9 6v10h6V6H9z" />
-            </svg>
-            <h3 class="text-lg font-semibold theme-text-secondary mb-2">No {{ media_type }}s found</h3>
-            <p class="theme-text-secondary text-sm mb-4">
+    <!-- No Results -->
+    <div id="no-results" class="hidden text-center py-16">
+        <div class="glass-panel rounded-3xl p-8 max-w-xl mx-auto">
+            <div class="mx-auto w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center mb-4 border border-white/10">
+                <i class="fa-solid fa-box-open text-3xl text-text-secondary"></i>
+            </div>
+            <h3 class="text-xl font-bold text-text mb-2">No {{ media_type }}s found</h3>
+            <p class="text-sm text-text-secondary mb-6">
                 {% if media_type == 'movie' %}
-                No movies match your search criteria
+                No movies match your search criteria.
                 {% else %}
-                No TV shows match your search criteria
+                No TV shows match your search criteria.
                 {% endif %}
             </p>
             <button onclick="clearSearch()"
-                class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md transition-colors text-sm shadow-sm">
+                    class="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-5 py-3 rounded-2xl transition font-bold shadow-lg shadow-primary/20">
+                <i class="fa-solid fa-clapperboard"></i>
                 Show All {{ media_type|title }}s
             </button>
         </div>
     </div>
 
     <!-- Pagination -->
-    <div id="pagination" class="flex justify-center items-center space-x-2 mt-8 hidden">
-        <!-- Pagination will be loaded here via JavaScript -->
+    <div id="pagination" class="hidden mt-6 sm:mt-8">
+        <div class="glass-panel rounded-3xl p-3 sm:p-4 overflow-x-auto">
+            <div class="flex justify-center items-center gap-2 min-w-max px-1" id="pagination-inner"></div>
+        </div>
     </div>
 
     <!-- Media Info -->
-    <div id="media-info" class="theme-card p-4 rounded-lg shadow mt-6 hidden">
-        <div
-            class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 text-sm theme-text-secondary">
-            <span id="results-info"></span>
-            <span id="db-info"></span>
+    <div id="media-info" class="hidden mt-6">
+        <div class="glass-panel rounded-3xl p-4 sm:p-5">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 text-sm text-text-secondary">
+                <span id="results-info"></span>
+                <span id="db-info"></span>
+            </div>
         </div>
     </div>
 </div>
@@ -116,7 +169,6 @@
     let isLoading = false;
     const mediaType = '{{ media_type }}';
 
-    // Show loading state
     function showLoading() {
         isLoading = true;
         document.getElementById('loading').classList.remove('hidden');
@@ -127,25 +179,24 @@
         document.getElementById('error-display').classList.add('hidden');
     }
 
-    // Hide loading state
     function hideLoading() {
         isLoading = false;
         document.getElementById('loading').classList.add('hidden');
         document.getElementById('media-grid').classList.remove('hidden');
     }
 
-    // Show error state
     function showError(message) {
         document.getElementById('error-message').textContent = message;
         document.getElementById('error-display').classList.remove('hidden');
         document.getElementById('loading').classList.add('hidden');
         document.getElementById('media-grid').classList.add('hidden');
         document.getElementById('no-results').classList.add('hidden');
+        document.getElementById('pagination').classList.add('hidden');
+        document.getElementById('media-info').classList.add('hidden');
     }
 
-    // Load media with proper error handling
     async function loadMedia(page = 1, search = '') {
-        if (isLoading) return; // Prevent multiple simultaneous requests
+        if (isLoading) return;
 
         showLoading();
         currentPage = page;
@@ -153,8 +204,6 @@
 
         try {
             const url = `/api/media/list?media_type=${mediaType}&page=${page}&page_size=24&search=${encodeURIComponent(search)}`;
-            console.log('Fetching:', url);
-
             const response = await fetch(url, {
                 method: 'GET',
                 credentials: 'same-origin',
@@ -163,8 +212,6 @@
                     'Content-Type': 'application/json'
                 }
             });
-
-            console.log('Response status:', response.status);
 
             if (!response.ok) {
                 if (response.status === 401) {
@@ -175,8 +222,6 @@
             }
 
             const data = await response.json();
-            console.log('Response data:', data);
-
             hideLoading();
 
             const grid = document.getElementById('media-grid');
@@ -192,58 +237,59 @@
             }
 
             document.getElementById('no-results').classList.add('hidden');
-
-            // Render media items
             grid.innerHTML = mediaItems.map(item => createMediaCard(item)).join('');
-
-            // Update pagination
             updatePagination(data.current_page || page, data.total_pages || 1);
-
-            // Update info
             updateMediaInfo(data);
 
         } catch (error) {
             console.error('Error loading media:', error);
             hideLoading();
             showError(`Failed to load ${mediaType}s: ${error.message}`);
+            showToast(`Failed to load ${mediaType}s.`, 'error', 'Load Error');
         }
     }
 
-    // Create media card HTML
-    function createMediaCard(item) {
-        const title = item.title || item.name || 'Unknown Title';
-        const year = item.release_year || 'Unknown Year';
-        const rating = item.rating ? `⭐ ${parseFloat(item.rating).toFixed(1)}` : '';
-        const poster = item.poster || 'https://via.placeholder.com/300x450/e5e7eb/9ca3af?text=No+Image';
 
-        return `
-        <div class="theme-card rounded-lg shadow hover:shadow-lg transition-all duration-300 group overflow-hidden">
-            <div class="relative">
-                <div class="aspect-w-2 aspect-h-3">
-                    <img src="${poster}" 
-                         alt="${title}" 
-                         class="w-full h-64 object-cover"
-                         onerror="this.src='https://via.placeholder.com/300x450/e5e7eb/9ca3af?text=No+Image'"
-                         loading="lazy">
+    function createMediaCard(item) {
+    const title = item.title || item.name || 'Unknown Title';
+    const year = item.release_year || 'Unknown Year';
+    const rating = item.rating ? `⭐ ${parseFloat(item.rating).toFixed(1)}` : '';
+    const poster = item.poster || 'https://via.placeholder.com/300x450/e5e7eb/9ca3af?text=No+Image';
+
+    // Escape title for data attribute safety
+    const safeTitle = title.replace(/"/g, '&quot;');
+
+    return `
+        <div class="group overflow-hidden rounded-3xl glass-panel border border-white/10 hover:border-primary/30 transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl">
+            <div class="relative overflow-hidden">
+                <img src="${poster}" alt="${title}" class="w-full aspect-[2/3] object-cover transition duration-300 group-hover:scale-105" onerror="this.src='https://via.placeholder.com/300x450/e5e7eb/9ca3af?text=No+Image'" loading="lazy">
+                <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+
+                <div class="absolute top-3 left-3">
+                    <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-black/60 text-white text-[11px] font-bold backdrop-blur-md border border-white/10">
+                        <i class="fa-solid fa-calendar-days"></i> ${year}
+                    </span>
                 </div>
-                <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-300"></div>
             </div>
-            <div class="p-3">
-                <h3 class="font-semibold text-sm mb-1 line-clamp-2 min-h-[2.5rem]" title="${title}">
-                    ${title}
-                </h3>
-                <div class="flex items-center justify-between text-xs theme-text-secondary mb-3">
-                    <span>${year}</span>
-                    ${rating ? `<span>${rating}</span>` : ''}
+
+            <div class="p-4">
+                <h3 class="font-bold text-sm sm:text-base text-text line-clamp-2 min-h-[2.75rem]" title="${title}">${title}</h3>
+                <div class="mt-2 flex items-center justify-between text-xs text-text-secondary">
+                    <span>DB #${item.db_index ?? '-'}</span>
+                    <span>${mediaType === 'movie' ? 'Movie' : 'TV Show'}</span>
                 </div>
-                <div class="flex justify-between items-center">
-                    <a href="/media/edit?tmdb_id=${item.tmdb_id}&db_index=${item.db_index}&media_type=${mediaType}" 
-                       class="text-primary hover:underline text-xs font-medium px-2 py-1 rounded transition-colors hover:bg-blue-50">
-                        Edit
+
+                <div class="mt-4 flex gap-2">
+                    <a href="/media/edit?tmdb_id=${encodeURIComponent(item.tmdb_id)}&db_index=${encodeURIComponent(item.db_index)}&media_type=${encodeURIComponent(mediaType)}"
+                       class="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 rounded-2xl bg-primary hover:bg-primary/90 text-white text-xs font-bold transition shadow-lg shadow-primary/20">
+                        <i class="fa-solid fa-pen-to-square"></i> Edit
                     </a>
-                    <button onclick="deleteMedia(${item.tmdb_id}, ${item.db_index}, '${title.replace(/'/g, "\\'")}')" 
-                            class="text-red-600 hover:underline text-xs font-medium px-2 py-1 rounded transition-colors hover:bg-red-50">
-                        Delete
+                    <button onclick="deleteMedia(this)"
+                            data-tmdb-id="${item.tmdb_id}" 
+                            data-db-index="${item.db_index ?? ''}" 
+                            data-title="${safeTitle}"
+                            class="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-2xl glass-panel hover:bg-red-500/10 text-red-300 text-xs font-bold transition border border-white/10">
+                        <i class="fa-solid fa-trash"></i>
                     </button>
                 </div>
             </div>
@@ -251,179 +297,168 @@
     `;
     }
 
-    // Update pagination
     function updatePagination(currentPage, totalPages) {
         const pagination = document.getElementById('pagination');
+        const paginationInner = document.getElementById('pagination-inner');
 
         if (totalPages <= 1) {
             pagination.classList.add('hidden');
+            paginationInner.innerHTML = '';
             return;
         }
 
         pagination.classList.remove('hidden');
         let paginationHTML = '';
 
-        // Previous button
         if (currentPage > 1) {
             paginationHTML += `
-            <button onclick="loadMedia(${currentPage - 1}, '${currentSearch}')" 
-                    class="px-3 py-2 border rounded-md hover:bg-gray-50 transition-colors text-sm">
-                Previous
-            </button>
-        `;
+                <button onclick='loadMedia(${currentPage - 1}, ${JSON.stringify(currentSearch)})'
+                        class="px-4 py-2 rounded-2xl glass-panel hover:bg-white/10 text-text text-sm font-bold transition border border-white/10">
+                    Previous
+                </button>
+            `;
         }
 
-        // Page numbers
         const startPage = Math.max(1, currentPage - 2);
         const endPage = Math.min(totalPages, currentPage + 2);
 
-        // First page
         if (startPage > 1) {
             paginationHTML += `
-            <button onclick="loadMedia(1, '${currentSearch}')" 
-                    class="px-3 py-2 border rounded-md hover:bg-gray-50 transition-colors text-sm">
-                1
-            </button>
-        `;
+                <button onclick='loadMedia(1, ${JSON.stringify(currentSearch)})'
+                        class="px-4 py-2 rounded-2xl glass-panel hover:bg-white/10 text-text text-sm font-bold transition border border-white/10">
+                    1
+                </button>
+            `;
             if (startPage > 2) {
-                paginationHTML += `<span class="px-3 py-2 text-sm">...</span>`;
+                paginationHTML += `<span class="px-2 text-text-secondary text-sm">...</span>`;
             }
         }
 
-        // Page range
         for (let i = startPage; i <= endPage; i++) {
             const isActive = i === currentPage;
             paginationHTML += `
-            <button onclick="loadMedia(${i}, '${currentSearch}')" 
-                    class="px-3 py-2 border rounded-md transition-colors text-sm ${isActive ? 'bg-blue-600 text-white border-blue-600' : 'hover:bg-gray-50'
-                }">
-                ${i}
-            </button>
-        `;
+                <button onclick='loadMedia(${i}, ${JSON.stringify(currentSearch)})'
+                        class="px-4 py-2 rounded-2xl text-sm font-bold transition border
+                               ${isActive
+                                   ? 'bg-primary text-white border-primary shadow-lg shadow-primary/20'
+                                   : 'glass-panel hover:bg-white/10 text-text border-white/10'}">
+                    ${i}
+                </button>
+            `;
         }
 
-        // Last page
         if (endPage < totalPages) {
             if (endPage < totalPages - 1) {
-                paginationHTML += `<span class="px-3 py-2 text-sm">...</span>`;
+                paginationHTML += `<span class="px-2 text-text-secondary text-sm">...</span>`;
             }
             paginationHTML += `
-            <button onclick="loadMedia(${totalPages}, '${currentSearch}')" 
-                    class="px-3 py-2 border rounded-md hover:bg-gray-50 transition-colors text-sm">
-                ${totalPages}
-            </button>
-        `;
+                <button onclick='loadMedia(${totalPages}, ${JSON.stringify(currentSearch)})'
+                        class="px-4 py-2 rounded-2xl glass-panel hover:bg-white/10 text-text text-sm font-bold transition border border-white/10">
+                    ${totalPages}
+                </button>
+            `;
         }
 
-        // Next button
         if (currentPage < totalPages) {
             paginationHTML += `
-            <button onclick="loadMedia(${currentPage + 1}, '${currentSearch}')" 
-                    class="px-3 py-2 border rounded-md hover:bg-gray-50 transition-colors text-sm">
-                Next
-            </button>
-        `;
+                <button onclick='loadMedia(${currentPage + 1}, ${JSON.stringify(currentSearch)})'
+                        class="px-4 py-2 rounded-2xl glass-panel hover:bg-white/10 text-text text-sm font-bold transition border border-white/10">
+                    Next
+                </button>
+            `;
         }
 
-        pagination.innerHTML = paginationHTML;
+        paginationInner.innerHTML = paginationHTML;
     }
 
-    // Update media info display
     function updateMediaInfo(data) {
         const mediaInfo = document.getElementById('media-info');
         const resultsInfo = document.getElementById('results-info');
         const dbInfo = document.getElementById('db-info');
 
-        const startItem = ((data.current_page - 1) * 24) + 1;
-        const endItem = Math.min(data.current_page * 24, data.total_count);
+        const totalCount = data.total_count || 0;
+        const pageSize = 24;
+        const current = data.current_page || 1;
+        const startItem = totalCount === 0 ? 0 : ((current - 1) * pageSize) + 1;
+        const endItem = Math.min(current * pageSize, totalCount);
 
-        resultsInfo.textContent = `Showing ${startItem}-${endItem} of ${data.total_count} ${mediaType}s`;
+        resultsInfo.textContent = `Showing ${startItem}-${endItem} of ${totalCount} ${mediaType}s`;
 
         if (data.databases_checked && data.databases_checked.length > 0) {
-            dbInfo.textContent = `Database${data.databases_checked.length > 1 ? 's' : ''}: ${data.databases_checked.join(', ')}`;
+            dbInfo.textContent = `Databases checked: ${data.databases_checked.join(', ')}`;
+        } else {
+            dbInfo.textContent = '';
         }
 
         mediaInfo.classList.remove('hidden');
     }
 
-    // Search functionality
     function searchMedia() {
         const searchInput = document.getElementById('search-input');
         const search = searchInput.value.trim();
         loadMedia(1, search);
     }
 
-    // Clear search
     function clearSearch() {
         document.getElementById('search-input').value = '';
         loadMedia(1, '');
     }
 
-    // Retry load function
     function retryLoad() {
         loadMedia(currentPage, currentSearch);
     }
 
-    // Delete media with confirmation
-    async function deleteMedia(tmdbId, dbIndex, title) {
-        if (!confirm(`Are you sure you want to delete "${title}"?\n\nThis action cannot be undone.`)) return;
+    async function deleteMedia(buttonElement) {
+    const tmdbId = buttonElement.getAttribute('data-tmdb-id');
+    const dbIndex = buttonElement.getAttribute('data-db-index');
+    const title = buttonElement.getAttribute('data-title');
 
-        try {
-            const response = await fetch(`/api/media/delete?tmdb_id=${tmdbId}&db_index=${dbIndex}&media_type=${mediaType}`, {
-                method: 'DELETE',
-                credentials: 'same-origin',
-                headers: {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json'
-                }
-            });
+    if (!confirm(`Are you sure you want to delete "${title}"?\n\nThis action cannot be undone.`)) return;
 
-            if (response.ok) {
-                // Show success message briefly
-                const successMsg = document.createElement('div');
-                successMsg.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-md shadow-lg z-50';
-                successMsg.textContent = `"${title}" deleted successfully`;
-                document.body.appendChild(successMsg);
-
-                setTimeout(() => {
-                    document.body.removeChild(successMsg);
-                }, 3000);
-
-                // Reload current page
-                loadMedia(currentPage, currentSearch);
-            } else {
-                const error = await response.json();
-                alert(`Error deleting "${title}": ${error.detail || 'Unknown error'}`);
+    try {
+        const response = await fetch(`/api/media/delete?tmdb_id=${encodeURIComponent(tmdbId)}&db_index=${encodeURIComponent(dbIndex)}&media_type=${encodeURIComponent(mediaType)}`, {
+            method: 'DELETE',
+            credentials: 'same-origin',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
             }
-        } catch (error) {
-            console.error('Error deleting media:', error);
-            alert(`Error deleting "${title}": ${error.message}`);
-        }
-    }
+        });
 
-    // Initialize page
+        if (response.ok) {
+            showToast(`"${title}" deleted successfully`, 'success', 'Deleted');
+            loadMedia(currentPage, currentSearch); // Refresh grid
+        } else {
+            const error = await response.json().catch(() => ({}));
+            showToast(error.detail || `Error deleting "${title}"`, 'error', 'Delete Failed');
+        }
+    } catch (error) {
+        console.error('Error deleting media:', error);
+        showToast(`Error deleting "${title}": ${error.message}`, 'error', 'Network Error');
+    }
+}
+
     document.addEventListener('DOMContentLoaded', () => {
-        // Load media on page load
         loadMedia();
 
-        // Add enter key listener to search input
-        document.getElementById('search-input').addEventListener('keypress', (e) => {
+        const searchInput = document.getElementById('search-input');
+
+        searchInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
                 e.preventDefault();
                 searchMedia();
             }
         });
 
-        // Add input event for real-time search (with debouncing)
         let searchTimeout;
-        document.getElementById('search-input').addEventListener('input', (e) => {
+        searchInput.addEventListener('input', (e) => {
             clearTimeout(searchTimeout);
             const searchValue = e.target.value.trim();
 
             if (searchValue.length === 0) {
                 searchTimeout = setTimeout(() => {
                     loadMedia(1, '');
-                }, 300);
+                }, 250);
             }
         });
     });
@@ -437,44 +472,22 @@
         overflow: hidden;
     }
 
-    .aspect-w-2 {
-        position: relative;
-        padding-bottom: 150%;
-        /* 2:3 aspect ratio */
+    .aspect-\[2\/3\] {
+        aspect-ratio: 2 / 3;
     }
 
-    .aspect-w-2>img {
-        position: absolute;
-        height: 100%;
-        width: 100%;
-        top: 0;
-        right: 0;
-        bottom: 0;
-        left: 0;
+    /* Better mobile scrolling for pagination */
+    #pagination .overflow-x-auto {
+        scrollbar-width: thin;
     }
 
-    @media (max-width: 640px) {
-        .grid {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 0.75rem;
-        }
+    #pagination .overflow-x-auto::-webkit-scrollbar {
+        height: 6px;
     }
 
-    @media (min-width: 1536px) {
-        .grid {
-            grid-template-columns: repeat(8, minmax(0, 1fr));
-        }
-    }
-
-    /* Loading animation */
-    @keyframes spin {
-        to {
-            transform: rotate(360deg);
-        }
-    }
-
-    .animate-spin {
-        animation: spin 1s linear infinite;
+    #pagination .overflow-x-auto::-webkit-scrollbar-thumb {
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.2);
     }
 </style>
 {% endblock %}
