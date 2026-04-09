@@ -3,72 +3,105 @@
 {% block title %}Login - Telegram Stremio{% endblock %}
 
 {% block content %}
-<div class="flex items-center justify-center min-h-[calc(100vh-160px)] py-12 px-4 sm:px-6 lg:px-8 relative">
-    
-    <div class="max-w-md w-full space-y-8 relative z-10">
-        
-        <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[120%] h-[120%] bg-blue-500/10 rounded-full blur-[100px] pointer-events-none"></div>
+<div class="flex-1 flex items-center justify-center py-4 min-h-0">
 
-        <div class="text-center relative z-10">
-            <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center mx-auto mb-5 border border-white/10 shadow-lg shadow-purple-500/10">
-                <i class="fas fa-lock text-2xl text-purple-400"></i>
-            </div>
-            <h2 class="text-3xl md:text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500 tracking-tight">Admin Login</h2>
-            <p class="mt-2 text-gray-400 font-medium">Sign in to access the admin dashboard</p>
-        </div>
+    <div class="w-full max-w-md rounded-[2rem] overflow-hidden glass-panel self-center">
 
-        {% if error %}
-        <div class="bg-red-500/10 border border-red-500/30 text-red-400 px-5 py-3.5 rounded-xl flex items-center gap-3 shadow-lg shadow-red-500/5 backdrop-blur-sm animate-[slideDown_0.3s_ease-out]">
-            <i class="fas fa-exclamation-circle text-lg shrink-0"></i>
-            <span class="text-sm font-semibold">{{ error }}</span>
-        </div>
-        {% endif %}
+        <div class="p-6 sm:p-10 flex flex-col justify-center bg-card/20">
 
-        <form method="post" class="glass-panel p-8 sm:p-10 rounded-2xl shadow-2xl space-y-6 relative overflow-hidden border border-white/10">
-            <div class="absolute -top-20 -right-20 w-40 h-40 bg-purple-500/20 rounded-full blur-[60px] pointer-events-none"></div>
-
-            <div class="relative z-10">
-                <label for="username" class="block text-sm font-semibold text-gray-300 mb-2">Username</label>
-                <div class="relative group">
-                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none transition-colors group-focus-within:text-purple-400 text-gray-500">
-                        <i class="fas fa-user"></i>
-                    </div>
-                    <input type="text" id="username" name="username" required placeholder="Enter your username"
-                        class="w-full glass-input rounded-xl pl-11 pr-4 py-3 text-sm placeholder-gray-500 focus:ring-2 focus:ring-purple-500/30 transition-all">
+            <div class="flex items-center gap-3 justify-center mb-6">
+                <div class="w-10 h-10 rounded-full bg-primary flex items-center justify-center shadow-[0_0_15px_var(--primary)]">
+                    <i class="fa-solid fa-play text-white text-sm"></i>
                 </div>
+                <span class="text-2xl font-extrabold tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-primary to-accent">
+                    TG Stremio
+                </span>
             </div>
 
-            <div class="relative z-10">
-                <label for="password" class="block text-sm font-semibold text-gray-300 mb-2">Password</label>
-                <div class="relative group">
-                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none transition-colors group-focus-within:text-purple-400 text-gray-500">
-                        <i class="fas fa-key"></i>
+            <div class="text-center mb-6">
+                <h2 class="text-lg font-bold tracking-tight text-text">Admin Authentication</h2>
+                <p class="text-text-secondary text-xs mt-1">Access your management console</p>
+            </div>
+
+            {% if error %}
+            <div class="flex items-center gap-3 bg-red-500/10 border border-red-500/20 text-red-400 px-4 py-2.5 rounded-xl mb-6 animate-pulse">
+                <i class="fa-solid fa-circle-exclamation text-xs"></i>
+                <p class="text-xs font-medium">{{ error }}</p>
+            </div>
+            {% endif %}
+
+            <form method="post" class="space-y-4">
+
+                <div class="space-y-1.5">
+                    <label class="text-[10px] font-bold uppercase tracking-widest text-text-secondary ml-1">Username</label>
+                    <div class="relative group">
+                        <i class="fa-solid fa-user absolute left-4 top-1/2 -translate-y-1/2 text-text-secondary group-focus-within:text-primary transition-colors text-sm"></i>
+                        <input type="text" name="username" required
+                            class="w-full pl-11 pr-4 py-3 bg-background/50 rounded-2xl border border-white/5 focus:border-primary/50 focus:ring-4 focus:ring-primary/10 outline-none transition-all text-text text-sm"
+                            placeholder="Admin ID">
                     </div>
-                    <input type="password" id="password" name="password" required placeholder="Enter your password"
-                        class="w-full glass-input rounded-xl pl-11 pr-4 py-3 text-sm placeholder-gray-500 focus:ring-2 focus:ring-purple-500/30 transition-all">
                 </div>
-            </div>
 
-            <div class="pt-2 relative z-10">
+                <div class="space-y-1.5">
+                    <label class="text-[10px] font-bold uppercase tracking-widest text-text-secondary ml-1">Password</label>
+                    <div class="relative group">
+                        <i class="fa-solid fa-lock absolute left-4 top-1/2 -translate-y-1/2 text-text-secondary group-focus-within:text-primary transition-colors text-sm"></i>
+                        
+                        <input type="password" id="password" name="password" required
+                            class="w-full pl-11 pr-11 py-3 bg-background/50 rounded-2xl border border-white/5 focus:border-primary/50 focus:ring-4 focus:ring-primary/10 outline-none transition-all text-text text-sm"
+                            placeholder="••••••••">
+
+                        <button type="button" onclick="togglePassword()" 
+                            class="absolute right-4 top-1/2 -translate-y-1/2 text-text-secondary hover:text-primary transition-colors">
+                            <i id="eyeIcon" class="fa-solid fa-eye text-xs"></i>
+                        </button>
+                    </div>
+                </div>
+
                 <button type="submit"
-                    class="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white py-3.5 px-4 rounded-xl transition-all duration-200 font-bold shadow-lg shadow-blue-500/20 border border-blue-400/30 flex items-center justify-center gap-2 hover:scale-[1.02] active:scale-[0.98]">
-                    <span>Secure Sign In</span>
-                    <i class="fas fa-arrow-right text-sm"></i>
+                    class="w-full py-3.5 rounded-2xl bg-primary hover:brightness-110 text-background font-bold transition-all shadow-lg shadow-primary/20 flex items-center justify-center gap-3 mt-4">
+                    <i class="fa-solid fa-right-to-bracket text-sm"></i>
+                    Sign In
                 </button>
-            </div>
-        </form>
 
-        <div class="text-center relative z-10 mt-8">
-            <p class="text-gray-500 text-sm font-medium flex flex-wrap items-center justify-center gap-4">
-                <a href="/status" class="text-blue-400 hover:text-blue-300 transition-colors flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-white/5">
-                    <i class="fas fa-server"></i> System Status
-                </a>
-                <span class="text-white/10 hidden sm:inline">•</span>
-                <a href="/stremio" class="text-purple-400 hover:text-purple-300 transition-colors flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-white/5">
-                    <i class="fas fa-book"></i> Stremio Guide
-                </a>
-            </p>
+            </form>
+
         </div>
     </div>
 </div>
+
+<style>
+    /* Strictly disable scrolling on the login screen */
+    html, body { 
+        height: 100%; 
+        overflow: hidden !important; 
+    }
+    
+    /* Ensure the 'main' block from base.html takes full height */
+    main {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+    }
+
+    input::placeholder {
+        color: color-mix(in srgb, var(--text-sec) 40%, transparent);
+    }
+</style>
+
+<script>
+    function togglePassword() {
+        const input = document.getElementById("password");
+        const icon = document.getElementById("eyeIcon");
+
+        if (input.type === "password") {
+            input.type = "text";
+            icon.classList.replace("fa-eye", "fa-eye-slash");
+        } else {
+            input.type = "password";
+            icon.classList.replace("fa-eye-slash", "fa-eye");
+        }
+    }
+</script>
+
 {% endblock %}
