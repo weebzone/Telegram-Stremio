@@ -174,6 +174,34 @@
     overflow-wrap: anywhere;
   }
 
+  .match-card {
+    background: color-mix(in srgb, var(--bg) 72%, transparent);
+    border: 1px solid color-mix(in srgb, var(--border) 92%, transparent);
+    border-radius: 1.25rem;
+    padding: 1rem;
+    transition: all 0.2s ease;
+  }
+
+  .match-card:hover {
+    transform: translateY(-2px);
+    border-color: color-mix(in srgb, var(--primary) 35%, transparent);
+    box-shadow: 0 14px 28px rgba(0, 0, 0, 0.18);
+  }
+
+  .match-card.active {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 18%, transparent);
+  }
+
+  .match-thumb {
+    width: 4.75rem;
+    height: 7rem;
+    border-radius: 1rem;
+    object-fit: cover;
+    border: 1px solid rgba(255,255,255,0.08);
+    flex-shrink: 0;
+  }
+
   @keyframes spin {
     to { transform: rotate(360deg); }
   }
@@ -286,6 +314,55 @@
             <p class="muted leading-7 text-sm sm:text-base">{{ media_details.description }}</p>
         </div>
         {% endif %}
+    </div>
+    {% endif %}
+
+    {% if media_details %}
+    <div class="glass-card rounded-3xl p-5 sm:p-6 lg:p-8 mb-6 sm:mb-8">
+        <div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-3 mb-5 sm:mb-6">
+            <div>
+                <h3 class="section-title text-xl sm:text-2xl">Rescan Metadata</h3>
+                <p class="muted mt-1 text-sm sm:text-base">
+                    Use this only when the auto-detected {{ media_type }} is mismatched. Existing Telegram files will stay safe.
+                </p>
+            </div>
+            <span class="pill">IMDb / TMDb re-match</span>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-3">
+            <input
+                id="rescan-query"
+                type="text"
+                class="field-input"
+                placeholder="Search correct {{ media_type }} title..."
+                value="{{ media_details.title if media_details else '' }}"
+            >
+            <button type="button" class="btn-ui btn-primary" onclick="searchRescanCandidates()">
+                🔎 Search Matches
+            </button>
+        </div>
+
+        <div id="rescan-state" class="muted text-sm mt-4 hidden"></div>
+
+        <div id="rescan-results" class="grid grid-cols-1 xl:grid-cols-2 gap-3 mt-4"></div>
+
+        <div id="rescan-preview" class="hidden mt-5 rounded-3xl border border-white/10 bg-white/5 p-4 sm:p-5">
+            <div class="flex items-start gap-4">
+                <img id="rescan-preview-poster" src="/static/placeholder.jpg" alt="Selected poster" class="match-thumb">
+                <div class="min-w-0 flex-1">
+                    <h4 id="rescan-preview-title" class="text-white font-bold text-lg"></h4>
+                    <p id="rescan-preview-subtitle" class="muted text-sm mt-1"></p>
+                    <p id="rescan-preview-ids" class="muted text-xs mt-2 break-all"></p>
+                </div>
+            </div>
+
+            <div class="flex flex-col sm:flex-row justify-end gap-3 mt-5">
+                <button type="button" onclick="clearRescanSelection()" class="btn-ui btn-ghost">Cancel</button>
+                <button type="button" onclick="applyRescanSelection()" class="btn-ui btn-primary">
+                    ✨ Apply Selected Match
+                </button>
+            </div>
+        </div>
     </div>
     {% endif %}
 
@@ -553,6 +630,177 @@
     const tmdbId = {{ tmdb_id }};
     const dbIndex = {{ db_index }};
     const mediaType = '{{ media_type }}';
+
+    let selectedRescanMatch = null;
+    let latestRescanResults = [];
+
+    function escapeHtml(value) {
+        return String(value ?? '')
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#39;');
+    }
+
+    function setRescanState(message = '', visible = false) {
+        const el = document.getElementById('rescan-state');
+        if (!el) return;
+        el.textContent = message;
+        el.classList.toggle('hidden', !visible);
+    }
+
+    function clearRescanSelection() {
+        selectedRescanMatch = null;
+        document.querySelectorAll('.match-card').forEach(card => card.classList.remove('active'));
+        const preview = document.getElementById('rescan-preview');
+        if (preview) preview.classList.add('hidden');
+    }
+
+    function selectRescanMatch(index) {
+        const item = latestRescanResults[index];
+        if (!item) return;
+
+        selectedRescanMatch = item;
+        document.querySelectorAll('.match-card').forEach(card => card.classList.remove('active'));
+        const activeCard = document.getElementById(`match-card-${index}`);
+        if (activeCard) activeCard.classList.add('active');
+
+        document.getElementById('rescan-preview-title').textContent = item.title || 'Unknown title';
+        document.getElementById('rescan-preview-subtitle').textContent = `${item.subtitle || 'Match'}${item.year ? ` • ${item.year}` : ''}`;
+        document.getElementById('rescan-preview-ids').textContent = `IMDb: ${item.imdb_id || 'N/A'} • TMDb: ${item.tmdb_id || 'N/A'}`;
+        document.getElementById('rescan-preview-poster').src = item.poster || '/static/placeholder.jpg';
+        document.getElementById('rescan-preview').classList.remove('hidden');
+    }
+
+    async function searchRescanCandidates() {
+        const query = document.getElementById('rescan-query').value.trim();
+        const resultsEl = document.getElementById('rescan-results');
+
+        if (!query) {
+            showErrorMessage('Please enter a title to search.');
+            return;
+        }
+
+        clearRescanSelection();
+        latestRescanResults = [];
+        resultsEl.innerHTML = '';
+        setRescanState('Searching matches...', true);
+
+        try {
+            const params = new URLSearchParams({
+                media_type: mediaType,
+                query
+            });
+
+            const yearValue = document.getElementById('release_year')?.value;
+            if (yearValue) {
+                params.set('year', yearValue);
+            }
+
+            const response = await fetch(`/api/media/rescan/search?${params.toString()}`);
+            const data = await response.json().catch(() => ({}));
+
+            if (!response.ok) {
+                setRescanState('', false);
+                showErrorMessage(data.detail || 'Failed to search matches.');
+                return;
+            }
+
+            const results = data.results || [];
+            latestRescanResults = results;
+
+            if (!results.length) {
+                setRescanState('No matches found.', true);
+                return;
+            }
+
+            setRescanState(`Found ${results.length} match${results.length > 1 ? 'es' : ''}. Select one below.`, true);
+
+            resultsEl.innerHTML = results.map((item, index) => `
+                <button
+                    type="button"
+                    id="match-card-${index}"
+                    class="match-card text-left w-full"
+                    data-index="${index}"
+                >
+                    <div class="flex items-start gap-4">
+                        <img
+                            src="${item.poster || '/static/placeholder.jpg'}"
+                            alt="${escapeHtml(item.title || 'Poster')}"
+                            class="match-thumb"
+                            onerror="this.src='/static/placeholder.jpg'"
+                        >
+                        <div class="min-w-0 flex-1">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <h4 class="text-white font-bold text-base sm:text-lg">${escapeHtml(item.title || 'Unknown title')}</h4>
+                                <span class="pill">${escapeHtml(item.year || '—')}</span>
+                            </div>
+                            <p class="muted text-sm mt-2">${escapeHtml(item.subtitle || '')}</p>
+                            <p class="muted text-xs mt-2 break-all">
+                                IMDb: ${escapeHtml(item.imdb_id || 'N/A')} · TMDb: ${escapeHtml(item.tmdb_id || 'N/A')}
+                            </p>
+                        </div>
+                    </div>
+                </button>
+            `).join('');
+
+            document.querySelectorAll('#rescan-results .match-card').forEach((card) => {
+                card.addEventListener('click', () => {
+                    const index = Number(card.dataset.index);
+                    selectRescanMatch(index);
+                });
+            });
+        } catch (error) {
+            console.error('Rescan search failed:', error);
+            setRescanState('', false);
+            showErrorMessage('Failed to search matches. Please try again.');
+        }
+    }
+
+    async function applyRescanSelection() {
+        if (!selectedRescanMatch) {
+            showErrorMessage('Please select a match first.');
+            return;
+        }
+
+        const selectedId = selectedRescanMatch.imdb_id || selectedRescanMatch.tmdb_id;
+        if (!selectedId) {
+            showErrorMessage('Selected match does not contain a valid IMDb/TMDb id.');
+            return;
+        }
+
+        if (!confirm(`Replace current metadata with "${selectedRescanMatch.title}"?\n\nExisting Telegram files will stay safe.`)) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/media/rescan/apply?tmdb_id=${tmdbId}&db_index=${dbIndex}&media_type=${mediaType}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ selected_id: String(selectedId) })
+            });
+
+            const data = await response.json().catch(() => ({}));
+
+            if (!response.ok) {
+                showErrorMessage(data.detail || 'Failed to apply selected metadata.');
+                return;
+            }
+
+            showSuccessMessage(data.message || 'Metadata rescanned successfully.');
+
+            const newTmdbId = data.redirect_tmdb_id || tmdbId;
+            const newDbIndex = data.db_index || dbIndex;
+
+            setTimeout(() => {
+                window.location.href = `/media/edit?tmdb_id=${newTmdbId}&db_index=${newDbIndex}&media_type=${mediaType}`;
+            }, 700);
+        } catch (error) {
+            console.error('Apply rescan failed:', error);
+            showErrorMessage('Failed to apply selected metadata. Please try again.');
+        }
+    }
 
     function toggleSeason(seasonIndex) {
         const content = document.getElementById(`season-content-${seasonIndex}`);
