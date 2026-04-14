@@ -526,3 +526,258 @@ async def fetch_movie_metadata(title, encoded_string, year=None, quality=None, d
         "quality": quality,
         "encoded_string": encoded_string,
     }
+
+
+async def search_movie_candidates(query: str, year: int | None = None, limit: int = 8) -> list[dict]:
+    query = (query or "").strip()
+    if not query:
+        return []
+
+    results: list[dict] = []
+    seen: set[tuple[str, str]] = set()
+
+    # IMDb/Cinemeta top result
+    try:
+        imdb_result = await search_title(query=query, type="movie")
+        if imdb_result and imdb_result.get("id"):
+            key = ("imdb", imdb_result["id"])
+            if key not in seen:
+                seen.add(key)
+                results.append({
+                    "source": "imdb",
+                    "title": imdb_result.get("title", ""),
+                    "year": imdb_result.get("year", ""),
+                    "imdb_id": imdb_result.get("id"),
+                    "tmdb_id": imdb_result.get("moviedb_id"),
+                    "poster": imdb_result.get("poster", ""),
+                    "backdrop": "",
+                    "subtitle": "IMDb / Cinemeta",
+                })
+    except Exception as e:
+        LOGGER.warning(f"IMDb movie candidate search failed for '{query}': {e}")
+
+    # TMDb multiple results
+    try:
+        async with API_SEMAPHORE:
+            tmdb_results = await tmdb.search().movies(query=query, year=year) if year else await tmdb.search().movies(query=query)
+
+        for item in (tmdb_results or [])[:limit]:
+            tmdb_id = getattr(item, "id", None)
+            if not tmdb_id:
+                continue
+
+            imdb_id = None
+            try:
+                details = await _tmdb_movie_details(tmdb_id)
+                ext = getattr(details, "external_ids", None) if details else None
+                imdb_id = getattr(ext, "imdb_id", None) if ext else None
+            except Exception:
+                pass
+
+            key = ("tmdb", str(tmdb_id))
+            if key in seen:
+                continue
+            seen.add(key)
+
+            release_date = getattr(item, "release_date", None)
+            year_value = getattr(release_date, "year", None) if release_date else None
+
+            results.append({
+                "source": "tmdb",
+                "title": getattr(item, "title", "") or "",
+                "year": year_value or "",
+                "imdb_id": imdb_id,
+                "tmdb_id": tmdb_id,
+                "poster": format_tmdb_image(getattr(item, "poster_path", None)),
+                "backdrop": format_tmdb_image(getattr(item, "backdrop_path", None), "original"),
+                "subtitle": "TMDb",
+            })
+    except Exception as e:
+        LOGGER.warning(f"TMDb movie candidate search failed for '{query}': {e}")
+
+    return results[:limit]
+
+
+async def search_tv_candidates(query: str, limit: int = 8) -> list[dict]:
+    query = (query or "").strip()
+    if not query:
+        return []
+
+    results: list[dict] = []
+    seen: set[tuple[str, str]] = set()
+
+    # IMDb/Cinemeta top result
+    try:
+        imdb_result = await search_title(query=query, type="tvSeries")
+        if imdb_result and imdb_result.get("id"):
+            key = ("imdb", imdb_result["id"])
+            if key not in seen:
+                seen.add(key)
+                results.append({
+                    "source": "imdb",
+                    "title": imdb_result.get("title", ""),
+                    "year": imdb_result.get("year", ""),
+                    "imdb_id": imdb_result.get("id"),
+                    "tmdb_id": imdb_result.get("moviedb_id"),
+                    "poster": imdb_result.get("poster", ""),
+                    "backdrop": "",
+                    "subtitle": "IMDb / Cinemeta",
+                })
+    except Exception as e:
+        LOGGER.warning(f"IMDb TV candidate search failed for '{query}': {e}")
+
+    # TMDb multiple results
+    try:
+        async with API_SEMAPHORE:
+            tmdb_results = await tmdb.search().tv(query=query)
+
+        for item in (tmdb_results or [])[:limit]:
+            tmdb_id = getattr(item, "id", None)
+            if not tmdb_id:
+                continue
+
+            imdb_id = None
+            try:
+                details = await _tmdb_tv_details(tmdb_id)
+                ext = getattr(details, "external_ids", None) if details else None
+                imdb_id = getattr(ext, "imdb_id", None) if ext else None
+            except Exception:
+                pass
+
+            key = ("tmdb", str(tmdb_id))
+            if key in seen:
+                continue
+            seen.add(key)
+
+            first_air_date = getattr(item, "first_air_date", None)
+            year_value = getattr(first_air_date, "year", None) if first_air_date else None
+
+            results.append({
+                "source": "tmdb",
+                "title": getattr(item, "name", "") or "",
+                "year": year_value or "",
+                "imdb_id": imdb_id,
+                "tmdb_id": tmdb_id,
+                "poster": format_tmdb_image(getattr(item, "poster_path", None)),
+                "backdrop": format_tmdb_image(getattr(item, "backdrop_path", None), "original"),
+                "subtitle": "TMDb",
+            })
+    except Exception as e:
+        LOGGER.warning(f"TMDb TV candidate search failed for '{query}': {e}")
+
+    return results[:limit]
+
+
+async def fetch_selected_movie_metadata(selected_id: str) -> dict | None:
+    selected_id = str(selected_id).strip()
+    if not selected_id:
+        return None
+
+    data = await fetch_movie_metadata(
+        title="manual-rescan",
+        encoded_string=None,
+        year=None,
+        quality=None,
+        default_id=selected_id
+    )
+    if not data:
+        return None
+
+    return {
+        "tmdb_id": data.get("tmdb_id"),
+        "imdb_id": data.get("imdb_id"),
+        "title": data.get("title"),
+        "release_year": data.get("year"),
+        "rating": data.get("rate"),
+        "description": data.get("description"),
+        "poster": data.get("poster"),
+        "backdrop": data.get("backdrop"),
+        "logo": data.get("logo"),
+        "genres": data.get("genres", []),
+        "cast": data.get("cast", []),
+        "runtime": data.get("runtime"),
+        "media_type": "movie",
+    }
+
+
+async def fetch_selected_tv_metadata(selected_id: str) -> dict | None:
+    selected_id = str(selected_id).strip()
+    if not selected_id:
+        return None
+
+    imdb_id = None
+    tmdb_id = None
+    imdb_tv = None
+    use_tmdb = False
+
+    if selected_id.startswith("tt"):
+        imdb_id = selected_id
+    elif selected_id.isdigit():
+        tmdb_id = int(selected_id)
+        use_tmdb = True
+    else:
+        return None
+
+    if imdb_id and not use_tmdb:
+        try:
+            imdb_tv = await get_detail(imdb_id=imdb_id, media_type="tvSeries")
+        except Exception:
+            imdb_tv = None
+            use_tmdb = True
+
+    if use_tmdb or not imdb_tv:
+        if not tmdb_id and imdb_tv and imdb_tv.get("moviedb_id"):
+            try:
+                tmdb_id = int(imdb_tv["moviedb_id"])
+            except Exception:
+                tmdb_id = None
+
+        if not tmdb_id:
+            return None
+
+        tv = await _tmdb_tv_details(tmdb_id)
+        if not tv:
+            return None
+
+        credits = getattr(tv, "credits", None) or {}
+        cast_arr = getattr(credits, "cast", []) or []
+        cast = [
+            getattr(c, "name", None) or getattr(c, "original_name", None)
+            for c in cast_arr
+        ]
+
+        runtime_val = tv.episode_run_time[0] if getattr(tv, "episode_run_time", None) else None
+        runtime = f"{runtime_val} min" if runtime_val else ""
+
+        return {
+            "tmdb_id": tv.id,
+            "imdb_id": getattr(getattr(tv, "external_ids", None), "imdb_id", None),
+            "title": tv.name,
+            "release_year": getattr(tv.first_air_date, "year", 0) if getattr(tv, "first_air_date", None) else 0,
+            "rating": getattr(tv, "vote_average", 0) or 0,
+            "description": tv.overview or "",
+            "poster": format_tmdb_image(tv.poster_path),
+            "backdrop": format_tmdb_image(tv.backdrop_path, "original"),
+            "logo": get_tmdb_logo(getattr(tv, "images", None)),
+            "genres": [g.name for g in (tv.genres or [])],
+            "cast": cast,
+            "runtime": str(runtime),
+            "media_type": "tv",
+        }
+
+    images = format_imdb_images(imdb_id)
+    return {
+        "tmdb_id": int(imdb_tv.get("moviedb_id")) if imdb_tv.get("moviedb_id") else None,
+        "imdb_id": imdb_id,
+        "title": imdb_tv.get("title", ""),
+        "release_year": imdb_tv.get("releaseDetailed", {}).get("year", 0),
+        "rating": imdb_tv.get("rating", {}).get("star", 0),
+        "description": imdb_tv.get("plot", ""),
+        "poster": images["poster"],
+        "backdrop": images["backdrop"],
+        "logo": images["logo"],
+        "genres": imdb_tv.get("genre", []),
+        "cast": imdb_tv.get("cast", []),
+        "runtime": str(imdb_tv.get("runtime") or ""),
+        "media_type": "tv",
+    }

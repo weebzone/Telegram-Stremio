@@ -23,7 +23,8 @@ from Backend.fastapi.routes.api_routes import (
     get_subscription_plans_api, add_subscription_plan_api,
     update_subscription_plan_api, delete_subscription_plan_api,
     get_all_subscribers_api, manage_subscriber_api,
-    get_all_tokens_api, assign_plan_api, link_token_user_api
+    get_all_tokens_api, assign_plan_api, link_token_user_api,
+    search_media_rescan_api, apply_media_rescan_api
 )
 
 app = FastAPI(
@@ -258,6 +259,27 @@ async def speed_test_stream(
     _: bool = Depends(require_auth)
 ):
     return await speed_test_stream_api(quality_id, tmdb_id, db_index, media_type)
+
+
+@app.get("/api/media/rescan/search")
+async def search_media_rescan(
+    media_type: str,
+    query: str,
+    year: int | None = None,
+    _: bool = Depends(require_auth)
+):
+    return await search_media_rescan_api(media_type, query, year)
+
+
+@app.post("/api/media/rescan/apply")
+async def apply_media_rescan(
+    request: Request,
+    tmdb_id: int,
+    db_index: int,
+    media_type: str,
+    _: bool = Depends(require_auth)
+):
+    return await apply_media_rescan_api(request, tmdb_id, db_index, media_type)
 
 @app.exception_handler(401)
 async def auth_exception_handler(request: Request, exc):

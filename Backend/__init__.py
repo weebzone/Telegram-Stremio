@@ -11,4 +11,4 @@ StartTime = time()
 USE_DEFAULT_ID: str = None
 db = Database()  
 
-__version__ = "2.1.1"
+__version__ = "2.2.0"

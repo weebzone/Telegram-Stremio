@@ -5,6 +5,12 @@ from fastapi.responses import StreamingResponse
 from Backend import db, StartTime, __version__
 from Backend.logger import LOGGER
 from Backend.helper.pyro import get_readable_time
+from Backend.helper.metadata import (
+    search_movie_candidates,
+    search_tv_candidates,
+    fetch_selected_movie_metadata,
+    fetch_selected_tv_metadata,
+)
 from Backend.pyrofork.bot import multi_clients, StreamBot
 from Backend.helper.custom_dl import run_speed_test, _speed_test_single_client
 from time import time
@@ -726,3 +732,61 @@ async def link_token_user_api(token: str, user_id: int) -> dict:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+
+
+async def search_media_rescan_api(media_type: str, query: str, year: int | None = None):
+    query = (query or "").strip()
+    if not query:
+        raise HTTPException(status_code=400, detail="query is required.")
+
+    if media_type == "movie":
+        results = await search_movie_candidates(query=query, year=year)
+    elif media_type == "tv":
+        results = await search_tv_candidates(query=query)
+    else:
+        raise HTTPException(status_code=400, detail="Invalid media_type.")
+
+    return {"results": results}
+
+
+async def apply_media_rescan_api(request: Request, tmdb_id: int, db_index: int, media_type: str):
+    body = await request.json()
+    selected_id = str(body.get("selected_id") or "").strip()
+
+    if not selected_id:
+        raise HTTPException(status_code=400, detail="selected_id is required.")
+
+    current_doc = await db.get_document(media_type, tmdb_id, db_index)
+    if not current_doc:
+        raise HTTPException(status_code=404, detail="Media not found.")
+
+    if media_type == "movie":
+        metadata = await fetch_selected_movie_metadata(selected_id)
+    elif media_type == "tv":
+        metadata = await fetch_selected_tv_metadata(selected_id)
+    else:
+        raise HTTPException(status_code=400, detail="Invalid media_type.")
+
+    if not metadata:
+        raise HTTPException(status_code=404, detail="Unable to fetch metadata for selected item.")
+
+    updated_doc = await db.replace_media_metadata(
+        media_type=media_type,
+        tmdb_id=tmdb_id,
+        db_index=db_index,
+        metadata=metadata,
+    )
+
+    if not updated_doc:
+        raise HTTPException(status_code=500, detail="Failed to replace media metadata.")
+
+    return {
+        "success": True,
+        "message": "Metadata rescanned successfully.",
+        "redirect_tmdb_id": updated_doc.get("tmdb_id"),
+        "db_index": updated_doc.get("db_index", db_index),
+        "media_type": media_type,
+        "data": updated_doc,
+}
