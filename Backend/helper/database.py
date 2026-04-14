@@ -1467,3 +1467,68 @@ class Database:
         except Exception as e:
             LOGGER.error(f"get_stream_analytics error: {e}")
             return {"summary": {}, "per_client": [], "recent": []}
+
+
+
+    async def replace_media_metadata(
+        self,
+        media_type: str,
+        tmdb_id: int,
+        db_index: int,
+        metadata: Dict[str, Any]
+    ) -> Optional[dict]:
+        db_key = f"storage_{db_index}"
+        collection_name = "tv" if media_type.lower() in ["tv", "series"] else "movie"
+        collection = self.dbs[db_key][collection_name]
+
+        current_doc = await collection.find_one({"tmdb_id": int(tmdb_id)})
+        if not current_doc:
+            return None
+
+        current_doc.pop("_id", None)
+
+        if collection_name == "movie":
+            preserved_telegram = current_doc.get("telegram", [])
+            current_doc.update({
+                "tmdb_id": int(metadata.get("tmdb_id") or tmdb_id),
+                "imdb_id": metadata.get("imdb_id"),
+                "title": metadata.get("title") or current_doc.get("title"),
+                "release_year": metadata.get("release_year", current_doc.get("release_year")),
+                "rating": metadata.get("rating", current_doc.get("rating")),
+                "description": metadata.get("description", current_doc.get("description")),
+                "poster": metadata.get("poster", current_doc.get("poster")),
+                "backdrop": metadata.get("backdrop", current_doc.get("backdrop")),
+                "logo": metadata.get("logo", current_doc.get("logo")),
+                "genres": metadata.get("genres", current_doc.get("genres", [])),
+                "cast": metadata.get("cast", current_doc.get("cast", [])),
+                "runtime": metadata.get("runtime", current_doc.get("runtime")),
+                "media_type": "movie",
+                "telegram": preserved_telegram,
+                "updated_on": datetime.utcnow(),
+            })
+        else:
+            preserved_seasons = current_doc.get("seasons", [])
+            current_doc.update({
+                "tmdb_id": int(metadata.get("tmdb_id") or tmdb_id) if metadata.get("tmdb_id") else int(tmdb_id),
+                "imdb_id": metadata.get("imdb_id"),
+                "title": metadata.get("title") or current_doc.get("title"),
+                "release_year": metadata.get("release_year", current_doc.get("release_year")),
+                "rating": metadata.get("rating", current_doc.get("rating")),
+                "description": metadata.get("description", current_doc.get("description")),
+                "poster": metadata.get("poster", current_doc.get("poster")),
+                "backdrop": metadata.get("backdrop", current_doc.get("backdrop")),
+                "logo": metadata.get("logo", current_doc.get("logo")),
+                "genres": metadata.get("genres", current_doc.get("genres", [])),
+                "cast": metadata.get("cast", current_doc.get("cast", [])),
+                "runtime": metadata.get("runtime", current_doc.get("runtime")),
+                "media_type": "tv",
+                "seasons": preserved_seasons,
+                "updated_on": datetime.utcnow(),
+            })
+
+        new_tmdb_id = int(current_doc["tmdb_id"])
+        await collection.delete_one({"tmdb_id": int(tmdb_id)})
+        await collection.insert_one(current_doc)
+
+        updated_doc = await collection.find_one({"tmdb_id": new_tmdb_id})
+        return convert_objectid_to_str(updated_doc) if updated_doc else None
