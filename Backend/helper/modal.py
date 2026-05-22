@@ -18,6 +18,7 @@ class QualityDetail(BaseModel):
     video_size: Optional[int] = None
     origin_chat_id: Optional[int] = None
     origin_msg_id: Optional[int] = None
+    torrent_private: bool = False
 
 
 # ---------------------------

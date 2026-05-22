@@ -4,7 +4,7 @@ import math
 from asyncio import create_task
 from bson import ObjectId
 import motor.motor_asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pydantic import ValidationError
 from pymongo import ASCENDING, DESCENDING
 from typing import Dict, List, Optional, Tuple, Any
@@ -15,6 +15,7 @@ import re
 from Backend.helper.encrypt import decode_string
 from Backend.helper.modal import Episode, MovieSchema, QualityDetail, Season, TVShowSchema
 from Backend.helper.task_manager import delete_message
+from Backend.helper.torrent_stats import scrape_torrent_trackers
 
 
 def convert_objectid_to_str(document: Dict[str, Any]) -> Dict[str, Any]:
@@ -40,6 +41,7 @@ class Database:
         self.dbs: Dict[str, motor.motor_asyncio.AsyncIOMotorDatabase] = {}
 
         self.current_db_index = 1
+        self._torrent_stats_refreshing = set()
 
     async def connect(self):
         try:
@@ -78,6 +80,127 @@ class Database:
             {"$set": {"current_index": self.current_db_index}},
             upsert=True
         )
+
+    # -------------------------------
+    # Torrent tracker stats cache
+    # -------------------------------
+    async def get_torrent_stats(self, info_hash: str) -> Optional[dict]:
+        if not info_hash:
+            return None
+        try:
+            return await self.dbs["tracking"]["torrent_stats"].find_one({"_id": str(info_hash).lower()})
+        except Exception as e:
+            LOGGER.debug(f"Torrent stats lookup failed for {info_hash}: {e}")
+            return None
+
+    def _torrent_stats_is_fresh(self, stats: Optional[dict]) -> bool:
+        if not stats:
+            return False
+        expires_at = stats.get("expires_at")
+        if not expires_at:
+            return False
+        if expires_at.tzinfo is not None:
+            expires_at = expires_at.replace(tzinfo=None)
+        return expires_at > datetime.utcnow()
+
+    def queue_torrent_stats_refresh(
+        self,
+        info_hash: str,
+        sources: list,
+        torrent_private: bool = False,
+        force: bool = False,
+    ) -> None:
+        if not getattr(Telegram, "TORRENT_STATS_ENABLED", True):
+            return
+        if torrent_private:
+            return
+        if not info_hash or not sources:
+            return
+
+        info_hash = str(info_hash).lower()
+        if info_hash in self._torrent_stats_refreshing:
+            return
+
+        async def _refresh_if_needed():
+            if not force:
+                cached = await self.get_torrent_stats(info_hash)
+                if self._torrent_stats_is_fresh(cached):
+                    return
+            await self.refresh_torrent_stats(info_hash, sources)
+
+        create_task(_refresh_if_needed())
+
+    async def refresh_torrent_stats(self, info_hash: str, sources: list) -> Optional[dict]:
+        if not getattr(Telegram, "TORRENT_STATS_ENABLED", True):
+            return None
+        if not info_hash or not sources:
+            return None
+
+        info_hash = str(info_hash).lower()
+        if info_hash in self._torrent_stats_refreshing:
+            return await self.get_torrent_stats(info_hash)
+
+        self._torrent_stats_refreshing.add(info_hash)
+        now = datetime.utcnow()
+        try:
+            stats = await scrape_torrent_trackers(
+                info_hash=info_hash,
+                sources=sources,
+                max_trackers=max(0, int(getattr(Telegram, "TORRENT_STATS_MAX_TRACKERS", 5) or 5)),
+                timeout=max(0.5, float(getattr(Telegram, "TORRENT_STATS_TIMEOUT_SEC", 2.5) or 2.5)),
+                concurrency=max(1, int(getattr(Telegram, "TORRENT_STATS_CONCURRENCY", 3) or 3)),
+            )
+            ok = stats.get("status") == "ok"
+            ttl = (
+                int(getattr(Telegram, "TORRENT_STATS_TTL_SEC", 21600) or 21600)
+                if ok else
+                int(getattr(Telegram, "TORRENT_STATS_FAILURE_TTL_SEC", 3600) or 3600)
+            )
+            doc = {
+                "_id": info_hash,
+                "info_hash": info_hash,
+                "seeders": stats.get("seeders"),
+                "peers": stats.get("peers"),
+                "completed": stats.get("completed"),
+                "checked_at": now,
+                "expires_at": now + timedelta(seconds=max(60, ttl)),
+                "trackers_checked": int(stats.get("trackers_checked") or 0),
+                "trackers_responded": int(stats.get("trackers_responded") or 0),
+                "status": stats.get("status") or "unavailable",
+                "errors": stats.get("errors") or [],
+            }
+            await self.dbs["tracking"]["torrent_stats"].update_one(
+                {"_id": info_hash},
+                {"$set": doc},
+                upsert=True,
+            )
+            return doc
+        except Exception as e:
+            LOGGER.warning(f"Torrent stats refresh failed for {info_hash}: {e}")
+            doc = {
+                "_id": info_hash,
+                "info_hash": info_hash,
+                "seeders": None,
+                "peers": None,
+                "completed": None,
+                "checked_at": now,
+                "expires_at": now + timedelta(seconds=max(60, int(getattr(Telegram, "TORRENT_STATS_FAILURE_TTL_SEC", 3600) or 3600))),
+                "trackers_checked": 0,
+                "trackers_responded": 0,
+                "status": "error",
+                "errors": [str(e)[:160]],
+            }
+            try:
+                await self.dbs["tracking"]["torrent_stats"].update_one(
+                    {"_id": info_hash},
+                    {"$set": doc},
+                    upsert=True,
+                )
+            except Exception:
+                pass
+            return doc
+        finally:
+            self._torrent_stats_refreshing.discard(info_hash)
 
     # -------------------------------
     # User Subscription Management
@@ -470,6 +593,7 @@ class Database:
             video_size=metadata_info.get("video_size"),
             origin_chat_id=metadata_info.get("origin_chat_id"),
             origin_msg_id=metadata_info.get("origin_msg_id"),
+            torrent_private=bool(metadata_info.get("torrent_private", False)),
         )
 
     def _source_type(self, quality: dict) -> str:

@@ -6,11 +6,21 @@ from pathlib import PurePosixPath
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
 
-from Backend.helper.pyro import get_readable_file_size
-
-
 VIDEO_EXTENSIONS = (".mkv", ".mp4", ".avi", ".webm", ".mov", ".flv", ".wmv", ".m4v")
 MAGNET_RE = re.compile(r"magnet:\?[^\s<>\"]+", re.IGNORECASE)
+
+
+def get_readable_file_size(size_in_bytes):
+    size_in_bytes = int(size_in_bytes) if str(size_in_bytes).isdigit() else 0
+    if not size_in_bytes:
+        return "0B"
+
+    index, size_units = 0, ["B", "KB", "MB", "GB", "TB", "PB"]
+    while size_in_bytes >= 1024 and index < len(size_units) - 1:
+        size_in_bytes /= 1024
+        index += 1
+
+    return f"{size_in_bytes:.2f}{size_units[index]}" if index > 0 else f"{size_in_bytes:.0f}B"
 
 
 @dataclass
@@ -23,6 +33,7 @@ class TorrentItem:
     file_idx: int | None
     sources: list[str]
     source_label: str
+    is_private: bool = False
 
     @property
     def unique_id(self) -> str:
@@ -131,6 +142,7 @@ def parse_magnet(magnet: str, fallback_name: str | None = None) -> TorrentItem:
         file_idx=None,
         sources=_tracker_sources(trackers),
         source_label="magnet",
+        is_private=False,
     )
 
 
@@ -146,6 +158,7 @@ def parse_torrent(data: bytes) -> list[TorrentItem]:
     trackers = _torrent_trackers(root)
     sources = _tracker_sources(trackers)
     root_name = _text(info.get(b"name") or info.get(b"name.utf-8") or "torrent")
+    is_private = int(info.get(b"private", 0) or 0) == 1
 
     raw_files = info.get(b"files")
     items: list[TorrentItem] = []
@@ -169,6 +182,7 @@ def parse_torrent(data: bytes) -> list[TorrentItem]:
                     file_idx=idx,
                     sources=sources,
                     source_label="torrent",
+                    is_private=is_private,
                 )
             )
     else:
@@ -185,6 +199,7 @@ def parse_torrent(data: bytes) -> list[TorrentItem]:
                     file_idx=0,
                     sources=sources,
                     source_label="torrent",
+                    is_private=is_private,
                 )
             )
 

@@ -93,15 +93,43 @@ def format_stream_details(filename: str, quality: str, size: str) -> tuple[str, 
     return (stream_name, stream_title)
 
 
-def build_torrent_stream(quality: dict, stream_name: str, stream_title: str) -> Optional[dict]:
+def _format_torrent_stats_line(torrent_stats: Optional[dict]) -> str:
+    if not torrent_stats or torrent_stats.get("status") != "ok":
+        return ""
+    seeders = torrent_stats.get("seeders")
+    peers = torrent_stats.get("peers")
+    if seeders is None and peers is None:
+        return ""
+    try:
+        seeders_text = str(max(0, int(seeders or 0)))
+    except (TypeError, ValueError):
+        seeders_text = "0"
+    try:
+        peers_text = str(max(0, int(peers or 0)))
+    except (TypeError, ValueError):
+        peers_text = "0"
+    return f"Seeds: {seeders_text} | Peers: {peers_text}"
+
+
+def build_torrent_stream(
+    quality: dict,
+    stream_name: str,
+    stream_title: str,
+    torrent_stats: Optional[dict] = None,
+) -> Optional[dict]:
     info_hash = quality.get("info_hash")
     if not info_hash:
         return None
 
     torrent_name = stream_name.replace("Telegram", "Torrent", 1)
+    title_parts = [stream_title]
+    stats_line = _format_torrent_stats_line(torrent_stats)
+    if stats_line:
+        title_parts.append(stats_line)
+    title_parts.extend(["🧲 Torrent stream", "Speed depends on seeders/peers."])
     stream = {
         "name": torrent_name,
-        "title": f"{stream_title}\n🧲 Torrent stream\nSpeed depends on seeders/peers.",
+        "title": "\n".join(title_parts),
         "infoHash": str(info_hash).lower(),
     }
 
@@ -642,7 +670,14 @@ async def get_streams(
         )
 
         if (quality.get("source_type") or "telegram") == "torrent":
-            torrent_stream = build_torrent_stream(quality, stream_name, stream_title)
+            info_hash = quality.get("info_hash")
+            torrent_stats = await db.get_torrent_stats(info_hash) if info_hash else None
+            db.queue_torrent_stats_refresh(
+                info_hash,
+                quality.get("sources") or [],
+                torrent_private=bool(quality.get("torrent_private", False)),
+            )
+            torrent_stream = build_torrent_stream(quality, stream_name, stream_title, torrent_stats)
             if torrent_stream:
                 streams.append(torrent_stream)
             continue

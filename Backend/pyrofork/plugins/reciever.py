@@ -239,6 +239,7 @@ async def _queue_torrent_item(message: Message, item: TorrentItem, override_id: 
         "video_size": item.size_bytes,
         "origin_chat_id": int(message.chat.id),
         "origin_msg_id": int(msg_id),
+        "torrent_private": bool(item.is_private),
     })
     await file_queue.put((
         metadata_info,
@@ -249,6 +250,11 @@ async def _queue_torrent_item(message: Message, item: TorrentItem, override_id: 
         message.chat.id,
         message.id,
     ))
+    db.queue_torrent_stats_refresh(
+        item.info_hash,
+        item.sources,
+        torrent_private=bool(item.is_private),
+    )
     return True
 
 
