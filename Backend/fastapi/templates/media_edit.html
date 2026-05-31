@@ -1003,6 +1003,140 @@
         return sessionStorage.getItem('api_token') || localStorage.getItem('api_token') || null;
     }
 
+
+    const CURRENT_TMDB_ID = Number("{{ tmdb_id }}");
+    const CURRENT_DB_INDEX = Number("{{ db_index }}");
+    const CURRENT_MEDIA_TYPE = "{{ media_type }}";
+
+    function setCatalogStatus(message, type = 'info') {
+        const status = document.getElementById('custom-catalog-status');
+        if (!status) return;
+        status.textContent = message;
+        status.classList.remove('text-emerald-300', 'text-rose-300', 'text-amber-300');
+        if (type === 'success') status.classList.add('text-emerald-300');
+        if (type === 'error') status.classList.add('text-rose-300');
+        if (type === 'warn') status.classList.add('text-amber-300');
+    }
+
+    async function loadMediaCatalogDropdown(selectedCatalogId = '') {
+        const select = document.getElementById('custom-catalog-select');
+        if (!select) return;
+
+        select.disabled = true;
+        select.innerHTML = '<option value="">Loading catalogs...</option>';
+        setCatalogStatus('Loading custom catalogs...');
+
+        try {
+            const params = new URLSearchParams({
+                tmdb_id: String(CURRENT_TMDB_ID),
+                db_index: String(CURRENT_DB_INDEX),
+                media_type: CURRENT_MEDIA_TYPE
+            });
+            const res = await fetch(`/api/custom-catalogs?${params.toString()}`);
+            const data = await res.json().catch(() => ({}));
+
+            if (!res.ok) {
+                throw new Error(data.detail || 'Failed to load catalogs');
+            }
+
+            const catalogs = data.catalogs || [];
+            if (!catalogs.length) {
+                select.innerHTML = '<option value="">No custom catalog found</option>';
+                setCatalogStatus('Create a catalog first from Manage Catalogs.', 'warn');
+                return;
+            }
+
+            select.innerHTML = catalogs.map(catalog => {
+                const visibility = catalog.visible ? 'Visible' : 'Hidden';
+                const added = catalog.contains_current ? ' · Added' : '';
+                return `<option value="${escapeHtml(catalog._id)}" data-visible="${catalog.visible ? '1' : '0'}" data-added="${catalog.contains_current ? '1' : '0'}">${escapeHtml(catalog.name)} (${visibility}${added})</option>`;
+            }).join('');
+
+            if (selectedCatalogId && catalogs.some(c => c._id === selectedCatalogId)) {
+                select.value = selectedCatalogId;
+            }
+
+            select.disabled = false;
+            updateCatalogDropdownStatus();
+        } catch (error) {
+            select.innerHTML = '<option value="">Failed to load catalogs</option>';
+            setCatalogStatus(error.message || 'Failed to load custom catalogs.', 'error');
+            showToast(error.message || 'Failed to load custom catalogs', 'error', 'Error');
+        }
+    }
+
+    function updateCatalogDropdownStatus() {
+        const select = document.getElementById('custom-catalog-select');
+        if (!select || !select.value) return;
+
+        const option = select.options[select.selectedIndex];
+        const isVisible = option?.dataset.visible === '1';
+        const isAdded = option?.dataset.added === '1';
+
+        if (isAdded) {
+            setCatalogStatus(`This title is already added to ${option.textContent.replace(' · Added', '')}.`, 'success');
+        } else if (!isVisible) {
+            setCatalogStatus('This catalog is hidden from Stremio main catalog screen, but you can still manage it here.', 'warn');
+        } else {
+            setCatalogStatus('This visible catalog will appear in Stremio main catalog screen.', 'info');
+        }
+    }
+
+    async function addCurrentMediaToCatalog() {
+        const select = document.getElementById('custom-catalog-select');
+        const catalogId = select?.value;
+        if (!catalogId) {
+            showToast('Please select a catalog first.', 'error', 'Error');
+            return;
+        }
+
+        try {
+            const res = await fetch(`/api/custom-catalogs/${catalogId}/items`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    tmdb_id: CURRENT_TMDB_ID,
+                    db_index: CURRENT_DB_INDEX,
+                    media_type: CURRENT_MEDIA_TYPE
+                })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.detail || 'Failed to add title to catalog');
+
+            showToast(data.message || 'Added to catalog.', 'success', 'Success');
+            await loadMediaCatalogDropdown(catalogId);
+        } catch (error) {
+            showToast(error.message || 'Failed to add title to catalog', 'error', 'Error');
+            setCatalogStatus(error.message || 'Failed to add title to catalog.', 'error');
+        }
+    }
+
+    async function removeCurrentMediaFromCatalog() {
+        const select = document.getElementById('custom-catalog-select');
+        const catalogId = select?.value;
+        if (!catalogId) {
+            showToast('Please select a catalog first.', 'error', 'Error');
+            return;
+        }
+
+        try {
+            const params = new URLSearchParams({
+                tmdb_id: String(CURRENT_TMDB_ID),
+                db_index: String(CURRENT_DB_INDEX),
+                media_type: CURRENT_MEDIA_TYPE
+            });
+            const res = await fetch(`/api/custom-catalogs/${catalogId}/items?${params.toString()}`, {method: 'DELETE'});
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.detail || 'Failed to remove title from catalog');
+
+            showToast(data.message || 'Removed from catalog.', data.removed === false ? 'info' : 'success', 'Done');
+            await loadMediaCatalogDropdown(catalogId);
+        } catch (error) {
+            showToast(error.message || 'Failed to remove title from catalog', 'error', 'Error');
+            setCatalogStatus(error.message || 'Failed to remove title from catalog.', 'error');
+        }
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
         const select = document.getElementById('custom-catalog-select');
         if (select) select.addEventListener('change', updateCatalogDropdownStatus);
