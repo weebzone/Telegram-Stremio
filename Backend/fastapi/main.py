@@ -11,7 +11,8 @@ from Backend.fastapi.routes.stremio_routes import router as stremio_router
 from Backend.fastapi.routes.template_routes import (
     login_page, login_post, logout, set_theme, dashboard_page,
     media_management_page, edit_media_page, public_status_page, stremio_guide_page,
-    admin_dashboard_page, admin_subscriptions_page, admin_access_page
+    admin_dashboard_page, admin_subscriptions_page, admin_access_page,
+    custom_catalogs_page
 )
 from Backend.fastapi.routes.api_routes import (
     list_media_api, delete_media_api, update_media_api,
@@ -104,30 +105,7 @@ async def media_management(request: Request, media_type: str = "movie", _: bool 
 
 @app.get("/catalogs", response_class=HTMLResponse)
 async def custom_catalogs(request: Request, _: bool = Depends(require_auth)):
-    # Keep this page self-contained so it works even if template_routes.py does not expose a helper.
-    from Backend.fastapi.routes import template_routes as tr
-
-    themes = getattr(tr, "THEMES", {
-        "dark": {
-            "name": "Dark",
-            "colors": {
-                "primary": "#8b5cf6", "secondary": "#06b6d4", "accent": "#f97316",
-                "background": "#070711", "card": "#111827", "border": "#273244",
-                "text": "#f8fafc", "text_secondary": "#94a3b8",
-            }
-        }
-    })
-    current_theme = request.session.get("theme", "dark")
-    theme = themes.get(current_theme) or next(iter(themes.values()))
-    current_user = request.session.get("username") or request.session.get("user") or "Admin"
-
-    return templates.TemplateResponse("custom_catalogs.html", {
-        "request": request,
-        "current_user": current_user,
-        "themes": themes,
-        "current_theme": current_theme,
-        "theme": theme,
-    })
+    return await custom_catalogs_page(request, _)
 
 @app.get("/media/edit", response_class=HTMLResponse)
 async def edit_media(request: Request, tmdb_id: int, db_index: int, media_type: str, _: bool = Depends(require_auth)):
