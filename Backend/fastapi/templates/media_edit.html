@@ -366,6 +366,32 @@
     </div>
     {% endif %}
 
+
+    {% if media_details %}
+    <div class="glass-card rounded-3xl p-5 sm:p-6 lg:p-8 mb-6 sm:mb-8">
+        <div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-3 mb-5 sm:mb-6">
+            <div>
+                <h3 class="section-title text-xl sm:text-2xl">Custom Catalog</h3>
+                <p class="muted mt-1 text-sm sm:text-base">Add this title directly into any custom Stremio catalog.</p>
+            </div>
+            <a href="/catalogs" class="btn-ui btn-ghost">Manage Catalogs</a>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-[1fr_auto_auto] gap-3">
+            <select id="custom-catalog-select" class="field-input">
+                <option value="">Loading catalogs...</option>
+            </select>
+            <button type="button" onclick="addCurrentMediaToCatalog()" class="btn-ui btn-primary">
+                ➕ Add to Catalog
+            </button>
+            <button type="button" onclick="removeCurrentMediaFromCatalog()" class="btn-ui btn-danger">
+                Remove
+            </button>
+        </div>
+        <p id="custom-catalog-status" class="muted text-sm mt-3">Only visible catalogs appear in Stremio. Hidden catalogs remain manageable in web panel.</p>
+    </div>
+    {% endif %}
+
     <div class="glass-card rounded-3xl p-5 sm:p-6 lg:p-8 mb-6 sm:mb-8">
         <div class="flex items-center justify-between gap-3 mb-5 sm:mb-6">
             <h3 class="section-title text-xl sm:text-2xl">Edit Details</h3>
@@ -978,6 +1004,9 @@
     }
 
     document.addEventListener('DOMContentLoaded', () => {
+        const select = document.getElementById('custom-catalog-select');
+        if (select) select.addEventListener('change', updateCatalogDropdownStatus);
+        loadMediaCatalogDropdown();
         document.querySelectorAll('.season-content').forEach((content, index) => {
             if (index > 0) {
                 content.classList.add('season-collapsed');

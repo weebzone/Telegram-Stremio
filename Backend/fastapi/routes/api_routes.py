@@ -790,3 +790,137 @@ async def apply_media_rescan_api(request: Request, tmdb_id: int, db_index: int, 
         "media_type": media_type,
         "data": updated_doc,
 }
+
+
+# --- Custom Catalog APIs ---
+
+def _normalize_media_type(media_type: str) -> str:
+    return "tv" if media_type in ["tv", "series"] else "movie"
+
+
+async def list_custom_catalogs_api(
+    tmdb_id: int | None = None,
+    db_index: int | None = None,
+    media_type: str | None = None,
+):
+    try:
+        catalogs = await db.get_custom_catalogs()
+        if tmdb_id is not None and db_index is not None and media_type:
+            normalized_type = _normalize_media_type(media_type)
+            for catalog in catalogs:
+                catalog["contains_current"] = any(
+                    int(item.get("tmdb_id", -1)) == int(tmdb_id)
+                    and int(item.get("db_index", -1)) == int(db_index)
+                    and item.get("media_type") == normalized_type
+                    for item in catalog.get("items", []) or []
+                )
+        return {"catalogs": catalogs}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+async def create_custom_catalog_api(payload: dict):
+    name = (payload.get("name") or "").strip()
+    visible = bool(payload.get("visible", True))
+    if not name:
+        raise HTTPException(status_code=400, detail="Catalog name is required.")
+
+    catalog_id = await db.create_custom_catalog(name=name, visible=visible)
+    if not catalog_id:
+        raise HTTPException(status_code=500, detail="Failed to create catalog.")
+
+    catalog = await db.get_custom_catalog(catalog_id)
+    return {"message": "Catalog created successfully.", "catalog": catalog}
+
+
+async def update_custom_catalog_api(catalog_id: str, payload: dict):
+    name = payload.get("name")
+    visible = payload.get("visible") if "visible" in payload else None
+    result = await db.update_custom_catalog(catalog_id, name=name, visible=visible)
+    if not result:
+        catalog = await db.get_custom_catalog(catalog_id)
+        if not catalog:
+            raise HTTPException(status_code=404, detail="Catalog not found.")
+    return {"message": "Catalog updated successfully.", "catalog": await db.get_custom_catalog(catalog_id)}
+
+
+async def delete_custom_catalog_api(catalog_id: str):
+    result = await db.delete_custom_catalog(catalog_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Catalog not found.")
+    return {"message": "Catalog deleted successfully."}
+
+
+async def get_custom_catalog_items_api(
+    catalog_id: str,
+    media_type: str | None = None,
+    page: int = 1,
+    page_size: int = 24,
+):
+    try:
+        data = await db.get_custom_catalog_items(catalog_id, media_type, page, page_size)
+        if not data.get("catalog"):
+            raise HTTPException(status_code=404, detail="Catalog not found.")
+        return data
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+async def search_catalog_media_api(
+    query: str,
+    media_type: str = "movie",
+    page: int = 1,
+    page_size: int = 12,
+):
+    query = (query or "").strip()
+    if not query:
+        return {"results": [], "total_count": 0}
+
+    try:
+        result = await db.search_documents(query, page, page_size)
+        normalized_type = _normalize_media_type(media_type)
+        filtered = [item for item in result.get("results", []) if item.get("media_type") == normalized_type]
+        return {"results": filtered, "total_count": len(filtered)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+async def add_custom_catalog_item_api(catalog_id: str, payload: dict):
+    tmdb_id = payload.get("tmdb_id")
+    db_index = payload.get("db_index")
+    media_type = _normalize_media_type(payload.get("media_type", "movie"))
+
+    if not tmdb_id or not db_index:
+        raise HTTPException(status_code=400, detail="tmdb_id and db_index are required.")
+
+    media = await db.get_document(media_type, int(tmdb_id), int(db_index))
+    if not media:
+        raise HTTPException(status_code=404, detail="Media not found.")
+
+    catalog = await db.get_custom_catalog(catalog_id)
+    if not catalog:
+        raise HTTPException(status_code=404, detail="Catalog not found.")
+
+    added = await db.add_item_to_custom_catalog(catalog_id, int(tmdb_id), int(db_index), media_type)
+    message = "Added to catalog." if added else "Already exists in this catalog."
+    return {"message": message, "added": added}
+
+
+async def remove_custom_catalog_item_api(
+    catalog_id: str,
+    tmdb_id: int,
+    db_index: int,
+    media_type: str,
+):
+    catalog = await db.get_custom_catalog(catalog_id)
+    if not catalog:
+        raise HTTPException(status_code=404, detail="Catalog not found.")
+
+    removed = await db.remove_item_from_custom_catalog(
+        catalog_id, int(tmdb_id), int(db_index), _normalize_media_type(media_type)
+    )
+    if not removed:
+        return {"message": "Item was not in this catalog.", "removed": False}
+    return {"message": "Removed from catalog.", "removed": True}
