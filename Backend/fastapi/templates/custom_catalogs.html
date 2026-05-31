@@ -4,87 +4,375 @@
 
 {% block content %}
 <style>
+  .catalog-page {
+    --soft-bg: color-mix(in srgb, var(--bg) 78%, transparent);
+    --card-bg: color-mix(in srgb, var(--card) 58%, transparent);
+    --card-bg-strong: color-mix(in srgb, var(--card) 82%, transparent);
+    --line: color-mix(in srgb, var(--border) 90%, transparent);
+    --primary-soft: color-mix(in srgb, var(--primary) 15%, transparent);
+    --accent-soft: color-mix(in srgb, var(--accent) 14%, transparent);
+  }
+
   .glass-card {
-    background: color-mix(in srgb, var(--card) 52%, transparent);
-    border: 1px solid color-mix(in srgb, var(--border) 95%, transparent);
+    position: relative;
+    overflow: hidden;
+    background: var(--card-bg);
+    border: 1px solid var(--line);
     backdrop-filter: blur(22px);
-    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.22);
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.18);
   }
-  .section-title { color: var(--text); font-weight: 900; letter-spacing: -0.025em; }
+
+  .glass-card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(circle at 12% 0%, var(--primary-soft), transparent 36%),
+      radial-gradient(circle at 95% 10%, var(--accent-soft), transparent 34%);
+    opacity: .9;
+  }
+
+  .glass-card > * { position: relative; z-index: 1; }
+
+  .hero-card {
+    min-height: 15rem;
+    display: grid;
+    place-items: stretch;
+  }
+
+  .hero-orb {
+    width: 4.25rem;
+    height: 4.25rem;
+    border-radius: 9999px;
+    background: linear-gradient(135deg, var(--primary), var(--accent));
+    box-shadow: 0 0 45px color-mix(in srgb, var(--primary) 45%, transparent);
+    display: grid;
+    place-items: center;
+    color: var(--bg);
+  }
+
+  .section-title {
+    color: var(--text);
+    font-weight: 900;
+    letter-spacing: -0.035em;
+  }
+
   .muted { color: var(--text-sec); }
-  .field-input, .field-select {
-    width: 100%; border-radius: 1rem; border: 1px solid color-mix(in srgb, var(--border) 95%, transparent);
-    background: color-mix(in srgb, var(--bg) 76%, transparent); color: var(--text);
-    padding: 0.9rem 1rem; outline: none; transition: all .2s ease;
+
+  .field-label {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 800;
+    margin-bottom: 0.55rem;
+    color: var(--text);
   }
-  .field-input:focus, .field-select:focus { border-color: var(--primary); box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 18%, transparent); }
-  .btn-ui { display:inline-flex; align-items:center; justify-content:center; gap:.45rem; border-radius:1rem; padding:.8rem 1.15rem; font-weight:800; transition:all .2s ease; border:1px solid transparent; }
+
+  .field-input,
+  .field-select {
+    width: 100%;
+    border-radius: 1rem;
+    border: 1px solid var(--line);
+    background: color-mix(in srgb, var(--bg) 84%, var(--card) 16%);
+    color: var(--text);
+    padding: 0.9rem 1rem;
+    outline: none;
+    transition: all .2s ease;
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text) 5%, transparent);
+  }
+
+  .field-input::placeholder { color: color-mix(in srgb, var(--text-sec) 82%, transparent); }
+
+  .field-input:focus,
+  .field-select:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 18%, transparent);
+  }
+
+  .btn-ui {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: .55rem;
+    border-radius: 1rem;
+    padding: .85rem 1.15rem;
+    font-weight: 900;
+    transition: all .2s ease;
+    border: 1px solid transparent;
+    white-space: nowrap;
+  }
+
   .btn-ui:hover { transform: translateY(-1px); }
-  .btn-primary { background: var(--primary); color: white; box-shadow: 0 10px 24px color-mix(in srgb, var(--primary) 26%, transparent); }
-  .btn-ghost { background: color-mix(in srgb, var(--bg) 74%, transparent); color: var(--text); border-color: color-mix(in srgb, var(--border) 95%, transparent); }
-  .btn-danger { background: color-mix(in srgb, rgb(239 68 68) 16%, transparent); color: rgb(248 113 113); border-color: color-mix(in srgb, rgb(239 68 68) 26%, transparent); }
-  .pill { display:inline-flex; align-items:center; gap:.35rem; padding:.35rem .75rem; border-radius:9999px; font-size:.78rem; font-weight:800; border:1px solid color-mix(in srgb, var(--border) 82%, transparent); background: color-mix(in srgb, var(--bg) 66%, transparent); color:var(--text); }
-  .catalog-card, .media-card { background: color-mix(in srgb, var(--bg) 70%, transparent); border: 1px solid color-mix(in srgb, var(--border) 90%, transparent); border-radius: 1.4rem; }
-  .poster { width: 4rem; height: 6rem; object-fit: cover; border-radius: .9rem; border: 1px solid rgba(255,255,255,.1); }
+  .btn-ui:active { transform: translateY(0) scale(.99); }
+
+  .btn-primary {
+    background: linear-gradient(135deg, var(--primary), var(--accent));
+    color: var(--bg);
+    box-shadow: 0 14px 28px color-mix(in srgb, var(--primary) 24%, transparent);
+  }
+
+  .btn-ghost {
+    background: color-mix(in srgb, var(--bg) 70%, transparent);
+    color: var(--text);
+    border-color: var(--line);
+  }
+
+  .btn-danger {
+    background: color-mix(in srgb, rgb(239 68 68) 16%, var(--card));
+    color: rgb(248 113 113);
+    border-color: color-mix(in srgb, rgb(239 68 68) 32%, var(--border));
+  }
+
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: .45rem;
+    padding: .42rem .85rem;
+    border-radius: 9999px;
+    font-size: .78rem;
+    font-weight: 900;
+    border: 1px solid var(--line);
+    background: color-mix(in srgb, var(--bg) 66%, transparent);
+    color: var(--text);
+  }
+
+  .stat-card,
+  .catalog-card,
+  .media-card,
+  .empty-state {
+    background: color-mix(in srgb, var(--bg) 72%, var(--card) 28%);
+    border: 1px solid var(--line);
+    border-radius: 1.45rem;
+    transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease, background .2s ease;
+  }
+
+  .catalog-card:hover,
+  .media-card:hover {
+    transform: translateY(-2px);
+    border-color: color-mix(in srgb, var(--primary) 42%, var(--border));
+    box-shadow: 0 16px 34px rgba(0,0,0,.16);
+  }
+
+  .catalog-card.active {
+    border-color: var(--primary);
+    background:
+      linear-gradient(135deg, color-mix(in srgb, var(--primary) 13%, transparent), transparent),
+      color-mix(in srgb, var(--bg) 70%, var(--card) 30%);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 14%, transparent);
+  }
+
+  .poster {
+    width: 4.25rem;
+    height: 6.35rem;
+    object-fit: cover;
+    border-radius: 1rem;
+    border: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
+    background: color-mix(in srgb, var(--bg) 80%, transparent);
+    flex-shrink: 0;
+  }
+
+  .switch {
+    width: 3.1rem;
+    height: 1.7rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--border) 80%, transparent);
+    position: relative;
+    cursor: pointer;
+    transition: .2s ease;
+    border: 1px solid var(--line);
+  }
+
+  .switch::after {
+    content: "";
+    width: 1.25rem;
+    height: 1.25rem;
+    border-radius: 999px;
+    background: var(--text);
+    position: absolute;
+    left: .18rem;
+    top: .17rem;
+    transition: .2s ease;
+    box-shadow: 0 4px 12px rgba(0,0,0,.24);
+  }
+
+  .switch-input:checked + .switch {
+    background: linear-gradient(135deg, var(--primary), var(--accent));
+  }
+
+  .switch-input:checked + .switch::after {
+    left: 1.55rem;
+    background: var(--bg);
+  }
+
+  .mini-tab {
+    border-radius: 999px;
+    padding: .48rem .9rem;
+    border: 1px solid var(--line);
+    color: var(--text-sec);
+    background: color-mix(in srgb, var(--bg) 56%, transparent);
+    font-weight: 900;
+    font-size: .8rem;
+  }
+
+  .mini-tab.active {
+    color: var(--bg);
+    border-color: transparent;
+    background: linear-gradient(135deg, var(--primary), var(--accent));
+  }
+
+  .skeleton {
+    min-height: 5.5rem;
+    border-radius: 1.45rem;
+    background: linear-gradient(90deg,
+      color-mix(in srgb, var(--bg) 72%, var(--card) 28%),
+      color-mix(in srgb, var(--primary) 9%, var(--card)),
+      color-mix(in srgb, var(--bg) 72%, var(--card) 28%));
+    background-size: 220% 100%;
+    animation: shimmer 1.2s infinite linear;
+    border: 1px solid var(--line);
+  }
+
+  @keyframes shimmer {
+    to { background-position: -220% 0; }
+  }
+
+  @media (max-width: 640px) {
+    .hero-card { min-height: 13rem; }
+    .btn-ui { width: 100%; }
+  }
 </style>
 
-<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8 space-y-6">
-  <div class="glass-card rounded-3xl p-5 sm:p-7">
-    <div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
-      <div>
-        <h1 class="section-title text-3xl sm:text-4xl">Custom Catalogs</h1>
-        <p class="muted mt-2">Create private Stremio sections like Bollywood, Anime, Kids, 4K, or your own curated lists.</p>
+<div class="catalog-page max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8 space-y-6">
+  <div class="glass-card hero-card rounded-3xl p-5 sm:p-7 lg:p-8">
+    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+      <div class="flex flex-col sm:flex-row sm:items-center gap-5">
+        <div class="hero-orb text-3xl">🎞️</div>
+        <div>
+          <div class="flex flex-wrap items-center gap-2 mb-3">
+            <span class="pill">Custom Stremio sections</span>
+            <span class="pill">No Stremio search/filter</span>
+          </div>
+          <h1 class="section-title text-3xl sm:text-4xl lg:text-5xl">Custom Catalogs</h1>
+          <p class="muted mt-3 max-w-2xl text-sm sm:text-base leading-7">
+            Build dynamic curated rows like Bollywood, Anime, Kids, 4K, Watch Later, or hidden private lists from your existing Telegram media.
+          </p>
+        </div>
       </div>
-      <span class="pill">Hidden catalogs do not appear in Stremio catalog screen</span>
+
+      <div class="grid grid-cols-3 gap-3 min-w-full sm:min-w-[26rem] lg:min-w-[30rem]">
+        <div class="stat-card p-4 text-center">
+          <p id="stat-total" class="section-title text-2xl">0</p>
+          <p class="muted text-xs font-bold mt-1">Catalogs</p>
+        </div>
+        <div class="stat-card p-4 text-center">
+          <p id="stat-visible" class="section-title text-2xl">0</p>
+          <p class="muted text-xs font-bold mt-1">Visible</p>
+        </div>
+        <div class="stat-card p-4 text-center">
+          <p id="stat-items" class="section-title text-2xl">0</p>
+          <p class="muted text-xs font-bold mt-1">Titles</p>
+        </div>
+      </div>
     </div>
   </div>
 
-  <div class="grid grid-cols-1 xl:grid-cols-[0.9fr_1.1fr] gap-6">
-    <div class="glass-card rounded-3xl p-5 sm:p-6">
-      <h2 class="section-title text-xl mb-4">Create Catalog</h2>
-      <form onsubmit="createCatalog(event)" class="space-y-4">
-        <div>
-          <label class="block text-sm font-bold mb-2">Catalog Name</label>
-          <input id="catalog-name" class="field-input" placeholder="Example: Bollywood Hits" required>
+  <div class="grid grid-cols-1 xl:grid-cols-[0.88fr_1.12fr] gap-6">
+    <div class="space-y-6">
+      <div class="glass-card rounded-3xl p-5 sm:p-6">
+        <div class="flex items-start justify-between gap-3 mb-5">
+          <div>
+            <h2 class="section-title text-2xl">Create Catalog</h2>
+            <p class="muted text-sm mt-1">Visible catalogs appear in Stremio manifest. Hidden catalogs stay only in web panel.</p>
+          </div>
+          <span class="pill">New</span>
         </div>
-        <label class="flex items-center gap-3 cursor-pointer select-none">
-          <input id="catalog-visible" type="checkbox" checked class="w-5 h-5 accent-primary">
-          <span class="font-semibold">Visible in Stremio main catalog screen</span>
-        </label>
-        <button class="btn-ui btn-primary w-full" type="submit">➕ Create Catalog</button>
-      </form>
 
-      <div class="mt-6">
-        <h2 class="section-title text-xl mb-4">Your Catalogs</h2>
-        <div id="catalog-list" class="space-y-3"></div>
+        <form onsubmit="createCatalog(event)" class="space-y-4">
+          <div>
+            <label class="field-label">Catalog Name</label>
+            <input id="catalog-name" class="field-input" placeholder="Example: Bollywood Hits" required>
+          </div>
+
+          <label class="catalog-card p-4 flex items-center justify-between gap-4 cursor-pointer select-none">
+            <div>
+              <p class="font-black">Show in Stremio</p>
+              <p class="muted text-xs mt-1">Turn off to keep this catalog private in web panel.</p>
+            </div>
+            <input id="catalog-visible" type="checkbox" checked class="switch-input hidden">
+            <span class="switch"></span>
+          </label>
+
+          <button class="btn-ui btn-primary w-full" type="submit">➕ Create Catalog</button>
+        </form>
+      </div>
+
+      <div class="glass-card rounded-3xl p-5 sm:p-6">
+        <div class="flex items-center justify-between gap-3 mb-5">
+          <div>
+            <h2 class="section-title text-2xl">Your Catalogs</h2>
+            <p class="muted text-sm mt-1">Select one to manage titles.</p>
+          </div>
+          <button onclick="loadCatalogs()" class="btn-ui btn-ghost px-3 py-2 text-sm">↻</button>
+        </div>
+        <div id="catalog-list" class="space-y-3">
+          <div class="skeleton"></div>
+          <div class="skeleton"></div>
+        </div>
       </div>
     </div>
 
     <div class="glass-card rounded-3xl p-5 sm:p-6">
-      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-5">
+      <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-3 mb-5">
         <div>
-          <h2 id="selected-title" class="section-title text-xl">Select a catalog</h2>
-          <p id="selected-subtitle" class="muted text-sm mt-1">Search titles from your existing media and add/remove them here.</p>
+          <div class="flex flex-wrap gap-2 mb-3">
+            <span id="selected-visibility-pill" class="pill hidden"></span>
+            <span id="selected-count-pill" class="pill hidden"></span>
+          </div>
+          <h2 id="selected-title" class="section-title text-2xl">Select a catalog</h2>
+          <p id="selected-subtitle" class="muted text-sm mt-1">Choose a catalog from the left side to add or remove titles.</p>
         </div>
-        <button id="delete-catalog-btn" onclick="deleteSelectedCatalog()" class="btn-ui btn-danger hidden">Delete Catalog</button>
+        <button id="delete-catalog-btn" onclick="deleteSelectedCatalog()" class="btn-ui btn-danger hidden md:w-auto">Delete Catalog</button>
       </div>
 
-      <div id="catalog-workspace" class="hidden space-y-5">
-        <div class="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3">
-          <input id="search-query" class="field-input" placeholder="Search title to add...">
-          <select id="search-media-type" class="field-select md:w-40">
-            <option value="movie">Movie</option>
-            <option value="tv">Series</option>
-          </select>
+      <div id="catalog-empty-guide" class="empty-state p-6 sm:p-8 text-center">
+        <div class="text-4xl mb-3">📚</div>
+        <h3 class="section-title text-xl">No catalog selected</h3>
+        <p class="muted mt-2 text-sm leading-6">Create a catalog or select an existing one. Then search from your existing media library and add titles instantly.</p>
+      </div>
+
+      <div id="catalog-workspace" class="hidden space-y-6">
+        <div class="catalog-card p-4 sm:p-5">
+          <div class="flex flex-col sm:flex-row sm:items-end gap-3">
+            <div class="flex-1">
+              <label class="field-label">Search existing media</label>
+              <input id="search-query" class="field-input" placeholder="Search title to add..." onkeydown="if(event.key === 'Enter') searchMedia()">
+            </div>
+            <div class="sm:w-44">
+              <label class="field-label">Type</label>
+              <select id="search-media-type" class="field-select">
+                <option value="movie">Movie</option>
+                <option value="tv">Series</option>
+              </select>
+            </div>
+            <button onclick="searchMedia()" class="btn-ui btn-primary sm:w-auto">🔎 Search</button>
+          </div>
         </div>
-        <button onclick="searchMedia()" class="btn-ui btn-primary w-full md:w-auto">🔎 Search Title</button>
 
-        <div id="search-results" class="grid grid-cols-1 lg:grid-cols-2 gap-3"></div>
-
-        <div class="border-t border-white/10 pt-5">
+        <div id="search-results-wrap" class="hidden">
           <div class="flex items-center justify-between gap-3 mb-3">
-            <h3 class="section-title text-lg">Titles in this catalog</h3>
-            <button onclick="loadCatalogItems()" class="btn-ui btn-ghost px-3 py-2 text-sm">Refresh</button>
+            <h3 class="section-title text-lg">Search Results</h3>
+            <button onclick="clearSearchResults()" class="mini-tab">Clear</button>
+          </div>
+          <div id="search-results" class="grid grid-cols-1 lg:grid-cols-2 gap-3"></div>
+        </div>
+
+        <div class="border-t pt-5" style="border-color: var(--line);">
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
+            <div>
+              <h3 class="section-title text-lg">Titles in this catalog</h3>
+              <p class="muted text-xs mt-1">These are shown in Stremio when the catalog is visible.</p>
+            </div>
+            <button onclick="loadCatalogItems()" class="btn-ui btn-ghost px-3 py-2 text-sm sm:w-auto">Refresh</button>
           </div>
           <div id="catalog-items" class="grid grid-cols-1 lg:grid-cols-2 gap-3"></div>
         </div>
@@ -101,53 +389,134 @@ function posterOrFallback(item) {
   return item.poster || 'https://via.placeholder.com/120x180/111827/94a3b8?text=No+Poster';
 }
 
+function escapeHtml(value) {
+  const div = document.createElement('div');
+  div.textContent = value == null ? '' : String(value);
+  return div.innerHTML;
+}
+
+function getSelectedCatalog() {
+  return catalogs.find(c => c._id === selectedCatalogId);
+}
+
+function updateStats() {
+  const total = catalogs.length;
+  const visible = catalogs.filter(c => c.visible).length;
+  const items = catalogs.reduce((sum, c) => sum + ((c.items || []).length), 0);
+  document.getElementById('stat-total').textContent = total;
+  document.getElementById('stat-visible').textContent = visible;
+  document.getElementById('stat-items').textContent = items;
+}
+
 function mediaCard(item, actionHtml) {
   const mediaType = item.media_type === 'tv' ? 'Series' : 'Movie';
+  const genres = Array.isArray(item.genres) ? item.genres.slice(0, 2).join(' · ') : '';
   return `<div class="media-card p-3 flex gap-3">
-    <img src="${escapeHtml(posterOrFallback(item))}" class="poster" onerror="this.src='https://via.placeholder.com/120x180/111827/94a3b8?text=No+Poster'">
+    <img src="${escapeHtml(posterOrFallback(item))}" class="poster" onerror="this.src='https://via.placeholder.com/120x180/111827/94a3b8?text=No+Poster'" alt="Poster">
     <div class="min-w-0 flex-1">
-      <h4 class="font-black truncate">${escapeHtml(item.title)}</h4>
-      <p class="muted text-xs mt-1">${mediaType} · ${escapeHtml(item.release_year || '')} · TMDb ${escapeHtml(item.tmdb_id || '')}</p>
+      <div class="flex items-start justify-between gap-2">
+        <div class="min-w-0">
+          <h4 class="font-black truncate" title="${escapeHtml(item.title)}">${escapeHtml(item.title)}</h4>
+          <p class="muted text-xs mt-1">${mediaType} · ${escapeHtml(item.release_year || 'Unknown')} · TMDb ${escapeHtml(item.tmdb_id || '')}</p>
+        </div>
+        <span class="pill text-[0.68rem] py-1 px-2">${escapeHtml(mediaType)}</span>
+      </div>
+      ${genres ? `<p class="muted text-xs mt-2 truncate">${escapeHtml(genres)}</p>` : ''}
       <div class="mt-3">${actionHtml}</div>
     </div>
   </div>`;
 }
 
+function emptyState(icon, title, message) {
+  return `<div class="empty-state p-6 text-center col-span-full">
+    <div class="text-3xl mb-2">${icon}</div>
+    <h4 class="section-title text-lg">${escapeHtml(title)}</h4>
+    <p class="muted text-sm mt-1">${escapeHtml(message)}</p>
+  </div>`;
+}
+
 async function loadCatalogs() {
-  const res = await fetch('/api/custom-catalogs');
-  const data = await res.json();
-  catalogs = data.catalogs || [];
-  renderCatalogs();
+  const box = document.getElementById('catalog-list');
+  box.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div>';
+  try {
+    const res = await fetch('/api/custom-catalogs');
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || 'Failed to load catalogs');
+    catalogs = data.catalogs || [];
+    if (selectedCatalogId && !catalogs.some(c => c._id === selectedCatalogId)) selectedCatalogId = null;
+    updateStats();
+    renderCatalogs();
+    updateSelectedHeader();
+  } catch (error) {
+    box.innerHTML = emptyState('⚠️', 'Unable to load catalogs', error.message || 'Please refresh and try again.');
+    showToast(error.message || 'Unable to load catalogs', 'error', 'Error');
+  }
 }
 
 function renderCatalogs() {
   const box = document.getElementById('catalog-list');
   if (!catalogs.length) {
-    box.innerHTML = '<p class="muted text-sm">No custom catalog yet.</p>';
+    box.innerHTML = emptyState('✨', 'No custom catalog yet', 'Create your first curated Stremio section above.');
     return;
   }
   box.innerHTML = catalogs.map(c => {
     const isActive = c._id === selectedCatalogId;
     const count = (c.items || []).length;
-    return `<div class="catalog-card p-4 ${isActive ? 'ring-2 ring-primary' : ''}">
+    return `<div class="catalog-card p-4 ${isActive ? 'active' : ''}">
       <div class="flex items-start justify-between gap-3">
         <button class="text-left min-w-0 flex-1" onclick="selectCatalog('${c._id}')">
-          <h3 class="font-black truncate">${escapeHtml(c.name)}</h3>
-          <p class="muted text-xs mt-1">${count} title${count === 1 ? '' : 's'} · ${c.visible ? 'Visible' : 'Hidden'}</p>
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="text-xl">${c.visible ? '🌐' : '🔒'}</span>
+            <h3 class="font-black truncate">${escapeHtml(c.name)}</h3>
+          </div>
+          <p class="muted text-xs mt-2">${count} title${count === 1 ? '' : 's'} · ${c.visible ? 'Visible in Stremio' : 'Hidden from Stremio'}</p>
         </button>
-        <label class="flex items-center gap-2 text-xs font-bold">
-          <input type="checkbox" ${c.visible ? 'checked' : ''} onchange="toggleVisibility('${c._id}', this.checked)" class="accent-primary">
-          Visible
+        <label class="flex items-center gap-2 shrink-0" title="Toggle Stremio visibility">
+          <input type="checkbox" ${c.visible ? 'checked' : ''} onchange="toggleVisibility('${c._id}', this.checked)" class="switch-input hidden">
+          <span class="switch"></span>
         </label>
       </div>
     </div>`;
   }).join('');
 }
 
+function updateSelectedHeader() {
+  const catalog = getSelectedCatalog();
+  const workspace = document.getElementById('catalog-workspace');
+  const guide = document.getElementById('catalog-empty-guide');
+  const deleteBtn = document.getElementById('delete-catalog-btn');
+  const visibilityPill = document.getElementById('selected-visibility-pill');
+  const countPill = document.getElementById('selected-count-pill');
+
+  if (!catalog) {
+    workspace.classList.add('hidden');
+    guide.classList.remove('hidden');
+    deleteBtn.classList.add('hidden');
+    visibilityPill.classList.add('hidden');
+    countPill.classList.add('hidden');
+    document.getElementById('selected-title').textContent = 'Select a catalog';
+    document.getElementById('selected-subtitle').textContent = 'Choose a catalog from the left side to add or remove titles.';
+    return;
+  }
+
+  workspace.classList.remove('hidden');
+  guide.classList.add('hidden');
+  deleteBtn.classList.remove('hidden');
+  visibilityPill.classList.remove('hidden');
+  countPill.classList.remove('hidden');
+  visibilityPill.textContent = catalog.visible ? '🌐 Visible in Stremio' : '🔒 Hidden from Stremio';
+  countPill.textContent = `${(catalog.items || []).length} title${(catalog.items || []).length === 1 ? '' : 's'}`;
+  document.getElementById('selected-title').textContent = catalog.name || 'Selected Catalog';
+  document.getElementById('selected-subtitle').textContent = catalog.visible
+    ? 'This catalog appears on the Stremio catalog screen.'
+    : 'This catalog is private in the web panel and hidden from Stremio.';
+}
+
 async function createCatalog(event) {
   event.preventDefault();
   const name = document.getElementById('catalog-name').value.trim();
   const visible = document.getElementById('catalog-visible').checked;
+  if (!name) return showToast('Catalog name is required', 'error', 'Error');
   const res = await fetch('/api/custom-catalogs', {
     method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name, visible})
   });
@@ -163,18 +532,15 @@ async function toggleVisibility(id, visible) {
   const res = await fetch(`/api/custom-catalogs/${id}`, {
     method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name: catalog?.name, visible})
   });
-  if (!res.ok) showToast('Failed to update visibility', 'error', 'Error');
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) showToast(data.detail || 'Failed to update visibility', 'error', 'Error');
   await loadCatalogs();
 }
 
 async function selectCatalog(id) {
   selectedCatalogId = id;
-  const catalog = catalogs.find(c => c._id === id);
-  document.getElementById('catalog-workspace').classList.remove('hidden');
-  document.getElementById('delete-catalog-btn').classList.remove('hidden');
-  document.getElementById('selected-title').textContent = catalog?.name || 'Selected Catalog';
-  document.getElementById('selected-subtitle').textContent = catalog?.visible ? 'Visible in Stremio.' : 'Hidden from Stremio catalog screen.';
   renderCatalogs();
+  updateSelectedHeader();
   await loadCatalogItems();
 }
 
@@ -183,10 +549,26 @@ async function searchMedia() {
   const q = document.getElementById('search-query').value.trim();
   const mediaType = document.getElementById('search-media-type').value;
   if (!q) return showToast('Type a title to search.', 'error', 'Error');
-  const res = await fetch(`/api/custom-catalogs/search-media?query=${encodeURIComponent(q)}&media_type=${mediaType}`);
-  const data = await res.json();
-  const results = data.results || [];
-  document.getElementById('search-results').innerHTML = results.length ? results.map(item => mediaCard(item, `<button class="btn-ui btn-primary px-3 py-2 text-sm" onclick="addItem(${item.tmdb_id}, ${item.db_index}, '${item.media_type}')">Add</button>`)).join('') : '<p class="muted text-sm">No title found.</p>';
+  const wrap = document.getElementById('search-results-wrap');
+  const box = document.getElementById('search-results');
+  wrap.classList.remove('hidden');
+  box.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div>';
+  try {
+    const res = await fetch(`/api/custom-catalogs/search-media?query=${encodeURIComponent(q)}&media_type=${mediaType}`);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || 'Search failed');
+    const results = data.results || [];
+    box.innerHTML = results.length
+      ? results.map(item => mediaCard(item, `<button class="btn-ui btn-primary px-3 py-2 text-sm" onclick="addItem(${item.tmdb_id}, ${item.db_index}, '${item.media_type}')">Add</button>`)).join('')
+      : emptyState('🔍', 'No title found', 'Try a shorter title or change movie/series type.');
+  } catch (error) {
+    box.innerHTML = emptyState('⚠️', 'Search failed', error.message || 'Please try again.');
+  }
+}
+
+function clearSearchResults() {
+  document.getElementById('search-results-wrap').classList.add('hidden');
+  document.getElementById('search-results').innerHTML = '';
 }
 
 async function addItem(tmdbId, dbIndex, mediaType) {
@@ -202,10 +584,19 @@ async function addItem(tmdbId, dbIndex, mediaType) {
 
 async function loadCatalogItems() {
   if (!selectedCatalogId) return;
-  const res = await fetch(`/api/custom-catalogs/${selectedCatalogId}/items?page_size=100`);
-  const data = await res.json();
-  const items = data.items || [];
-  document.getElementById('catalog-items').innerHTML = items.length ? items.map(item => mediaCard(item, `<button class="btn-ui btn-danger px-3 py-2 text-sm" onclick="removeItem(${item.tmdb_id}, ${item.db_index}, '${item.media_type}')">Remove</button>`)).join('') : '<p class="muted text-sm">No titles added yet.</p>';
+  const box = document.getElementById('catalog-items');
+  box.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div>';
+  try {
+    const res = await fetch(`/api/custom-catalogs/${selectedCatalogId}/items?page_size=100`);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || 'Failed to load catalog items');
+    const items = data.items || [];
+    box.innerHTML = items.length
+      ? items.map(item => mediaCard(item, `<button class="btn-ui btn-danger px-3 py-2 text-sm" onclick="removeItem(${item.tmdb_id}, ${item.db_index}, '${item.media_type}')">Remove</button>`)).join('')
+      : emptyState('➕', 'No titles added yet', 'Use search above to add media to this catalog.');
+  } catch (error) {
+    box.innerHTML = emptyState('⚠️', 'Unable to load titles', error.message || 'Please try again.');
+  }
 }
 
 async function removeItem(tmdbId, dbIndex, mediaType) {
@@ -222,11 +613,11 @@ async function deleteSelectedCatalog() {
   if (!selectedCatalogId) return;
   if (!confirm('Delete this custom catalog? Titles will not be deleted from your media library.')) return;
   const res = await fetch(`/api/custom-catalogs/${selectedCatalogId}`, { method: 'DELETE' });
-  if (!res.ok) return showToast('Failed to delete catalog', 'error', 'Error');
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) return showToast(data.detail || 'Failed to delete catalog', 'error', 'Error');
   selectedCatalogId = null;
-  document.getElementById('catalog-workspace').classList.add('hidden');
-  document.getElementById('delete-catalog-btn').classList.add('hidden');
-  document.getElementById('selected-title').textContent = 'Select a catalog';
+  clearSearchResults();
+  updateSelectedHeader();
   showToast('Catalog deleted', 'success', 'Success');
   await loadCatalogs();
 }
