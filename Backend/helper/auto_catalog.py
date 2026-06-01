@@ -21,7 +21,7 @@ AUTO_SYNC_CONCURRENCY = getattr(Telegram, "AUTO_SYNC_CONCURRENCY", 5)
 AUTO_CATALOG_INTERVAL_SYNC = getattr(Telegram, "AUTO_CATALOG_INTERVAL_SYNC", True)
 AUTO_CATALOG_SYNC_INTERVAL_MINUTES = int(getattr(Telegram, "AUTO_CATALOG_SYNC_INTERVAL_MINUTES", 60))
 
-# No genre catalogs here. User can choose exactly which auto catalogs are enabled.
+# User can choose exactly which auto catalogs are enabled.
 AUTO_CATALOG_DEFINITIONS = [
     {"key": "bollywood", "name": "Bollywood", "group": "Language"},
     {"key": "hollywood", "name": "Hollywood", "group": "Language"},
@@ -269,7 +269,6 @@ def classify_media_from_tmdb(doc: dict, details: dict, watch_data: dict, enabled
             providers.add(bucket)
             tags.add(bucket)
 
-    # The admin selection is the final gate. Disabled catalogs will not be built/touched.
     tags = {tag for tag in tags if tag in enabled_names}
 
     return {
@@ -452,7 +451,7 @@ async def _rebuild_auto_catalogs(db, catalog_items: Dict[str, List[dict]], enabl
             upsert=True,
         )
 
-    # Disabled or removed auto catalogs should not appear in Stremio.
+
     active_keys = {_catalog_key(name) for name in enabled_names}
     await collection.update_many(
         {"auto": True, "auto_key": {"$nin": list(active_keys)}},
