@@ -934,7 +934,6 @@ async def remove_custom_catalog_item_api(
 
 async def auto_sync_custom_catalogs_api(full_rebuild: bool = False):
     try:
-        # Start in background so Heroku does not kill long Full Rebuild requests after 30 seconds.
         result = await start_auto_catalog_sync_background(db, force=True, full_rebuild=full_rebuild)
         return {"message": result.get("message", "Auto sync started."), "result": result}
     except Exception as e:
