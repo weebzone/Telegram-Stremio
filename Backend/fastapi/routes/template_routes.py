@@ -270,7 +270,6 @@ async def admin_access_page(request: Request, _: bool = Depends(require_auth)):
 
 
 async def custom_catalogs_page(request: Request, _: bool = Depends(require_auth)):
-    """Render the Custom Catalogs admin page using the same theme context as other pages."""
     theme_name = request.session.get("theme", "dark_professional")
     theme = get_theme(theme_name)
     current_user = get_current_user(request)
