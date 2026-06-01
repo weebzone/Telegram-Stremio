@@ -60,10 +60,6 @@ async def start_services():
         link_checker_task = DeadLinkChecker(db, app, check_interval_hours=24)
         loop.create_task(link_checker_task.start())
 
-        # Auto catalog behavior:
-        # 1) First boot: this queued sync safely skips until admin saves auto-catalog settings.
-        # 2) After settings exist: restart runs quick sync automatically.
-        # 3) Hourly loop: quick sync runs every AUTO_CATALOG_SYNC_INTERVAL_MINUTES.
         if AUTO_CATALOG_ON_STARTUP:
             loop.create_task(start_auto_catalog_sync_background(
                 db,
