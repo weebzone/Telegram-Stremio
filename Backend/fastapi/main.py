@@ -29,7 +29,9 @@ from Backend.fastapi.routes.api_routes import (
     search_media_rescan_api, apply_media_rescan_api,
     list_custom_catalogs_api, create_custom_catalog_api, update_custom_catalog_api,
     delete_custom_catalog_api, get_custom_catalog_items_api, search_catalog_media_api,
-    add_custom_catalog_item_api, remove_custom_catalog_item_api
+    add_custom_catalog_item_api, remove_custom_catalog_item_api,
+    auto_sync_custom_catalogs_api, auto_catalog_sync_status_api,
+    get_auto_catalog_settings_api, update_auto_catalog_settings_api
 )
 
 templates = Jinja2Templates(directory="Backend/fastapi/templates")
@@ -325,6 +327,26 @@ async def search_catalog_media(
     _: bool = Depends(require_auth)
 ):
     return await search_catalog_media_api(query, media_type, page, page_size)
+
+
+@app.post("/api/custom-catalogs/auto-sync")
+async def auto_sync_custom_catalogs(
+    full_rebuild: bool = Query(False),
+    _: bool = Depends(require_auth)
+):
+    return await auto_sync_custom_catalogs_api(full_rebuild)
+
+@app.get("/api/custom-catalogs/auto-sync/status")
+async def auto_catalog_sync_status(_: bool = Depends(require_auth)):
+    return await auto_catalog_sync_status_api()
+
+@app.get("/api/custom-catalogs/auto-sync/settings")
+async def get_auto_catalog_settings_route(_: bool = Depends(require_auth)):
+    return await get_auto_catalog_settings_api()
+
+@app.put("/api/custom-catalogs/auto-sync/settings")
+async def update_auto_catalog_settings_route(payload: dict, _: bool = Depends(require_auth)):
+    return await update_auto_catalog_settings_api(payload)
 
 @app.get("/api/custom-catalogs/{catalog_id}/items")
 async def get_custom_catalog_items(

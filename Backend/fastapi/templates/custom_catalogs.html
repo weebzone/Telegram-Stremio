@@ -276,6 +276,42 @@
     </div>
   </div>
 
+
+
+  <div class="glass-card rounded-3xl p-5 sm:p-6">
+    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+      <div>
+        <div class="flex flex-wrap gap-2 mb-3">
+          <span class="pill">✨ Auto catalogs</span>
+          <span id="auto-sync-status" class="pill">Checking status...</span>
+        </div>
+        <h2 class="section-title text-2xl sm:text-3xl">Auto-create by selected language & OTT</h2>
+        <p class="muted text-sm sm:text-base mt-2 leading-7 max-w-3xl">
+          On app startup this scans your movie and series library, fetches TMDb original language + watch providers, then creates only the auto catalogs you select below. Genre auto catalogs are removed.
+        </p>
+      </div>
+      <div class="flex flex-col sm:flex-row gap-3">
+        <button id="auto-sync-btn" onclick="runAutoSync(false)" class="btn-ui btn-primary lg:w-auto">⚡ Quick Sync</button>
+        <button id="auto-rebuild-btn" onclick="runAutoSync(true)" class="btn-ui btn-ghost lg:w-auto">♻️ Full Rebuild</button>
+      </div>
+    </div>
+
+    <div class="mt-5 pt-5 border-t" style="border-color: color-mix(in srgb, var(--border) 80%, transparent);">
+      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+        <div>
+          <h3 class="section-title text-xl">Choose Auto Catalogs</h3>
+          <p class="muted text-sm mt-1">Disable anything you do not want to auto-create. Save, then run Full Rebuild once to apply removed catalogs.</p>
+        </div>
+        <button id="save-auto-settings-btn" onclick="saveAutoCatalogSettings()" class="btn-ui btn-ghost md:w-auto">💾 Save Selection</button>
+      </div>
+      <div id="auto-settings-list" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div class="skeleton"></div>
+        <div class="skeleton"></div>
+        <div class="skeleton"></div>
+      </div>
+    </div>
+  </div>
+
   <div class="grid grid-cols-1 xl:grid-cols-[0.88fr_1.12fr] gap-6">
     <div class="space-y-6">
       <div class="glass-card rounded-3xl p-5 sm:p-6">
@@ -466,8 +502,9 @@ function renderCatalogs() {
       <div class="flex items-start justify-between gap-3">
         <button class="text-left min-w-0 flex-1" onclick="selectCatalog('${c._id}')">
           <div class="flex items-center gap-2 min-w-0">
-            <span class="text-xl">${c.visible ? '🌐' : '🔒'}</span>
+            <span class="text-xl">${c.auto ? '✨' : (c.visible ? '🌐' : '🔒')}</span>
             <h3 class="font-black truncate">${escapeHtml(c.name)}</h3>
+            ${c.auto ? '<span class="pill text-[0.62rem] px-2 py-0.5">Auto</span>' : ''}
           </div>
           <p class="muted text-xs mt-2">${count} title${count === 1 ? '' : 's'} · ${c.visible ? 'Visible in Stremio' : 'Hidden from Stremio'}</p>
         </button>
@@ -622,6 +659,136 @@ async function deleteSelectedCatalog() {
   await loadCatalogs();
 }
 
-document.addEventListener('DOMContentLoaded', loadCatalogs);
+
+
+async function loadAutoCatalogSettings() {
+  const box = document.getElementById('auto-settings-list');
+  if (!box) return;
+  try {
+    const res = await fetch('/api/custom-catalogs/auto-sync/settings');
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || 'Failed to load auto catalog settings');
+    const defs = (data.settings && data.settings.definitions) || [];
+    if (!defs.length) {
+      box.innerHTML = `<div class="empty-state p-4 muted">No auto catalog options found.</div>`;
+      return;
+    }
+
+    const groups = {};
+    defs.forEach(def => {
+      if (!groups[def.group]) groups[def.group] = [];
+      groups[def.group].push(def);
+    });
+
+    box.innerHTML = Object.entries(groups).map(([group, items]) => `
+      <div class="catalog-card p-4 space-y-3">
+        <div class="flex items-center justify-between gap-2">
+          <h4 class="section-title text-base">${escapeHtml(group)}</h4>
+          <span class="pill text-[0.65rem] px-2 py-0.5">${items.length}</span>
+        </div>
+        <div class="space-y-2">
+          ${items.map(item => `
+            <label class="flex items-center justify-between gap-3 rounded-2xl p-3 cursor-pointer" style="background: color-mix(in srgb, var(--bg) 64%, transparent); border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);">
+              <span class="font-bold text-sm">${escapeHtml(item.name)}</span>
+              <input type="checkbox" class="auto-setting-checkbox switch-input hidden" value="${escapeHtml(item.key)}" ${item.enabled ? 'checked' : ''}>
+              <span class="switch"></span>
+            </label>
+          `).join('')}
+        </div>
+      </div>
+    `).join('');
+  } catch (error) {
+    box.innerHTML = `<div class="empty-state p-4 text-red-400">${escapeHtml(error.message || 'Failed to load settings')}</div>`;
+  }
+}
+
+async function saveAutoCatalogSettings() {
+  const btn = document.getElementById('save-auto-settings-btn');
+  const old = btn ? btn.textContent : '';
+  const enabledKeys = Array.from(document.querySelectorAll('.auto-setting-checkbox:checked')).map(el => el.value);
+  try {
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+    const res = await fetch('/api/custom-catalogs/auto-sync/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled_keys: enabledKeys })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || 'Failed to save settings');
+    showToast('Auto catalog selection saved. Run Full Rebuild once to remove disabled catalog items.', 'success', 'Saved');
+    await loadAutoCatalogSettings();
+  } catch (error) {
+    showToast(error.message || 'Failed to save settings', 'error', 'Error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = old; }
+  }
+}
+
+let autoSyncPollTimer = null;
+
+async function loadAutoSyncStatus() {
+  const pill = document.getElementById('auto-sync-status');
+  const syncBtn = document.getElementById('auto-sync-btn');
+  const rebuildBtn = document.getElementById('auto-rebuild-btn');
+  if (!pill) return;
+  try {
+    const res = await fetch('/api/custom-catalogs/auto-sync/status');
+    const data = await res.json().catch(() => ({}));
+    const status = data.status || {};
+    const mode = status.mode === 'full_rebuild' ? 'Full rebuild' : 'Quick sync';
+
+    if (status.running) {
+      pill.textContent = `${mode} running: ${status.scanned || 0} scanned · ${status.classified || 0} checked`;
+      if (syncBtn) syncBtn.disabled = true;
+      if (rebuildBtn) rebuildBtn.disabled = true;
+      if (!autoSyncPollTimer) {
+        autoSyncPollTimer = setInterval(loadAutoSyncStatus, 3000);
+      }
+    } else {
+      if (status.finished_at) {
+        pill.textContent = status.error
+          ? `${mode} failed`
+          : `${mode}: ${status.classified || 0} checked · ${status.skipped || 0} skipped`;
+      } else {
+        pill.textContent = 'Quick sync runs on boot';
+      }
+      if (syncBtn) syncBtn.disabled = false;
+      if (rebuildBtn) rebuildBtn.disabled = false;
+      if (autoSyncPollTimer) {
+        clearInterval(autoSyncPollTimer);
+        autoSyncPollTimer = null;
+        await loadCatalogs();
+      }
+    }
+  } catch (e) {
+    pill.textContent = 'Status unavailable';
+  }
+}
+
+async function runAutoSync(fullRebuild = false) {
+  const btn = document.getElementById(fullRebuild ? 'auto-rebuild-btn' : 'auto-sync-btn');
+  const otherBtn = document.getElementById(fullRebuild ? 'auto-sync-btn' : 'auto-rebuild-btn');
+  const old = btn.textContent;
+  btn.disabled = true;
+  if (otherBtn) otherBtn.disabled = true;
+  btn.textContent = fullRebuild ? '⏳ Rebuilding...' : '⏳ Syncing...';
+  try {
+    const url = `/api/custom-catalogs/auto-sync?full_rebuild=${fullRebuild ? 'true' : 'false'}`;
+    const res = await fetch(url, { method: 'POST' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || 'Auto sync failed');
+    const result = data.result || {};
+    const title = fullRebuild ? 'Full rebuild started' : 'Quick sync started';
+    showToast(result.message || data.message || 'Auto sync started in background.', 'info', title);
+    await loadAutoSyncStatus();
+  } catch (error) {
+    showToast(error.message || 'Auto sync failed', 'error', 'Error');
+  } finally {
+    btn.textContent = old;
+    await loadAutoSyncStatus();
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => { loadCatalogs(); loadAutoSyncStatus(); loadAutoCatalogSettings(); });
 </script>
 {% endblock %}

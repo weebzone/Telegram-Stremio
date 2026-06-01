@@ -14,6 +14,12 @@ from Backend.helper.metadata import (
 from Backend.pyrofork.bot import multi_clients, StreamBot
 from Backend.helper.custom_dl import run_speed_test, _speed_test_single_client
 from time import time
+from Backend.helper.auto_catalog import (
+    start_auto_catalog_sync_background,
+    get_auto_catalog_sync_status,
+    get_auto_catalog_settings,
+    update_auto_catalog_settings,
+)
 
 
 # --- API Routes for System Stats ---
@@ -924,3 +930,39 @@ async def remove_custom_catalog_item_api(
     if not removed:
         return {"message": "Item was not in this catalog.", "removed": False}
     return {"message": "Removed from catalog.", "removed": True}
+
+
+async def auto_sync_custom_catalogs_api(full_rebuild: bool = False):
+    try:
+        # Start in background so Heroku does not kill long Full Rebuild requests after 30 seconds.
+        result = await start_auto_catalog_sync_background(db, force=True, full_rebuild=full_rebuild)
+        return {"message": result.get("message", "Auto sync started."), "result": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+async def auto_catalog_sync_status_api():
+    try:
+        return {"status": await get_auto_catalog_sync_status(db)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+async def get_auto_catalog_settings_api():
+    try:
+        return {"settings": await get_auto_catalog_settings(db)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+async def update_auto_catalog_settings_api(payload: dict):
+    try:
+        enabled_keys = payload.get("enabled_keys", [])
+        if not isinstance(enabled_keys, list):
+            raise HTTPException(status_code=400, detail="enabled_keys must be a list.")
+        settings = await update_auto_catalog_settings(db, enabled_keys)
+        return {"message": "Auto catalog settings saved.", "settings": settings}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
