@@ -20,6 +20,10 @@ from Backend.helper.auto_catalog import (
     AUTO_SYNC_DELAY_SECONDS, AUTO_CATALOG_ON_STARTUP,
     AUTO_CATALOG_FULL_REBUILD_ON_STARTUP
 )
+from Backend.helper.iptv import (
+    start_iptv_interval_loop,
+    start_iptv_sync_background,
+)
 
 
 loop = get_event_loop()
@@ -68,6 +72,14 @@ async def start_services():
             ))
 
         loop.create_task(start_auto_catalog_interval_loop(db))
+
+        if Telegram.IPTV_ENABLED and Telegram.IPTV_AUTO_SYNC:
+            loop.create_task(start_iptv_sync_background(
+                db,
+                force=False,
+                delay_seconds=Telegram.IPTV_SYNC_START_DELAY_SECONDS,
+            ))
+            loop.create_task(start_iptv_interval_loop(db))
         
         if Telegram.SUBSCRIPTION:
             loop.create_task(subscription_checker_loop(StreamBot))

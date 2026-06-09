@@ -20,6 +20,14 @@ from Backend.helper.auto_catalog import (
     get_auto_catalog_settings,
     update_auto_catalog_settings,
 )
+from Backend.helper.iptv import (
+    get_iptv_settings,
+    get_iptv_sync_status,
+    list_iptv_channels,
+    set_iptv_channel_hidden,
+    start_iptv_sync_background,
+    update_iptv_settings,
+)
 
 
 # --- API Routes for System Stats ---
@@ -50,6 +58,71 @@ async def get_system_stats_api():
             "server_status": "error", 
             "error": str(e)
         }
+
+
+# --- IPTV Live TV Administration ---
+
+async def get_iptv_status_api():
+    try:
+        return await get_iptv_sync_status(db)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+async def sync_iptv_api(force: bool = True):
+    try:
+        result = await start_iptv_sync_background(db, force=force)
+        if not result.get("started") and result.get("reason") == "sync_already_running":
+            raise HTTPException(status_code=409, detail="IPTV sync is already running.")
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+async def list_iptv_channels_api(
+    search: str = "",
+    hidden: bool | None = None,
+    page: int = 1,
+    page_size: int = 50,
+):
+    try:
+        return await list_iptv_channels(
+            db,
+            search=search,
+            hidden=hidden,
+            page=page,
+            page_size=page_size,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+async def update_iptv_channel_api(channel_id: str, payload: dict):
+    if "hidden" not in payload:
+        raise HTTPException(status_code=400, detail="hidden is required.")
+    hidden = bool(payload.get("hidden"))
+    updated = await set_iptv_channel_hidden(db, channel_id, hidden)
+    if not updated:
+        raise HTTPException(status_code=404, detail="IPTV channel not found.")
+    return {"success": True, "channel_id": channel_id, "hidden": hidden}
+
+
+async def get_iptv_settings_api():
+    try:
+        return await get_iptv_settings(db)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+async def update_iptv_settings_api(payload: dict):
+    try:
+        return await update_iptv_settings(db, payload)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
     
 # --- API Routes for Media Management ---
 
