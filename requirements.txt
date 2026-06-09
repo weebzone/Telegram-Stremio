@@ -6,6 +6,7 @@ parse-torrent-title
 pyrofork
 python-dotenv
 pytz
+rapidfuzz
 tgcrypto
 themoviedb
 uvicorn
