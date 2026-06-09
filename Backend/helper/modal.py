@@ -10,6 +10,10 @@ class QualityDetail(BaseModel):
     id: str
     name: str
     size: str
+    hidden_from_stremio: bool = False
+    recommended: bool = False
+    quality_note: Optional[str] = None
+    flagged_duplicate: bool = False
 
 
 # ---------------------------

@@ -795,7 +795,51 @@ async def apply_media_rescan_api(request: Request, tmdb_id: int, db_index: int, 
         "db_index": updated_doc.get("db_index", db_index),
         "media_type": media_type,
         "data": updated_doc,
-}
+    }
+
+
+# --- Duplicate / Quality Flag APIs ---
+
+async def get_duplicate_media_api() -> dict:
+    groups = await db.get_duplicate_quality_groups()
+    return {"status": "success", "data": groups}
+
+
+async def update_quality_flags_api(payload: dict) -> dict:
+    flags = payload.get("flags") or {
+        key: payload[key]
+        for key in ("hidden_from_stremio", "recommended", "quality_note", "flagged_duplicate")
+        if key in payload
+    }
+    ok = await db.update_quality_flags(
+        media_type=payload.get("media_type"),
+        tmdb_id=int(payload.get("tmdb_id")),
+        db_index=int(payload.get("db_index")),
+        quality_id=payload.get("id") or payload.get("quality_id"),
+        flags=flags,
+        season=payload.get("season"),
+        episode=payload.get("episode"),
+        clear=False,
+    )
+    if not ok:
+        raise HTTPException(status_code=404, detail="Quality not found")
+    return {"status": "success", "message": "Quality flags updated"}
+
+
+async def clear_quality_flags_api(payload: dict) -> dict:
+    ok = await db.update_quality_flags(
+        media_type=payload.get("media_type"),
+        tmdb_id=int(payload.get("tmdb_id")),
+        db_index=int(payload.get("db_index")),
+        quality_id=payload.get("id") or payload.get("quality_id"),
+        flags={},
+        season=payload.get("season"),
+        episode=payload.get("episode"),
+        clear=True,
+    )
+    if not ok:
+        raise HTTPException(status_code=404, detail="Quality not found")
+    return {"status": "success", "message": "Quality flags cleared"}
 
 
 # --- Custom Catalog APIs ---
