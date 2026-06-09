@@ -6,11 +6,13 @@ from Backend import db, StartTime, __version__
 from Backend.logger import LOGGER
 from Backend.helper.pyro import get_readable_time
 from Backend.helper.metadata import (
+    metadata,
     search_movie_candidates,
     search_tv_candidates,
     fetch_selected_movie_metadata,
     fetch_selected_tv_metadata,
 )
+from Backend.helper.pyro import clean_filename, remove_urls
 from Backend.pyrofork.bot import multi_clients, StreamBot
 from Backend.helper.custom_dl import run_speed_test, _speed_test_single_client
 from time import time
@@ -796,6 +798,90 @@ async def apply_media_rescan_api(request: Request, tmdb_id: int, db_index: int, 
         "media_type": media_type,
         "data": updated_doc,
 }
+
+
+# --- Unmatched Media Repair APIs ---
+
+async def list_unmatched_media_api(status: str = "open") -> dict:
+    items = await db.list_unmatched_media(status=status)
+    return {"status": "success", "data": items}
+
+
+async def search_unmatched_media_api(unmatched_id: str, payload: dict) -> dict:
+    item = await db.get_unmatched_media(unmatched_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Unmatched item not found")
+
+    query = (payload.get("query") or item.get("title") or item.get("file_name") or "").strip()
+    media_type = payload.get("media_type") or "movie"
+    year = payload.get("year")
+    if not query:
+        raise HTTPException(status_code=400, detail="query is required")
+
+    suggestions = (
+        await search_tv_candidates(query=query)
+        if media_type in {"tv", "series"}
+        else await search_movie_candidates(query=query, year=year)
+    )
+    await db.update_unmatched_suggestions(unmatched_id, suggestions)
+    return {"status": "success", "data": suggestions}
+
+
+async def _index_unmatched_item(item: dict, override_id: str | None = None) -> dict:
+    channel = int(item.get("channel") or str(item.get("origin_chat_id", "")).replace("-100", ""))
+    msg_id = int(item["origin_msg_id"])
+    title = item.get("title") or item.get("file_name") or "unknown"
+    display_name = remove_urls(title)
+    if not display_name.endswith((".mkv", ".mp4")):
+        display_name += ".mkv"
+
+    metadata_info = await metadata(
+        clean_filename(title),
+        channel,
+        msg_id,
+        override_id=override_id or item.get("override_id"),
+    )
+    if metadata_info is None:
+        raise HTTPException(status_code=422, detail="Metadata still could not be resolved.")
+
+    updated_id = await db.insert_media(
+        metadata_info,
+        channel=channel,
+        msg_id=msg_id,
+        size=item.get("size") or "",
+        name=display_name,
+    )
+    if not updated_id:
+        raise HTTPException(status_code=500, detail="Database insert failed")
+    return {"updated_id": updated_id, "metadata": metadata_info}
+
+
+async def apply_unmatched_media_api(unmatched_id: str, payload: dict) -> dict:
+    item = await db.get_unmatched_media(unmatched_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Unmatched item not found")
+    selected_id = (payload.get("selected_id") or "").strip()
+    if not selected_id:
+        raise HTTPException(status_code=400, detail="selected_id is required")
+    result = await _index_unmatched_item(item, override_id=selected_id)
+    await db.mark_unmatched_status(unmatched_id, "resolved", {"resolved_by": "manual_apply"})
+    return {"status": "success", **result}
+
+
+async def reprocess_unmatched_media_api(unmatched_id: str) -> dict:
+    item = await db.get_unmatched_media(unmatched_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Unmatched item not found")
+    result = await _index_unmatched_item(item, override_id=item.get("override_id"))
+    await db.mark_unmatched_status(unmatched_id, "resolved", {"resolved_by": "reprocess"})
+    return {"status": "success", **result}
+
+
+async def dismiss_unmatched_media_api(unmatched_id: str) -> dict:
+    ok = await db.mark_unmatched_status(unmatched_id, "dismissed")
+    if not ok:
+        raise HTTPException(status_code=404, detail="Unmatched item not found")
+    return {"status": "success", "message": "Unmatched item dismissed"}
 
 
 # --- Custom Catalog APIs ---

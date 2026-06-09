@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+
+{% block title %}Unmatched Media - TG Stremio{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <section class="glass-card rounded-3xl p-5 sm:p-6 lg:p-8">
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div>
+        <h1 class="section-title text-2xl sm:text-3xl">Unmatched Media</h1>
+        <p class="muted mt-2">Repair uploads that could not be matched to metadata during ingestion.</p>
+      </div>
+      <div class="flex gap-2">
+        <select id="status-filter" class="theme-select" onchange="loadItems()">
+          <option value="open">Open</option>
+          <option value="resolved">Resolved</option>
+          <option value="dismissed">Dismissed</option>
+          <option value="all">All</option>
+        </select>
+        <button onclick="loadItems()" class="btn-ui btn-primary">Refresh</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="items" class="space-y-4"></section>
+</div>
+
+<script>
+const state = { items: [], suggestions: {} };
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+}
+
+function badge(text) {
+  return `<span class="pill">${escapeHtml(text)}</span>`;
+}
+
+async function loadItems() {
+  const status = document.getElementById('status-filter').value;
+  const wrap = document.getElementById('items');
+  wrap.innerHTML = '<div class="glass-card rounded-3xl p-8 text-center muted">Loading...</div>';
+  const res = await fetch(`/api/unmatched-media?status=${encodeURIComponent(status)}`);
+  const data = await res.json();
+  state.items = data.data || [];
+  if (!state.items.length) {
+    wrap.innerHTML = '<div class="glass-card rounded-3xl p-8 text-center muted">No unmatched media in this view.</div>';
+    return;
+  }
+  wrap.innerHTML = state.items.map(renderItem).join('');
+}
+
+function renderItem(item) {
+  const id = item._id;
+  const suggestions = state.suggestions[id] || item.suggestions || [];
+  return `
+    <article class="glass-card rounded-3xl p-5 sm:p-6">
+      <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+        <div class="min-w-0">
+          <div class="flex flex-wrap gap-2 mb-3">
+            ${badge(item.source_type || 'telegram')}
+            ${badge(item.status || 'open')}
+            ${item.size ? badge(item.size) : ''}
+          </div>
+          <h2 class="font-bold text-lg break-all">${escapeHtml(item.title || item.file_name || 'Unknown')}</h2>
+          <p class="muted text-sm mt-2 break-all">${escapeHtml(item.failure_reason || 'metadata_failed')}</p>
+          ${item.parsed_title || item.parsed_year || item.match_confidence ? `
+            <div class="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+              <div class="glass-card-soft rounded-2xl p-3"><div class="muted">Parsed</div><div class="font-semibold break-all">${escapeHtml(item.parsed_title || '-')}</div></div>
+              <div class="glass-card-soft rounded-2xl p-3"><div class="muted">Year / Type</div><div class="font-semibold">${escapeHtml(item.parsed_year || '-')} · ${escapeHtml(item.parsed_media_type || '-')}</div></div>
+              <div class="glass-card-soft rounded-2xl p-3"><div class="muted">Confidence</div><div class="font-semibold">${escapeHtml(item.match_confidence ?? '-')}</div></div>
+            </div>
+            ${item.search_variants?.length ? `<p class="muted text-xs mt-2 break-all">Tried: ${escapeHtml(item.search_variants.join(' · '))}</p>` : ''}
+          ` : ''}
+          <p class="muted text-xs mt-2">Chat ${escapeHtml(item.origin_chat_id)} / message ${escapeHtml(item.origin_msg_id)}</p>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 w-full lg:w-auto">
+          <button class="btn-ui btn-info" onclick="searchItem('${id}', 'movie')">Search Movie</button>
+          <button class="btn-ui btn-info" onclick="searchItem('${id}', 'tv')">Search TV</button>
+          <button class="btn-ui btn-primary" onclick="reprocessItem('${id}')">Reprocess</button>
+        </div>
+      </div>
+
+      <div class="mt-5">
+        ${suggestions.length ? renderSuggestions(id, suggestions) : '<p class="muted text-sm">No suggestions loaded.</p>'}
+      </div>
+
+      <div class="mt-5 flex justify-end">
+        <button class="btn-ui btn-danger" onclick="dismissItem('${id}')">Dismiss</button>
+      </div>
+    </article>
+  `;
+}
+
+function renderSuggestions(id, suggestions) {
+  return `
+    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+      ${suggestions.map(s => `
+        <div class="glass-card-soft rounded-2xl p-4 border border-white/10">
+          <div class="font-semibold">${escapeHtml(s.title || 'Unknown')}</div>
+          <div class="muted text-xs mt-1">
+            ${escapeHtml(s.subtitle || s.source || '')}
+            ${s.year ? ' · ' + escapeHtml(s.year) : ''}
+            ${s.score ? ' · score ' + escapeHtml(s.score) : ''}
+          </div>
+          <div class="muted text-[11px] mt-2 break-all">
+            ${s.imdb_id ? 'IMDb ' + escapeHtml(s.imdb_id) + ' ' : ''}
+            ${s.tmdb_id ? 'TMDb ' + escapeHtml(s.tmdb_id) : ''}
+            ${s.reason ? '<br>Reason: ' + escapeHtml(s.reason) : ''}
+          </div>
+          <button class="btn-ui btn-success w-full mt-3" onclick="applyItem('${id}', '${escapeHtml(s.tmdb_id || s.imdb_id || '')}')">Apply</button>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+async function searchItem(id, mediaType) {
+  const item = state.items.find(i => i._id === id);
+  const query = prompt('Search title', item?.title || item?.file_name || '');
+  if (!query) return;
+  const res = await fetch(`/api/unmatched-media/${id}/search`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({query, media_type: mediaType})
+  });
+  const data = await res.json();
+  state.suggestions[id] = data.data || [];
+  renderAll();
+}
+
+async function applyItem(id, selectedId) {
+  if (!selectedId) return;
+  if (!confirm(`Apply metadata ${selectedId} to this item?`)) return;
+  const res = await fetch(`/api/unmatched-media/${id}/apply`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({selected_id: selectedId})
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    alert(err.detail || 'Apply failed');
+    return;
+  }
+  await loadItems();
+}
+
+async function reprocessItem(id) {
+  if (!confirm('Reprocess this item using its current filename/caption?')) return;
+  const res = await fetch(`/api/unmatched-media/${id}/reprocess`, {method: 'POST'});
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    alert(err.detail || 'Reprocess failed');
+    return;
+  }
+  await loadItems();
+}
+
+async function dismissItem(id) {
+  if (!confirm('Dismiss this unmatched item?')) return;
+  await fetch(`/api/unmatched-media/${id}/dismiss`, {method: 'POST'});
+  await loadItems();
+}
+
+function renderAll() {
+  document.getElementById('items').innerHTML = state.items.map(renderItem).join('');
+}
+
+loadItems();
+</script>
+{% endblock %}
