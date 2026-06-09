@@ -482,11 +482,15 @@
                                 {{ quality.quality }}
                             </span>
                             <span class="pill">{{ quality.size }}</span>
+                            {% if quality.recommended %}<span class="pill bg-green-500/15 text-green-300 border border-green-500/20">Recommended</span>{% endif %}
+                            {% if quality.hidden_from_stremio %}<span class="pill bg-red-500/15 text-red-300 border border-red-500/20">Hidden</span>{% endif %}
+                            {% if quality.flagged_duplicate %}<span class="pill bg-yellow-500/15 text-yellow-300 border border-yellow-500/20">Duplicate</span>{% endif %}
                         </div>
                         <p class="muted mt-3 text-sm break-all">{{ quality.name }}</p>
+                        {% if quality.quality_note %}<p class="muted mt-2 text-xs">Note: {{ quality.quality_note }}</p>{% endif %}
                     </div>
 
-                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 w-full sm:w-auto xl:min-w-[24rem]">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2 w-full sm:w-auto xl:min-w-[34rem]">
                         <button onclick="copyStreamLink('{{ quality.id }}', '{{ quality.name }}')" class="btn-ui btn-success w-full" title="Copy direct stream link">
                             📋 Copy Link
                         </button>
@@ -495,6 +499,18 @@
                         </button>
                         <button onclick="deleteQuality('{{ quality.id }}')" class="btn-ui btn-danger w-full">
                             Delete
+                        </button>
+                        <button onclick="setQualityFlags('{{ quality.id }}', {recommended: {{ 'false' if quality.recommended else 'true' }}})" class="btn-ui btn-primary w-full">
+                            {{ 'Unrecommend' if quality.recommended else 'Recommend' }}
+                        </button>
+                        <button onclick="setQualityFlags('{{ quality.id }}', {hidden_from_stremio: {{ 'false' if quality.hidden_from_stremio else 'true' }}})" class="btn-ui btn-ghost w-full">
+                            {{ 'Show' if quality.hidden_from_stremio else 'Hide' }}
+                        </button>
+                        <button onclick="setQualityNote('{{ quality.id }}')" class="btn-ui btn-info w-full">
+                            Note
+                        </button>
+                        <button onclick="setQualityFlags('{{ quality.id }}', {flagged_duplicate: {{ 'false' if quality.flagged_duplicate else 'true' }}})" class="btn-ui btn-ghost w-full">
+                            {{ 'Unflag Dup' if quality.flagged_duplicate else 'Flag Dup' }}
                         </button>
                     </div>
                 </div>
@@ -548,11 +564,15 @@
                                                     <div class="flex flex-wrap items-center gap-2 sm:gap-3">
                                                         <span class="quality-badge bg-green-500/15 text-green-300 border border-green-500/20">{{ quality.quality }}</span>
                                                         <span class="pill">{{ quality.size }}</span>
+                                                        {% if quality.recommended %}<span class="pill bg-green-500/15 text-green-300 border border-green-500/20">Recommended</span>{% endif %}
+                                                        {% if quality.hidden_from_stremio %}<span class="pill bg-red-500/15 text-red-300 border border-red-500/20">Hidden</span>{% endif %}
+                                                        {% if quality.flagged_duplicate %}<span class="pill bg-yellow-500/15 text-yellow-300 border border-yellow-500/20">Duplicate</span>{% endif %}
                                                     </div>
                                                     <p class="muted text-xs sm:text-sm mt-2 break-all">{{ quality.name }}</p>
+                                                    {% if quality.quality_note %}<p class="muted mt-2 text-xs">Note: {{ quality.quality_note }}</p>{% endif %}
                                                 </div>
 
-                                                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 w-full sm:w-auto xl:min-w-[22rem]">
+                                                <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2 w-full sm:w-auto xl:min-w-[34rem]">
                                                     <button onclick="copyStreamLink('{{ quality.id }}', '{{ quality.name }}')" class="btn-ui btn-success w-full text-xs sm:text-sm">
                                                         📋 Copy
                                                     </button>
@@ -561,6 +581,18 @@
                                                     </button>
                                                     <button onclick="deleteTVQuality({{ season.season_number }}, {{ episode.episode_number }}, '{{ quality.id }}')" class="btn-ui btn-danger w-full text-xs sm:text-sm">
                                                         Delete
+                                                    </button>
+                                                    <button onclick="setQualityFlags('{{ quality.id }}', {recommended: {{ 'false' if quality.recommended else 'true' }}}, {{ season.season_number }}, {{ episode.episode_number }})" class="btn-ui btn-primary w-full text-xs sm:text-sm">
+                                                        {{ 'Unrecommend' if quality.recommended else 'Recommend' }}
+                                                    </button>
+                                                    <button onclick="setQualityFlags('{{ quality.id }}', {hidden_from_stremio: {{ 'false' if quality.hidden_from_stremio else 'true' }}}, {{ season.season_number }}, {{ episode.episode_number }})" class="btn-ui btn-ghost w-full text-xs sm:text-sm">
+                                                        {{ 'Show' if quality.hidden_from_stremio else 'Hide' }}
+                                                    </button>
+                                                    <button onclick="setQualityNote('{{ quality.id }}', {{ season.season_number }}, {{ episode.episode_number }})" class="btn-ui btn-info w-full text-xs sm:text-sm">
+                                                        Note
+                                                    </button>
+                                                    <button onclick="setQualityFlags('{{ quality.id }}', {flagged_duplicate: {{ 'false' if quality.flagged_duplicate else 'true' }}}, {{ season.season_number }}, {{ episode.episode_number }})" class="btn-ui btn-ghost w-full text-xs sm:text-sm">
+                                                        {{ 'Unflag Dup' if quality.flagged_duplicate else 'Flag Dup' }}
                                                     </button>
                                                 </div>
                                             </div>
@@ -928,6 +960,42 @@
             console.error('Error deleting:', error);
             showErrorMessage('Error deleting. Please try again.');
         }
+    }
+
+    async function setQualityFlags(id, flags, season = null, episode = null) {
+        const payload = {
+            media_type: mediaType,
+            tmdb_id: tmdbId,
+            db_index: dbIndex,
+            id,
+            flags
+        };
+        if (season !== null) payload.season = season;
+        if (episode !== null) payload.episode = episode;
+
+        try {
+            const response = await fetch('/api/media/quality-flags', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            if (response.ok) {
+                showSuccessMessage('Quality flags updated');
+                setTimeout(() => location.reload(), 700);
+            } else {
+                const error = await response.json().catch(() => ({}));
+                showErrorMessage(`Flag update failed: ${error.detail || 'Unknown error'}`);
+            }
+        } catch (error) {
+            console.error('Flag update failed:', error);
+            showErrorMessage('Flag update failed. Please try again.');
+        }
+    }
+
+    async function setQualityNote(id, season = null, episode = null) {
+        const note = prompt('Quality note, for example: bad seek, slow, duplicate, TV risky', '');
+        if (note === null) return;
+        await setQualityFlags(id, { quality_note: note }, season, episode);
     }
 
     async function deleteTVEpisode(season, episode) {

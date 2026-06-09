@@ -1639,6 +1639,144 @@ class Database:
             LOGGER.error(f"get_stream_analytics error: {e}")
             return {"summary": {}, "per_client": [], "recent": []}
 
+    @staticmethod
+    def _apply_quality_flags(quality: dict, flags: dict, clear: bool = False) -> dict:
+        allowed = {"hidden_from_stremio", "recommended", "quality_note", "flagged_duplicate"}
+        for key in allowed:
+            if clear:
+                quality[key] = None if key == "quality_note" else False
+            elif key in flags:
+                quality[key] = (flags.get(key) or None) if key == "quality_note" else bool(flags.get(key))
+        return quality
+
+    async def update_quality_flags(
+        self,
+        media_type: str,
+        tmdb_id: int,
+        db_index: int,
+        quality_id: str,
+        flags: dict,
+        season: Optional[int] = None,
+        episode: Optional[int] = None,
+        clear: bool = False,
+    ) -> bool:
+        db_key = f"storage_{db_index}"
+        collection_name = "tv" if str(media_type).lower() in {"tv", "series"} else "movie"
+        collection = self.dbs[db_key][collection_name]
+        doc = await collection.find_one({"tmdb_id": int(tmdb_id)})
+        if not doc or not quality_id:
+            return False
+
+        found = False
+        if collection_name == "movie":
+            for quality in doc.get("telegram", []):
+                if quality.get("id") == quality_id:
+                    self._apply_quality_flags(quality, flags, clear=clear)
+                    found = True
+                    break
+        else:
+            for season_doc in doc.get("seasons", []):
+                if season is not None and int(season_doc.get("season_number", -1)) != int(season):
+                    continue
+                for episode_doc in season_doc.get("episodes", []):
+                    if episode is not None and int(episode_doc.get("episode_number", -1)) != int(episode):
+                        continue
+                    for quality in episode_doc.get("telegram", []):
+                        if quality.get("id") == quality_id:
+                            self._apply_quality_flags(quality, flags, clear=clear)
+                            found = True
+                            break
+                    if found:
+                        break
+                if found:
+                    break
+
+        if not found:
+            return False
+
+        doc["updated_on"] = datetime.utcnow()
+        result = await collection.replace_one({"_id": doc["_id"]}, doc)
+        return result.modified_count > 0 or result.matched_count > 0
+
+    @staticmethod
+    def _duplicate_key_for_quality(quality: dict) -> str:
+        if quality.get("info_hash"):
+            return f"torrent:{str(quality.get('info_hash')).lower()}:{quality.get('file_idx')}"
+        if quality.get("id"):
+            return f"id:{quality.get('id')}"
+        filename = (quality.get("filename") or quality.get("name") or "").strip().lower()
+        size = quality.get("video_size") or quality.get("size") or ""
+        return f"file:{filename}:{size}"
+
+    def _duplicate_group(
+        self,
+        doc: dict,
+        media_type: str,
+        qualities: list,
+        season: Optional[int] = None,
+        episode: Optional[int] = None,
+    ) -> Optional[dict]:
+        if len(qualities) < 2:
+            return None
+
+        buckets: Dict[str, List[dict]] = {}
+        for quality in qualities:
+            buckets.setdefault(self._duplicate_key_for_quality(quality), []).append(quality)
+        exact_duplicates = [items for items in buckets.values() if len(items) > 1]
+
+        return {
+            "media_type": media_type,
+            "tmdb_id": doc.get("tmdb_id"),
+            "db_index": doc.get("db_index"),
+            "title": doc.get("title"),
+            "season": season,
+            "episode": episode,
+            "quality_count": len(qualities),
+            "exact_duplicate_count": sum(len(items) for items in exact_duplicates),
+            "qualities": [
+                {
+                    "id": quality.get("id"),
+                    "quality": quality.get("quality"),
+                    "name": quality.get("name") or quality.get("filename"),
+                    "size": quality.get("size") or quality.get("video_size"),
+                    "hidden_from_stremio": bool(quality.get("hidden_from_stremio", False)),
+                    "recommended": bool(quality.get("recommended", False)),
+                    "quality_note": quality.get("quality_note"),
+                    "flagged_duplicate": bool(quality.get("flagged_duplicate", False)),
+                }
+                for quality in qualities
+            ],
+        }
+
+    async def get_duplicate_quality_groups(self, limit: int = 200) -> List[dict]:
+        groups: List[dict] = []
+        for index in range(1, self.current_db_index + 1):
+            db_key = f"storage_{index}"
+            movie_cursor = self.dbs[db_key]["movie"].find({"telegram.1": {"$exists": True}})
+            async for doc in movie_cursor:
+                group = self._duplicate_group(doc, "movie", doc.get("telegram", []))
+                if group:
+                    groups.append(group)
+                if len(groups) >= limit:
+                    return groups
+
+            tv_cursor = self.dbs[db_key]["tv"].find({"seasons.episodes.telegram.1": {"$exists": True}})
+            async for doc in tv_cursor:
+                for season_doc in doc.get("seasons", []):
+                    for episode_doc in season_doc.get("episodes", []):
+                        group = self._duplicate_group(
+                            doc,
+                            "tv",
+                            episode_doc.get("telegram", []),
+                            season=season_doc.get("season_number"),
+                            episode=episode_doc.get("episode_number"),
+                        )
+                        if group:
+                            groups.append(group)
+                        if len(groups) >= limit:
+                            return groups
+        return groups
+
 
 
     async def replace_media_metadata(

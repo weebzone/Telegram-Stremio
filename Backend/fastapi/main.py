@@ -27,6 +27,7 @@ from Backend.fastapi.routes.api_routes import (
     get_all_subscribers_api, manage_subscriber_api,
     get_all_tokens_api, assign_plan_api, link_token_user_api,
     search_media_rescan_api, apply_media_rescan_api,
+    get_duplicate_media_api, update_quality_flags_api, clear_quality_flags_api,
     list_custom_catalogs_api, create_custom_catalog_api, update_custom_catalog_api,
     delete_custom_catalog_api, get_custom_catalog_items_api, search_catalog_media_api,
     add_custom_catalog_item_api, remove_custom_catalog_item_api,
@@ -146,6 +147,18 @@ async def delete_tv_episode(tmdb_id: int, db_index: int, season: int, episode: i
 @app.delete("/api/media/delete-tv-season")
 async def delete_tv_season(tmdb_id: int, db_index: int, season: int, _: bool = Depends(require_auth)):
     return await delete_tv_season_api(tmdb_id, db_index, season)
+
+@app.get("/api/media/duplicates")
+async def get_media_duplicates(_: bool = Depends(require_auth)):
+    return await get_duplicate_media_api()
+
+@app.post("/api/media/quality-flags")
+async def update_quality_flags(payload: dict, _: bool = Depends(require_auth)):
+    return await update_quality_flags_api(payload)
+
+@app.post("/api/media/quality-flags/clear")
+async def clear_quality_flags(payload: dict, _: bool = Depends(require_auth)):
+    return await clear_quality_flags_api(payload)
 
 @app.get("/api/system/workloads")
 async def get_workloads(_: bool = Depends(require_auth)):
