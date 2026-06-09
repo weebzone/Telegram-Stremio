@@ -1,0 +1,401 @@
+{% extends "base.html" %}
+
+{% block title %}Live TV - TG Stremio{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <section class="glass-panel rounded-[2.5rem] p-6 sm:p-8">
+        <div class="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-6">
+            <div>
+                <div class="flex items-center gap-3 text-[10px] font-bold uppercase tracking-[0.22em] text-text-secondary">
+                    <span class="w-2 h-2 rounded-full bg-primary shadow-[0_0_12px_var(--primary)]"></span>
+                    iptv-org India
+                </div>
+                <h1 class="mt-3 text-2xl sm:text-3xl lg:text-4xl font-extrabold text-text">Live TV</h1>
+                <p class="mt-2 text-sm text-text-secondary max-w-2xl">
+                    Direct-first live channels. Header-sensitive sources include an optional VPS fallback.
+                </p>
+            </div>
+            <div class="flex flex-col sm:flex-row gap-3">
+                <button onclick="saveSettings()" class="px-5 py-3 rounded-2xl border border-primary/30 bg-primary/10 text-primary font-bold hover:bg-primary hover:text-background transition-all inline-flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-floppy-disk"></i>
+                    Save Settings
+                </button>
+                <button id="sync-button" onclick="startSync()" class="px-5 py-3 rounded-2xl bg-primary text-background font-bold hover:brightness-110 transition-all inline-flex items-center justify-center gap-2">
+                    <i id="sync-icon" class="fa-solid fa-rotate"></i>
+                    Sync Now
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <section class="grid grid-cols-2 lg:grid-cols-6 gap-4">
+        <div class="glass-panel rounded-[2rem] p-5">
+            <p class="text-[10px] uppercase tracking-[0.18em] text-text-secondary font-bold">Status</p>
+            <p id="status-value" class="mt-2 text-lg font-extrabold text-text">Loading</p>
+        </div>
+        <div class="glass-panel rounded-[2rem] p-5">
+            <p class="text-[10px] uppercase tracking-[0.18em] text-text-secondary font-bold">Channels</p>
+            <p id="channel-count" class="mt-2 text-3xl font-extrabold text-text">0</p>
+        </div>
+        <div class="glass-panel rounded-[2rem] p-5">
+            <p class="text-[10px] uppercase tracking-[0.18em] text-text-secondary font-bold">Streams</p>
+            <p id="stream-count" class="mt-2 text-3xl font-extrabold text-text">0</p>
+        </div>
+        <div class="glass-panel rounded-[2rem] p-5">
+            <p class="text-[10px] uppercase tracking-[0.18em] text-text-secondary font-bold">Direct</p>
+            <p id="direct-count" class="mt-2 text-3xl font-extrabold text-emerald-300">0</p>
+        </div>
+        <div class="glass-panel rounded-[2rem] p-5">
+            <p class="text-[10px] uppercase tracking-[0.18em] text-text-secondary font-bold">Header-Aware</p>
+            <p id="header-count" class="mt-2 text-3xl font-extrabold text-amber-300">0</p>
+        </div>
+        <div class="glass-panel rounded-[2rem] p-5">
+            <p class="text-[10px] uppercase tracking-[0.18em] text-text-secondary font-bold">Last Sync</p>
+            <p id="last-sync" class="mt-2 text-sm font-bold text-text leading-snug">Never</p>
+        </div>
+    </section>
+
+    <section class="grid lg:grid-cols-3 gap-6">
+        <div class="glass-panel rounded-[2.5rem] p-6 lg:col-span-1">
+            <div class="flex items-center gap-3 mb-5">
+                <div class="w-11 h-11 rounded-2xl bg-primary/10 text-primary flex items-center justify-center">
+                    <i class="fa-solid fa-sliders"></i>
+                </div>
+                <div>
+                    <h2 class="font-bold text-text">Catalog Settings</h2>
+                    <p class="text-xs text-text-secondary">India-only v1 rollout</p>
+                </div>
+            </div>
+            <div class="space-y-5">
+                <label class="flex items-center justify-between gap-4">
+                    <span>
+                        <span class="block text-sm font-bold text-text">Enable Live TV</span>
+                        <span class="block text-xs text-text-secondary mt-1">Advertise the TV catalog in the manifest.</span>
+                    </span>
+                    <input id="setting-enabled" type="checkbox" class="w-5 h-5 accent-[var(--primary)]">
+                </label>
+                <div class="rounded-2xl border border-primary/15 bg-primary/5 p-4 text-xs text-text-secondary space-y-2">
+                    <p class="font-bold text-text">Unlimited India catalog</p>
+                    <p>All playable Indian channels are indexed. Hidden, blocklisted, closed, NSFW, replaced, and unplayable channels are excluded.</p>
+                </div>
+                <div class="rounded-2xl border border-white/5 bg-white/[0.03] p-4 text-xs text-text-secondary space-y-2">
+                    <p><span class="font-bold text-text">Country:</span> India (IN)</p>
+                    <p><span class="font-bold text-text">Refresh:</span> Every 6 hours</p>
+                    <p><span class="font-bold text-text">EPG:</span> Deferred</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="glass-panel rounded-[2.5rem] p-6 lg:col-span-2">
+            <div class="flex items-start justify-between gap-4">
+                <div>
+                    <h2 class="font-bold text-text">Sync Health</h2>
+                    <p class="text-xs text-text-secondary mt-1">The previous good snapshot stays active if a refresh fails.</p>
+                </div>
+                <span id="sync-badge" class="text-[10px] font-bold uppercase tracking-[0.18em] bg-white/10 text-text-secondary px-3 py-1 rounded-full">Unknown</span>
+            </div>
+            <div class="mt-6 grid sm:grid-cols-2 gap-4 text-sm">
+                <div class="rounded-2xl border border-white/5 bg-white/[0.03] p-4">
+                    <p class="text-[10px] uppercase tracking-widest text-text-secondary font-bold">Source Updated</p>
+                    <p id="source-modified" class="mt-2 font-bold text-text break-words">Unknown</p>
+                </div>
+                <div class="rounded-2xl border border-white/5 bg-white/[0.03] p-4">
+                    <p class="text-[10px] uppercase tracking-widest text-text-secondary font-bold">Hidden Channels</p>
+                    <p id="hidden-count" class="mt-2 font-bold text-text">0</p>
+                </div>
+                <div class="rounded-2xl border border-white/5 bg-white/[0.03] p-4">
+                    <p class="text-[10px] uppercase tracking-widest text-text-secondary font-bold">Eligible India Channels</p>
+                    <p id="source-channel-count" class="mt-2 font-bold text-text">0</p>
+                </div>
+                <div class="rounded-2xl border border-white/5 bg-white/[0.03] p-4">
+                    <p class="text-[10px] uppercase tracking-widest text-text-secondary font-bold">Playable India Channels</p>
+                    <p id="playable-channel-count" class="mt-2 font-bold text-text">0</p>
+                </div>
+            </div>
+            <div id="sync-error" class="hidden mt-4 rounded-2xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-200"></div>
+        </div>
+    </section>
+
+    <section class="glass-panel rounded-[2.5rem] overflow-hidden">
+        <div class="p-6 border-b border-white/5">
+            <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                <div>
+                    <h2 class="text-lg font-bold text-text">Channels</h2>
+                    <p class="text-xs text-text-secondary mt-1">Hidden channels are excluded from Stremio immediately.</p>
+                </div>
+                <div class="flex flex-col sm:flex-row gap-3">
+                    <div class="relative">
+                        <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-text-secondary"></i>
+                        <input id="channel-search" type="search" placeholder="Search channels"
+                            class="w-full sm:w-64 rounded-2xl border border-white/10 bg-black/10 pl-11 pr-4 py-3 text-sm text-text outline-none focus:border-primary">
+                    </div>
+                    <select id="visibility-filter" class="rounded-2xl border border-white/10 bg-[var(--bg)] px-4 py-3 text-sm text-text outline-none">
+                        <option value="visible">Visible</option>
+                        <option value="all">All</option>
+                        <option value="hidden">Hidden</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div id="channels-loading" class="p-10 text-center text-sm text-text-secondary">Loading channels...</div>
+        <div id="channels-empty" class="hidden p-10 text-center">
+            <i class="fa-solid fa-tower-broadcast text-4xl text-white/10 mb-3"></i>
+            <p class="text-sm text-text-secondary">No channels match this view.</p>
+        </div>
+        <div id="channels-mobile" class="md:hidden p-4 space-y-4"></div>
+        <div id="channels-table-wrap" class="hidden md:block overflow-x-auto">
+            <table class="w-full text-left">
+                <thead>
+                    <tr class="bg-white/5 text-[10px] uppercase tracking-[0.2em] font-bold text-text-secondary">
+                        <th class="py-5 px-6">Channel</th>
+                        <th class="py-5 px-6">Categories</th>
+                        <th class="py-5 px-6">Languages</th>
+                        <th class="py-5 px-6">Streams</th>
+                        <th class="py-5 px-6">Routing</th>
+                        <th class="py-5 px-6 text-right">Visibility</th>
+                    </tr>
+                </thead>
+                <tbody id="channels-table" class="divide-y divide-white/5"></tbody>
+            </table>
+        </div>
+        <div id="pagination" class="hidden p-5 border-t border-white/5 flex items-center justify-between gap-4">
+            <button id="prev-page" onclick="changePage(-1)" class="px-4 py-2 rounded-xl border border-white/10 text-sm font-bold disabled:opacity-30">Previous</button>
+            <span id="page-label" class="text-xs text-text-secondary">Page 1</span>
+            <button id="next-page" onclick="changePage(1)" class="px-4 py-2 rounded-xl border border-white/10 text-sm font-bold disabled:opacity-30">Next</button>
+        </div>
+    </section>
+</div>
+
+<script>
+let currentPage = 1;
+let totalPages = 0;
+let searchTimer = null;
+let statusTimer = null;
+
+function fmtDate(value) {
+    if (!value) return 'Never';
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString();
+}
+
+function routingLabel(channel) {
+    const streams = Array.isArray(channel?.streams) ? channel.streams : [];
+    const headers = streams.filter(item => item?.requires_headers).length;
+    if (!headers) return '<span class="text-emerald-300">Direct</span>';
+    if (headers === streams.length) return '<span class="text-amber-300">Headers + fallback</span>';
+    return '<span class="text-sky-300">Mixed</span>';
+}
+
+function logoMarkup(channel) {
+    if (channel?.logo) {
+        return `<img src="${escapeHtml(channel.logo)}" alt="" class="w-12 h-12 rounded-xl object-contain bg-white p-1" loading="lazy">`;
+    }
+    return '<div class="w-12 h-12 rounded-xl bg-primary/10 text-primary flex items-center justify-center"><i class="fa-solid fa-tv"></i></div>';
+}
+
+function visibilityButton(channel) {
+    const hidden = Boolean(channel?.hidden);
+    return `<button onclick="toggleChannel('${escapeHtml(channel._id)}', ${hidden ? 'false' : 'true'})"
+        class="px-3 py-2 rounded-xl text-xs font-bold ${hidden ? 'bg-primary/10 text-primary' : 'bg-red-500/10 text-red-300'}">
+        ${hidden ? 'Show' : 'Hide'}
+    </button>`;
+}
+
+function mobileCard(channel) {
+    return `
+        <article class="glass-panel rounded-[2rem] p-5">
+            <div class="flex items-start gap-4">
+                ${logoMarkup(channel)}
+                <div class="min-w-0 flex-1">
+                    <h3 class="font-bold text-text truncate">${escapeHtml(channel?.name || channel?._id)}</h3>
+                    <p class="text-xs text-text-secondary mt-1 truncate">${escapeHtml((channel?.categories || []).join(', ') || 'Uncategorized')}</p>
+                </div>
+                ${visibilityButton(channel)}
+            </div>
+            <div class="mt-4 pt-4 border-t border-white/5 grid grid-cols-2 gap-3 text-xs">
+                <div><p class="text-text-secondary">Languages</p><p class="mt-1 font-bold text-text">${escapeHtml((channel?.languages || []).join(', ') || '-')}</p></div>
+                <div><p class="text-text-secondary">Streams</p><p class="mt-1 font-bold text-text">${Number(channel?.stream_count || 0)}</p></div>
+                <div class="col-span-2"><p class="text-text-secondary">Routing</p><p class="mt-1 font-bold">${routingLabel(channel)}</p></div>
+            </div>
+        </article>`;
+}
+
+function tableRow(channel) {
+    return `
+        <tr class="hover:bg-white/[0.02] transition-colors">
+            <td class="py-5 px-6 min-w-[260px]">
+                <div class="flex items-center gap-3">
+                    ${logoMarkup(channel)}
+                    <div class="min-w-0">
+                        <p class="font-bold text-text truncate max-w-[260px]">${escapeHtml(channel?.name || channel?._id)}</p>
+                        <p class="text-[10px] font-mono text-text-secondary mt-1">${escapeHtml(channel?._id || '')}</p>
+                    </div>
+                </div>
+            </td>
+            <td class="py-5 px-6 text-xs text-text-secondary max-w-[240px]">${escapeHtml((channel?.categories || []).join(', ') || '-')}</td>
+            <td class="py-5 px-6 text-xs text-text-secondary">${escapeHtml((channel?.languages || []).join(', ') || '-')}</td>
+            <td class="py-5 px-6 font-bold text-text">${Number(channel?.stream_count || 0)}</td>
+            <td class="py-5 px-6 text-xs font-bold">${routingLabel(channel)}</td>
+            <td class="py-5 px-6 text-right">${visibilityButton(channel)}</td>
+        </tr>`;
+}
+
+async function loadStatus() {
+    try {
+        const response = await fetch('/api/iptv/status', {cache: 'no-store'});
+        if (!response.ok) throw new Error('Unable to load IPTV status');
+        const data = await response.json();
+        const counts = data?.counts || {};
+        const settings = data?.settings || {};
+        const running = Boolean(data?.running);
+
+        document.getElementById('status-value').textContent = running ? 'Syncing' : String(data?.status || 'Unknown');
+        document.getElementById('channel-count').textContent = Number(counts?.visible_channels || 0).toLocaleString();
+        document.getElementById('stream-count').textContent = Number(counts?.selected_streams || 0).toLocaleString();
+        document.getElementById('direct-count').textContent = Number(counts?.direct_streams || 0).toLocaleString();
+        document.getElementById('header-count').textContent = Number(counts?.header_streams || 0).toLocaleString();
+        document.getElementById('hidden-count').textContent = Number(counts?.hidden_channels || 0).toLocaleString();
+        document.getElementById('source-channel-count').textContent = Number(counts?.source_country_channels || counts?.source_channels || 0).toLocaleString();
+        document.getElementById('playable-channel-count').textContent = Number(counts?.playable_country_channels || counts?.selected_channels || 0).toLocaleString();
+        document.getElementById('last-sync').textContent = fmtDate(data?.last_completed_at);
+        document.getElementById('source-modified').textContent = data?.source_last_modified || 'Unknown';
+        document.getElementById('setting-enabled').checked = Boolean(settings?.enabled);
+
+        const badge = document.getElementById('sync-badge');
+        badge.textContent = running ? 'Syncing' : String(data?.status || 'Unknown');
+        badge.className = `text-[10px] font-bold uppercase tracking-[0.18em] px-3 py-1 rounded-full ${
+            data?.status === 'error' ? 'bg-red-500/15 text-red-300' :
+            running ? 'bg-amber-500/15 text-amber-300' :
+            'bg-emerald-500/15 text-emerald-300'
+        }`;
+
+        const error = document.getElementById('sync-error');
+        if (data?.last_error) {
+            error.textContent = data.last_error;
+            error.classList.remove('hidden');
+        } else {
+            error.classList.add('hidden');
+        }
+
+        const syncButton = document.getElementById('sync-button');
+        syncButton.disabled = running;
+        document.getElementById('sync-icon').classList.toggle('animate-spin', running);
+    } catch (error) {
+        showToast(error.message, 'error', 'Live TV');
+    }
+}
+
+function hiddenFilterValue() {
+    const value = document.getElementById('visibility-filter').value;
+    if (value === 'hidden') return 'true';
+    if (value === 'visible') return 'false';
+    return '';
+}
+
+async function loadChannels(resetPage = false) {
+    if (resetPage) currentPage = 1;
+    const loading = document.getElementById('channels-loading');
+    const empty = document.getElementById('channels-empty');
+    const mobile = document.getElementById('channels-mobile');
+    const tableWrap = document.getElementById('channels-table-wrap');
+    const table = document.getElementById('channels-table');
+    loading.classList.remove('hidden');
+    empty.classList.add('hidden');
+
+    const params = new URLSearchParams({
+        page: String(currentPage),
+        page_size: '50',
+        search: document.getElementById('channel-search').value.trim(),
+    });
+    const hidden = hiddenFilterValue();
+    if (hidden) params.set('hidden', hidden);
+
+    try {
+        const response = await fetch(`/api/iptv/channels?${params}`, {cache: 'no-store'});
+        if (!response.ok) throw new Error('Unable to load IPTV channels');
+        const data = await response.json();
+        const channels = Array.isArray(data?.channels) ? data.channels : [];
+        totalPages = Number(data?.total_pages || 0);
+
+        mobile.innerHTML = channels.map(mobileCard).join('');
+        table.innerHTML = channels.map(tableRow).join('');
+        tableWrap.classList.toggle('hidden', channels.length === 0);
+        empty.classList.toggle('hidden', channels.length !== 0);
+        document.getElementById('pagination').classList.toggle('hidden', totalPages <= 1);
+        document.getElementById('page-label').textContent = `Page ${currentPage} of ${Math.max(1, totalPages)}`;
+        document.getElementById('prev-page').disabled = currentPage <= 1;
+        document.getElementById('next-page').disabled = currentPage >= totalPages;
+    } catch (error) {
+        showToast(error.message, 'error', 'Channels');
+    } finally {
+        loading.classList.add('hidden');
+    }
+}
+
+async function startSync() {
+    try {
+        const response = await fetch('/api/iptv/sync?force=true', {method: 'POST'});
+        const data = await response.json();
+        if (!response.ok) throw new Error(data?.detail || 'Unable to start sync');
+        showToast('IPTV synchronization started.', 'success', 'Live TV');
+        await loadStatus();
+    } catch (error) {
+        showToast(error.message, 'error', 'Live TV');
+    }
+}
+
+async function saveSettings() {
+    const payload = {
+        enabled: document.getElementById('setting-enabled').checked,
+    };
+    try {
+        const response = await fetch('/api/iptv/settings', {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data?.detail || 'Unable to save settings');
+        showToast('Settings saved.', 'success', 'Live TV');
+        await loadStatus();
+    } catch (error) {
+        showToast(error.message, 'error', 'Live TV');
+    }
+}
+
+async function toggleChannel(channelId, hidden) {
+    try {
+        const response = await fetch(`/api/iptv/channels/${encodeURIComponent(channelId)}`, {
+            method: 'PATCH',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({hidden}),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data?.detail || 'Unable to update channel');
+        showToast(hidden ? 'Channel hidden from Stremio.' : 'Channel restored.', 'success', 'Live TV');
+        await Promise.all([loadChannels(), loadStatus()]);
+    } catch (error) {
+        showToast(error.message, 'error', 'Live TV');
+    }
+}
+
+function changePage(delta) {
+    const next = currentPage + delta;
+    if (next < 1 || next > totalPages) return;
+    currentPage = next;
+    loadChannels();
+}
+
+document.getElementById('visibility-filter').addEventListener('change', () => loadChannels(true));
+document.getElementById('channel-search').addEventListener('input', () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => loadChannels(true), 350);
+});
+
+Promise.all([loadStatus(), loadChannels(true)]);
+statusTimer = setInterval(loadStatus, 30000);
+window.addEventListener('beforeunload', () => clearInterval(statusTimer));
+</script>
+{% endblock %}
