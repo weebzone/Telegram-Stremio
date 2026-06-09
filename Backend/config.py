@@ -15,6 +15,29 @@ class Telegram:
     PARALLEL = int(getenv("PARALLEL", "1"))
     PRE_FETCH = int(getenv("PRE_FETCH", "1"))
 
+    SMART_ROUTING_ENABLED = getenv("SMART_ROUTING_ENABLED", "true").lower() == "true"
+    SMART_ROUTING_PROBE_ENABLED = getenv("SMART_ROUTING_PROBE_ENABLED", "true").lower() == "true"
+    try:
+        SMART_ROUTING_PROBE_CLIENTS = int(getenv("SMART_ROUTING_PROBE_CLIENTS", "3") or 3)
+    except Exception:
+        SMART_ROUTING_PROBE_CLIENTS = 3
+    try:
+        SMART_ROUTING_PROBE_BYTES = int(getenv("SMART_ROUTING_PROBE_BYTES", "262144") or 262144)
+    except Exception:
+        SMART_ROUTING_PROBE_BYTES = 262144
+    try:
+        SMART_ROUTING_PROBE_TIMEOUT_SEC = float(getenv("SMART_ROUTING_PROBE_TIMEOUT_SEC", "4") or 4)
+    except Exception:
+        SMART_ROUTING_PROBE_TIMEOUT_SEC = 4.0
+    try:
+        SMART_ROUTING_FIRST_CHUNK_TIMEOUT_SEC = float(getenv("SMART_ROUTING_FIRST_CHUNK_TIMEOUT_SEC", "4") or 4)
+    except Exception:
+        SMART_ROUTING_FIRST_CHUNK_TIMEOUT_SEC = 4.0
+    try:
+        SMART_ROUTING_CHUNK_TIMEOUT_SEC = float(getenv("SMART_ROUTING_CHUNK_TIMEOUT_SEC", "15") or 15)
+    except Exception:
+        SMART_ROUTING_CHUNK_TIMEOUT_SEC = 15.0
+
     AUTH_CHANNEL = [channel.strip() for channel in (getenv("AUTH_CHANNEL") or "").split(",") if channel.strip()]
     DATABASE = [db.strip() for db in (getenv("DATABASE") or "").split(",") if db.strip()]
 
@@ -30,6 +53,7 @@ class Telegram:
 
     ADMIN_USERNAME = getenv("ADMIN_USERNAME", "fyvio")
     ADMIN_PASSWORD = getenv("ADMIN_PASSWORD", "fyvio")
+    DEFAULT_ADDON_TOKEN = getenv("DEFAULT_ADDON_TOKEN", "").strip()
     
     SUBSCRIPTION = getenv("SUBSCRIPTION", "false").lower() == "true"
     SUBSCRIPTION_GROUP_ID = int(getenv("SUBSCRIPTION_GROUP_ID", "0"))
@@ -40,3 +64,64 @@ class Telegram:
     PROXY_TYPE = getenv("ProxyType", "HTTPS")
     HTTP_PROXY_URL = getenv("HTTP_Proxy_URL", "")
     SHOW_PROXY_AND_NON_PROXY_BOTH = getenv("SHOW_ProxyAndNonProxyBoth", "false").lower() == "true"
+
+    # -------------------------------
+    # Disk cache + nginx offload (optional)
+    # -------------------------------
+    DISK_CACHE_ENABLED = getenv("DISK_CACHE_ENABLED", "false").lower() == "true"
+    DISK_CACHE_DIR = getenv("DISK_CACHE_DIR", "cache")
+    try:
+        DISK_CACHE_MAX_GB = float(getenv("DISK_CACHE_MAX_GB", "0") or 0)
+    except Exception:
+        DISK_CACHE_MAX_GB = 0.0
+    try:
+        DISK_CACHE_MAX_BYTES = int(getenv("DISK_CACHE_MAX_BYTES", "0") or 0)
+    except Exception:
+        DISK_CACHE_MAX_BYTES = 0
+
+    DISK_CACHE_CONCURRENCY = int(getenv("DISK_CACHE_CONCURRENCY", "1") or 1)
+    DISK_CACHE_PRECACHE_ON_INGEST = getenv("DISK_CACHE_PRECACHE_ON_INGEST", "false").lower() == "true"
+
+    NGINX_ACCEL_REDIRECT_ENABLED = getenv("NGINX_ACCEL_REDIRECT_ENABLED", "false").lower() == "true"
+    NGINX_ACCEL_REDIRECT_LOCATION = getenv("NGINX_ACCEL_REDIRECT_LOCATION", "/_cache/")
+
+    # -------------------------------
+    # Streaming SLO warnings (logs only)
+    # -------------------------------
+    try:
+        STREAM_SLO_TTFB_WARN_SEC = float(getenv("STREAM_SLO_TTFB_WARN_SEC", "3") or 3)
+    except Exception:
+        STREAM_SLO_TTFB_WARN_SEC = 3.0
+    try:
+        STREAM_SLO_TIMEOUT_WARN_COUNT = int(getenv("STREAM_SLO_TIMEOUT_WARN_COUNT", "2") or 2)
+    except Exception:
+        STREAM_SLO_TIMEOUT_WARN_COUNT = 2
+    try:
+        STREAM_SLO_BUFFERING_WARN_RATE = float(getenv("STREAM_SLO_BUFFERING_WARN_RATE", "0.05") or 0.05)
+    except Exception:
+        STREAM_SLO_BUFFERING_WARN_RATE = 0.05
+
+    # -------------------------------
+    # Torrent tracker scrape stats (optional, lightweight)
+    # -------------------------------
+    TORRENT_STATS_ENABLED = getenv("TORRENT_STATS_ENABLED", "true").lower() == "true"
+    try:
+        TORRENT_STATS_TTL_SEC = int(getenv("TORRENT_STATS_TTL_SEC", "21600") or 21600)
+    except Exception:
+        TORRENT_STATS_TTL_SEC = 21600
+    try:
+        TORRENT_STATS_FAILURE_TTL_SEC = int(getenv("TORRENT_STATS_FAILURE_TTL_SEC", "3600") or 3600)
+    except Exception:
+        TORRENT_STATS_FAILURE_TTL_SEC = 3600
+    try:
+        TORRENT_STATS_MAX_TRACKERS = int(getenv("TORRENT_STATS_MAX_TRACKERS", "5") or 5)
+    except Exception:
+        TORRENT_STATS_MAX_TRACKERS = 5
+    try:
+        TORRENT_STATS_TIMEOUT_SEC = float(getenv("TORRENT_STATS_TIMEOUT_SEC", "2.5") or 2.5)
+    except Exception:
+        TORRENT_STATS_TIMEOUT_SEC = 2.5
+    try:
+        TORRENT_STATS_CONCURRENCY = int(getenv("TORRENT_STATS_CONCURRENCY", "3") or 3)
+    except Exception:
+        TORRENT_STATS_CONCURRENCY = 3

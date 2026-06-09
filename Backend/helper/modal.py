@@ -10,6 +10,15 @@ class QualityDetail(BaseModel):
     id: str
     name: str
     size: str
+    source_type: str = "telegram"
+    info_hash: Optional[str] = None
+    file_idx: Optional[int] = None
+    sources: Optional[List[str]] = None
+    filename: Optional[str] = None
+    video_size: Optional[int] = None
+    origin_chat_id: Optional[int] = None
+    origin_msg_id: Optional[int] = None
+    torrent_private: bool = False
 
 
 # ---------------------------

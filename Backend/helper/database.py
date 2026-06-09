@@ -1,9 +1,10 @@
 import secrets
 import string
+import math
 from asyncio import create_task
 from bson import ObjectId
 import motor.motor_asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pydantic import ValidationError
 from pymongo import ASCENDING, DESCENDING
 from typing import Dict, List, Optional, Tuple, Any
@@ -14,6 +15,7 @@ import re
 from Backend.helper.encrypt import decode_string
 from Backend.helper.modal import Episode, MovieSchema, QualityDetail, Season, TVShowSchema
 from Backend.helper.task_manager import delete_message
+from Backend.helper.torrent_stats import scrape_torrent_trackers
 
 
 def convert_objectid_to_str(document: Dict[str, Any]) -> Dict[str, Any]:
@@ -39,6 +41,7 @@ class Database:
         self.dbs: Dict[str, motor.motor_asyncio.AsyncIOMotorDatabase] = {}
 
         self.current_db_index = 1
+        self._torrent_stats_refreshing = set()
 
     async def connect(self):
         try:
@@ -77,6 +80,127 @@ class Database:
             {"$set": {"current_index": self.current_db_index}},
             upsert=True
         )
+
+    # -------------------------------
+    # Torrent tracker stats cache
+    # -------------------------------
+    async def get_torrent_stats(self, info_hash: str) -> Optional[dict]:
+        if not info_hash:
+            return None
+        try:
+            return await self.dbs["tracking"]["torrent_stats"].find_one({"_id": str(info_hash).lower()})
+        except Exception as e:
+            LOGGER.debug(f"Torrent stats lookup failed for {info_hash}: {e}")
+            return None
+
+    def _torrent_stats_is_fresh(self, stats: Optional[dict]) -> bool:
+        if not stats:
+            return False
+        expires_at = stats.get("expires_at")
+        if not expires_at:
+            return False
+        if expires_at.tzinfo is not None:
+            expires_at = expires_at.replace(tzinfo=None)
+        return expires_at > datetime.utcnow()
+
+    def queue_torrent_stats_refresh(
+        self,
+        info_hash: str,
+        sources: list,
+        torrent_private: bool = False,
+        force: bool = False,
+    ) -> None:
+        if not getattr(Telegram, "TORRENT_STATS_ENABLED", True):
+            return
+        if torrent_private:
+            return
+        if not info_hash or not sources:
+            return
+
+        info_hash = str(info_hash).lower()
+        if info_hash in self._torrent_stats_refreshing:
+            return
+
+        async def _refresh_if_needed():
+            if not force:
+                cached = await self.get_torrent_stats(info_hash)
+                if self._torrent_stats_is_fresh(cached):
+                    return
+            await self.refresh_torrent_stats(info_hash, sources)
+
+        create_task(_refresh_if_needed())
+
+    async def refresh_torrent_stats(self, info_hash: str, sources: list) -> Optional[dict]:
+        if not getattr(Telegram, "TORRENT_STATS_ENABLED", True):
+            return None
+        if not info_hash or not sources:
+            return None
+
+        info_hash = str(info_hash).lower()
+        if info_hash in self._torrent_stats_refreshing:
+            return await self.get_torrent_stats(info_hash)
+
+        self._torrent_stats_refreshing.add(info_hash)
+        now = datetime.utcnow()
+        try:
+            stats = await scrape_torrent_trackers(
+                info_hash=info_hash,
+                sources=sources,
+                max_trackers=max(0, int(getattr(Telegram, "TORRENT_STATS_MAX_TRACKERS", 5) or 5)),
+                timeout=max(0.5, float(getattr(Telegram, "TORRENT_STATS_TIMEOUT_SEC", 2.5) or 2.5)),
+                concurrency=max(1, int(getattr(Telegram, "TORRENT_STATS_CONCURRENCY", 3) or 3)),
+            )
+            ok = stats.get("status") == "ok"
+            ttl = (
+                int(getattr(Telegram, "TORRENT_STATS_TTL_SEC", 21600) or 21600)
+                if ok else
+                int(getattr(Telegram, "TORRENT_STATS_FAILURE_TTL_SEC", 3600) or 3600)
+            )
+            doc = {
+                "_id": info_hash,
+                "info_hash": info_hash,
+                "seeders": stats.get("seeders"),
+                "peers": stats.get("peers"),
+                "completed": stats.get("completed"),
+                "checked_at": now,
+                "expires_at": now + timedelta(seconds=max(60, ttl)),
+                "trackers_checked": int(stats.get("trackers_checked") or 0),
+                "trackers_responded": int(stats.get("trackers_responded") or 0),
+                "status": stats.get("status") or "unavailable",
+                "errors": stats.get("errors") or [],
+            }
+            await self.dbs["tracking"]["torrent_stats"].update_one(
+                {"_id": info_hash},
+                {"$set": doc},
+                upsert=True,
+            )
+            return doc
+        except Exception as e:
+            LOGGER.warning(f"Torrent stats refresh failed for {info_hash}: {e}")
+            doc = {
+                "_id": info_hash,
+                "info_hash": info_hash,
+                "seeders": None,
+                "peers": None,
+                "completed": None,
+                "checked_at": now,
+                "expires_at": now + timedelta(seconds=max(60, int(getattr(Telegram, "TORRENT_STATS_FAILURE_TTL_SEC", 3600) or 3600))),
+                "trackers_checked": 0,
+                "trackers_responded": 0,
+                "status": "error",
+                "errors": [str(e)[:160]],
+            }
+            try:
+                await self.dbs["tracking"]["torrent_stats"].update_one(
+                    {"_id": info_hash},
+                    {"$set": doc},
+                    upsert=True,
+                )
+            except Exception:
+                pass
+            return doc
+        finally:
+            self._torrent_stats_refreshing.discard(info_hash)
 
     # -------------------------------
     # User Subscription Management
@@ -290,177 +414,6 @@ class Database:
         }
 
 
-
-
-    # -------------------------------
-    # Custom Catalog Management
-    # -------------------------------
-    async def create_custom_catalog(self, name: str, visible: bool = True) -> Optional[str]:
-        name = (name or "").strip()
-        if not name:
-            return None
-
-        now = datetime.utcnow()
-        result = await self.dbs["tracking"]["custom_catalogs"].insert_one({
-            "name": name,
-            "visible": bool(visible),
-            "items": [],
-            "created_at": now,
-            "updated_at": now,
-        })
-        return str(result.inserted_id)
-
-    async def get_custom_catalogs(self, visible_only: bool = False) -> List[dict]:
-        query = {"visible": True} if visible_only else {}
-        cursor = self.dbs["tracking"]["custom_catalogs"].find(query).sort("updated_at", DESCENDING)
-        catalogs = await cursor.to_list(None)
-        return [convert_objectid_to_str(catalog) for catalog in catalogs]
-
-    async def get_custom_catalog(self, catalog_id: str) -> Optional[dict]:
-        try:
-            catalog = await self.dbs["tracking"]["custom_catalogs"].find_one({"_id": ObjectId(catalog_id)})
-            return convert_objectid_to_str(catalog) if catalog else None
-        except Exception:
-            return None
-
-    async def update_custom_catalog(self, catalog_id: str, name: Optional[str] = None, visible: Optional[bool] = None) -> bool:
-        update_data = {"updated_at": datetime.utcnow()}
-        if name is not None:
-            clean_name = name.strip()
-            if clean_name:
-                update_data["name"] = clean_name
-        if visible is not None:
-            update_data["visible"] = bool(visible)
-
-        try:
-            result = await self.dbs["tracking"]["custom_catalogs"].update_one(
-                {"_id": ObjectId(catalog_id)},
-                {"$set": update_data}
-            )
-            return result.modified_count > 0
-        except Exception:
-            return False
-
-    async def delete_custom_catalog(self, catalog_id: str) -> bool:
-        try:
-            result = await self.dbs["tracking"]["custom_catalogs"].delete_one({"_id": ObjectId(catalog_id)})
-            return result.deleted_count > 0
-        except Exception:
-            return False
-
-    async def add_item_to_custom_catalog(
-        self, catalog_id: str, tmdb_id: int, db_index: int, media_type: str
-    ) -> bool:
-        media_type = "tv" if media_type in ["tv", "series"] else "movie"
-        item = {
-            "tmdb_id": int(tmdb_id),
-            "db_index": int(db_index),
-            "media_type": media_type,
-            "added_at": datetime.utcnow(),
-        }
-        try:
-            result = await self.dbs["tracking"]["custom_catalogs"].update_one(
-                {
-                    "_id": ObjectId(catalog_id),
-                    "items": {
-                        "$not": {
-                            "$elemMatch": {
-                                "tmdb_id": int(tmdb_id),
-                                "db_index": int(db_index),
-                                "media_type": media_type,
-                            }
-                        }
-                    },
-                },
-                {
-                    "$push": {"items": {"$each": [item], "$position": 0}},
-                    "$set": {"updated_at": datetime.utcnow()},
-                }
-            )
-            return result.modified_count > 0
-        except Exception:
-            return False
-
-    async def remove_item_from_custom_catalog(
-        self, catalog_id: str, tmdb_id: int, db_index: int, media_type: str
-    ) -> bool:
-        media_type = "tv" if media_type in ["tv", "series"] else "movie"
-        try:
-            result = await self.dbs["tracking"]["custom_catalogs"].update_one(
-                {"_id": ObjectId(catalog_id)},
-                {
-                    "$pull": {
-                        "items": {
-                            "tmdb_id": int(tmdb_id),
-                            "db_index": int(db_index),
-                            "media_type": media_type,
-                        }
-                    },
-                    "$set": {"updated_at": datetime.utcnow()},
-                }
-            )
-            return result.modified_count > 0
-        except Exception:
-            return False
-
-    async def custom_catalog_contains_item(
-        self, catalog_id: str, tmdb_id: int, db_index: int, media_type: str
-    ) -> bool:
-        media_type = "tv" if media_type in ["tv", "series"] else "movie"
-        try:
-            catalog = await self.dbs["tracking"]["custom_catalogs"].find_one({
-                "_id": ObjectId(catalog_id),
-                "items": {
-                    "$elemMatch": {
-                        "tmdb_id": int(tmdb_id),
-                        "db_index": int(db_index),
-                        "media_type": media_type,
-                    }
-                }
-            })
-            return bool(catalog)
-        except Exception:
-            return False
-
-    async def get_custom_catalog_items(
-        self, catalog_id: str, media_type: Optional[str] = None, page: int = 1, page_size: int = 24
-    ) -> dict:
-        catalog = await self.get_custom_catalog(catalog_id)
-        if not catalog:
-            return {"catalog": None, "items": [], "total_count": 0, "current_page": page, "total_pages": 0}
-
-        db_media_type = None
-        if media_type:
-            db_media_type = "tv" if media_type in ["tv", "series"] else "movie"
-
-        raw_items = catalog.get("items", []) or []
-        if db_media_type:
-            raw_items = [item for item in raw_items if item.get("media_type") == db_media_type]
-
-        total_count = len(raw_items)
-        skip = (page - 1) * page_size
-        selected_items = raw_items[skip:skip + page_size]
-
-        hydrated_items = []
-        for item in selected_items:
-            doc = await self.get_document(
-                item.get("media_type", "movie"),
-                int(item.get("tmdb_id")),
-                int(item.get("db_index", 1))
-            )
-            if doc:
-                hydrated_items.append(doc)
-
-        total_pages = (total_count + page_size - 1) // page_size if total_count else 0
-        return {
-            "catalog": catalog,
-            "items": hydrated_items,
-            "total_count": total_count,
-            "current_page": page,
-            "total_pages": total_pages,
-        }
-
-
     # -------------------------------
     # Helper Methods for Repeated Logic
     # -------------------------------
@@ -559,6 +512,7 @@ class Database:
         self, metadata_info: dict,
         channel: int, msg_id: int, size: str, name: str
     ) -> Optional[ObjectId]:
+        quality_detail = self._quality_from_metadata(metadata_info, size, name)
         
         if metadata_info['media_type'] == "movie":
             media = MovieSchema(
@@ -576,15 +530,33 @@ class Database:
                 cast=metadata_info['cast'],
                 runtime=metadata_info['runtime'],
                 media_type=metadata_info['media_type'],
-                telegram=[QualityDetail(
-                    quality=metadata_info['quality'],
-                    id=metadata_info['encoded_string'],
-                    name=name,
-                    size=size
-                )]
+                telegram=[quality_detail]
             )
             return await self.update_movie(media)
         else:
+            if metadata_info.get("season_pack") and metadata_info.get("season_pack_episodes"):
+                episodes = [
+                    Episode(
+                        episode_number=int(ep.get("episode_number")),
+                        title=ep.get("episode_title") or f"Episode {ep.get('episode_number')}",
+                        episode_backdrop=ep.get("episode_backdrop"),
+                        overview=ep.get("episode_overview"),
+                        released=ep.get("episode_released"),
+                        telegram=[quality_detail]
+                    )
+                    for ep in metadata_info["season_pack_episodes"]
+                    if ep.get("episode_number") is not None
+                ]
+            else:
+                episodes = [Episode(
+                    episode_number=metadata_info['episode_number'],
+                    title=metadata_info['episode_title'],
+                    episode_backdrop=metadata_info['episode_backdrop'],
+                    overview=metadata_info['episode_overview'],
+                    released=metadata_info['episode_released'],
+                    telegram=[quality_detail]
+                )]
+
             tv_show = TVShowSchema(
                 tmdb_id=metadata_info['tmdb_id'],
                 imdb_id=metadata_info['imdb_id'],
@@ -602,22 +574,53 @@ class Database:
                 media_type=metadata_info['media_type'],
                 seasons=[Season(
                     season_number=metadata_info['season_number'],
-                    episodes=[Episode(
-                        episode_number=metadata_info['episode_number'],
-                        title=metadata_info['episode_title'],
-                        episode_backdrop=metadata_info['episode_backdrop'],
-                        overview=metadata_info['episode_overview'],
-                        released=metadata_info['episode_released'],
-                        telegram=[QualityDetail(
-                            quality=metadata_info['quality'],
-                            id=metadata_info['encoded_string'],
-                            name=name,
-                            size=size
-                        )]
-                    )]
+                    episodes=episodes
                 )]
             )
             return await self.update_tv_show(tv_show)
+
+    def _quality_from_metadata(self, metadata_info: dict, size: str, name: str) -> QualityDetail:
+        return QualityDetail(
+            quality=metadata_info["quality"],
+            id=metadata_info["encoded_string"],
+            name=name,
+            size=size,
+            source_type=metadata_info.get("source_type", "telegram"),
+            info_hash=metadata_info.get("info_hash"),
+            file_idx=metadata_info.get("file_idx"),
+            sources=metadata_info.get("sources"),
+            filename=metadata_info.get("filename") or name,
+            video_size=metadata_info.get("video_size"),
+            origin_chat_id=metadata_info.get("origin_chat_id"),
+            origin_msg_id=metadata_info.get("origin_msg_id"),
+            torrent_private=bool(metadata_info.get("torrent_private", False)),
+        )
+
+    def _source_type(self, quality: dict) -> str:
+        return quality.get("source_type") or "telegram"
+
+    def _same_replace_group(self, existing_quality: dict, new_quality: dict) -> bool:
+        return (
+            existing_quality.get("quality") == new_quality.get("quality")
+            and self._source_type(existing_quality) == self._source_type(new_quality)
+        )
+
+    def _should_delete_telegram_source(self, quality: dict) -> bool:
+        return self._source_type(quality) == "telegram" and bool(quality.get("id"))
+
+    def _queue_delete_telegram_source(self, quality: dict) -> None:
+        if not self._should_delete_telegram_source(quality):
+            return
+        create_task(self._delete_encoded_quality_safely(quality.get("id")))
+
+    async def _delete_encoded_quality_safely(self, encoded_id: str) -> None:
+        try:
+            decoded_data = await decode_string(encoded_id)
+            chat_id = int(f"-100{decoded_data['chat_id']}")
+            msg_id = int(decoded_data["msg_id"])
+            await delete_message(chat_id, msg_id)
+        except Exception as e:
+            LOGGER.error(f"Failed to queue file for deletion: {e}")
 
     async def update_movie(self, movie_data: MovieSchema) -> Optional[ObjectId]:
         try:
@@ -678,21 +681,13 @@ class Database:
         existing_qualities = existing_movie.get("telegram", [])
 
         if Telegram.REPLACE_MODE:
-            to_delete = [q for q in existing_qualities if q.get("quality") == target_quality]
+            to_delete = [q for q in existing_qualities if self._same_replace_group(q, quality_to_update)]
 
             for q in to_delete:
-                try:
-                    old_id = q.get("id")
-                    if old_id:
-                        decoded = await decode_string(old_id)
-                        chat_id = int(f"-100{decoded['chat_id']}")
-                        msg_id = int(decoded['msg_id'])
-                        create_task(delete_message(chat_id, msg_id))
-                except Exception as e:
-                    LOGGER.error(f"Failed to delete old quality: {e}")
+                self._queue_delete_telegram_source(q)
 
             existing_qualities = [
-                q for q in existing_qualities if q.get("quality") != target_quality
+                q for q in existing_qualities if not self._same_replace_group(q, quality_to_update)
             ]
             existing_qualities.append(quality_to_update)
 
@@ -804,23 +799,15 @@ class Database:
                     if Telegram.REPLACE_MODE:
                         to_delete = [
                             q for q in existing_episode["telegram"]
-                            if q.get("quality") == target_quality
+                            if self._same_replace_group(q, quality)
                         ]
 
                         for q in to_delete:
-                            try:
-                                old_id = q.get("id")
-                                if old_id:
-                                    decoded = await decode_string(old_id)
-                                    chat_id = int(f"-100{decoded['chat_id']}")
-                                    msg_id = int(decoded['msg_id'])
-                                    create_task(delete_message(chat_id, msg_id))
-                            except Exception as e:
-                                LOGGER.error(f"Failed to delete old quality: {e}")
+                            self._queue_delete_telegram_source(q)
 
                         existing_episode["telegram"] = [
                             q for q in existing_episode["telegram"]
-                            if q.get("quality") != target_quality
+                            if not self._same_replace_group(q, quality)
                         ]
                         existing_episode["telegram"].append(quality)
 
@@ -1099,15 +1086,7 @@ class Database:
             doc = await self.dbs[db_key]["movie"].find_one({"tmdb_id": tmdb_id})
             if doc and "telegram" in doc:
                 for quality in doc["telegram"]:
-                    try:
-                        old_id = quality.get("id")
-                        if old_id:
-                            decoded_data = await decode_string(old_id)
-                            chat_id = int(f"-100{decoded_data['chat_id']}")
-                            msg_id = int(decoded_data['msg_id'])
-                            create_task(delete_message(chat_id, msg_id))
-                    except Exception as e:
-                        LOGGER.error(f"Failed to queue file for deletion: {e}")
+                    self._queue_delete_telegram_source(quality)
             
             result = await self.dbs[db_key]["movie"].delete_one({"tmdb_id": tmdb_id})
         else:
@@ -1116,15 +1095,7 @@ class Database:
                 for season in doc["seasons"]:
                     for episode in season.get("episodes", []):
                         for quality in episode.get("telegram", []):
-                            try:
-                                old_id = quality.get("id")
-                                if old_id:
-                                    decoded_data = await decode_string(old_id)
-                                    chat_id = int(f"-100{decoded_data['chat_id']}")
-                                    msg_id = int(decoded_data['msg_id'])
-                                    create_task(delete_message(chat_id, msg_id))
-                            except Exception as e:
-                                LOGGER.error(f"Failed to queue file for deletion: {e}")
+                            self._queue_delete_telegram_source(quality)
             
             result = await self.dbs[db_key]["tv"].delete_one({"tmdb_id": tmdb_id})
         
@@ -1198,6 +1169,72 @@ class Database:
                                 return True
         return False
 
+    async def delete_media_by_origin(self, origin_chat_id: int, origin_msg_id: int) -> bool:
+        """Remove every quality entry created from a source Telegram post."""
+        changed = False
+        for i in range(1, self.current_db_index + 1):
+            db = self.dbs[f"storage_{i}"]
+
+            movie_cursor = db["movie"].find({
+                "telegram.origin_chat_id": int(origin_chat_id),
+                "telegram.origin_msg_id": int(origin_msg_id),
+            })
+            for movie in await movie_cursor.to_list(None):
+                before = len(movie.get("telegram", []))
+                movie["telegram"] = [
+                    q for q in movie.get("telegram", [])
+                    if not (
+                        q.get("origin_chat_id") == int(origin_chat_id)
+                        and q.get("origin_msg_id") == int(origin_msg_id)
+                    )
+                ]
+                if len(movie["telegram"]) == before:
+                    continue
+                if movie["telegram"]:
+                    movie["updated_on"] = datetime.utcnow()
+                    await db["movie"].replace_one({"_id": movie["_id"]}, movie)
+                else:
+                    await db["movie"].delete_one({"_id": movie["_id"]})
+                changed = True
+
+            tv_cursor = db["tv"].find({
+                "seasons.episodes.telegram.origin_chat_id": int(origin_chat_id),
+                "seasons.episodes.telegram.origin_msg_id": int(origin_msg_id),
+            })
+            for tv in await tv_cursor.to_list(None):
+                doc_changed = False
+                new_seasons = []
+                for season in tv.get("seasons", []):
+                    new_episodes = []
+                    for episode in season.get("episodes", []):
+                        before = len(episode.get("telegram", []))
+                        episode["telegram"] = [
+                            q for q in episode.get("telegram", [])
+                            if not (
+                                q.get("origin_chat_id") == int(origin_chat_id)
+                                and q.get("origin_msg_id") == int(origin_msg_id)
+                            )
+                        ]
+                        if len(episode["telegram"]) != before:
+                            doc_changed = True
+                        if episode.get("telegram"):
+                            new_episodes.append(episode)
+                    season["episodes"] = new_episodes
+                    if season["episodes"]:
+                        new_seasons.append(season)
+
+                if not doc_changed:
+                    continue
+                tv["seasons"] = new_seasons
+                if tv["seasons"]:
+                    tv["updated_on"] = datetime.utcnow()
+                    await db["tv"].replace_one({"_id": tv["_id"]}, tv)
+                else:
+                    await db["tv"].delete_one({"_id": tv["_id"]})
+                changed = True
+
+        return changed
+
     async def delete_movie_quality(self, tmdb_id: int, db_index: int, id: str) -> bool:
         db_key = f"storage_{db_index}"
         movie = await self.dbs[db_key]["movie"].find_one({"tmdb_id": tmdb_id})
@@ -1207,15 +1244,7 @@ class Database:
 
         for q in movie["telegram"]:
             if q.get("id") == id:
-                try:
-                    old_id = q.get("id")
-                    if old_id:
-                        decoded_data = await decode_string(old_id)
-                        chat_id = int(f"-100{decoded_data['chat_id']}")
-                        msg_id = int(decoded_data['msg_id'])
-                        create_task(delete_message(chat_id, msg_id))
-                except Exception as e:
-                    LOGGER.error(f"Failed to queue file for deletion: {e}")
+                self._queue_delete_telegram_source(q)
                 break
         
         original_len = len(movie["telegram"])
@@ -1241,15 +1270,7 @@ class Database:
                 for ep in season["episodes"]:
                     if ep.get("episode_number") == episode_number:
                         for quality in ep.get("telegram", []):
-                            try:
-                                old_id = quality.get("id")
-                                if old_id:
-                                    decoded_data = await decode_string(old_id)
-                                    chat_id = int(f"-100{decoded_data['chat_id']}")
-                                    msg_id = int(decoded_data['msg_id'])
-                                    create_task(delete_message(chat_id, msg_id))
-                            except Exception as e:
-                                LOGGER.error(f"Failed to queue file for deletion: {e}")
+                            self._queue_delete_telegram_source(quality)
                         break
                 
                 original_len = len(season["episodes"])
@@ -1275,15 +1296,7 @@ class Database:
             if season.get("season_number") == season_number:
                 for episode in season.get("episodes", []):
                     for quality in episode.get("telegram", []):
-                        try:
-                            old_id = quality.get("id")
-                            if old_id:
-                                decoded_data = await decode_string(old_id)
-                                chat_id = int(f"-100{decoded_data['chat_id']}")
-                                msg_id = int(decoded_data['msg_id'])
-                                create_task(delete_message(chat_id, msg_id))
-                        except Exception as e:
-                            LOGGER.error(f"Failed to queue file for deletion: {e}")
+                        self._queue_delete_telegram_source(quality)
                 break
         
         original_len = len(tv["seasons"])
@@ -1310,15 +1323,7 @@ class Database:
                     if episode.get("episode_number") == episode_number and "telegram" in episode:
                         for q in episode["telegram"]:
                             if q.get("id") == id:
-                                try:
-                                    old_id = q.get("id")
-                                    if old_id:
-                                        decoded_data = await decode_string(old_id)
-                                        chat_id = int(f"-100{decoded_data['chat_id']}")
-                                        msg_id = int(decoded_data['msg_id'])
-                                        create_task(delete_message(chat_id, msg_id))
-                                except Exception as e:
-                                    LOGGER.error(f"Failed to queue file for deletion: {e}")
+                                self._queue_delete_telegram_source(q)
                                 break
                         
                         original_len = len(episode["telegram"])
@@ -1569,12 +1574,21 @@ class Database:
                 "title":       stats.get("meta", {}).get("title"),  # Added title
                 "client_index": stats.get("client_index"),
                 "total_bytes": stats.get("total_bytes", 0),
+                "ttfb_sec":    stats.get("ttfb_sec"),
                 "duration_sec": round(stats.get("duration", 0.0), 2),
                 "avg_mbps":    round(stats.get("avg_mbps", 0.0), 3),
                 "peak_mbps":   round(stats.get("peak_mbps", 0.0), 3),
                 "status":      stats.get("status", "finished"),
                 "parallelism": stats.get("parallelism"),
                 "chunk_size":  stats.get("chunk_size"),
+                "cached":      stats.get("cached", False),
+                "served_via":  stats.get("served_via", "telegram"),
+                "chunk_timeouts": stats.get("chunk_timeouts", 0),
+                "chunk_errors":   stats.get("chunk_errors", 0),
+                "fallback_chunks": stats.get("fallback_chunks", 0),
+                "zero_pad_chunks": stats.get("zero_pad_chunks", 0),
+                "buffering_events": stats.get("buffering_events", 0),
+                "buffering_rate": stats.get("buffering_rate", 0.0),
                 "logged_at":   datetime.utcnow(),
             }
             await self.dbs["tracking"]["stream_analytics"].insert_one(record)
@@ -1591,10 +1605,17 @@ class Database:
                 {"$group": {
                     "_id": None,
                     "total_streams":     {"$sum": 1},
+                    "cached_streams":    {"$sum": {"$cond": [{"$eq": ["$cached", True]}, 1, 0]}},
+                    "error_streams":     {"$sum": {"$cond": [{"$eq": ["$status", "error"]}, 1, 0]}},
+                    "cancelled_streams": {"$sum": {"$cond": [{"$eq": ["$status", "cancelled"]}, 1, 0]}},
+                    "non_finished_streams": {"$sum": {"$cond": [{"$ne": ["$status", "finished"]}, 1, 0]}},
                     "total_bytes":       {"$sum": "$total_bytes"},
                     "avg_speed":         {"$avg": "$avg_mbps"},
                     "peak_speed":        {"$max": "$peak_mbps"},
                     "avg_duration":      {"$avg": "$duration_sec"},
+                    "avg_ttfb_sec":      {"$avg": "$ttfb_sec"},
+                    "avg_buffering_rate": {"$avg": "$buffering_rate"},
+                    "buffering_streams": {"$sum": {"$cond": [{"$gt": ["$buffering_events", 0]}, 1, 0]}},
                 }},
             ]
             agg = await col.aggregate(pipeline).to_list(1)
@@ -1606,9 +1627,16 @@ class Database:
                 {"$group": {
                     "_id":          "$client_index",
                     "streams":      {"$sum": 1},
+                    "cached_streams": {"$sum": {"$cond": [{"$eq": ["$cached", True]}, 1, 0]}},
+                    "error_streams": {"$sum": {"$cond": [{"$eq": ["$status", "error"]}, 1, 0]}},
+                    "cancelled_streams": {"$sum": {"$cond": [{"$eq": ["$status", "cancelled"]}, 1, 0]}},
+                    "non_finished_streams": {"$sum": {"$cond": [{"$ne": ["$status", "finished"]}, 1, 0]}},
                     "avg_mbps":     {"$avg": "$avg_mbps"},
                     "peak_mbps":    {"$max": "$peak_mbps"},
                     "total_bytes":  {"$sum": "$total_bytes"},
+                    "avg_ttfb_sec": {"$avg": "$ttfb_sec"},
+                    "avg_buffering_rate": {"$avg": "$buffering_rate"},
+                    "buffering_streams": {"$sum": {"$cond": [{"$gt": ["$buffering_events", 0]}, 1, 0]}},
                 }},
                 {"$sort": {"_id": 1}},
             ]
@@ -1617,18 +1645,58 @@ class Database:
                 row["client_index"] = row.pop("_id")
                 row["avg_mbps"]     = round(row.get("avg_mbps", 0), 3)
                 row["peak_mbps"]    = round(row.get("peak_mbps", 0), 3)
+                row["avg_ttfb_sec"]  = round(row.get("avg_ttfb_sec", 0) or 0, 3)
+                row["avg_buffering_rate"] = round(row.get("avg_buffering_rate", 0) or 0, 4)
 
             # Recent records (newest first)
             recent_cursor = col.find(
                 {},
                 {"_id": 0, "stream_id": 1, "client_index": 1, "dc_id": 1,
                  "total_bytes": 1, "duration_sec": 1, "avg_mbps": 1,
-                 "peak_mbps": 1, "status": 1, "logged_at": 1, "title": 1}
+                 "peak_mbps": 1, "status": 1, "logged_at": 1, "title": 1,
+                  "cached": 1, "served_via": 1,
+                 "ttfb_sec": 1, "chunk_timeouts": 1, "chunk_errors": 1,
+                  "fallback_chunks": 1, "zero_pad_chunks": 1,
+                  "buffering_events": 1, "buffering_rate": 1}
             ).sort("logged_at", DESCENDING).limit(limit)
             recent = await recent_cursor.to_list(None)
             for r in recent:
                 if "logged_at" in r:
                     r["logged_at"] = r["logged_at"].isoformat()
+
+            # Best-effort percentiles computed over the returned window.
+            ttfb_vals = sorted([v for v in (r.get("ttfb_sec") for r in recent) if isinstance(v, (int, float))])
+            if ttfb_vals:
+                def pct(p: float) -> float:
+                    if len(ttfb_vals) == 1:
+                        return float(ttfb_vals[0])
+                    k = (len(ttfb_vals) - 1) * p
+                    f = int(math.floor(k))
+                    c = int(math.ceil(k))
+                    if f == c:
+                        return float(ttfb_vals[int(k)])
+                    return float(ttfb_vals[f] * (c - k) + ttfb_vals[c] * (k - f))
+
+                summary["ttfb_p50_sec"] = round(pct(0.50), 3)
+                summary["ttfb_p95_sec"] = round(pct(0.95), 3)
+            else:
+                summary["ttfb_p50_sec"] = None
+                summary["ttfb_p95_sec"] = None
+
+            if summary.get("total_streams"):
+                summary["cache_hit_rate"] = round((summary.get("cached_streams", 0) / summary["total_streams"]) * 100, 2)
+                summary["error_rate"] = round((summary.get("error_streams", 0) / summary["total_streams"]) * 100, 2)
+                summary["cancel_rate"] = round((summary.get("cancelled_streams", 0) / summary["total_streams"]) * 100, 2)
+                summary["non_finished_rate"] = round((summary.get("non_finished_streams", 0) / summary["total_streams"]) * 100, 2)
+                summary["buffering_stream_rate"] = round((summary.get("buffering_streams", 0) / summary["total_streams"]) * 100, 2)
+                summary["avg_buffering_rate"] = round(summary.get("avg_buffering_rate", 0) or 0, 4)
+            else:
+                summary["cache_hit_rate"] = 0
+                summary["error_rate"] = 0
+                summary["cancel_rate"] = 0
+                summary["non_finished_rate"] = 0
+                summary["buffering_stream_rate"] = 0
+                summary["avg_buffering_rate"] = 0
 
             return {
                 "summary":    summary,
@@ -1638,68 +1706,3 @@ class Database:
         except Exception as e:
             LOGGER.error(f"get_stream_analytics error: {e}")
             return {"summary": {}, "per_client": [], "recent": []}
-
-
-
-    async def replace_media_metadata(
-        self,
-        media_type: str,
-        tmdb_id: int,
-        db_index: int,
-        metadata: Dict[str, Any]
-    ) -> Optional[dict]:
-        db_key = f"storage_{db_index}"
-        collection_name = "tv" if media_type.lower() in ["tv", "series"] else "movie"
-        collection = self.dbs[db_key][collection_name]
-
-        current_doc = await collection.find_one({"tmdb_id": int(tmdb_id)})
-        if not current_doc:
-            return None
-
-        current_doc.pop("_id", None)
-
-        if collection_name == "movie":
-            preserved_telegram = current_doc.get("telegram", [])
-            current_doc.update({
-                "tmdb_id": int(metadata.get("tmdb_id") or tmdb_id),
-                "imdb_id": metadata.get("imdb_id"),
-                "title": metadata.get("title") or current_doc.get("title"),
-                "release_year": metadata.get("release_year", current_doc.get("release_year")),
-                "rating": metadata.get("rating", current_doc.get("rating")),
-                "description": metadata.get("description", current_doc.get("description")),
-                "poster": metadata.get("poster", current_doc.get("poster")),
-                "backdrop": metadata.get("backdrop", current_doc.get("backdrop")),
-                "logo": metadata.get("logo", current_doc.get("logo")),
-                "genres": metadata.get("genres", current_doc.get("genres", [])),
-                "cast": metadata.get("cast", current_doc.get("cast", [])),
-                "runtime": metadata.get("runtime", current_doc.get("runtime")),
-                "media_type": "movie",
-                "telegram": preserved_telegram,
-                "updated_on": datetime.utcnow(),
-            })
-        else:
-            preserved_seasons = current_doc.get("seasons", [])
-            current_doc.update({
-                "tmdb_id": int(metadata.get("tmdb_id") or tmdb_id) if metadata.get("tmdb_id") else int(tmdb_id),
-                "imdb_id": metadata.get("imdb_id"),
-                "title": metadata.get("title") or current_doc.get("title"),
-                "release_year": metadata.get("release_year", current_doc.get("release_year")),
-                "rating": metadata.get("rating", current_doc.get("rating")),
-                "description": metadata.get("description", current_doc.get("description")),
-                "poster": metadata.get("poster", current_doc.get("poster")),
-                "backdrop": metadata.get("backdrop", current_doc.get("backdrop")),
-                "logo": metadata.get("logo", current_doc.get("logo")),
-                "genres": metadata.get("genres", current_doc.get("genres", [])),
-                "cast": metadata.get("cast", current_doc.get("cast", [])),
-                "runtime": metadata.get("runtime", current_doc.get("runtime")),
-                "media_type": "tv",
-                "seasons": preserved_seasons,
-                "updated_on": datetime.utcnow(),
-            })
-
-        new_tmdb_id = int(current_doc["tmdb_id"])
-        await collection.delete_one({"tmdb_id": int(tmdb_id)})
-        await collection.insert_one(current_doc)
-
-        updated_doc = await collection.find_one({"tmdb_id": new_tmdb_id})
-        return convert_objectid_to_str(updated_doc) if updated_doc else None

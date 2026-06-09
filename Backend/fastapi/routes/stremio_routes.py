@@ -93,6 +93,73 @@ def format_stream_details(filename: str, quality: str, size: str) -> tuple[str, 
     return (stream_name, stream_title)
 
 
+def _format_torrent_stats_line(torrent_stats: Optional[dict]) -> str:
+    if not torrent_stats or torrent_stats.get("status") != "ok":
+        return ""
+    seeders = torrent_stats.get("seeders")
+    peers = torrent_stats.get("peers")
+    if seeders is None and peers is None:
+        return ""
+    try:
+        seeders_text = str(max(0, int(seeders or 0)))
+    except (TypeError, ValueError):
+        seeders_text = "0"
+    try:
+        peers_text = str(max(0, int(peers or 0)))
+    except (TypeError, ValueError):
+        peers_text = "0"
+    return f"Seeds: {seeders_text} | Peers: {peers_text}"
+
+
+def build_torrent_stream(
+    quality: dict,
+    stream_name: str,
+    stream_title: str,
+    torrent_stats: Optional[dict] = None,
+) -> Optional[dict]:
+    info_hash = quality.get("info_hash")
+    if not info_hash:
+        return None
+
+    torrent_name = stream_name.replace("Telegram", "Torrent", 1)
+    title_parts = [stream_title]
+    stats_line = _format_torrent_stats_line(torrent_stats)
+    if stats_line:
+        title_parts.append(stats_line)
+    title_parts.extend(["🧲 Torrent stream", "Speed depends on seeders/peers."])
+    stream = {
+        "name": torrent_name,
+        "title": "\n".join(title_parts),
+        "infoHash": str(info_hash).lower(),
+    }
+
+    file_idx = quality.get("file_idx")
+    if file_idx is not None:
+        try:
+            stream["fileIdx"] = int(file_idx)
+        except (TypeError, ValueError):
+            pass
+
+    sources = quality.get("sources") or []
+    if sources:
+        stream["sources"] = [str(source) for source in sources if source]
+
+    behavior_hints = {}
+    filename = quality.get("filename") or quality.get("name")
+    if filename:
+        behavior_hints["filename"] = filename
+    video_size = quality.get("video_size")
+    if video_size:
+        try:
+            behavior_hints["videoSize"] = int(video_size)
+        except (TypeError, ValueError):
+            pass
+    if behavior_hints:
+        stream["behaviorHints"] = behavior_hints
+
+    return stream
+
+
 def get_resolution_priority(stream_name: str) -> int:
     resolution_map = {
         "2160p": 2160, "4k": 2160, "uhd": 2160,
@@ -594,41 +661,56 @@ async def get_streams(
 
     streams = []
     for quality in media_details.get("telegram", []):
-        if quality.get("id"):
-            filename = quality.get("name", "")
-            quality_str = quality.get("quality", "HD")
-            size = quality.get("size", "")
+        filename = quality.get("name", "")
+        quality_str = quality.get("quality", "HD")
+        size = quality.get("size", "")
 
-            stream_name, stream_title = format_stream_details(
-                filename, quality_str, size
+        stream_name, stream_title = format_stream_details(
+            filename, quality_str, size
+        )
+
+        if (quality.get("source_type") or "telegram") == "torrent":
+            info_hash = quality.get("info_hash")
+            torrent_stats = await db.get_torrent_stats(info_hash) if info_hash else None
+            db.queue_torrent_stats_refresh(
+                info_hash,
+                quality.get("sources") or [],
+                torrent_private=bool(quality.get("torrent_private", False)),
             )
+            torrent_stream = build_torrent_stream(quality, stream_name, stream_title, torrent_stats)
+            if torrent_stream:
+                streams.append(torrent_stream)
+            continue
 
-            original_url = f"{BASE_URL}/dl/{token}/{quality.get('id')}/video.mkv"
-            proxy_url = f"{Telegram.HTTP_PROXY_URL}{original_url}" if Telegram.PROXY and Telegram.HTTP_PROXY_URL else None
+        if not quality.get("id"):
+            continue
 
-            if Telegram.SHOW_PROXY_AND_NON_PROXY_BOTH and proxy_url:
-                streams.append({
-                    "name": f"{stream_name} (Proxy)",
-                    "title": stream_title,
-                    "url": proxy_url
-                })
-                streams.append({
-                    "name": f"{stream_name} (Direct)",
-                    "title": stream_title,
-                    "url": original_url
-                })
-            elif proxy_url:
-                streams.append({
-                    "name": stream_name,
-                    "title": stream_title,
-                    "url": proxy_url
-                })
-            else:
-                streams.append({
-                    "name": stream_name,
-                    "title": stream_title,
-                    "url": original_url
-                })
+        original_url = f"{BASE_URL}/dl/{token}/{quality.get('id')}/video.mkv"
+        proxy_url = f"{Telegram.HTTP_PROXY_URL}{original_url}" if Telegram.PROXY and Telegram.HTTP_PROXY_URL else None
+
+        if Telegram.SHOW_PROXY_AND_NON_PROXY_BOTH and proxy_url:
+            streams.append({
+                "name": f"{stream_name} (Proxy)",
+                "title": stream_title,
+                "url": proxy_url
+            })
+            streams.append({
+                "name": f"{stream_name} (Direct)",
+                "title": stream_title,
+                "url": original_url
+            })
+        elif proxy_url:
+            streams.append({
+                "name": stream_name,
+                "title": stream_title,
+                "url": proxy_url
+            })
+        else:
+            streams.append({
+                "name": stream_name,
+                "title": stream_title,
+                "url": original_url
+            })
 
     streams.sort(
         key=lambda s: get_resolution_priority(s.get("name", "")),
