@@ -15,7 +15,7 @@
     --accent: {{ theme.colors.accent }};
     --bg: {{ theme.colors.background }};
     --card: {{ theme.colors.card }};
-    --border: {{ theme.colors.border }}; /* Added theme border */
+    --border: {{ theme.colors.border }};
     --text: {{ theme.colors.text }};
     --text-sec: {{ theme.colors.text_secondary }};
 }
@@ -33,7 +33,6 @@ body {
     flex-direction: column;
 }
 
-/* GLASS PANELS */
 .glass-panel {
     background: color-mix(in srgb, var(--card) 45%, transparent);
     backdrop-filter: blur(20px);
@@ -43,7 +42,6 @@ body {
 
 .glass-pill { border-radius: 9999px; }
 
-/* NAV LINKS */
 .nav-link {
     color: var(--text-sec);
     border-radius: 9999px;
@@ -55,12 +53,10 @@ body {
     font-weight: 600;
 }
 
-/* FIX: Text becomes dark background color when pill is behind it for readability */
 .nav-link:hover, .nav-link.active-page {
     color: var(--bg) !important; 
 }
 
-/* ACTIVE PILL */
 #active-pill {
     position: absolute;
     background: var(--primary);
@@ -70,65 +66,38 @@ body {
     box-shadow: 0 0 15px color-mix(in srgb, var(--primary) 40%, transparent);
 }
 
-    .toast {
-        pointer-events: auto;
-        min-width: 260px;
-        max-width: 360px;
-        border: 1px solid var(--border);
-        background: color-mix(in srgb, var(--card) 88%, transparent);
-        color: var(--text);
-        box-shadow: 0 18px 40px rgba(0,0,0,0.2);
-        border-radius: 1rem;
-        padding: 0.9rem 1rem;
-        display: flex;
-        align-items: flex-start;
-        gap: 0.75rem;
-        backdrop-filter: blur(14px);
-        animation: toast-in 220ms ease-out;
-    }
-
-    .toast.success { border-color: color-mix(in srgb, #22c55e 35%, var(--border)); }
-    .toast.error { border-color: color-mix(in srgb, #ef4444 35%, var(--border)); }
-    .toast.info { border-color: color-mix(in srgb, var(--primary) 35%, var(--border)); }
-
-    .toast-title {
-        font-weight: 800;
-        font-size: 0.9rem;
-        line-height: 1.2;
-    }
-
-    .toast-message {
-        margin-top: 0.15rem;
-        font-size: 0.82rem;
-        color: var(--text-secondary);
-        line-height: 1.35;
-    }
-
-    @keyframes toast-in {
-        from { opacity: 0; transform: translateY(-10px) scale(0.98); }
-        to { opacity: 1; transform: translateY(0) scale(1); }
-    }
-
-    @keyframes toast-out {
-        from { opacity: 1; transform: translateY(0) scale(1); }
-        to { opacity: 0; transform: translateY(-8px) scale(0.98); }
-    }
-
-/* Mobile improvement */
-@media (max-width: 640px) {
-    #toast-container {
-        top: 5rem;
-        left: 0.75rem;
-        right: 0.75rem;
-    }
-
-    .toast {
-        max-width: none;
-        width: 100%;
-    }
+.toast {
+    pointer-events: auto;
+    min-width: 260px;
+    max-width: 360px;
+    border: 1px solid var(--border);
+    background: color-mix(in srgb, var(--card) 88%, transparent);
+    color: var(--text);
+    box-shadow: 0 18px 40px rgba(0,0,0,0.2);
+    border-radius: 1rem;
+    padding: 0.9rem 1rem;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    backdrop-filter: blur(14px);
+    animation: toast-in 220ms ease-out;
 }
-    
-/* THEME SELECT */
+
+.toast.success { border-color: color-mix(in srgb, #22c55e 35%, var(--border)); }
+.toast.error   { border-color: color-mix(in srgb, #ef4444 35%, var(--border)); }
+.toast.info    { border-color: color-mix(in srgb, var(--primary) 35%, var(--border)); }
+
+.toast-title   { font-weight: 800; font-size: 0.9rem; line-height: 1.2; }
+.toast-message { margin-top: 0.15rem; font-size: 0.82rem; color: var(--text-secondary); line-height: 1.35; }
+
+@keyframes toast-in  { from { opacity: 0; transform: translateY(-10px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes toast-out { from { opacity: 1; transform: translateY(0) scale(1); } to { opacity: 0; transform: translateY(-8px) scale(0.98); } }
+
+@media (max-width: 640px) {
+    #toast-container { top: 5rem; left: 0.75rem; right: 0.75rem; }
+    .toast { max-width: none; width: 100%; }
+}
+
 .theme-select {
     appearance: none;
     background: var(--bg);
@@ -140,14 +109,12 @@ body {
     cursor: pointer;
 }
 
-/* OVERLAY */
 #overlay {
     backdrop-filter: blur(8px);
     background: rgba(0,0,0,0.4);
     transition: opacity 0.3s ease;
 }
 
-/* SCROLL ANIMATION - Fixed "Jumping" issue */
 .nav-scrolled { 
     transform: translate(-50%, -5px) scale(0.97); 
     background: color-mix(in srgb, var(--card) 80%, transparent);
@@ -201,6 +168,7 @@ tailwind.config = {
         <a href="/admin/dashboard" class="nav-link">Admin</a>
         <a href="/admin/subscriptions" class="nav-link">Subs</a>
         <a href="/admin/access" class="nav-link">Access</a>
+        <a href="/admin/settings" class="nav-link">Settings</a>
     </div>
     {% endif %}
 
@@ -234,6 +202,12 @@ tailwind.config = {
                         </select>
                     </form>
 
+                    <a href="/admin/settings"
+                       class="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold mb-2 transition-all"
+                       style="background:color-mix(in srgb,var(--primary) 12%,transparent);color:var(--primary)">
+                        <i class="fa-solid fa-gear"></i> Settings
+                    </a>
+
                     <a href="/logout" class="block text-center bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white px-4 py-2.5 rounded-xl text-sm font-bold transition-all">
                         Logout
                     </a>
@@ -254,6 +228,8 @@ tailwind.config = {
             <a href="/admin/dashboard" class="px-4 py-3 rounded-xl hover:bg-primary hover:text-background transition flex items-center gap-3 font-semibold"><i class="fa-solid fa-chart-line"></i> Admin</a>
             <a href="/admin/subscriptions" class="px-4 py-3 rounded-xl hover:bg-primary hover:text-background transition flex items-center gap-3 font-semibold"><i class="fa-solid fa-credit-card"></i> Subs</a>
             <a href="/admin/access" class="px-4 py-3 rounded-xl hover:bg-primary hover:text-background transition flex items-center gap-3 font-semibold"><i class="fa-solid fa-shield"></i> Access</a>
+            <!-- ↓ NEW -->
+            <a href="/admin/settings" class="px-4 py-3 rounded-xl hover:bg-primary hover:text-background transition flex items-center gap-3 font-semibold"><i class="fa-solid fa-gear"></i> Settings</a>
         </div>
     </div>
 </nav>
@@ -271,8 +247,7 @@ tailwind.config = {
     </div>
 </footer>
     
-<div id="toast-container"
-     class="fixed top-4 right-4 z-[9999] space-y-3 pointer-events-none"></div>
+<div id="toast-container" class="fixed top-4 right-4 z-[9999] space-y-3 pointer-events-none"></div>
     
 <script>
 const btn = document.getElementById('menu-btn');
@@ -287,7 +262,6 @@ const navContainer = document.getElementById('nav-container');
 let isMenuOpen = false;
 let isUserOpen = false;
 
-// --- MENU & DROPDOWN TOGGLE ---
 function toggleMenu() {
     isMenuOpen = !isMenuOpen;
     if(isUserOpen) closeUser();
@@ -331,48 +305,47 @@ function checkOverlay() {
         overlay.classList.add("pointer-events-none");
     }
 }
-    function showToast(message, type = 'info', title = '') {
-        const container = document.getElementById('toast-container');
-        if (!container) return;
 
-        const toast = document.createElement('div');
-        toast.className = `toast ${type}`;
+function showToast(message, type = 'info', title = '') {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
 
-        const icon = type === 'success'
-            ? 'fa-circle-check'
-            : type === 'error'
-                ? 'fa-triangle-exclamation'
-                : 'fa-circle-info';
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
 
-        toast.innerHTML = `
-            <i class="fa-solid ${icon} mt-0.5"></i>
-            <div class="min-w-0">
-                ${title ? `<div class="toast-title">${escapeHtml(title)}</div>` : ''}
-                <div class="toast-message">${escapeHtml(message)}</div>
-            </div>
-        `;
+    const icon = type === 'success'
+        ? 'fa-circle-check'
+        : type === 'error'
+            ? 'fa-triangle-exclamation'
+            : 'fa-circle-info';
 
-        container.appendChild(toast);
+    toast.innerHTML = `
+        <i class="fa-solid ${icon} mt-0.5"></i>
+        <div class="min-w-0">
+            ${title ? `<div class="toast-title">${escapeHtml(title)}</div>` : ''}
+            <div class="toast-message">${escapeHtml(message)}</div>
+        </div>
+    `;
 
+    container.appendChild(toast);
+
+    setTimeout(() => {
+        toast.style.animation = 'toast-out 180ms ease-in forwards';
         setTimeout(() => {
-            toast.style.animation = 'toast-out 180ms ease-in forwards';
-            setTimeout(() => {
-                if (toast.parentNode) toast.parentNode.removeChild(toast);
-            }, 200);
-        }, 2600);
-    }
+            if (toast.parentNode) toast.parentNode.removeChild(toast);
+        }, 200);
+    }, 2600);
+}
 
-    // GLOBAL SAFE ESCAPE (important!)
-    function escapeHtml(str) {
-        return String(str || '')
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#039;');
-    }
-    
-// Events
+function escapeHtml(str) {
+    return String(str || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
 if(btn) btn.onclick = toggleMenu;
 if(userBtn) userBtn.onclick = toggleUser;
 overlay.onclick = () => { closeMenu(); closeUser(); };
@@ -391,7 +364,6 @@ if (userDropdown) {
     userDropdown.addEventListener("click", e => e.stopPropagation());
 }
 
-// --- SMART ACTIVE PILL LOGIC ---
 const links = document.querySelectorAll(".nav-link");
 const pill = document.getElementById("active-pill");
 let activeLink = null;
@@ -419,7 +391,6 @@ links.forEach(l => {
     l.addEventListener("mouseenter", () => movePill(l));
 });
 
-// Returns pill to active page when mouse leaves the navbar
 if(navContainer) {
     navContainer.addEventListener("mouseleave", () => {
         if(activeLink) movePill(activeLink);
