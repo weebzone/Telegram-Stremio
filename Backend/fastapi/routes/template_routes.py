@@ -6,6 +6,7 @@ from Backend.fastapi.themes import get_theme, get_all_themes
 from Backend import db
 from Backend.pyrofork.bot import work_loads, multi_clients, StreamBot
 from Backend.helper.pyro import get_readable_time
+from Backend.helper.settings_manager import SettingsManager
 from Backend import StartTime, __version__
 import time
 from Backend.helper.custom_dl import ACTIVE_STREAMS, RECENT_STREAMS
@@ -280,4 +281,22 @@ async def custom_catalogs_page(request: Request, _: bool = Depends(require_auth)
         "themes": get_all_themes(),
         "current_theme": theme_name,
         "current_user": current_user,
+    })
+
+
+async def settings_page(request: Request, _: bool = Depends(require_auth)):
+    theme_name = request.session.get("theme", "dark_professional")
+    theme = get_theme(theme_name)
+    current_user = get_current_user(request)
+
+    settings = SettingsManager.current().to_dict()
+    settings["admin_password"] = ""
+
+    return templates.TemplateResponse("settings.html", {
+        "request": request,
+        "theme": theme,
+        "themes": get_all_themes(),
+        "current_theme": theme_name,
+        "current_user": current_user,
+        "settings": settings,
     })
