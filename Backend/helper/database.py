@@ -5,7 +5,7 @@ from bson import ObjectId
 import motor.motor_asyncio
 from datetime import datetime, timezone
 from pydantic import ValidationError
-from pymongo import ASCENDING, DESCENDING
+from pymongo import ASCENDING, DESCENDING, ReturnDocument
 from typing import Dict, List, Optional, Tuple, Any
 
 from Backend.logger import LOGGER
@@ -1640,6 +1640,67 @@ class Database:
             return {"summary": {}, "per_client": [], "recent": []}
 
 
+
+    # -------------------------------
+    # Unmatched Media Repair Queue
+    # -------------------------------
+
+    async def upsert_unmatched_media(self, job: dict, reason: str, suggestions: Optional[List[dict]] = None) -> str:
+        """Store a metadata-failed Telegram item for manual repair."""
+        now = datetime.utcnow()
+        source_key = job.get("source_key") or f"{job.get('source_type', 'telegram')}:{job.get('chat_id')}:{job.get('msg_id')}"
+        doc = {
+            "source_key": source_key,
+            "source_type": job.get("source_type", "telegram"),
+            "origin_chat_id": job.get("chat_id"),
+            "origin_msg_id": job.get("msg_id"),
+            "channel": job.get("channel"),
+            "title": job.get("title") or job.get("file_name") or "",
+            "file_name": job.get("file_name") or job.get("title") or "",
+            "size": job.get("size"),
+            "file_size": job.get("file_size"),
+            "override_id": job.get("override_id"),
+            "failure_reason": str(reason or "metadata_failed")[:500],
+            "suggestions": suggestions or [],
+            "status": "open",
+            "updated_at": now,
+        }
+        result = await self.dbs["tracking"]["unmatched_media"].find_one_and_update(
+            {"source_key": source_key},
+            {"$set": doc, "$setOnInsert": {"created_at": now}},
+            upsert=True,
+            return_document=ReturnDocument.AFTER,
+        )
+        return str(result["_id"])
+
+    async def get_unmatched_media(self, unmatched_id: str) -> Optional[dict]:
+        try:
+            doc = await self.dbs["tracking"]["unmatched_media"].find_one({"_id": ObjectId(unmatched_id)})
+            return convert_objectid_to_str(doc) if doc else None
+        except Exception:
+            return None
+
+    async def list_unmatched_media(self, status: str = "open", limit: int = 100) -> List[dict]:
+        query = {} if status == "all" else {"status": status}
+        docs = await self.dbs["tracking"]["unmatched_media"].find(query).sort("updated_at", DESCENDING).limit(limit).to_list(None)
+        return [convert_objectid_to_str(doc) for doc in docs]
+
+    async def update_unmatched_suggestions(self, unmatched_id: str, suggestions: List[dict]) -> bool:
+        result = await self.dbs["tracking"]["unmatched_media"].update_one(
+            {"_id": ObjectId(unmatched_id)},
+            {"$set": {"suggestions": suggestions, "updated_at": datetime.utcnow()}},
+        )
+        return result.modified_count > 0
+
+    async def mark_unmatched_status(self, unmatched_id: str, status: str, extra: Optional[dict] = None) -> bool:
+        update = {"status": status, "updated_at": datetime.utcnow()}
+        if extra:
+            update.update(extra)
+        result = await self.dbs["tracking"]["unmatched_media"].update_one(
+            {"_id": ObjectId(unmatched_id)},
+            {"$set": update},
+        )
+        return result.modified_count > 0
 
     async def replace_media_metadata(
         self,

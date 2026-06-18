@@ -46,6 +46,19 @@ async def file_receive_handler(client: Client, message: Message):
 
                 metadata_info = await metadata(clean_filename(title), int(channel), msg_id)
                 if metadata_info is None:
+                    await db.upsert_unmatched_media(
+                        {
+                            "source_type": "telegram",
+                            "chat_id": int(message.chat.id),
+                            "channel": int(channel),
+                            "msg_id": msg_id,
+                            "title": title,
+                            "file_name": file.file_name,
+                            "size": size,
+                            "file_size": file.file_size,
+                        },
+                        "metadata_failed",
+                    )
                     LOGGER.warning(f"Metadata failed for file: {title} (ID: {msg_id})")
                     return
 
@@ -98,6 +111,20 @@ async def file_edited_handler(client: Client, message: Message):
 
                     metadata_info = await metadata(clean_filename(title), int(channel), msg_id, override_id=override_id)
                     if metadata_info is None:
+                        await db.upsert_unmatched_media(
+                            {
+                                "source_type": "telegram",
+                                "chat_id": int(message.chat.id),
+                                "channel": int(channel),
+                                "msg_id": msg_id,
+                                "title": title,
+                                "file_name": file.file_name,
+                                "size": size,
+                                "file_size": file.file_size,
+                                "override_id": override_id,
+                            },
+                            "metadata_failed",
+                        )
                         LOGGER.warning(f"Metadata failed for edited file: {title} (ID: {msg_id})")
                         return
 

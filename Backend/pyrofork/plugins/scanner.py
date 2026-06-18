@@ -216,6 +216,19 @@ async def _scan_channel(client: Client, chat_id: int):
                 metadata_info = None
 
             if metadata_info is None:
+                await db.upsert_unmatched_media(
+                    {
+                        "source_type": "telegram",
+                        "chat_id": int(chat_id),
+                        "channel": channel_int,
+                        "msg_id": msg_id,
+                        "title": title,
+                        "file_name": getattr(file, "file_name", None),
+                        "size": size,
+                        "file_size": getattr(file, "file_size", None),
+                    },
+                    "metadata_failed",
+                )
                 s.skipped_meta += 1
                 s.processed += 1
                 await _update_progress()
