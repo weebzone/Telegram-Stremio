@@ -4,6 +4,7 @@ from fastapi import Request, Query, HTTPException
 from fastapi.responses import StreamingResponse
 from Backend import db, StartTime, __version__
 from Backend.logger import LOGGER
+from Backend.helper.settings_manager import SettingsManager
 from Backend.helper.pyro import get_readable_time
 from Backend.helper.metadata import (
     search_movie_candidates,
@@ -965,3 +966,68 @@ async def update_auto_catalog_settings_api(payload: dict):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Settings API
+# ─────────────────────────────────────────────────────────────────────────────
+
+async def get_settings_api() -> dict:
+    """Return all runtime settings. The admin password is never sent to the client."""
+    data = SettingsManager.current().to_dict()
+    # Never expose the raw password — let the UI know whether one is set
+    data["admin_password_set"] = bool(data.get("admin_password"))
+    data["admin_password"] = ""
+    return {"settings": data}
+
+
+async def update_settings_api(payload: dict) -> dict:
+
+    # Empty password string → don't change it
+    if "admin_password" in payload and not str(payload["admin_password"]).strip():
+        del payload["admin_password"]
+
+    # ── Type coercion & validation ────────────────────────────────────────────
+    bool_keys = {"replace_mode", "hide_catalog", "subscription", "show_proxy_and_non_proxy_both"}
+    for key in bool_keys:
+        if key in payload:
+            payload[key] = bool(payload[key])
+
+    list_str_keys = {"auth_channels", "multi_tokens"}
+    for key in list_str_keys:
+        if key in payload:
+            if not isinstance(payload[key], list):
+                raise HTTPException(status_code=400, detail=f"'{key}' must be a list.")
+            payload[key] = [str(v).strip() for v in payload[key] if str(v).strip()]
+
+    if "approver_ids" in payload:
+        if not isinstance(payload["approver_ids"], list):
+            raise HTTPException(status_code=400, detail="'approver_ids' must be a list.")
+        try:
+            payload["approver_ids"] = [int(v) for v in payload["approver_ids"] if str(v).strip()]
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=400, detail="All approver_ids must be integers.")
+
+    if "subscription_group_id" in payload:
+        try:
+            payload["subscription_group_id"] = int(payload["subscription_group_id"])
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=400, detail="'subscription_group_id' must be an integer.")
+
+    # Strip whitespace from string fields
+    for key in ("tmdb_api", "base_url", "upstream_repo", "upstream_branch",
+                "admin_username", "admin_password", "http_proxy_url", "subscription_url"):
+        if key in payload and isinstance(payload[key], str):
+            payload[key] = payload[key].strip()
+
+    # ── Persist & reinitialise ────────────────────────────────────────────────
+    try:
+        reinit_results = await SettingsManager.update(db, payload)
+        return {
+            "message": "Settings saved successfully.",
+            "reinit": reinit_results,
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
