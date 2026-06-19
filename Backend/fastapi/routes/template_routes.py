@@ -291,6 +291,10 @@ async def settings_page(request: Request, _: bool = Depends(require_auth)):
 
     settings = SettingsManager.current().to_dict()
     settings["admin_password"] = ""
+    try:
+        settings["database_list"] = db.get_database_list()
+    except Exception:
+        settings["database_list"] = []
 
     return templates.TemplateResponse("settings.html", {
         "request": request,
