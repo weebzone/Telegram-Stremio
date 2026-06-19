@@ -1,9 +1,6 @@
 from __future__ import annotations
 from typing import Any, Dict, List
 from Backend.logger import LOGGER
-from Backend.config import Telegram
-from Backend.pyrofork.bot import StreamBot
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Default values (used when nothing exists in the DB yet)
@@ -30,6 +27,9 @@ _DEFAULTS: Dict[str, Any] = {
 
 
 def _seed_from_env() -> Dict[str, Any]:
+    """Read legacy Telegram config env values. Called only on FIRST startup."""
+    from Backend.config import Telegram  # lazy import — see note at top of file
+
     seed = dict(_DEFAULTS)
     seed.update({
         "replace_mode":                 Telegram.REPLACE_MODE,
@@ -203,6 +203,8 @@ class SettingsManager:
     @classmethod
     async def _reinit_dependent(cls, old: dict, new: dict) -> Dict[str, str]:
         results: Dict[str, str] = {}
+
+        # Multi-tokens changed → hot-reload Pyrogram helper clients
         old_tokens = old.get("multi_tokens") or []
         new_tokens = new.get("multi_tokens") or []
         if old_tokens != new_tokens:
@@ -217,7 +219,11 @@ class SettingsManager:
                 LOGGER.error(f"SettingsManager reinit multi_tokens: {exc}")
                 results["multi_tokens"] = f"error: {exc}"
 
-        results["auth_channels"] = f"{len(new.get('auth_channels') or [])} channel(s) saved"
+        # Auth channels — only report when they actually changed. This was
+        old_channels = old.get("auth_channels") or []
+        new_channels = new.get("auth_channels") or []
+        if old_channels != new_channels:
+            results["auth_channels"] = f"{len(new_channels)} channel(s) saved"
 
         # Proxy settings changed
         proxy_keys = {"http_proxy_url", "show_proxy_and_non_proxy_both"}
@@ -228,6 +234,8 @@ class SettingsManager:
         if old.get("subscription") != new.get("subscription"):
             try:
                 from Backend.helper import subscription_task_manager
+                from Backend.pyrofork.bot import StreamBot
+
                 if new.get("subscription"):
                     await subscription_task_manager.start(StreamBot)
                     results["subscription"] = "checker task started"
