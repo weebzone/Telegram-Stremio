@@ -1,18 +1,20 @@
 from pyrogram import Client, filters
 from pyrogram.types import ChatMemberUpdated
-from Backend.config import Telegram
+from Backend.helper.settings_manager import SettingsManager
 from Backend import db
 from datetime import datetime
 from Backend.logger import LOGGER
 from pyrogram.enums import ChatMemberStatus
 
+config = SettingsManager.current()
+
 @Client.on_chat_member_updated()
 async def on_user_join(client: Client, chat_member_updated: ChatMemberUpdated):
-    if not Telegram.SUBSCRIPTION:
+    if not config.subscription:
         return
 
     # Check if this update is for the subscription group
-    if chat_member_updated.chat.id != Telegram.SUBSCRIPTION_GROUP_ID:
+    if chat_member_updated.chat.id != config.subscription_group_id:
         return
 
     # Check if it's a join event (user was not a member, now is a member)
