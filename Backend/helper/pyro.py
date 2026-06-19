@@ -2,7 +2,7 @@ from pyrogram.file_id import FileId
 from typing import Optional
 from Backend.logger import LOGGER
 from Backend import __version__, now, timezone
-from Backend.config import Telegram
+from Backend.helper.settings_manager import SettingsManager
 from Backend.helper.exceptions import FIleNotFound
 from aiofiles import open as aiopen
 from aiofiles.os import path as aiopath, remove as aioremove
@@ -14,7 +14,7 @@ from pyrogram import enums
 
 
 
-
+config = SettingsManager.current()
 # ---------------------------------------------------------------------------
 # Pre-compiled patterns used in clean_filename
 # ---------------------------------------------------------------------------
@@ -192,7 +192,7 @@ async def restart_notification():
                 chat_id, msg_id = map(int, data)
 
             try:
-                repo = Telegram.UPSTREAM_REPO.split('/')
+                repo = config.upstream_repo.split('/')
                 UPSTREAM_REPO = f"https://github.com/{repo[-2]}/{repo[-1]}"
                 await StreamBot.edit_message_text(
                     chat_id=chat_id,
@@ -203,7 +203,7 @@ async def restart_notification():
                         f"Time: {now.strftime('%I:%M:%S %p')}\n"
                         f"TimeZone: {timezone.zone}\n\n"
                         f"Repo: {UPSTREAM_REPO}\n"
-                        f"Branch: {Telegram.UPSTREAM_BRANCH}\n"
+                        f"Branch: {config.upstream_branch}\n"
                         f"Version: {__version__}"
                     ),
                     parse_mode=enums.ParseMode.HTML
