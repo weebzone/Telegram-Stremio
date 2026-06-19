@@ -198,9 +198,9 @@
         <div class="grid-2">
             <div>
                 <label class="s-label" for="tmdb_api">TMDB API Key</label>
-                <input type="password" id="tmdb_api" class="s-input"
+                <input type="text" id="tmdb_api" class="s-input"
                     value="{{ settings.tmdb_api }}" autocomplete="off"
-                    placeholder="Your TMDB v3 API key">
+                    placeholder="Your TMDB v3 API key" spellcheck="false">
             </div>
             <div>
                 <label class="s-label" for="base_url">Base URL</label>
@@ -345,7 +345,7 @@
             {% for entry in settings.database_list %}
                 {% if not entry.locked %}
                 <div class="multi-item">
-                    <input type="password" class="s-input" value="{{ entry.full_uri }}"
+                    <input type="text" class="s-input" value="{{ entry.full_uri }}" spellcheck="false"
                         data-list="extra_databases" placeholder="mongodb+srv://user:pass@host/...">
                     <span title="{{ 'Connected' if entry.connected else 'Disconnected' }}"
                         style="flex-shrink:0;width:0.6rem;height:0.6rem;border-radius:50%;
@@ -358,7 +358,7 @@
             {% endfor %}
         </div>
         <div class="add-row">
-            <input type="password" id="extra_databases_new" class="s-input"
+            <input type="text" id="extra_databases_new" class="s-input" spellcheck="false"
                 placeholder="mongodb+srv://user:pass@host/..."
                 onkeydown="if(event.key==='Enter'){event.preventDefault();addItem('extra_databases')}">
             <button class="add-btn" onclick="addItem('extra_databases')">+ Add Database</button>
@@ -375,7 +375,7 @@
         <div class="multi-list-items" id="multi_tokens_items">
             {% for tok in settings.multi_tokens %}
             <div class="multi-item">
-                <input type="password" class="s-input" value="{{ tok }}"
+                <input type="text" class="s-input" value="{{ tok }}" spellcheck="false"
                     data-list="multi_tokens" placeholder="Bot token">
                 <button class="remove-btn" onclick="removeItem(this)" title="Remove">
                     <i class="fa-solid fa-xmark"></i>
@@ -384,7 +384,7 @@
             {% endfor %}
         </div>
         <div class="add-row">
-            <input type="password" id="multi_tokens_new" class="s-input"
+            <input type="text" id="multi_tokens_new" class="s-input" spellcheck="false"
                 placeholder="New bot token (1234567890:ABCdef…)"
                 onkeydown="if(event.key==='Enter'){event.preventDefault();addItem('multi_tokens')}">
             <button class="add-btn" onclick="addItem('multi_tokens')">+ Add Token</button>
@@ -430,12 +430,11 @@ function addItem(listKey) {
 
     const container = document.getElementById(listKey + '_items');
     const isNumeric = listKey === 'approver_ids';
-    const isSecret  = listKey === 'multi_tokens';
 
     const item = document.createElement('div');
     item.className = 'multi-item';
     item.innerHTML = `
-        <input type="${isSecret ? 'password' : isNumeric ? 'number' : 'text'}"
+        <input type="${isNumeric ? 'number' : 'text'}"
                class="s-input"
                value="${escapeHtmlAttr(value)}"
                data-list="${listKey}">
@@ -504,6 +503,12 @@ async function saveSettings() {
             for (const [subsystem, msg] of Object.entries(reinit)) {
                 showToast(`${capitalize(subsystem)}: ${msg}`, 'info');
             }
+
+            // Pull the freshly-saved state back from the server and patch
+            // the UI in place — no full page reload needed. This also
+            // picks up server-computed bits the form can't know on its
+            // own (e.g. each database's live connection-status dot).
+            await refreshSettingsFromServer();
         } else {
             showToast(data.detail || 'Save failed', 'error', 'Error');
         }
@@ -528,6 +533,88 @@ function escapeHtmlAttr(str) {
 
 function capitalize(str) {
     return str.charAt(0).toUpperCase() + str.slice(1).replace(/_/g, ' ');
+}
+
+/* ── Post-save refresh, no page reload ──────────────────────────────────── */
+async function refreshSettingsFromServer() {
+    try {
+        const res = await fetch('/api/admin/settings');
+        if (!res.ok) return;
+        const data = await res.json();
+        renderSettings(data.settings || {});
+    } catch (err) {
+        console.error('Failed to refresh settings UI:', err);
+    }
+}
+
+function renderSettings(s) {
+    // Toggles
+    document.getElementById('replace_mode').checked = !!s.replace_mode;
+    document.getElementById('hide_catalog').checked = !!s.hide_catalog;
+    document.getElementById('subscription').checked = !!s.subscription;
+    document.getElementById('show_proxy_and_non_proxy_both').checked = !!s.show_proxy_and_non_proxy_both;
+    toggleSubFields();
+
+    // Plain text/number fields
+    document.getElementById('admin_username').value = s.admin_username || '';
+    document.getElementById('admin_password').value = '';  // never re-fill password
+    document.getElementById('tmdb_api').value = s.tmdb_api || '';
+    document.getElementById('base_url').value = s.base_url || '';
+    document.getElementById('upstream_repo').value = s.upstream_repo || '';
+    document.getElementById('upstream_branch').value = s.upstream_branch || '';
+    document.getElementById('subscription_group_id').value = s.subscription_group_id || 0;
+    document.getElementById('subscription_url').value = s.subscription_url || '';
+    document.getElementById('http_proxy_url').value = s.http_proxy_url || '';
+
+    // Simple multi-value lists
+    rebuildSimpleList('auth_channels_items', s.auth_channels, 'text');
+    rebuildSimpleList('approver_ids_items', s.approver_ids, 'number');
+    rebuildSimpleList('multi_tokens_items', s.multi_tokens, 'text');
+
+    // Databases — needs the live connection-status dot per entry
+    rebuildDatabaseList(s.database_list || []);
+}
+
+function rebuildSimpleList(containerId, values, inputType) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    const listKey = containerId.replace('_items', '');
+
+    container.innerHTML = '';
+    (values || []).forEach(val => {
+        const item = document.createElement('div');
+        item.className = 'multi-item';
+        item.innerHTML = `
+            <input type="${inputType}" class="s-input"
+                   value="${escapeHtmlAttr(val)}" data-list="${listKey}">
+            <button class="remove-btn" onclick="removeItem(this)" title="Remove">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        `;
+        container.appendChild(item);
+    });
+}
+
+function rebuildDatabaseList(dbList) {
+    const container = document.getElementById('extra_databases_items');
+    if (!container) return;
+
+    container.innerHTML = '';
+    dbList.filter(entry => !entry.locked).forEach(entry => {
+        const item = document.createElement('div');
+        item.className = 'multi-item';
+        item.innerHTML = `
+            <input type="text" class="s-input" spellcheck="false"
+                   value="${escapeHtmlAttr(entry.full_uri || '')}" data-list="extra_databases">
+            <span title="${entry.connected ? 'Connected' : 'Disconnected'}"
+                style="flex-shrink:0;width:0.6rem;height:0.6rem;border-radius:50%;
+                       background:${entry.connected ? '#22c55e' : '#ef4444'}"></span>
+            <button class="remove-btn" onclick="removeItem(this)" title="Remove (only safe from the end of the list)">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        `;
+        container.appendChild(item);
+    });
 }
 </script>
 
