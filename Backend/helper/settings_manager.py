@@ -38,6 +38,7 @@ _DEFAULTS: Dict[str, Any] = {
     "http_proxy_url": "",
     "show_proxy_and_non_proxy_both": False,
     "multi_tokens": [],
+    "extra_databases": [],
 }
 
 
@@ -65,7 +66,8 @@ def _seed_from_env() -> Dict[str, Any]:
         "approver_ids":                 list(Telegram.APPROVER_IDS),
         "http_proxy_url":               Telegram.HTTP_PROXY_URL,
         "show_proxy_and_non_proxy_both": Telegram.SHOW_PROXY_AND_NON_PROXY_BOTH,
-        "multi_tokens":                 [],
+        "multi_tokens":                 [],   
+        "extra_databases":              list(Telegram.DATABASE[2:]) if len(Telegram.DATABASE) > 2 else [],
     })
     return seed
 
@@ -156,6 +158,10 @@ class Settings:
     def multi_tokens(self) -> List[str]:
         return list(self._d.get("multi_tokens") or [])
 
+    @property
+    def extra_databases(self) -> List[str]:
+        return list(self._d.get("extra_databases") or [])
+
     # ── Serialisation ─────────────────────────────────────────────────────────
     def to_dict(self) -> Dict[str, Any]:
         return dict(self._d)
@@ -185,6 +191,11 @@ class SettingsManager:
         - First run  → seeds the DB from legacy env values then loads.
         - Later runs → loads existing DB values, merges with defaults for
           any new keys added in a future release.
+
+        NOTE: this does NOT connect extra_databases — call
+        ``await db.reload_extra_databases(SettingsManager.current().extra_databases)``
+        right after this, since on restart `db.db_uris` only contains the two
+        essential databases from config.env.
         """
         raw = await db.get_settings()
         if not raw:
@@ -215,34 +226,51 @@ class SettingsManager:
     @classmethod
     async def update(cls, db, new_values: Dict[str, Any]) -> Dict[str, str]:
         """
-        Merge *new_values* onto existing settings, persist to DB, reload
-        the in-memory snapshot, and reinitialise changed subsystems.
+        Merge *new_values* onto existing settings, reinitialise any affected
+        subsystem FIRST, and only persist to DB once that succeeds.
 
-        Returns a ``{subsystem: status_message}`` dict for the API response.
+        Doing reinit before the write means a bad database URI or other
+        runtime failure aborts the whole save — the stored settings document
+        never describes a state the app couldn't actually reach. Raises
+        whatever exception the failing subsystem raised; callers (the API
+        layer) should catch and turn it into an HTTP error.
         """
         old = cls.current().to_dict()
         merged = dict(old)
         merged.update(new_values)
 
-        await db.save_settings(merged)
-        await cls.reload(db)
-        new = cls.current().to_dict()
+        results = await cls._reinit_changed(old, merged, db)
 
-        return await cls._reinit_changed(old, new)
+        await db.save_settings(merged)
+        cls._current = Settings(merged)
+
+        return results
 
     # ── Internal reinit logic ────────────────────────────────────────────────
     @classmethod
-    async def _reinit_changed(cls, old: dict, new: dict) -> Dict[str, str]:
+    async def _reinit_changed(cls, old: dict, new: dict, db) -> Dict[str, str]:
         results: Dict[str, str] = {}
 
-        # Multi-tokens changed → reinitialise Pyrogram helper clients
-        old_tokens = set(old.get("multi_tokens") or [])
-        new_tokens = set(new.get("multi_tokens") or [])
+        # Extra storage databases changed → connect/disconnect them.
+        # This can raise ValueError (e.g. bad URI, or an unsafe mid-list
+        # edit) — let it propagate so update() aborts before saving.
+        old_extra = old.get("extra_databases") or []
+        new_extra = new.get("extra_databases") or []
+        if old_extra != new_extra:
+            result = await db.reload_extra_databases(new_extra)
+            results["databases"] = result.get("message", "databases reloaded")
+
+        # Multi-tokens changed → hot-reload Pyrogram helper clients
+        old_tokens = old.get("multi_tokens") or []
+        new_tokens = new.get("multi_tokens") or []
         if old_tokens != new_tokens:
             try:
-                from Backend.pyrofork.clients import initialize_clients
-                await initialize_clients()
-                results["multi_tokens"] = "clients reinitialized"
+                from Backend.pyrofork.clients import reload_multi_token_clients
+                result = await reload_multi_token_clients()
+                results["multi_tokens"] = (
+                    f"{result['started']} started, {result['stopped']} stopped "
+                    f"({result['total_clients']} active)"
+                )
             except Exception as exc:
                 LOGGER.error(f"SettingsManager reinit multi_tokens: {exc}")
                 results["multi_tokens"] = f"error: {exc}"
