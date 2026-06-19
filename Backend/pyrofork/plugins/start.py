@@ -1,18 +1,20 @@
 from pyrogram import filters, Client, enums
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from Backend.helper.custom_filter import CustomFilters
+from Backend.helper.settings_manager import SettingsManager
 from Backend.config import Telegram
 from Backend import db
 from datetime import datetime
 
+config = SettingsManager.current()
 @Client.on_message(filters.command('start') & filters.private, group=10)
 async def send_start_message(client: Client, message: Message):
     try:
         user_id = (message.from_user.id if message.from_user else None) or (message.sender_chat.id if message.sender_chat else None) or message.chat.id
-        base_url = Telegram.BASE_URL
+        base_url = config.base_url
         addon_url = f"{base_url}/stremio/manifest.json"
 
-        if not Telegram.SUBSCRIPTION:
+        if not config.subscription:
             if user_id != Telegram.OWNER_ID:
                 return
             user_name = (message.from_user.first_name or message.from_user.username or f"User {user_id}") if message.from_user else f"Chat {user_id}"
