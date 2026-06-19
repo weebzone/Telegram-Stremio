@@ -975,11 +975,18 @@ async def update_auto_catalog_settings_api(payload: dict):
 # ─────────────────────────────────────────────────────────────────────────────
 
 async def get_settings_api() -> dict:
-    """Return all runtime settings. The admin password is never sent to the client."""
+
     data = SettingsManager.current().to_dict()
     # Never expose the raw password — let the UI know whether one is set
     data["admin_password_set"] = bool(data.get("admin_password"))
     data["admin_password"] = ""
+
+    try:
+        data["database_list"] = db.get_database_list()
+    except Exception as e:
+        LOGGER.error(f"get_settings_api: could not load database list: {e}")
+        data["database_list"] = []
+
     return {"settings": data}
 
 
@@ -995,12 +1002,20 @@ async def update_settings_api(payload: dict) -> dict:
         if key in payload:
             payload[key] = bool(payload[key])
 
-    list_str_keys = {"auth_channels", "multi_tokens"}
+    list_str_keys = {"auth_channels", "multi_tokens", "extra_databases"}
     for key in list_str_keys:
         if key in payload:
             if not isinstance(payload[key], list):
                 raise HTTPException(status_code=400, detail=f"'{key}' must be a list.")
             payload[key] = [str(v).strip() for v in payload[key] if str(v).strip()]
+
+    if "extra_databases" in payload:
+        for uri in payload["extra_databases"]:
+            if not uri.startswith(("mongodb://", "mongodb+srv://")):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid database URI (must start with mongodb:// or mongodb+srv://): {uri[:30]}…"
+                )
 
     if "approver_ids" in payload:
         if not isinstance(payload["approver_ids"], list):
@@ -1022,12 +1037,14 @@ async def update_settings_api(payload: dict) -> dict:
         if key in payload and isinstance(payload[key], str):
             payload[key] = payload[key].strip()
 
-    # ── Persist & reinitialise ────────────────────────────────────────────────
     try:
         reinit_results = await SettingsManager.update(db, payload)
         return {
             "message": "Settings saved successfully.",
             "reinit": reinit_results,
         }
+    except ValueError as exc:
+        # Raised by db.reload_extra_databases() for unsafe/invalid DB changes
+        raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
