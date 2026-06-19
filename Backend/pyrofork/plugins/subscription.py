@@ -1,15 +1,18 @@
 from pyrogram import Client, filters
 from pyrogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from Backend.config import Telegram
+from Backend.helper.settings_manager import SettingsManager
 from Backend import db
 from datetime import datetime, timedelta
 import asyncio
 
 from bson.objectid import ObjectId
 
+config = SettingsManager.current()
+
 @Client.on_callback_query(filters.regex(r"^plan_([a-fA-F0-9]{24})$"))
 async def plan_selection(client: Client, callback_query: CallbackQuery):
-    if not Telegram.SUBSCRIPTION:
+    if not config.subscription:
         return await callback_query.answer("Subscriptions are not enabled.", show_alert=True)
         
     plan_id = callback_query.matches[0].group(1)
@@ -85,7 +88,7 @@ async def plan_selection(client: Client, callback_query: CallbackQuery):
 
 @Client.on_message(filters.photo & filters.private)
 async def handle_payment_screenshot(client: Client, message: Message):
-    if not Telegram.SUBSCRIPTION:
+    if not config.subscription:
         return
     
     # Safely resolve sender ID
@@ -134,7 +137,7 @@ async def handle_payment_screenshot(client: Client, message: Message):
             f"Please review the screenshot above and approve or reject."
         )
 
-        approver_ids = Telegram.APPROVER_IDS if Telegram.APPROVER_IDS else [Telegram.OWNER_ID]
+        approver_ids = config.approver_ids if config.approver_ids else [Telegram.OWNER_ID]
         admin_messages = []
         for approver_id in approver_ids:
             try:
@@ -171,7 +174,7 @@ async def handle_payment_screenshot(client: Client, message: Message):
 
 @Client.on_callback_query(filters.regex(r"^(approve|reject)_(\d+)$"))
 async def admin_review(client: Client, callback_query: CallbackQuery):
-    approver_ids = Telegram.APPROVER_IDS if Telegram.APPROVER_IDS else [Telegram.OWNER_ID]
+    approver_ids = config.approver_ids if config.approver_ids else [Telegram.OWNER_ID]
     if callback_query.from_user.id not in approver_ids:
         return await callback_query.answer("You are not authorized to perform this action.", show_alert=True)
 
@@ -196,7 +199,7 @@ async def admin_review(client: Client, callback_query: CallbackQuery):
                 user_name = (user_obj.get("first_name") or user_obj.get("username") or str(target_user_id)) if user_obj else str(target_user_id)
                 token_doc = await db.add_api_token(name=user_name, user_id=target_user_id)
                 token_str = token_doc.get("token")
-                addon_url = f"{Telegram.BASE_URL}/stremio/{token_str}/manifest.json"
+                addon_url = f"{config.base_url}/stremio/{token_str}/manifest.json"
             except Exception as te:
                 token_str = None
                 addon_url = None
@@ -204,7 +207,7 @@ async def admin_review(client: Client, callback_query: CallbackQuery):
             # Generate invite link for the group
             try:
                 invite_link = await client.create_chat_invite_link(
-                    chat_id=Telegram.SUBSCRIPTION_GROUP_ID,
+                    chat_id=config.subscription_group_id,
                     member_limit=1,
                     expire_date=datetime.utcnow() + timedelta(days=1)
                 )
@@ -318,7 +321,7 @@ async def admin_review(client: Client, callback_query: CallbackQuery):
 
 @Client.on_message(filters.command("status"))
 async def check_status(client: Client, message: Message):
-    if not Telegram.SUBSCRIPTION:
+    if not config.subscription:
         return
         
     user_id = (message.from_user.id if message.from_user else None) or (message.sender_chat.id if message.sender_chat else None) or message.chat.id
