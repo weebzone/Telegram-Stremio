@@ -6,8 +6,6 @@ Commands (owner-only, private chat):
     /search <title>         — Search your DB for a movie or show
     /dbcheck                — Find orphaned stream entries (dead Telegram messages)
     /dbcheck purge          — Find and delete orphaned entries
-    /exportchannels         — Export AUTH_CHANNEL list as JSON
-    /importchannels <json>  — Import channels from JSON
 """
 
 import asyncio
@@ -21,10 +19,10 @@ from pymongo.errors import CursorNotFound
 from Backend.helper.custom_filter import CustomFilters
 from Backend.logger import LOGGER
 from Backend import db, StartTime, __version__
-from Backend.config import Telegram
+from Backend.helper.settings_manager import SettingsManager
 from Backend.helper.encrypt import decode_string
 
-
+config = SettingsManager.current()
 CONCURRENT_TASKS = 10
 BATCH_SIZE = 100
 PROGRESS_UPDATE_EVERY = 50
@@ -102,7 +100,7 @@ async def stats_command(client: Client, message: Message):
                 pass
 
         uptime_sec = int(time.time() - StartTime)
-        channels_count = len(Telegram.AUTH_CHANNEL)
+        channels_count = len(config.auth_channels)
 
         text = (
             f"<blockquote>📊 <b>Telegram-Stremio v{__version__}</b></blockquote>\n\n"
@@ -428,104 +426,3 @@ async def dbcheck_command(client: Client, message: Message):
     except Exception as e:
         LOGGER.error(f"[DBCheck] Error: {e}")
         await status_msg.edit_text(f"❌ DB check failed: {e}")
-
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  /exportchannels & /importchannels — Backup/restore channel config
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-@Client.on_message(filters.command('exportchannels') & filters.private & CustomFilters.owner, group=10)
-async def export_channels(client: Client, message: Message):
-    """Export current AUTH_CHANNEL list as a copyable JSON block."""
-    channels_data = []
-    for ch_id in Telegram.AUTH_CHANNEL:
-        entry = {"id": ch_id}
-        try:
-            chat = await client.get_chat(int(ch_id))
-            entry["name"] = getattr(chat, "title", "")
-            entry["members"] = getattr(chat, "members_count", 0)
-        except Exception:
-            entry["name"] = "[inaccessible]"
-        channels_data.append(entry)
-
-    export = {
-        "version": __version__,
-        "exported_at": time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime()),
-        "channels": channels_data,
-    }
-
-    json_str = json.dumps(export, indent=2, ensure_ascii=False)
-
-    await message.reply_text(
-        f"<blockquote>📤 <b>Channel Export</b></blockquote>\n\n"
-        f"<pre>{json_str}</pre>\n\n"
-        f"<i>Use /importchannels to restore this on another instance.</i>",
-        quote=True,
-        parse_mode=enums.ParseMode.HTML,
-    )
-
-
-@Client.on_message(filters.command('importchannels') & filters.private & CustomFilters.owner, group=10)
-async def import_channels(client: Client, message: Message):
-    """Import channels from a JSON export block."""
-    args = message.text.split(maxsplit=1)
-    if len(args) < 2:
-        await message.reply_text(
-            "Usage: /importchannels <code>&lt;json&gt;</code>\n\n"
-            "Paste the JSON output from /exportchannels after the command.",
-            quote=True,
-            parse_mode=enums.ParseMode.HTML,
-        )
-        return
-
-    raw = args[1].strip()
-    try:
-        data = json.loads(raw)
-    except json.JSONDecodeError as e:
-        await message.reply_text(
-            f"❌ Invalid JSON: <code>{e}</code>",
-            quote=True,
-            parse_mode=enums.ParseMode.HTML,
-        )
-        return
-
-    channels = data.get("channels", [])
-    if not channels:
-        await message.reply_text("❌ No channels found in the JSON.", quote=True)
-        return
-
-    added = 0
-    skipped = 0
-    failed = 0
-
-    for entry in channels:
-        ch_id = str(entry.get("id", "")).strip()
-        if not ch_id:
-            continue
-
-        if ch_id in Telegram.AUTH_CHANNEL:
-            skipped += 1
-            continue
-
-        # Validate access
-        try:
-            await client.get_chat(int(ch_id))
-            Telegram.AUTH_CHANNEL.append(ch_id)
-            added += 1
-        except Exception:
-            failed += 1
-
-    # Persist
-    if added > 0:
-        from Backend.pyrofork.plugins.channels import _save_channels_to_db
-        await _save_channels_to_db()
-
-    await message.reply_text(
-        f"<blockquote>📥 <b>Channel Import Complete</b></blockquote>\n\n"
-        f"✅ Added: <code>{added}</code>\n"
-        f"⏭ Skipped (already exists): <code>{skipped}</code>\n"
-        f"❌ Failed (no access): <code>{failed}</code>\n\n"
-        f"Total AUTH_CHANNELs: <code>{len(Telegram.AUTH_CHANNEL)}</code>",
-        quote=True,
-        parse_mode=enums.ParseMode.HTML,
-    )
