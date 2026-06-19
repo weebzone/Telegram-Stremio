@@ -2,7 +2,6 @@ from __future__ import annotations
 from typing import Any, Dict, List
 from Backend.logger import LOGGER
 from Backend.config import Telegram
-from Backend.helper import subscription_task_manager
 from Backend.pyrofork.bot import StreamBot
 
 
@@ -228,6 +227,7 @@ class SettingsManager:
         # Subscription ENABLED/DISABLED toggle → actually start/stop the
         if old.get("subscription") != new.get("subscription"):
             try:
+                from Backend.helper import subscription_task_manager
                 if new.get("subscription"):
                     await subscription_task_manager.start(StreamBot)
                     results["subscription"] = "checker task started"
