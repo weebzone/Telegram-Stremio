@@ -10,16 +10,15 @@ from Backend.logger import LOGGER
 # -----------------------------
 # Auto catalog settings
 # -----------------------------
-AUTO_CATALOG_REGION = getattr(Telegram, "AUTO_CATALOG_REGION", "IN")
-AUTO_CATALOG_ON_STARTUP = getattr(Telegram, "AUTO_CATALOG_ON_STARTUP", True)
-AUTO_CATALOG_FULL_REBUILD_ON_STARTUP = getattr(Telegram, "AUTO_CATALOG_FULL_REBUILD_ON_STARTUP", False)
-AUTO_SYNC_DELAY_SECONDS = getattr(Telegram, "AUTO_SYNC_DELAY_SECONDS", 20)
-AUTO_SYNC_CONCURRENCY = getattr(Telegram, "AUTO_SYNC_CONCURRENCY", 5)
+AUTO_CATALOG_REGION = "IN"
+AUTO_CATALOG_FULL_REBUILD_ON_STARTUP = False
+AUTO_SYNC_DELAY_SECONDS = 20
+AUTO_SYNC_CONCURRENCY = 5
 
 # Hourly quick sync. It only starts after the admin has saved at least one
 # auto-catalog option from /catalogs, so first boot stays clean.
-AUTO_CATALOG_INTERVAL_SYNC = getattr(Telegram, "AUTO_CATALOG_INTERVAL_SYNC", True)
-AUTO_CATALOG_SYNC_INTERVAL_MINUTES = int(getattr(Telegram, "AUTO_CATALOG_SYNC_INTERVAL_MINUTES", 60))
+AUTO_CATALOG_INTERVAL_SYNC = True
+AUTO_CATALOG_SYNC_INTERVAL_MINUTES = 60
 
 # User can choose exactly which auto catalogs are enabled.
 AUTO_CATALOG_DEFINITIONS = [
