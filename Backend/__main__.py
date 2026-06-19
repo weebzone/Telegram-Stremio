@@ -15,9 +15,7 @@ from Backend.helper import subscription_task_manager
 from Backend.helper.link_checker import DeadLinkChecker
 from Backend.fastapi.main import app
 from Backend.helper.auto_catalog import (
-    start_auto_catalog_sync_background, start_auto_catalog_interval_loop,
-    AUTO_SYNC_DELAY_SECONDS, AUTO_CATALOG_ON_STARTUP,
-    AUTO_CATALOG_FULL_REBUILD_ON_STARTUP
+    start_auto_catalog_sync_background, start_auto_catalog_interval_loop
 )
 
 
@@ -65,12 +63,8 @@ async def start_services():
         link_checker_task = DeadLinkChecker(db, app, check_interval_hours=24)
         loop.create_task(link_checker_task.start())
 
-        if AUTO_CATALOG_ON_STARTUP:
-            loop.create_task(start_auto_catalog_sync_background(
-                db,
-                delay_seconds=AUTO_SYNC_DELAY_SECONDS,
-                full_rebuild=AUTO_CATALOG_FULL_REBUILD_ON_STARTUP,
-            ))
+        
+        loop.create_task(start_auto_catalog_sync_background(db, delay_seconds=20, full_rebuild=False))
 
         loop.create_task(start_auto_catalog_interval_loop(db))
 
