@@ -11,7 +11,7 @@ from Backend.helper.settings_manager import SettingsManager
 from Backend.helper.pyro import restart_notification, setup_bot_commands
 from Backend.pyrofork.bot import Helper, StreamBot
 from Backend.pyrofork.clients import initialize_clients
-from Backend.helper.subscription_checker import subscription_checker_loop
+from Backend.helper import subscription_task_manager
 from Backend.helper.link_checker import DeadLinkChecker
 from Backend.fastapi.main import app
 from Backend.helper.auto_catalog import (
@@ -74,11 +74,7 @@ async def start_services():
 
         loop.create_task(start_auto_catalog_interval_loop(db))
 
-
-        config = SettingsManager.current()
-        if config.subscription:
-            loop.create_task(subscription_checker_loop(StreamBot))
-            LOGGER.info("Subscription Checker Task Started.")
+        await subscription_task_manager.sync(StreamBot)
         
         LOGGER.info("Telegram-Stremio Started Successfully!")
         await idle()
