@@ -6,15 +6,15 @@ from datetime import datetime
 from Backend.logger import LOGGER
 from pyrogram.enums import ChatMemberStatus
 
-config = SettingsManager.current()
+
 
 @Client.on_chat_member_updated()
 async def on_user_join(client: Client, chat_member_updated: ChatMemberUpdated):
-    if not config.subscription:
+    if not SettingsManager.current().subscription:
         return
 
     # Check if this update is for the subscription group
-    if chat_member_updated.chat.id != config.subscription_group_id:
+    if chat_member_updated.chat.id != SettingsManager.current().subscription_group_id:
         return
 
     # Check if it's a join event (user was not a member, now is a member)

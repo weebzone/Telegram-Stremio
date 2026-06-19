@@ -14,9 +14,9 @@ from Backend.logger import LOGGER
 from Backend.helper.encrypt import encode_string
 
 # ----------------- Configuration -----------------
-config = SettingsManager.current()
+
 DELAY = 0
-tmdb = aioTMDb(key=config.tmdb_api, language="en-US", region="US")
+tmdb = aioTMDb(key=SettingsManager.current().tmdb_api, language="en-US", region="US")
 
 # Cache dictionaries (per run)
 IMDB_CACHE: dict = {}

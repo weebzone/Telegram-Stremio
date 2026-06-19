@@ -25,7 +25,7 @@ from Backend.helper.auto_catalog import (
 
 from Backend.helper.settings_manager import SettingsManager
 
-config = SettingsManager.current()
+
 
 
 # --- API Routes for System Stats ---
@@ -600,7 +600,7 @@ async def get_all_tokens_api() -> dict:
 
         # Pre-load all subscribers into a dict keyed by user_id for O(1) lookup
         subscriber_map = {}       # user_id (str) -> user doc
-        if config.subscription:
+        if SettingsManager.current().subscription:
             try:
                 for u in await db.get_all_subscribers():
                     uid = str(u.get("_id"))
@@ -620,7 +620,7 @@ async def get_all_tokens_api() -> dict:
             return f"User {user_id}" if user_id else "Telegram User"
 
         def build_entry(user_id, user, token_doc):
-            """Build a unified access entry from optional user + token records."""
+            """ a unified access entry from optional user + token records."""
             expiry = None
             sub_status = None
             user_found = bool(user)
@@ -636,7 +636,7 @@ async def get_all_tokens_api() -> dict:
                     expiry = t_expiry
 
             # Determine status
-            if config.subscription:
+            if SettingsManager.current().subscription:
                 if not user_found:
                     is_expired = True
                 elif sub_status != "active":
@@ -662,7 +662,7 @@ async def get_all_tokens_api() -> dict:
                 "is_expired": is_expired,
                 "sub_status": sub_status,
                 "addon_url": (
-                    f"{config.base_url}/stremio/{token_str}/manifest.json"
+                    f"{SettingsManager.current().base_url}/stremio/{token_str}/manifest.json"
                     if token_str else None
                 ),
             }

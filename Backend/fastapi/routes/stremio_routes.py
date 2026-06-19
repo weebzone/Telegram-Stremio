@@ -12,8 +12,8 @@ from Backend.fastapi.security.tokens import verify_token
 router = APIRouter(prefix="/stremio", tags=["Stremio Addon"])
 
 # --- Configuration ---
-config = SettingsManager.current()
-BASE_URL = config.base_url
+
+BASE_URL = SettingsManager.current().base_url
 ADDON_NAME = "Telegram"
 ADDON_VERSION = __version__
 PAGE_SIZE = 15
@@ -110,7 +110,7 @@ def get_resolution_priority(stream_name: str) -> int:
 
 @router.get("/{token}/manifest.json")
 async def get_manifest(token: str, token_data: dict = Depends(verify_token)):
-    if config.hide_catalog:
+    if SettingsManager.current().hide_catalog:
         resources = ["stream"]
         catalogs = []
     else:
@@ -188,7 +188,7 @@ async def get_manifest(token: str, token_data: dict = Depends(verify_token)):
     addon_version = ADDON_VERSION
     expiry_obj = None
 
-    if config.subscription:
+    if SettingsManager.current().subscription:
         user_id = token_data.get("user_id")
         if user_id:
             try:
@@ -210,7 +210,7 @@ async def get_manifest(token: str, token_data: dict = Depends(verify_token)):
             except Exception:
                 pass
 
-    configure_url = f"{config.base_url}/stremio/{token}/configure"
+    configure_url = f"{SettingsManager.current().base_url}/stremio/{token}/configure"
 
     return {
         "id": f"telegram.media.{token[:8]}",
@@ -231,7 +231,7 @@ async def get_manifest(token: str, token_data: dict = Depends(verify_token)):
                 "key": "manifest_url",
                 "title": "Your Addon URL (copy to reinstall)",
                 "type": "text",
-                "default": f"{config.base_url}/stremio/{token}/manifest.json"
+                "default": f"{SettingsManager.current().base_url}/stremio/{token}/manifest.json"
             }
         ]
     }
@@ -240,7 +240,7 @@ async def get_manifest(token: str, token_data: dict = Depends(verify_token)):
 @router.get("/{token}/catalog/{media_type}/{id}/{extra:path}.json")
 @router.get("/{token}/catalog/{media_type}/{id}.json")
 async def get_catalog(token: str, media_type: str, id: str, extra: Optional[str] = None, token_data: dict = Depends(verify_token)):
-    if config.hide_catalog:
+    if SettingsManager.current().hide_catalog:
         raise HTTPException(status_code=404, detail="Catalog disabled")
 
     if media_type not in ["movie", "series"]:
@@ -308,7 +308,7 @@ async def get_catalog(token: str, media_type: str, id: str, extra: Optional[str]
 
 @router.get("/{token}/meta/{media_type}/{id}.json")
 async def get_meta(token: str, media_type: str, id: str, token_data: dict = Depends(verify_token)):
-    if config.hide_catalog:
+    if SettingsManager.current().hide_catalog:
         raise HTTPException(status_code=404, detail="Catalog disabled")
     try:
         imdb_id = id
@@ -430,9 +430,9 @@ async def get_streams(
             )
 
             original_url = f"{BASE_URL}/dl/{token}/{quality.get('id')}/video.mkv"
-            proxy_url = f"{config.http_proxy_url}{original_url}" if config.http_proxy_url else None
+            proxy_url = f"{SettingsManager.current().subscription_url}{original_url}" if SettingsManager.current().subscription_url else None
 
-            if config.show_proxy_and_non_proxy_both and proxy_url:
+            if SettingsManager.current().show_proxy_and_non_proxy_both and proxy_url:
                 streams.append({
                     "name": f"{stream_name} (Proxy)",
                     "title": stream_title,
@@ -473,7 +473,7 @@ async def get_streams(
 
 @router.get("/{token}/configure")
 async def configure_addon(token: str):
-    manifest_url = f"{config.base_url}/stremio/{token}/manifest.json"
+    manifest_url = f"{SettingsManager.current().base_url}/stremio/{token}/manifest.json"
     web_install_url = f"https://web.stremio.com/#/?addon_manifest={quote(manifest_url, safe='')}"
 
     # Fetch user info for display

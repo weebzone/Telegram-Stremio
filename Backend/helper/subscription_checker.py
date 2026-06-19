@@ -7,11 +7,11 @@ from Backend.logger import LOGGER
 
 
 
-config = SettingsManager.current()
+
 async def subscription_checker_loop(bot: Client):
     while True:
         try:
-            if not config.subscription:
+            if not SettingsManager.current().subscription:
                 await asyncio.sleep(60)
                 continue
 
@@ -24,8 +24,8 @@ async def subscription_checker_loop(bot: Client):
                 try:
 
                     # Ban then unban to kick the user without permanently banning them
-                    await bot.ban_chat_member(config.subscription_group_id, user_id)
-                    await bot.unban_chat_member(config.subscription_group_id, user_id)
+                    await bot.ban_chat_member(SettingsManager.current().subscription_group_id, user_id)
+                    await bot.unban_chat_member(SettingsManager.current().subscription_group_id, user_id)
 
                     await db.mark_user_expired(user_id)
 

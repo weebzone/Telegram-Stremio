@@ -14,7 +14,7 @@ from pyrogram import enums
 
 
 
-config = SettingsManager.current()
+
 # ---------------------------------------------------------------------------
 # Pre-compiled patterns used in clean_filename
 # ---------------------------------------------------------------------------
@@ -192,7 +192,7 @@ async def restart_notification():
                 chat_id, msg_id = map(int, data)
 
             try:
-                repo = config.upstream_repo.split('/')
+                repo = SettingsManager.current().upstream_repo.split('/')
                 UPSTREAM_REPO = f"https://github.com/{repo[-2]}/{repo[-1]}"
                 await StreamBot.edit_message_text(
                     chat_id=chat_id,
@@ -203,7 +203,7 @@ async def restart_notification():
                         f"Time: {now.strftime('%I:%M:%S %p')}\n"
                         f"TimeZone: {timezone.zone}\n\n"
                         f"Repo: {UPSTREAM_REPO}\n"
-                        f"Branch: {config.upstream_branch}\n"
+                        f"Branch: {SettingsManager.current().upstream_branch}\n"
                         f"Version: {__version__}"
                     ),
                     parse_mode=enums.ParseMode.HTML

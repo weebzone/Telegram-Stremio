@@ -22,7 +22,7 @@ from Backend import db, StartTime, __version__
 from Backend.helper.settings_manager import SettingsManager
 from Backend.helper.encrypt import decode_string
 
-config = SettingsManager.current()
+
 CONCURRENT_TASKS = 10
 BATCH_SIZE = 100
 PROGRESS_UPDATE_EVERY = 50
@@ -100,7 +100,7 @@ async def stats_command(client: Client, message: Message):
                 pass
 
         uptime_sec = int(time.time() - StartTime)
-        channels_count = len(config.auth_channels)
+        channels_count = len(SettingsManager.current().auth_channels)
 
         text = (
             f"<blockquote>📊 <b>Telegram-Stremio v{__version__}</b></blockquote>\n\n"

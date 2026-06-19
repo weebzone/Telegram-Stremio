@@ -23,7 +23,7 @@ from Backend.helper.pyro import clean_filename, get_readable_file_size, remove_u
 from Backend.helper.metadata import metadata
 from Backend.helper.encrypt import encode_string
 
-config = SettingsManager.current()
+
 # ── Scan state (singleton — only one scan at a time) ────────────────────
 class _ScanState:
     def __init__(self):
@@ -278,7 +278,7 @@ async def scan_command(client: Client, message: Message):
     if len(args) > 1:
         target_channels = [args[1].strip()]
     else:
-        target_channels = list(config.auth_channels)
+        target_channels = list(SettingsManager.current().auth_channels)
 
     if not target_channels:
         await message.reply_text("❌ No AUTH_CHANNELs configured.", quote=True)
@@ -361,7 +361,7 @@ async def rescan_command(client: Client, message: Message):
         )
         return
 
-    channels = list(config.auth_channels)
+    channels = list(SettingsManager.current().auth_channels)
     if not channels:
         await message.reply_text("❌ No AUTH_CHANNELs configured.", quote=True)
         return

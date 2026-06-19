@@ -14,7 +14,7 @@ from Backend.helper.encrypt import encode_string
 from Backend.helper.encrypt import encode_string
 from Backend.helper.metadata import extract_default_id
 
-config = SettingsManager.current()
+
 
 file_queue = Queue()
 db_lock = Lock()
@@ -36,7 +36,7 @@ for _ in range(1):
 
 @Client.on_message(filters.channel & (filters.document | filters.video))
 async def file_receive_handler(client: Client, message: Message):
-    if str(message.chat.id) in config.auth_channels:
+    if str(message.chat.id) in SettingsManager.current().auth_channels:
         try:
             if message.video or (message.document and message.document.mime_type.startswith("video/")):
                 file = message.video or message.document
@@ -79,7 +79,7 @@ async def file_receive_handler(client: Client, message: Message):
 
 @Client.on_edited_message(filters.channel & (filters.document | filters.video))
 async def file_edited_handler(client: Client, message: Message):
-    if str(message.chat.id) in config.auth_channels:
+    if str(message.chat.id) in SettingsManager.current().auth_channels:
         try:
             if message.video or (message.document and message.document.mime_type.startswith("video/")):
                 file = message.video or message.document
@@ -117,7 +117,7 @@ async def file_deleted_handler(client: Client, messages: list[Message]):
     try:
         
         for message in messages:
-            if message.chat and str(message.chat.id) in config.auth_channels:
+            if message.chat and str(message.chat.id) in SettingsManager.current().auth_channels:
                 channel = str(message.chat.id).replace("-100", "")
                 msg_id = message.id
                 

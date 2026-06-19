@@ -16,7 +16,7 @@ from Backend.helper.encrypt import decode_string
 from Backend.helper.modal import Episode, MovieSchema, QualityDetail, Season, TVShowSchema
 from Backend.helper.task_manager import delete_message
 
-config = SettingsManager.current()
+
 
 def convert_objectid_to_str(document: Dict[str, Any]) -> Dict[str, Any]:
     for key, value in document.items():
@@ -814,7 +814,7 @@ class Database:
         movie_id = existing_movie["_id"]
         existing_qualities = existing_movie.get("telegram", [])
 
-        if config.replace_mode:
+        if SettingsManager.current().replace_mode:
             to_delete = [q for q in existing_qualities if q.get("quality") == target_quality]
 
             for q in to_delete:
@@ -938,7 +938,7 @@ class Database:
                 for quality in episode["telegram"]:
                     target_quality = quality.get("quality")
 
-                    if config.replace_mode:
+                    if SettingsManager.current().replace_mode:
                         to_delete = [
                             q for q in existing_episode["telegram"]
                             if q.get("quality") == target_quality
