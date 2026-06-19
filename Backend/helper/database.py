@@ -106,6 +106,113 @@ class Database:
             return False
 
 
+
+    async def connect_storage_db(self, uri: str, index: int) -> bool:
+        """Connect and register a single database at `index`. Verifies the
+        connection actually works (via a ping) before registering it, so a
+        bad URI never leaves stale half-registered state behind."""
+        try:
+            client = motor.motor_asyncio.AsyncIOMotorClient(uri)
+            await client.admin.command("ping")
+
+            db_key = "tracking" if index == 0 else f"storage_{index}"
+            self.clients[db_key] = client
+            self.dbs[db_key] = client[self.db_name]
+
+            db_type = "Tracking" if index == 0 else f"Storage {index}"
+            masked_uri = re.sub(r"://(.*?):.*?@", r"://\1:*****@", uri).split('?')[0]
+            LOGGER.info(f"{db_type} Database connected successfully: {masked_uri}")
+            return True
+        except Exception as e:
+            LOGGER.error(f"Failed to connect database at index {index}: {e}")
+            return False
+
+    async def disconnect_storage_db(self, index: int) -> None:
+        """Close and unregister the storage database at `index`. Never call
+        this with index 0 or 1 — those are the locked essential databases."""
+        db_key = f"storage_{index}"
+        client = self.clients.pop(db_key, None)
+        self.dbs.pop(db_key, None)
+        if client:
+            client.close()
+            LOGGER.info(f"Disconnected {db_key}.")
+
+    def get_database_list(self) -> List[Dict[str, Any]]:
+        """
+        Return every configured database for the admin Settings page.
+
+        Locked entries (tracking + storage_1) only expose a masked URI since
+        they're never editable. Unlocked "extra" entries also include the
+        full, unmasked URI (`full_uri`) so the admin can actually edit it in
+        the Settings panel — they're already authenticated, so this is safe.
+        """
+        result = []
+        for index, uri in enumerate(self.db_uris):
+            masked = re.sub(r"://(.*?):.*?@", r"://\1:*****@", uri).split('?')[0]
+            db_key = "tracking" if index == 0 else f"storage_{index}"
+            entry = {
+                "index": index,
+                "uri_masked": masked,
+                "locked": index <= 1,
+                "type": "tracking" if index == 0 else "storage",
+                "connected": db_key in self.clients,
+            }
+            if index > 1:
+                entry["full_uri"] = uri
+            result.append(entry)
+        return result
+
+    async def reload_extra_databases(self, new_extra_uris: List[str]) -> Dict[str, Any]:
+        """
+        Hot-reload additional storage databases (index >= 2) without touching
+        the locked tracking (0) and storage_1 (1) databases.
+
+        Raises ValueError (caught by SettingsManager / the API layer and
+        reported to the admin) if the requested change would alter or remove
+        a database that isn't at the end of the list, or if a new database
+        URI fails to connect.
+        """
+        old_extra = self.db_uris[2:]
+        new_extra = [u.strip() for u in (new_extra_uris or []) if u and u.strip()]
+
+        common_len = min(len(old_extra), len(new_extra))
+        for i in range(common_len):
+            if old_extra[i] != new_extra[i]:
+                raise ValueError(
+                    f"Cannot modify storage_{i + 2} in place — existing media "
+                    f"documents reference it by position. Only appending new "
+                    f"databases or removing the last one(s) is supported."
+                )
+
+        added = 0
+        removed = 0
+
+        if len(new_extra) > len(old_extra):
+            for offset, uri in enumerate(new_extra[len(old_extra):]):
+                index = len(old_extra) + 2 + offset
+                ok = await self.connect_storage_db(uri, index)
+                if not ok:
+                    raise ValueError(
+                        f"Failed to connect new database at storage_{index}. "
+                        f"Check the URI and try again — no changes were saved."
+                    )
+                added += 1
+
+        elif len(new_extra) < len(old_extra):
+            for index in range(len(old_extra) + 1, len(new_extra) + 1, -1):
+                await self.disconnect_storage_db(index)
+                removed += 1
+
+        self.db_uris = self.db_uris[:2] + new_extra
+
+        message = f"{added} database(s) added, {removed} database(s) removed."
+        LOGGER.info(f"reload_extra_databases: {message}")
+        return {"added": added, "removed": removed, "message": message}
+
+
+
+
+
     # -------------------------------
     # User Subscription Management
     # -------------------------------
