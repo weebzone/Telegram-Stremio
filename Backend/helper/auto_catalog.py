@@ -11,8 +11,6 @@ from Backend.logger import LOGGER
 # Auto catalog settings
 # -----------------------------
 AUTO_CATALOG_REGION = "IN"
-AUTO_CATALOG_FULL_REBUILD_ON_STARTUP = False
-AUTO_SYNC_DELAY_SECONDS = 20
 AUTO_SYNC_CONCURRENCY = 5
 
 # Hourly quick sync. It only starts after the admin has saved at least one
