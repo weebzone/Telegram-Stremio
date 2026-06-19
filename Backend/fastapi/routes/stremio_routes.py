@@ -376,7 +376,7 @@ async def get_streams(
                 {
                     "name": "🚫 Subscription Expired",
                     "title": "Your subscription has expired.\nRenew via the bot to continue watching.",
-                    "url": config.subscription_url
+                    "url": SettingsManager.current().subscription_url
                 }
             ]
         }
@@ -430,7 +430,7 @@ async def get_streams(
             )
 
             original_url = f"{BASE_URL}/dl/{token}/{quality.get('id')}/video.mkv"
-            proxy_url = f"{SettingsManager.current().subscription_url}{original_url}" if SettingsManager.current().subscription_url else None
+            proxy_url = f"{SettingsManager.current().http_proxy_url}{original_url}" if SettingsManager.current().http_proxy_url else None
 
             if SettingsManager.current().show_proxy_and_non_proxy_both and proxy_url:
                 streams.append({
