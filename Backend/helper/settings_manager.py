@@ -14,8 +14,8 @@ _DEFAULTS: Dict[str, Any] = {
     "auth_channels": [],
     "tmdb_api": "",
     "base_url": "",
-    "upstream_repo": "https://github.com/weebzone/Telegram-Stremio",
-    "upstream_branch": "dev",
+    "upstream_repo": "",
+    "upstream_branch": "",
     "admin_username": "admin",
     "admin_password": "admin",
     "subscription": False,
@@ -34,7 +34,7 @@ def _seed_from_env() -> Dict[str, Any]:
     Read legacy Telegram config env values and return them as a settings dict.
     Called only on FIRST startup to migrate existing config.env values into DB.
     """
-    from Backend.config import Telegram
+    from Backend.config import Telegram  # lazy import to avoid circular deps
 
     seed = dict(_DEFAULTS)
     seed.update({
@@ -53,7 +53,7 @@ def _seed_from_env() -> Dict[str, Any]:
         "approver_ids":                 list(Telegram.APPROVER_IDS),
         "http_proxy_url":               Telegram.HTTP_PROXY_URL,
         "show_proxy_and_non_proxy_both": Telegram.SHOW_PROXY_AND_NON_PROXY_BOTH,
-        "multi_tokens":                 [],
+        "multi_tokens":                 [], 
         "extra_databases":              list(Telegram.DATABASE[2:]) if len(Telegram.DATABASE) > 2 else [],
     })
     return seed
@@ -288,16 +288,9 @@ class SettingsManager:
             except Exception as exc:
                 LOGGER.error(f"SettingsManager reinit multi_tokens: {exc}")
                 results["multi_tokens"] = f"error: {exc}"
-
-        # Auth channels changed → reload channel cache
+                
         if (old.get("auth_channels") or []) != (new.get("auth_channels") or []):
-            try:
-                from Backend.pyrofork.plugins.channels import _load_channels_from_db
-                await _load_channels_from_db()
-                results["auth_channels"] = "channel cache reloaded"
-            except Exception as exc:
-                LOGGER.error(f"SettingsManager reinit auth_channels: {exc}")
-                results["auth_channels"] = f"error: {exc}"
+            results["auth_channels"] = "updated — applies on next membership check"
 
         # Proxy settings changed
         proxy_keys = {"http_proxy_url", "show_proxy_and_non_proxy_both"}
