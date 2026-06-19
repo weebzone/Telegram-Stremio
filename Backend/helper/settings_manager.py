@@ -1,8 +1,9 @@
 from __future__ import annotations
-
 from typing import Any, Dict, List
-
 from Backend.logger import LOGGER
+from Backend.config import Telegram
+from Backend.helper import subscription_task_manager
+from Backend.pyrofork.bot import StreamBot
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -30,12 +31,6 @@ _DEFAULTS: Dict[str, Any] = {
 
 
 def _seed_from_env() -> Dict[str, Any]:
-    """
-    Read legacy Telegram config env values and return them as a settings dict.
-    Called only on FIRST startup to migrate existing config.env values into DB.
-    """
-    from Backend.config import Telegram  # lazy import to avoid circular deps
-
     seed = dict(_DEFAULTS)
     seed.update({
         "replace_mode":                 Telegram.REPLACE_MODE,
@@ -63,13 +58,6 @@ def _seed_from_env() -> Dict[str, Any]:
 # Immutable settings snapshot
 # ─────────────────────────────────────────────────────────────────────────────
 class Settings:
-    """
-    Immutable value object returned by SettingsManager.current().
-
-    All attributes are typed; lists are always returned as copies so callers
-    cannot accidentally mutate the stored state.
-    """
-
     __slots__ = ("_d",)
 
     def __init__(self, data: Dict[str, Any]) -> None:
@@ -158,38 +146,11 @@ class Settings:
 # Manager singleton
 # ─────────────────────────────────────────────────────────────────────────────
 class SettingsManager:
-    """
-    Singleton that owns the authoritative in-memory settings snapshot.
-
-    Thread/coroutine safety note: all mutations go through `update()`. There
-    is a brief window mid-update where a concurrent reader could see settings
-    that are saved to DB but whose dependent subsystems (multi-token clients,
-    subscription task, etc) haven't finished reinitialising yet; for an admin
-    panel that is acceptable. Add an asyncio.Lock here if stricter
-    consistency is needed.
-    """
-
     _current: Settings | None = None
 
     # ── Bootstrap ────────────────────────────────────────────────────────────
     @classmethod
     async def initialize(cls, db) -> None:
-        """
-        Call once after ``db.connect()``.
-
-        - First run  → seeds the DB from legacy env values then loads.
-        - Later runs → loads existing DB values, merges with defaults for
-          any new keys added in a future release.
-
-        NOTE: this does NOT connect extra_databases — call
-        ``await db.reload_extra_databases(SettingsManager.current().extra_databases)``
-        right after this, since on restart `db.db_uris` only contains the two
-        essential databases from config.env.
-
-        It also does NOT start the subscription checker task — call
-        ``subscription_task_manager.sync(StreamBot)`` after initialize() in
-        __main__.py to start it if settings.subscription is True.
-        """
         raw = await db.get_settings()
         if not raw:
             LOGGER.info("SettingsManager: no settings in DB — seeding from config.env.")
@@ -210,41 +171,13 @@ class SettingsManager:
     # ── Read ─────────────────────────────────────────────────────────────────
     @classmethod
     def current(cls) -> Settings:
-        """
-        Return the current settings snapshot. Always safe to call.
-
-        IMPORTANT: call this fresh at the point of use — do not store the
-        return value in a module-level variable or stash it at import time.
-        ``SettingsManager`` swaps out the underlying object on every
-        ``update()``, so a cached reference will silently go stale the
-        moment an admin changes anything from the Settings page.
-        """
         if cls._current is None:
-            return Settings({})   # safe fallback before initialize()
+            return Settings({})
         return cls._current
 
     # ── Write + reinitialise ─────────────────────────────────────────────────
     @classmethod
     async def update(cls, db, new_values: Dict[str, Any]) -> Dict[str, str]:
-        """
-        Merge *new_values* onto existing settings and apply the change in
-        three ordered phases:
-
-          1. Validate/apply anything that could fail and must abort the
-             whole save BEFORE persisting (currently: extra_databases —
-             a bad URI must not leave a half-saved settings document).
-          2. Persist to DB and flip the in-memory snapshot.
-          3. Reinitialise everything else that reads
-             ``SettingsManager.current()`` internally (multi-token clients,
-             auth channel cache, subscription task).
-
-        Phase 3 MUST run after phase 2, not before — earlier versions of
-        this method ran reinit before flipping `_current`, which meant
-        every reinit step that calls `SettingsManager.current()` (like the
-        multi-token client loader) saw the settings from BEFORE this save,
-        not the ones just submitted. That was the cause of multi-token
-        clients appearing to start one save "late".
-        """
         old = cls.current().to_dict()
         merged = dict(old)
         merged.update(new_values)
@@ -271,10 +204,6 @@ class SettingsManager:
     @classmethod
     async def _reinit_dependent(cls, old: dict, new: dict) -> Dict[str, str]:
         results: Dict[str, str] = {}
-
-        # Multi-tokens changed → hot-reload Pyrogram helper clients.
-        # reload_multi_token_clients() reads SettingsManager.current(), which
-        # by this point already reflects `new` (see update() phase ordering).
         old_tokens = old.get("multi_tokens") or []
         new_tokens = new.get("multi_tokens") or []
         if old_tokens != new_tokens:
@@ -297,11 +226,8 @@ class SettingsManager:
             results["proxy"] = "updated — applies to next outbound request"
 
         # Subscription ENABLED/DISABLED toggle → actually start/stop the
-        # background checker task, not just note that settings changed.
         if old.get("subscription") != new.get("subscription"):
             try:
-                from Backend.helper import subscription_task_manager
-                from Backend.pyrofork.bot import StreamBot
                 if new.get("subscription"):
                     await subscription_task_manager.start(StreamBot)
                     results["subscription"] = "checker task started"
@@ -312,9 +238,6 @@ class SettingsManager:
                 LOGGER.error(f"SettingsManager reinit subscription: {exc}")
                 results["subscription"] = f"error: {exc}"
         else:
-            # Group id / approvers / URL changed but on/off state didn't —
-            # the running task reads SettingsManager.current() on every
-            # loop iteration, so no restart of the task itself is needed.
             sub_keys = {"subscription_group_id", "approver_ids", "subscription_url"}
             if any(old.get(k) != new.get(k) for k in sub_keys):
                 results["subscription"] = "settings reloaded in-memory"
