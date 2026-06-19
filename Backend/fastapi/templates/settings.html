@@ -304,6 +304,67 @@
         </label>
     </div>
 
+    <!-- ── Databases ────────────────────────────────────────────────────── -->
+    <div class="settings-card">
+        <h2><i class="fa-solid fa-database"></i> Databases</h2>
+        <p style="font-size:0.83rem;color:var(--text-sec);margin-bottom:1rem">
+            Tracking and Storage 1 are required to boot the app and can't be edited
+            here. Additional storage databases connect/disconnect instantly when
+            saved — no restart needed. For data-safety reasons you can only
+            <strong>append</strong> new databases or <strong>remove from the end</strong>
+            of the list — editing or deleting one in the middle is rejected on save,
+            since existing media documents reference databases by position.
+        </p>
+
+        <!-- Locked databases (rendered from db.get_database_list()) -->
+        <div class="space-y-2 mb-4">
+            {% for entry in settings.database_list %}
+                {% if entry.locked %}
+                <div class="multi-item" style="opacity:0.65">
+                    <input type="text" class="s-input" value="{{ entry.uri_masked }}" disabled
+                        style="cursor:not-allowed">
+                    <span style="flex-shrink:0;font-size:0.7rem;font-weight:700;text-transform:uppercase;
+                                 padding:0.4rem 0.7rem;border-radius:0.5rem;
+                                 background:color-mix(in srgb,var(--text-sec) 15%,transparent);
+                                 color:var(--text-sec);white-space:nowrap">
+                        <i class="fa-solid fa-lock"></i>
+                        {{ "Tracking" if entry.type == "tracking" else "Storage 1" }}
+                    </span>
+                </div>
+                {% endif %}
+            {% endfor %}
+        </div>
+
+        <hr class="divider">
+
+        <label class="s-label">EXTRA STORAGE DATABASES
+            <span style="font-weight:400;text-transform:none;letter-spacing:0">
+                — additional Mongo URIs for media storage rotation</span>
+        </label>
+        <div class="multi-list-items" id="extra_databases_items">
+            {% for entry in settings.database_list %}
+                {% if not entry.locked %}
+                <div class="multi-item">
+                    <input type="password" class="s-input" value="{{ entry.full_uri }}"
+                        data-list="extra_databases" placeholder="mongodb+srv://user:pass@host/...">
+                    <span title="{{ 'Connected' if entry.connected else 'Disconnected' }}"
+                        style="flex-shrink:0;width:0.6rem;height:0.6rem;border-radius:50%;
+                               background:{{ '#22c55e' if entry.connected else '#ef4444' }}"></span>
+                    <button class="remove-btn" onclick="removeItem(this)" title="Remove (only safe from the end of the list)">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+                {% endif %}
+            {% endfor %}
+        </div>
+        <div class="add-row">
+            <input type="password" id="extra_databases_new" class="s-input"
+                placeholder="mongodb+srv://user:pass@host/..."
+                onkeydown="if(event.key==='Enter'){event.preventDefault();addItem('extra_databases')}">
+            <button class="add-btn" onclick="addItem('extra_databases')">+ Add Database</button>
+        </div>
+    </div>
+
     <!-- ── Multi-Token Clients ─────────────────────────────────────────── -->
     <div class="settings-card">
         <h2><i class="fa-brands fa-telegram"></i> Multi-Token Clients</h2>
@@ -424,6 +485,7 @@ async function saveSettings() {
         http_proxy_url:                document.getElementById('http_proxy_url').value.trim(),
         show_proxy_and_non_proxy_both: document.getElementById('show_proxy_and_non_proxy_both').checked,
         multi_tokens:                  collectList('multi_tokens'),
+        extra_databases:               collectList('extra_databases'),
     };
 
     try {
