@@ -2,6 +2,7 @@ import asyncio
 from typing import Optional
 from Backend.helper.subscription_checker import subscription_checker_loop
 from Backend.helper.settings_manager import SettingsManager
+from Backend.logger import LOGGER
 
 _task: Optional[asyncio.Task] = None
 
