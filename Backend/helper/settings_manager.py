@@ -1,16 +1,3 @@
-"""
-Usage
------
-
-    # Anywhere in the app:
-    s = SettingsManager.current()
-    if s.replace_mode:
-        ...
-    proxy = s.http_proxy_url
-
-    # In admin API (save + reinit changed subsystems):
-    reinit_results = await SettingsManager.update(db, {"replace_mode": False})
-"""
 from __future__ import annotations
 
 from typing import Any, Dict, List
@@ -27,8 +14,8 @@ _DEFAULTS: Dict[str, Any] = {
     "auth_channels": [],
     "tmdb_api": "",
     "base_url": "",
-    "upstream_repo": "",
-    "upstream_branch": "",
+    "upstream_repo": "https://github.com/weebzone/Telegram-Stremio",
+    "upstream_branch": "dev",
     "admin_username": "admin",
     "admin_password": "admin",
     "subscription": False,
@@ -47,7 +34,7 @@ def _seed_from_env() -> Dict[str, Any]:
     Read legacy Telegram config env values and return them as a settings dict.
     Called only on FIRST startup to migrate existing config.env values into DB.
     """
-    from Backend.config import Telegram  # lazy import to avoid circular deps
+    from Backend.config import Telegram
 
     seed = dict(_DEFAULTS)
     seed.update({
@@ -66,7 +53,7 @@ def _seed_from_env() -> Dict[str, Any]:
         "approver_ids":                 list(Telegram.APPROVER_IDS),
         "http_proxy_url":               Telegram.HTTP_PROXY_URL,
         "show_proxy_and_non_proxy_both": Telegram.SHOW_PROXY_AND_NON_PROXY_BOTH,
-        "multi_tokens":                 [],   
+        "multi_tokens":                 [],
         "extra_databases":              list(Telegram.DATABASE[2:]) if len(Telegram.DATABASE) > 2 else [],
     })
     return seed
@@ -174,10 +161,12 @@ class SettingsManager:
     """
     Singleton that owns the authoritative in-memory settings snapshot.
 
-    Thread/coroutine safety note: all mutations go through `update()`, which
-    awaits a DB write before swapping `_current`. There is a brief window where
-    a concurrent reader could see stale data; for an admin panel that is
-    acceptable. Add an asyncio.Lock here if stricter consistency is needed.
+    Thread/coroutine safety note: all mutations go through `update()`. There
+    is a brief window mid-update where a concurrent reader could see settings
+    that are saved to DB but whose dependent subsystems (multi-token clients,
+    subscription task, etc) haven't finished reinitialising yet; for an admin
+    panel that is acceptable. Add an asyncio.Lock here if stricter
+    consistency is needed.
     """
 
     _current: Settings | None = None
@@ -196,6 +185,10 @@ class SettingsManager:
         ``await db.reload_extra_databases(SettingsManager.current().extra_databases)``
         right after this, since on restart `db.db_uris` only contains the two
         essential databases from config.env.
+
+        It also does NOT start the subscription checker task — call
+        ``subscription_task_manager.sync(StreamBot)`` after initialize() in
+        __main__.py to start it if settings.subscription is True.
         """
         raw = await db.get_settings()
         if not raw:
@@ -217,7 +210,15 @@ class SettingsManager:
     # ── Read ─────────────────────────────────────────────────────────────────
     @classmethod
     def current(cls) -> Settings:
-        """Return the current settings snapshot. Always safe to call."""
+        """
+        Return the current settings snapshot. Always safe to call.
+
+        IMPORTANT: call this fresh at the point of use — do not store the
+        return value in a module-level variable or stash it at import time.
+        ``SettingsManager`` swaps out the underlying object on every
+        ``update()``, so a cached reference will silently go stale the
+        moment an admin changes anything from the Settings page.
+        """
         if cls._current is None:
             return Settings({})   # safe fallback before initialize()
         return cls._current
@@ -226,41 +227,54 @@ class SettingsManager:
     @classmethod
     async def update(cls, db, new_values: Dict[str, Any]) -> Dict[str, str]:
         """
-        Merge *new_values* onto existing settings, reinitialise any affected
-        subsystem FIRST, and only persist to DB once that succeeds.
+        Merge *new_values* onto existing settings and apply the change in
+        three ordered phases:
 
-        Doing reinit before the write means a bad database URI or other
-        runtime failure aborts the whole save — the stored settings document
-        never describes a state the app couldn't actually reach. Raises
-        whatever exception the failing subsystem raised; callers (the API
-        layer) should catch and turn it into an HTTP error.
+          1. Validate/apply anything that could fail and must abort the
+             whole save BEFORE persisting (currently: extra_databases —
+             a bad URI must not leave a half-saved settings document).
+          2. Persist to DB and flip the in-memory snapshot.
+          3. Reinitialise everything else that reads
+             ``SettingsManager.current()`` internally (multi-token clients,
+             auth channel cache, subscription task).
+
+        Phase 3 MUST run after phase 2, not before — earlier versions of
+        this method ran reinit before flipping `_current`, which meant
+        every reinit step that calls `SettingsManager.current()` (like the
+        multi-token client loader) saw the settings from BEFORE this save,
+        not the ones just submitted. That was the cause of multi-token
+        clients appearing to start one save "late".
         """
         old = cls.current().to_dict()
         merged = dict(old)
         merged.update(new_values)
 
-        results = await cls._reinit_changed(old, merged, db)
+        results: Dict[str, str] = {}
 
+        # ── Phase 1: validate / apply things that can abort the save ───────
+        old_extra = old.get("extra_databases") or []
+        new_extra = merged.get("extra_databases") or []
+        if old_extra != new_extra:
+            result = await db.reload_extra_databases(new_extra)   # may raise ValueError
+            results["databases"] = result.get("message", "databases reloaded")
+
+        # ── Phase 2: persist + flip in-memory snapshot ──────────────────────
         await db.save_settings(merged)
         cls._current = Settings(merged)
 
+        # ── Phase 3: reinit everything that reads current() ─────────────────
+        results.update(await cls._reinit_dependent(old, merged))
+
         return results
 
-    # ── Internal reinit logic ────────────────────────────────────────────────
+    # ── Internal reinit logic (runs AFTER _current has been updated) ────────
     @classmethod
-    async def _reinit_changed(cls, old: dict, new: dict, db) -> Dict[str, str]:
+    async def _reinit_dependent(cls, old: dict, new: dict) -> Dict[str, str]:
         results: Dict[str, str] = {}
 
-        # Extra storage databases changed → connect/disconnect them.
-        # This can raise ValueError (e.g. bad URI, or an unsafe mid-list
-        # edit) — let it propagate so update() aborts before saving.
-        old_extra = old.get("extra_databases") or []
-        new_extra = new.get("extra_databases") or []
-        if old_extra != new_extra:
-            result = await db.reload_extra_databases(new_extra)
-            results["databases"] = result.get("message", "databases reloaded")
-
-        # Multi-tokens changed → hot-reload Pyrogram helper clients
+        # Multi-tokens changed → hot-reload Pyrogram helper clients.
+        # reload_multi_token_clients() reads SettingsManager.current(), which
+        # by this point already reflects `new` (see update() phase ordering).
         old_tokens = old.get("multi_tokens") or []
         new_tokens = new.get("multi_tokens") or []
         if old_tokens != new_tokens:
@@ -290,10 +304,28 @@ class SettingsManager:
         if any(old.get(k) != new.get(k) for k in proxy_keys):
             results["proxy"] = "updated — applies to next outbound request"
 
-        # Subscription settings changed
-        sub_keys = {"subscription", "subscription_group_id", "approver_ids", "subscription_url"}
-        if any(old.get(k) != new.get(k) for k in sub_keys):
-            results["subscription"] = "settings reloaded in-memory"
+        # Subscription ENABLED/DISABLED toggle → actually start/stop the
+        # background checker task, not just note that settings changed.
+        if old.get("subscription") != new.get("subscription"):
+            try:
+                from Backend.helper import subscription_task_manager
+                from Backend.pyrofork.bot import StreamBot
+                if new.get("subscription"):
+                    await subscription_task_manager.start(StreamBot)
+                    results["subscription"] = "checker task started"
+                else:
+                    await subscription_task_manager.stop()
+                    results["subscription"] = "checker task stopped"
+            except Exception as exc:
+                LOGGER.error(f"SettingsManager reinit subscription: {exc}")
+                results["subscription"] = f"error: {exc}"
+        else:
+            # Group id / approvers / URL changed but on/off state didn't —
+            # the running task reads SettingsManager.current() on every
+            # loop iteration, so no restart of the task itself is needed.
+            sub_keys = {"subscription_group_id", "approver_ids", "subscription_url"}
+            if any(old.get(k) != new.get(k) for k in sub_keys):
+                results["subscription"] = "settings reloaded in-memory"
 
         # Admin credentials changed
         cred_keys = {"admin_username", "admin_password"}
