@@ -1,5 +1,6 @@
 import asyncio
 import json
+from datetime import datetime
 from fastapi import Request, Query, HTTPException
 from fastapi.responses import StreamingResponse
 from Backend import db, StartTime, __version__
@@ -21,6 +22,10 @@ from Backend.helper.auto_catalog import (
     get_auto_catalog_settings,
     update_auto_catalog_settings,
 )
+
+from Backend.helper.settings_manager import SettingsManager
+
+config = SettingsManager.current()
 
 
 # --- API Routes for System Stats ---
@@ -588,9 +593,6 @@ async def manage_subscriber_api(user_id: int, payload: dict) -> dict:
 # --- Access Management API ---
 
 async def get_all_tokens_api() -> dict:
-    from Backend import db
-    from Backend.config import Telegram
-    from datetime import datetime
     try:
         tokens = await db.get_all_api_tokens()
         now = datetime.utcnow()
@@ -598,7 +600,7 @@ async def get_all_tokens_api() -> dict:
 
         # Pre-load all subscribers into a dict keyed by user_id for O(1) lookup
         subscriber_map = {}       # user_id (str) -> user doc
-        if Telegram.SUBSCRIPTION:
+        if config.subscription:
             try:
                 for u in await db.get_all_subscribers():
                     uid = str(u.get("_id"))
@@ -634,7 +636,7 @@ async def get_all_tokens_api() -> dict:
                     expiry = t_expiry
 
             # Determine status
-            if Telegram.SUBSCRIPTION:
+            if config.subscription:
                 if not user_found:
                     is_expired = True
                 elif sub_status != "active":
@@ -660,7 +662,7 @@ async def get_all_tokens_api() -> dict:
                 "is_expired": is_expired,
                 "sub_status": sub_status,
                 "addon_url": (
-                    f"{Telegram.BASE_URL}/stremio/{token_str}/manifest.json"
+                    f"{config.base_url}/stremio/{token_str}/manifest.json"
                     if token_str else None
                 ),
             }
