@@ -12,8 +12,6 @@ from Backend.fastapi.security.tokens import verify_token
 router = APIRouter(prefix="/stremio", tags=["Stremio Addon"])
 
 # --- Configuration ---
-
-BASE_URL = SettingsManager.current().base_url
 ADDON_NAME = "Telegram"
 ADDON_VERSION = __version__
 PAGE_SIZE = 15
@@ -429,7 +427,7 @@ async def get_streams(
                 filename, quality_str, size
             )
 
-            original_url = f"{BASE_URL}/dl/{token}/{quality.get('id')}/video.mkv"
+            original_url = f"{SettingsManager.current().base_url}/dl/{token}/{quality.get('id')}/video.mkv"
             proxy_url = f"{SettingsManager.current().http_proxy_url}{original_url}" if SettingsManager.current().http_proxy_url else None
 
             if SettingsManager.current().show_proxy_and_non_proxy_both and proxy_url:
