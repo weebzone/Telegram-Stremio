@@ -38,7 +38,7 @@ for _ in range(1):
 async def file_receive_handler(client: Client, message: Message):
     if str(message.chat.id) in SettingsManager.current().auth_channels:
         try:
-            if message.video or (message.document and message.document.mime_type.startswith("video/")):
+            if message.video or message.document:
                 file = message.video or message.document
                 title = message.caption or file.file_name
                 msg_id = message.id
