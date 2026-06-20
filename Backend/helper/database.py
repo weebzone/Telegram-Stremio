@@ -12,9 +12,10 @@ from Backend.logger import LOGGER
 from Backend.config import Telegram
 from Backend.helper.settings_manager import SettingsManager
 import re
-from Backend.helper.encrypt import decode_string
-from Backend.helper.modal import Episode, MovieSchema, QualityDetail, Season, TVShowSchema
+from Backend.helper.encrypt import decode_string, encode_string
+from Backend.helper.modal import Episode, MovieSchema, QualityDetail, QualityPart, Season, TVShowSchema
 from Backend.helper.task_manager import delete_message
+from Backend.helper.pyro import get_readable_file_size
 
 
 
@@ -692,11 +693,120 @@ class Database:
     # Multi Database Method for insert/update/delete/list
     # -------------------------------
 
+    async def _build_part_id_and_size(self, parts: List[dict]) -> Tuple[str, str]:
+        """Given a list of part dicts (chat_id, msg_id, part_number, size_bytes),
+        produce the aggregate opaque stream `id` (encoding all parts, ordered)
+        and the human-readable total size string."""
+        sorted_parts = sorted(parts, key=lambda p: p.get("part_number", 0))
+        payload = {"parts": [{"chat_id": p["chat_id"], "msg_id": p["msg_id"]} for p in sorted_parts]}
+        encoded = await encode_string(payload)
+        total_bytes = sum(p.get("size_bytes", 0) for p in sorted_parts)
+        size_str = get_readable_file_size(total_bytes)
+        return encoded, size_str
+
+    async def remove_media_part(self, channel: int, msg_id: int) -> bool:
+        """Remove a single Telegram message from the database, whether it was
+        stored as a standalone quality entry (legacy single-file) or as one
+        part of a multi-part split-file quality entry. Mirrors
+        delete_media_by_stream_id's cleanup-cascading behaviour."""
+        try:
+            legacy_hash = await encode_string({"chat_id": channel, "msg_id": msg_id})
+            if await self.delete_media_by_stream_id(legacy_hash):
+                return True
+        except Exception as e:
+            LOGGER.error(f"remove_media_part: legacy lookup failed: {e}")
+
+        for i in range(1, self.current_db_index + 1):
+            db = self.dbs[f"storage_{i}"]
+
+            movie = await db["movie"].find_one(
+                {"telegram.parts": {"$elemMatch": {"chat_id": channel, "msg_id": msg_id}}}
+            )
+            if movie:
+                new_telegram = []
+                for q in movie.get("telegram", []):
+                    parts = q.get("parts")
+                    if parts and any(p.get("chat_id") == channel and p.get("msg_id") == msg_id for p in parts):
+                        remaining = [p for p in parts if not (p.get("chat_id") == channel and p.get("msg_id") == msg_id)]
+                        if not remaining:
+                            continue  # last part removed: drop the whole quality entry
+                        new_id, new_size = await self._build_part_id_and_size(remaining)
+                        q["parts"] = remaining
+                        q["id"] = new_id
+                        q["size"] = new_size
+                    new_telegram.append(q)
+
+                if len(new_telegram) == 0:
+                    await db["movie"].delete_one({"_id": movie["_id"]})
+                else:
+                    movie["telegram"] = new_telegram
+                    movie["updated_on"] = datetime.utcnow()
+                    await db["movie"].replace_one({"_id": movie["_id"]}, movie)
+                return True
+
+            tv = await db["tv"].find_one(
+                {"seasons.episodes.telegram.parts": {"$elemMatch": {"chat_id": channel, "msg_id": msg_id}}}
+            )
+            if tv:
+                for season in tv.get("seasons", []):
+                    for episode in season.get("episodes", []):
+                        new_telegram = []
+                        for q in episode.get("telegram", []):
+                            parts = q.get("parts")
+                            if parts and any(p.get("chat_id") == channel and p.get("msg_id") == msg_id for p in parts):
+                                remaining = [p for p in parts if not (p.get("chat_id") == channel and p.get("msg_id") == msg_id)]
+                                if not remaining:
+                                    continue
+                                new_id, new_size = await self._build_part_id_and_size(remaining)
+                                q["parts"] = remaining
+                                q["id"] = new_id
+                                q["size"] = new_size
+                            new_telegram.append(q)
+                        episode["telegram"] = new_telegram
+                    season["episodes"] = [e for e in season.get("episodes", []) if e.get("telegram")]
+                tv["seasons"] = [s for s in tv.get("seasons", []) if s.get("episodes")]
+
+                if len(tv["seasons"]) == 0:
+                    await db["tv"].delete_one({"_id": tv["_id"]})
+                else:
+                    tv["updated_on"] = datetime.utcnow()
+                    await db["tv"].replace_one({"_id": tv["_id"]}, tv)
+                return True
+
+        return False
+
     async def insert_media(
         self, metadata_info: dict,
-        channel: int, msg_id: int, size: str, name: str
+        channel: int, msg_id: int, size: str, name: str, raw_size: int = 0
     ) -> Optional[ObjectId]:
-        
+
+        group_key = metadata_info.get("group_key")
+        part_number = metadata_info.get("part_number")
+
+        if group_key:
+            part = {
+                "part_number": part_number or 1,
+                "chat_id": channel,
+                "msg_id": msg_id,
+                "size_bytes": raw_size,
+            }
+            part_id, part_size = await self._build_part_id_and_size([part])
+            quality_detail = QualityDetail(
+                quality=metadata_info['quality'],
+                id=part_id,
+                name=name,
+                size=part_size,
+                group_key=group_key,
+                parts=[QualityPart(**part)],
+            )
+        else:
+            quality_detail = QualityDetail(
+                quality=metadata_info['quality'],
+                id=metadata_info['encoded_string'],
+                name=name,
+                size=size,
+            )
+
         if metadata_info['media_type'] == "movie":
             media = MovieSchema(
                 tmdb_id=metadata_info['tmdb_id'],
@@ -713,12 +823,7 @@ class Database:
                 cast=metadata_info['cast'],
                 runtime=metadata_info['runtime'],
                 media_type=metadata_info['media_type'],
-                telegram=[QualityDetail(
-                    quality=metadata_info['quality'],
-                    id=metadata_info['encoded_string'],
-                    name=name,
-                    size=size
-                )]
+                telegram=[quality_detail]
             )
             return await self.update_movie(media)
         else:
@@ -745,16 +850,42 @@ class Database:
                         episode_backdrop=metadata_info['episode_backdrop'],
                         overview=metadata_info['episode_overview'],
                         released=metadata_info['episode_released'],
-                        telegram=[QualityDetail(
-                            quality=metadata_info['quality'],
-                            id=metadata_info['encoded_string'],
-                            name=name,
-                            size=size
-                        )]
+                        telegram=[quality_detail]
                     )]
                 )]
             )
             return await self.update_tv_show(tv_show)
+
+    async def _merge_split_part(self, qualities: List[dict], quality_to_update: dict) -> List[dict]:
+        """Merge an incoming split-part QualityDetail into the matching
+        group (by group_key) within `qualities`, or append it as the first
+        part of a new group. Returns the updated qualities list."""
+        group_key = quality_to_update.get("group_key")
+        incoming_parts = quality_to_update.get("parts") or []
+        if not incoming_parts:
+            return qualities + [quality_to_update]
+        new_part = incoming_parts[0]
+
+        merged = False
+        result = []
+        for q in qualities:
+            if group_key is not None and q.get("group_key") == group_key:
+                existing_parts = q.get("parts") or []
+                existing_parts = [
+                    p for p in existing_parts if p.get("part_number") != new_part.get("part_number")
+                ]
+                existing_parts.append(new_part)
+                new_id, new_size = await self._build_part_id_and_size(existing_parts)
+                q["parts"] = existing_parts
+                q["id"] = new_id
+                q["size"] = new_size
+                q["name"] = quality_to_update.get("name", q.get("name"))
+                merged = True
+            result.append(q)
+
+        if not merged:
+            result.append(quality_to_update)
+        return result
 
     async def update_movie(self, movie_data: MovieSchema) -> Optional[ObjectId]:
         try:
@@ -814,7 +945,10 @@ class Database:
         movie_id = existing_movie["_id"]
         existing_qualities = existing_movie.get("telegram", [])
 
-        if SettingsManager.current().replace_mode:
+        if quality_to_update.get("group_key"):
+            existing_qualities = await self._merge_split_part(existing_qualities, quality_to_update)
+
+        elif SettingsManager.current().replace_mode:
             to_delete = [q for q in existing_qualities if q.get("quality") == target_quality]
 
             for q in to_delete:
@@ -938,7 +1072,12 @@ class Database:
                 for quality in episode["telegram"]:
                     target_quality = quality.get("quality")
 
-                    if SettingsManager.current().replace_mode:
+                    if quality.get("group_key"):
+                        existing_episode["telegram"] = await self._merge_split_part(
+                            existing_episode["telegram"], quality
+                        )
+
+                    elif SettingsManager.current().replace_mode:
                         to_delete = [
                             q for q in existing_episode["telegram"]
                             if q.get("quality") == target_quality
