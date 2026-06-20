@@ -10,9 +10,8 @@ from pyrogram import filters, Client
 from pyrogram.types import Message
 from pyrogram.errors import FloodWait
 from pyrogram.enums.parse_mode import ParseMode
-from Backend.helper.encrypt import encode_string
-from Backend.helper.encrypt import encode_string
 from Backend.helper.metadata import extract_default_id
+from Backend.helper.split_files import strip_part_suffix
 
 
 
@@ -38,7 +37,7 @@ for _ in range(1):
 async def file_receive_handler(client: Client, message: Message):
     if str(message.chat.id) in SettingsManager.current().auth_channels:
         try:
-            if message.video or message.document:
+            if message.video or (message.document and message.document.mime_type.startswith("video/")):
                 file = message.video or message.document
                 title = message.caption or file.file_name
                 msg_id = message.id
@@ -52,6 +51,8 @@ async def file_receive_handler(client: Client, message: Message):
                     return
 
                 title = remove_urls(title)
+                if metadata_info.get('group_key'):
+                    title = strip_part_suffix(title)
                 if not title.endswith(('.mkv', '.mp4')):
                     title += '.mkv'
 
@@ -103,6 +104,8 @@ async def file_edited_handler(client: Client, message: Message):
                         return
 
                     title = remove_urls(title)
+                    if metadata_info.get('group_key'):
+                        title = strip_part_suffix(title)
                     if not title.endswith(('.mkv', '.mp4')):
                         title += '.mkv'
 
