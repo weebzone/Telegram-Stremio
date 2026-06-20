@@ -12,6 +12,9 @@ _NAMED_PATTERNS = [
 # Bare numeric segment style: movie.001.mkv / movie-002.mp4
 _NUMERIC_PATTERN = re.compile(r'(?i)[\.\-_](\d{2,3})(?=[\.\-_][a-z0-9]{2,4}$)')
 
+_VIDEO_EXTENSIONS = r'mkv|mp4|avi|ts|m4v|mov|wmv|webm|flv'
+_TRAILING_NUMERIC_PATTERN = re.compile(rf'(?i)\.({_VIDEO_EXTENSIONS})\.(\d{{2,3}})$')
+
 _NORMALIZE_RE = re.compile(r'[\.\-_ ]+')
 
 
@@ -35,6 +38,12 @@ def parse_split_info(filename: str) -> Optional[Tuple[str, int]]:
                 continue
             remainder = name[:m.start()] + name[m.end():]
             return _normalize(remainder), part_num
+
+    m = _TRAILING_NUMERIC_PATTERN.search(name)
+    if m:
+        part_num = int(m.group(2))
+        remainder = name[:m.start()] + '.' + m.group(1)  # keep the real extension, drop ".NNN"
+        return _normalize(remainder), part_num
 
     m = _NUMERIC_PATTERN.search(name)
     if m:
