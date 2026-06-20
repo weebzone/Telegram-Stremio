@@ -15,7 +15,6 @@ import re
 from Backend.helper.encrypt import decode_string, encode_string
 from Backend.helper.modal import Episode, MovieSchema, QualityDetail, QualityPart, Season, TVShowSchema
 from Backend.helper.task_manager import delete_message
-from Backend.helper.pyro import get_readable_file_size
 
 
 
@@ -701,6 +700,7 @@ class Database:
         payload = {"parts": [{"chat_id": p["chat_id"], "msg_id": p["msg_id"]} for p in sorted_parts]}
         encoded = await encode_string(payload)
         total_bytes = sum(p.get("size_bytes", 0) for p in sorted_parts)
+        from Backend.helper.pyro import get_readable_file_size 
         size_str = get_readable_file_size(total_bytes)
         return encoded, size_str
 
