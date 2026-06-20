@@ -58,11 +58,12 @@ def format_released_date(media):
             return None
     return None
 
-def format_stream_details(filename: str, quality: str, size: str) -> tuple[str, str]:
+def format_stream_details(filename: str, quality: str, size: str, is_split: bool = False) -> tuple[str, str]:
+    size_emoji = "📦" if is_split else "💾"
     try:
         parsed = PTN.parse(filename)
     except Exception:
-        return (f"Telegram {quality}", f"📁 {filename}\n💾 {size}")
+        return (f"Telegram {quality}", f"📁 {filename}\n{size_emoji} {size}")
 
     codec_parts = []
     if parsed.get("codec"):
@@ -82,7 +83,7 @@ def format_stream_details(filename: str, quality: str, size: str) -> tuple[str, 
 
     stream_title_parts = [
         f"📁 {filename}",
-        f"💾 {size}",
+        f"{size_emoji} {size}",
     ]
     if codec_info:
         stream_title_parts.append(codec_info)
@@ -424,7 +425,7 @@ async def get_streams(
             size = quality.get("size", "")
 
             stream_name, stream_title = format_stream_details(
-                filename, quality_str, size
+                filename, quality_str, size, is_split=bool(quality.get("group_key"))
             )
 
             original_url = f"{SettingsManager.current().base_url}/dl/{token}/{quality.get('id')}/video.mkv"
