@@ -11,12 +11,25 @@ from pyrogram.types import Message
 from pyrogram.errors import FloodWait
 from pyrogram.enums.parse_mode import ParseMode
 from Backend.helper.metadata import extract_default_id
-from Backend.helper.split_files import strip_part_suffix
+from Backend.helper.split_files import parse_split_info, strip_part_suffix
 
 
 
 file_queue = Queue()
 db_lock = Lock()
+
+
+def _is_supported_media(message: Message) -> bool:
+    if message.video:
+        return True
+    if message.document:
+        mime_type = message.document.mime_type or ""
+        if mime_type.startswith("video/"):
+            return True
+        candidate = message.caption or message.document.file_name or ""
+        if parse_split_info(candidate):
+            return True
+    return False
 
 async def process_file():
     while True:
@@ -37,7 +50,7 @@ for _ in range(1):
 async def file_receive_handler(client: Client, message: Message):
     if str(message.chat.id) in SettingsManager.current().auth_channels:
         try:
-            if message.video or (message.document and message.document.mime_type.startswith("video/")):
+            if _is_supported_media(message):
                 file = message.video or message.document
                 title = message.caption or file.file_name
                 msg_id = message.id
@@ -83,7 +96,7 @@ async def file_receive_handler(client: Client, message: Message):
 async def file_edited_handler(client: Client, message: Message):
     if str(message.chat.id) in SettingsManager.current().auth_channels:
         try:
-            if message.video or (message.document and message.document.mime_type.startswith("video/")):
+            if _is_supported_media(message):
                 file = message.video or message.document
                 title = message.caption or file.file_name
                 msg_id = message.id
