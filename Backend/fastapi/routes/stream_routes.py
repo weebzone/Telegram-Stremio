@@ -14,6 +14,7 @@ from Backend.logger import LOGGER
 from Backend.helper.encrypt import decode_string
 from Backend.helper.utils import track_usage
 from Backend.helper.custom_dl import ByteStreamer, ACTIVE_STREAMS, RECENT_STREAMS
+from Backend.helper.virtual_dl import resolve_virtual_parts, virtual_stream_generator
 from Backend.pyrofork.bot import work_loads, multi_clients, client_dc_map, client_failures, client_avg_mbps
 from Backend.fastapi.security.tokens import verify_token
 
@@ -103,6 +104,13 @@ def get_parallel_prefetch(client_count: int) -> tuple[int, int]:
 @router.head("/dl/{token}/{id}/{name}")
 async def stream_handler(request: Request, token: str, id: str, name: str, token_data: dict = Depends(verify_token),):
     decoded = await decode_string(id)
+
+    if "parts" in decoded:
+        return await virtual_media_streamer(
+            request=request, parts_payload=decoded["parts"],
+            token=token, token_data=token_data, stream_id_hash=id,
+        )
+
     msg_id = decoded.get("msg_id")
     if not msg_id:
         raise HTTPException(status_code=400, detail="Missing id")
@@ -233,6 +241,81 @@ async def media_streamer(request: Request, chat_id: int, msg_id: int, token: str
         status = 200
 
     return StreamingResponse(body_gen, headers=headers, status_code=status, media_type=mime_type, )
+
+
+async def virtual_media_streamer(request: Request, parts_payload: list, token: str, token_data: dict = None, stream_id_hash: str = None,):
+    index = select_best_client(0)
+    tg_client = multi_clients[index]
+    if tg_client not in _streamer_by_client:
+        _streamer_by_client[tg_client] = ByteStreamer(tg_client, index)
+    streamer: ByteStreamer = _streamer_by_client[tg_client]
+
+    parts, file_size = await resolve_virtual_parts(parts_payload, streamer)
+    if not parts or file_size <= 0:
+        raise HTTPException(status_code=404, detail="Split media parts not found")
+
+    range_header = request.headers.get("Range", "")
+    start, end = parse_range_header(range_header, file_size)
+    req_length = end - start + 1
+    chunk_size = 1024 * 1024
+    stream_id = secrets.token_hex(8)
+    decoded_name = unquote(request.path_params.get("name", ""))
+
+    db_title = None
+    if stream_id_hash:
+        _now = time.time()
+        _cached = _title_cache.get(stream_id_hash)
+        if _cached and _now < _cached[1]:
+            db_title = _cached[0]
+        else:
+            db_title = await db.get_title_by_stream_id(stream_id_hash)
+            _title_cache[stream_id_hash] = (db_title, _now + _TITLE_CACHE_TTL)
+    final_title = db_title if db_title else decoded_name
+
+    meta = {
+        "request_path": str(request.url.path),
+        "client_host": request.client.host if request.client else None,
+        "title": final_title,
+        "user_name": token_data.get("name", "Unknown") if token_data else "Unknown",
+        "split_parts": len(parts),
+    }
+
+    token_count = len(multi_clients) - 1
+    parallelism, prefetch_count = get_parallel_prefetch(token_count)
+
+    asyncio.create_task(track_usage(stream_id, token, token_data))
+
+    first_file_id = parts[0]["file_id"]
+    file_name = first_file_id.file_name or f"{secrets.token_hex(4)}.bin"
+    mime_type = first_file_id.mime_type or mimetypes.guess_type(file_name)[0] or "application/octet-stream"
+    if "." not in file_name and "/" in mime_type:
+        file_name = f"{file_name}.{mime_type.split('/')[1]}"
+
+    common_headers = {
+        "Content-Type": mime_type,
+        "Content-Disposition": f'inline; filename="{file_name}"',
+        "Accept-Ranges": "bytes",
+        "Content-Length": str(req_length),
+        "Cache-Control": "public, max-age=3600",
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges",
+    }
+    if range_header:
+        common_headers["Content-Range"] = f"bytes {start}-{end}/{file_size}"
+        status = 206
+    else:
+        status = 200
+
+    if request.method == "HEAD":
+        return PlainResponse(status_code=status, headers=common_headers)
+
+    body_gen = virtual_stream_generator(
+        parts=parts, start=start, end=end, chunk_size=chunk_size,
+        streamer=streamer, client_index=index, request=request, meta=meta,
+        stream_id=stream_id, parallelism=parallelism, prefetch_count=prefetch_count,
+    )
+
+    return StreamingResponse(body_gen, headers=common_headers, status_code=status, media_type=mime_type, )
 
 @router.get("/stream/stats")
 async def get_stream_stats():
