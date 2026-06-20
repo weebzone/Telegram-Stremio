@@ -5,11 +5,20 @@ from pydantic import BaseModel, Field
 # ---------------------------
 # Quality Detail Schema
 # ---------------------------
+class QualityPart(BaseModel):
+    part_number: int
+    chat_id: int
+    msg_id: int
+    size_bytes: int
+
+
 class QualityDetail(BaseModel):
     quality: str
     id: str
     name: str
     size: str
+    group_key: Optional[str] = None
+    parts: Optional[List[QualityPart]] = None
 
 
 # ---------------------------
