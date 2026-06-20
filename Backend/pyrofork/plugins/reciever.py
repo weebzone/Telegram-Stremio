@@ -21,9 +21,9 @@ db_lock = Lock()
 
 async def process_file():
     while True:
-        metadata_info, channel, msg_id, size, title = await file_queue.get()
+        metadata_info, channel, msg_id, size, raw_size, title = await file_queue.get()
         async with db_lock:
-            updated_id = await db.insert_media(metadata_info, channel=channel, msg_id=msg_id, size=size, name=title)
+            updated_id = await db.insert_media(metadata_info, channel=channel, msg_id=msg_id, size=size, raw_size=raw_size, name=title)
             if updated_id:
                 LOGGER.info(f"{metadata_info['media_type']} updated with ID: {updated_id}")
             else:
@@ -42,6 +42,7 @@ async def file_receive_handler(client: Client, message: Message):
                 file = message.video or message.document
                 title = message.caption or file.file_name
                 msg_id = message.id
+                raw_size = file.file_size
                 size = get_readable_file_size(file.file_size)
                 channel = str(message.chat.id).replace("-100", "")
 
@@ -62,7 +63,7 @@ async def file_receive_handler(client: Client, message: Message):
                         new_caption=new_caption
                     ))
 
-                await file_queue.put((metadata_info, int(channel), msg_id, size, title))
+                await file_queue.put((metadata_info, int(channel), msg_id, size, raw_size, title))
             else:
                 await message.reply_text("> Not supported")
         except FloodWait as e:
@@ -85,6 +86,7 @@ async def file_edited_handler(client: Client, message: Message):
                 file = message.video or message.document
                 title = message.caption or file.file_name
                 msg_id = message.id
+                raw_size = file.file_size
                 size = get_readable_file_size(file.file_size)
                 channel = str(message.chat.id).replace("-100", "")
 
@@ -93,9 +95,7 @@ async def file_edited_handler(client: Client, message: Message):
                 if override_id:
                     LOGGER.info(f"Detected override ID '{override_id}' in edited message {msg_id}")
                     
-                    stream_id_hash = await encode_string({"chat_id": int(channel), "msg_id": msg_id})
-                    
-                    await db.delete_media_by_stream_id(stream_id_hash)
+                    await db.remove_media_part(int(channel), msg_id)
 
                     metadata_info = await metadata(clean_filename(title), int(channel), msg_id, override_id=override_id)
                     if metadata_info is None:
@@ -106,7 +106,7 @@ async def file_edited_handler(client: Client, message: Message):
                     if not title.endswith(('.mkv', '.mp4')):
                         title += '.mkv'
 
-                    await file_queue.put((metadata_info, int(channel), msg_id, size, title))
+                    await file_queue.put((metadata_info, int(channel), msg_id, size, raw_size, title))
             else:
                 pass
         except Exception as e:
@@ -122,8 +122,7 @@ async def file_deleted_handler(client: Client, messages: list[Message]):
                 msg_id = message.id
                 
                 try:
-                    stream_id_hash = await encode_string({"chat_id": int(channel), "msg_id": msg_id})
-                    deleted = await db.delete_media_by_stream_id(stream_id_hash)
+                    deleted = await db.remove_media_part(int(channel), msg_id)
                     
                     if deleted:
                         LOGGER.info(f"Automatically purged deleted message {msg_id} from database.")
