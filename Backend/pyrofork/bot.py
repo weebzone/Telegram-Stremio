@@ -12,18 +12,28 @@ StreamBot = Client(
     max_concurrent_transmissions=10
 )
 
-Helper = Client(
-    "helper",
-    api_id=Telegram.API_ID,
-    api_hash=Telegram.API_HASH,
-    bot_token=Telegram.HELPER_BOT_TOKEN,
-    sleep_threshold=20,
-    workers=6,
-    max_concurrent_transmissions=10
-)
+USERBOT_CLIENT_INDEX = -1
+
+Userbot = None
+if Telegram.USER_SESSION_STRING:
+    Userbot = Client(
+        name='userbot',
+        api_id=Telegram.API_ID,
+        api_hash=Telegram.API_HASH,
+        session_string=Telegram.USER_SESSION_STRING,
+        sleep_threshold=20,
+        workers=6,
+        max_concurrent_transmissions=10,
+        no_updates=True,
+    )
 
 multi_clients = {}
 work_loads = {}
 client_dc_map = {}
-client_failures = {}  
+client_failures = {}
 client_avg_mbps = {}
+
+if Userbot is not None:
+    work_loads[USERBOT_CLIENT_INDEX] = 0
+    client_failures[USERBOT_CLIENT_INDEX] = 0
+    client_avg_mbps[USERBOT_CLIENT_INDEX] = 0.0
