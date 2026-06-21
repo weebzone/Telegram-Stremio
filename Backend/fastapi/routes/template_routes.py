@@ -4,6 +4,7 @@ from fastapi.templating import Jinja2Templates
 from Backend.fastapi.security.credentials import verify_credentials, require_auth, is_authenticated, get_current_user
 from Backend.fastapi.themes import get_theme, get_all_themes
 from Backend import db
+from Backend.config import Telegram
 from Backend.pyrofork.bot import work_loads, multi_clients, StreamBot
 from Backend.helper.pyro import get_readable_time
 from Backend.helper.settings_manager import SettingsManager
@@ -284,6 +285,7 @@ async def custom_catalogs_page(request: Request, _: bool = Depends(require_auth)
     })
 
 
+
 async def settings_page(request: Request, _: bool = Depends(require_auth)):
     theme_name = request.session.get("theme", "dark_professional")
     theme = get_theme(theme_name)
@@ -291,16 +293,23 @@ async def settings_page(request: Request, _: bool = Depends(require_auth)):
 
     settings = SettingsManager.current().to_dict()
     settings["admin_password"] = ""
+
     try:
         settings["database_list"] = db.get_database_list()
     except Exception:
         settings["database_list"] = []
 
-    return templates.TemplateResponse("settings.html", {
-        "request": request,
-        "theme": theme,
-        "themes": get_all_themes(),
-        "current_theme": theme_name,
-        "current_user": current_user,
-        "settings": settings,
-    })
+    userbot_configured = bool(Telegram.USER_SESSION_STRING and Telegram.USER_SESSION_STRING.strip())
+
+    return templates.TemplateResponse(
+        "settings.html",
+        {
+            "request": request,
+            "theme": theme,
+            "themes": get_all_themes(),
+            "current_theme": theme_name,
+            "current_user": current_user,
+            "settings": settings,
+            "userbot_configured": userbot_configured,
+        },
+)
