@@ -364,6 +364,51 @@ async def get_meta(token: str, media_type: str, id: str, token_data: dict = Depe
         meta_obj["videos"] = videos
     return {"meta": meta_obj}
 
+async def _global_streams_for(token: str, imdb_id: str, media_type: str, season_num: Optional[int], episode_num: Optional[int]) -> list:
+    """Builds Global Search stream entries for a catalog item that has no
+    local DB row at all. Since there's no local title to read, the
+    canonical title (and, for a specific episode, confirmation it exists)
+    is resolved from Cinemeta via Backend.helper.imdb — the same source
+    used everywhere else in this codebase for metadata."""
+    from Backend.helper.imdb import get_detail, get_season
+
+    imdb_media_type = "tvSeries" if media_type == "series" else "movie"
+
+    detail = await get_detail(imdb_id=imdb_id, media_type=imdb_media_type)
+    if not detail or not detail.get("title"):
+        return []
+
+    expected_title = detail["title"]
+    year = (detail.get("releaseDetailed") or {}).get("year") or None
+
+    if season_num is not None and episode_num is not None:
+        try:
+            await get_season(imdb_id=imdb_id, season_id=season_num, episode_id=episode_num)
+        except Exception:
+            pass  # best-effort only; absence doesn't block the search
+
+    try:
+        global_results = await global_search(
+            expected_title,
+            SettingsManager.current().auth_channels,
+            year=year,
+            season=season_num,
+            episode=episode_num,
+        )
+    except Exception as e:
+        LOGGER.error(f"[GLOBAL SEARCH] search failed for '{expected_title}': {e}")
+        return []
+
+    streams = []
+    for r in global_results:
+        _, stream_title = format_stream_details(r["title"], r["quality"], r["size"], is_split=False)
+        stream_name = f"🌐 GLOBAL {r['quality']}"
+        stream_title = f"{stream_title}\n📡 {r['source_chat']}"
+        url = f"{SettingsManager.current().base_url}/dl/{token}/{r['token']}/{quote(r['title'])}"
+        streams.append({"name": stream_name, "title": stream_title, "url": url})
+    return streams
+
+
 @router.get("/{token}/stream/{media_type}/{id}.json")
 async def get_streams(
     token: str,
@@ -416,66 +461,58 @@ async def get_streams(
         episode_number=episode_num
     )
 
-    if not media_details or "telegram" not in media_details:
-        return {"streams": []}
-
     streams = []
-    for quality in media_details.get("telegram", []):
-        if quality.get("id"):
-            filename = quality.get("name", "")
-            quality_str = quality.get("quality", "HD")
-            size = quality.get("size", "")
 
-            stream_name, stream_title = format_stream_details(
-                filename, quality_str, size, is_split=bool(quality.get("group_key"))
-            )
+    if media_details and "telegram" in media_details:
+        for quality in media_details.get("telegram", []):
+            if quality.get("id"):
+                filename = quality.get("name", "")
+                quality_str = quality.get("quality", "HD")
+                size = quality.get("size", "")
 
-            original_url = f"{SettingsManager.current().base_url}/dl/{token}/{quality.get('id')}/video.mkv"
-            proxy_url = f"{SettingsManager.current().http_proxy_url}{original_url}" if SettingsManager.current().http_proxy_url else None
+                stream_name, stream_title = format_stream_details(
+                    filename, quality_str, size, is_split=bool(quality.get("group_key"))
+                )
 
-            if SettingsManager.current().show_proxy_and_non_proxy_both and proxy_url:
-                streams.append({
-                    "name": f"{stream_name} (Proxy)",
-                    "title": stream_title,
-                    "url": proxy_url
-                })
-                streams.append({
-                    "name": f"{stream_name} (Direct)",
-                    "title": stream_title,
-                    "url": original_url
-                })
-            elif proxy_url:
-                streams.append({
-                    "name": stream_name,
-                    "title": stream_title,
-                    "url": proxy_url
-                })
-            else:
-                streams.append({
-                    "name": stream_name,
-                    "title": stream_title,
-                    "url": original_url
-                })
+                original_url = f"{SettingsManager.current().base_url}/dl/{token}/{quality.get('id')}/video.mkv"
+                proxy_url = f"{SettingsManager.current().http_proxy_url}{original_url}" if SettingsManager.current().http_proxy_url else None
 
-
-
-    if is_global_search_enabled() and not media_details.get("title"):
+                if SettingsManager.current().show_proxy_and_non_proxy_both and proxy_url:
+                    streams.append({
+                        "name": f"{stream_name} (Proxy)",
+                        "title": stream_title,
+                        "url": proxy_url
+                    })
+                    streams.append({
+                        "name": f"{stream_name} (Direct)",
+                        "title": stream_title,
+                        "url": original_url
+                    })
+                elif proxy_url:
+                    streams.append({
+                        "name": stream_name,
+                        "title": stream_title,
+                        "url": proxy_url
+                    })
+                else:
+                    streams.append({
+                        "name": stream_name,
+                        "title": stream_title,
+                        "url": original_url
+                    })
+    elif is_global_search_enabled():
+        # Not in the local catalog at all — resolve the real title via
+        # Cinemeta (we have no local DB row to read a title from) and
+        # search for it across the Userbot's channels instead.
         try:
-            from Backend.helper.imdb import get_detail   # adjust import path as needed
-        
-            media_type = "tv" if mediatype == "series" else "movie"
-            imdb_detail = await get_detail(imdbid, media_type)
-            search_title = imdb_detail.get("title") if imdb_detail else media_details.get("title")
-        
-            if search_title:
-                global_results = await global_search(search_title, SettingsManager.current().auth_channels)
-                for r in global_results:
-                    stream_name = f"🌐 GLOBAL {r['quality']}"
-                    stream_title = f"📁 {r['title']}\n📦 {r['size']}\n📡 {r['source_chat']}"
-                    url = f"{SettingsManager.current().base_url}/dl/{token}/{r['token']}/{quote(r['title'])}"
-                    streams.append({"name": stream_name, "title": stream_title, "url": url})
+            streams.extend(
+                await _global_streams_for(token, imdb_id, media_type, season_num, episode_num)
+            )
         except Exception as e:
-            LOGGER.error(f"[GLOBAL SEARCH] stream injection failed for '{imdbid}': {e}")
+            LOGGER.error(f"[GLOBAL SEARCH] stream search failed for {imdb_id}: {e}")
+
+    if not streams:
+        return {"streams": []}
 
     streams.sort(
         key=lambda s: get_resolution_priority(s.get("name", "")),
