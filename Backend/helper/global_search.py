@@ -1,4 +1,5 @@
 import asyncio
+import re
 import time
 from typing import Dict, List, Optional
 
@@ -21,14 +22,17 @@ from Backend.helper.encrypt import encode_string
 
 MAX_RESULTS = 50
 MAX_RESULTS_PER_CHAT = 10
-MAX_DIALOGS_SCANNED = 20          # safety cap; tune for very large accounts
+MAX_DIALOGS_SCANNED = 5
 SEARCH_COOLDOWN_SECONDS = 5
 MAX_CONCURRENT_SEARCHES = 3
+MIN_TITLE_SCORE = 0.6              
 
 _last_search_ts: Dict[str, float] = {}
 _inflight_queries: set = set()
 _search_semaphore = asyncio.Semaphore(MAX_CONCURRENT_SEARCHES)
 _userbot_session_dead = False
+
+_TOKEN_RE = re.compile(r"[a-z0-9]+")
 
 
 def is_userbot_available() -> bool:
@@ -47,9 +51,7 @@ def _readable_size(num_bytes: int) -> str:
 
 def _video_filename(message) -> Optional[str]:
     """Returns a usable filename if this message is video content, else
-    None. Documents are only accepted if their mime type is video/* —
-    unlike split-part detection, Global Search has no reason to special-case
-    odd extensions here."""
+    None."""
     if message.video:
         return message.caption or getattr(message.video, "file_name", None) or "video.mkv"
     if message.document:
@@ -57,6 +59,61 @@ def _video_filename(message) -> Optional[str]:
         if mime.startswith("video/"):
             return message.caption or message.document.file_name or "video.mkv"
     return None
+
+
+def _tokens(s: str) -> set:
+    return set(_TOKEN_RE.findall((s or "").lower()))
+
+
+def _title_score(result_title: str, expected_title: str) -> float:
+    expected = _tokens(expected_title)
+    if not expected:
+        return 0.0
+    found = _tokens(result_title)
+    return len(expected & found) / len(expected)
+
+
+def _matches_episode(parsed: dict, season: Optional[int], episode: Optional[int]) -> bool:
+    """Validates a PTN-parsed filename against the requested season/episode
+    (TV only). A filename that doesn't mention season/episode at all is
+    treated as ambiguous, not a mismatch — single-episode uploads in some
+    channels omit it from the filename. An explicit, conflicting value is a
+    hard reject."""
+    if season is not None:
+        result_season = parsed.get("season")
+        if isinstance(result_season, list):
+            if season not in result_season:
+                return False
+        elif result_season is not None and int(result_season) != int(season):
+            return False
+
+    if episode is not None:
+        result_episode = parsed.get("episode")
+        if isinstance(result_episode, list):
+            if episode not in result_episode:
+                return False
+        elif result_episode is not None and int(result_episode) != int(episode):
+            return False
+
+    return True
+
+
+def _parse_and_validate(filename: str, expected_title: str, season: Optional[int], episode: Optional[int]) -> Optional[dict]:
+    """Properly parses `filename` with PTN and returns the parsed dict only
+    if it plausibly matches what we're looking for, else None."""
+    try:
+        parsed = PTN.parse(filename)
+    except Exception:
+        return None
+
+    if not _matches_episode(parsed, season, episode):
+        return None
+
+    result_title = parsed.get("title", "")
+    if _title_score(result_title, expected_title) < MIN_TITLE_SCORE:
+        return None
+
+    return parsed
 
 
 def _auth_channel_ids(auth_channels: List[str]) -> set:
@@ -76,14 +133,25 @@ def _auth_channel_ids(auth_channels: List[str]) -> set:
     return ids
 
 
-async def global_search(query: str, auth_channels: List[str]) -> List[Dict]:
-    """Search for `query` across every chat the Userbot can see, excluding
-    Auth Channels. Returns up to MAX_RESULTS dicts:
+async def global_search(
+    expected_title: str,
+    auth_channels: List[str],
+    *,
+    year: Optional[int] = None,
+    season: Optional[int] = None,
+    episode: Optional[int] = None,
+) -> List[Dict]:
+    """Search for media matching `expected_title` (optionally a specific
+    `season`/`episode` for TV) across every chat the Userbot can see,
+    excluding Auth Channels. Returns up to MAX_RESULTS dicts:
         {token, title, size, source_chat, quality}
     `token` is an opaque playback id — pass it straight into the same
-    encode/decode pipeline used for normal streams (see stream_routes.py)."""
-    query = (query or "").strip()
-    if not query:
+    encode/decode pipeline used for normal streams (see stream_routes.py).
+    Every candidate is parsed with PTN and validated against
+    expected_title/season/episode before being included — Telegram's own
+    search is loose and returns plenty of unrelated matches otherwise."""
+    expected_title = (expected_title or "").strip()
+    if not expected_title:
         return []
 
     if not is_global_search_enabled():
@@ -91,13 +159,17 @@ async def global_search(query: str, auth_channels: List[str]) -> List[Dict]:
 
     from Backend.pyrofork.bot import Userbot
 
-    key = query.lower()
+    search_query = expected_title
+    if season is not None and episode is not None:
+        search_query = f"{expected_title} S{int(season):02d}E{int(episode):02d}"
+
+    key = f"{search_query.lower()}"
     now = time.time()
     if now - _last_search_ts.get(key, 0) < SEARCH_COOLDOWN_SECONDS:
-        LOGGER.info(f"[GLOBAL SEARCH] Cooldown active for '{query}', skipping.")
+        LOGGER.info(f"[GLOBAL SEARCH] Cooldown active for '{search_query}', skipping.")
         return []
     if key in _inflight_queries:
-        LOGGER.info(f"[GLOBAL SEARCH] Duplicate in-flight search for '{query}', skipping.")
+        LOGGER.info(f"[GLOBAL SEARCH] Duplicate in-flight search for '{search_query}', skipping.")
         return []
 
     _inflight_queries.add(key)
@@ -108,7 +180,7 @@ async def global_search(query: str, auth_channels: List[str]) -> List[Dict]:
 
     try:
         async with _search_semaphore:
-            LOGGER.info(f"[USERBOT] Search started: '{query}'")
+            LOGGER.info(f"[USERBOT] Search started: '{search_query}'")
             dialogs_scanned = 0
 
             try:
@@ -132,7 +204,7 @@ async def global_search(query: str, auth_channels: List[str]) -> List[Dict]:
                     try:
                         async for message in Userbot.search_messages(
                             chat_id=chat.id,
-                            query=query,
+                            query=search_query,
                             filter=enums.MessagesFilter.VIDEO,
                             limit=MAX_RESULTS_PER_CHAT,
                         ):
@@ -140,13 +212,13 @@ async def global_search(query: str, auth_channels: List[str]) -> List[Dict]:
                             if not filename:
                                 continue
 
+                            parsed = _parse_and_validate(filename, expected_title, season, episode)
+                            if parsed is None:
+                                continue
+
                             media = message.video or message.document
                             size_bytes = getattr(media, "file_size", 0) or 0
-
-                            try:
-                                quality = (PTN.parse(filename).get("resolution") or "HD")
-                            except Exception:
-                                quality = "HD"
+                            quality = parsed.get("resolution") or "HD"
 
                             token = await encode_string({
                                 "global": True,
@@ -193,7 +265,7 @@ async def global_search(query: str, auth_channels: List[str]) -> List[Dict]:
                 await asyncio.sleep(e.value)
 
             LOGGER.info(
-                f"[USERBOT] Search completed: '{query}' -> {len(results)} result(s) "
+                f"[USERBOT] Search completed: '{search_query}' -> {len(results)} result(s) "
                 f"across {dialogs_scanned} chat(s)"
             )
             return results
