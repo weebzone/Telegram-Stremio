@@ -294,7 +294,7 @@
                 <strong>Enable Global Search</strong>
                 <span style="color:var(--text-sec);font-size:0.8rem;display:block">
                     Search media across every channel your Userbot account can see, excluding Auth Channels.
-                    Results are tagged <strong>[GLOBAL]</strong> and streamed live through the Userbot session.
+                    Results are tagged <strong>🌐 GLOBAL</strong> in the stream list for items not in your local catalog.
                 </span>
             </span>
         </label>
@@ -302,11 +302,10 @@
         <p style="color:var(--text-sec);font-size:0.8rem;margin-top:0.75rem">
             <i class="fa-solid fa-circle-info"></i>
             Requires <code>USER_SESSION_STRING</code> to be set in <code>config.env</code> (startup-critical,
-            not editable here). Restart the app after setting it to unlock this option.
+            not editable here) <strong>and a full app restart</strong>. Restart the app after setting it to unlock this option.
         </p>
         {% endif %}
     </div>
-
 
     <!-- ── Proxy ───────────────────────────────────────────────────────── -->
     <div class="settings-card">
