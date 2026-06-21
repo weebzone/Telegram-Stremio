@@ -24,6 +24,7 @@ _DEFAULTS: Dict[str, Any] = {
     "multi_tokens": [],
     "extra_databases": [],
     "global_search": False,
+    "global_search_channels": [],
 }
 
 
@@ -46,6 +47,7 @@ def _seed_from_env() -> Dict[str, Any]:
         "subscription_group_id":        Telegram.SUBSCRIPTION_GROUP_ID,
         "subscription_url":             Telegram.SUBSCRIPTION_URL,
         "approver_ids":                 list(Telegram.APPROVER_IDS),
+        "global_search_channels":       [],
         "http_proxy_url":               Telegram.HTTP_PROXY_URL,
         "show_proxy_and_non_proxy_both": Telegram.SHOW_PROXY_AND_NON_PROXY_BOTH,
         "multi_tokens":                 [],
@@ -85,6 +87,10 @@ class Settings:
     @property
     def global_search(self) -> bool:
         return bool(self._d.get("global_search", False))
+
+    @property
+    def global_search_channels(self):
+        return list(self._d.get("global_search_channels") or [])
 
     # ── Strings ──────────────────────────────────────────────────────────────
     @property
