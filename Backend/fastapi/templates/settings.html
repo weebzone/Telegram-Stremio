@@ -307,30 +307,6 @@
         {% endif %}
     </div>
 
-    <!-- ── Global Search (Userbot) ─────────────────────────────────────── -->
-    <div class="settings-card">
-        <h2><i class="fa-solid fa-magnifying-glass-location"></i> Global Search</h2>
-        <label class="toggle-wrap" style="margin-bottom:0.5rem">
-            <input type="checkbox" class="toggle-input" id="global_search"
-                {% if settings.global_search %}checked{% endif %}
-                {% if not userbot_configured %}disabled{% endif %}>
-            <span class="toggle-track"></span>
-            <span class="toggle-label">
-                <strong>Enable Global Search</strong>
-                <span style="color:var(--text-sec);font-size:0.8rem;display:block">
-                    Search media across every channel your Userbot account can see
-                    (excluding Auth Channels), tagged [GLOBAL] in results.
-                </span>
-            </span>
-        </label>
-        {% if not userbot_configured %}
-        <p style="color:var(--text-sec);font-size:0.8rem;margin-top:0.5rem">
-            <i class="fa-solid fa-circle-info"></i>
-            Requires <code>USER_SESSION_STRING</code> to be set in <code>config.env</code>.
-            Restart the app after adding it, then this toggle will unlock.
-        </p>
-        {% endif %}
-    </div>
 
     <!-- ── Proxy ───────────────────────────────────────────────────────── -->
     <div class="settings-card">
