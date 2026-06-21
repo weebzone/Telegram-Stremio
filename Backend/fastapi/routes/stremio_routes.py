@@ -8,6 +8,8 @@ import PTN
 from fastapi.responses import HTMLResponse
 from datetime import datetime, timezone, timedelta
 from Backend.fastapi.security.tokens import verify_token
+from Backend.logger import LOGGER
+from Backend.helper.global_search import global_search, is_global_search_enabled
 
 router = APIRouter(prefix="/stremio", tags=["Stremio Addon"])
 
@@ -309,6 +311,7 @@ async def get_catalog(token: str, media_type: str, id: str, extra: Optional[str]
 async def get_meta(token: str, media_type: str, id: str, token_data: dict = Depends(verify_token)):
     if SettingsManager.current().hide_catalog:
         raise HTTPException(status_code=404, detail="Catalog disabled")
+
     try:
         imdb_id = id
     except (ValueError, IndexError):
@@ -399,7 +402,6 @@ async def get_streams(
             ]
         }
 
-
     try:
         parts = id.split(":")
         imdb_id = parts[0]
@@ -454,6 +456,17 @@ async def get_streams(
                     "title": stream_title,
                     "url": original_url
                 })
+
+    if media_details.get("title") and is_global_search_enabled():
+        try:
+            global_results = await global_search(media_details["title"], SettingsManager.current().auth_channels)
+            for r in global_results:
+                stream_name = f"🌐 GLOBAL {r['quality']}"
+                stream_title = f"📁 {r['title']}\n📦 {r['size']}\n📡 {r['source_chat']}"
+                url = f"{SettingsManager.current().base_url}/dl/{token}/{r['token']}/{quote(r['title'])}"
+                streams.append({"name": stream_name, "title": stream_title, "url": url})
+        except Exception as e:
+            LOGGER.error(f"[GLOBAL SEARCH] stream injection failed for '{media_details['title']}': {e}")
 
     streams.sort(
         key=lambda s: get_resolution_priority(s.get("name", "")),
