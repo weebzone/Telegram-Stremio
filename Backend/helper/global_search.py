@@ -21,8 +21,8 @@ from Backend.helper.settings_manager import SettingsManager
 from Backend.helper.encrypt import encode_string
 
 MAX_RESULTS = 50
-MAX_RESULTS_PER_CHAT = 10
-MAX_DIALOGS_SCANNED = 5
+MAX_RESULTS_PER_CHAT = 50
+MAX_DIALOGS_SCANNED = 200
 SEARCH_COOLDOWN_SECONDS = 5
 MAX_CONCURRENT_SEARCHES = 3
 MIN_TITLE_SCORE = 0.6              
