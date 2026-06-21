@@ -9,7 +9,7 @@ from Backend.logger import LOGGER
 from Backend.fastapi import server
 from Backend.helper.settings_manager import SettingsManager
 from Backend.helper.pyro import restart_notification, setup_bot_commands
-from Backend.pyrofork.bot import Helper, StreamBot
+from Backend.pyrofork.bot import Userbot, StreamBot
 from Backend.pyrofork.clients import initialize_clients
 from Backend.helper import subscription_task_manager
 from Backend.helper.link_checker import DeadLinkChecker
@@ -43,9 +43,12 @@ async def start_services():
         LOGGER.info(f"Bot Client : [@{StreamBot.username}]")
         await asleep(1.2)
 
-        await Helper.start()
-        Helper.username = Helper.me.username
-        LOGGER.info(f"Helper Bot Client : [@{Helper.username}]")
+        if Userbot is not None:
+            await Userbot.start()
+            Userbot.username = Userbot.me.username
+            LOGGER.info(f"Userbot Client : [@{Userbot.username}] (Global Search / fallback enabled)")
+        else:
+            LOGGER.info("Userbot not configured (USER_SESSION_STRING empty) — running with StreamBot only.")
         await asleep(1.2)
 
         LOGGER.info("Initializing Multi Clients...")
@@ -86,7 +89,8 @@ async def stop_services():
         await asyncio.gather(*pending_tasks, return_exceptions=True)
 
         await StreamBot.stop()
-        await Helper.stop()
+        if Userbot is not None:
+            await Userbot.stop()
 
         await db.disconnect()
         
