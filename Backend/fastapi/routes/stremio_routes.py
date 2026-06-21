@@ -457,16 +457,25 @@ async def get_streams(
                     "url": original_url
                 })
 
-    if media_details.get("title") and is_global_search_enabled():
+
+
+    if is_global_search_enabled() and not media_details.get("title"):
         try:
-            global_results = await global_search(media_details["title"], SettingsManager.current().auth_channels)
-            for r in global_results:
-                stream_name = f"🌐 GLOBAL {r['quality']}"
-                stream_title = f"📁 {r['title']}\n📦 {r['size']}\n📡 {r['source_chat']}"
-                url = f"{SettingsManager.current().base_url}/dl/{token}/{r['token']}/{quote(r['title'])}"
-                streams.append({"name": stream_name, "title": stream_title, "url": url})
+            from Backend.helper.imdb import get_detail   # adjust import path as needed
+        
+            media_type = "tv" if mediatype == "series" else "movie"
+            imdb_detail = await get_detail(imdbid, media_type)
+            search_title = imdb_detail.get("title") if imdb_detail else media_details.get("title")
+        
+            if search_title:
+                global_results = await global_search(search_title, SettingsManager.current().auth_channels)
+                for r in global_results:
+                    stream_name = f"🌐 GLOBAL {r['quality']}"
+                    stream_title = f"📁 {r['title']}\n📦 {r['size']}\n📡 {r['source_chat']}"
+                    url = f"{SettingsManager.current().base_url}/dl/{token}/{r['token']}/{quote(r['title'])}"
+                    streams.append({"name": stream_name, "title": stream_title, "url": url})
         except Exception as e:
-            LOGGER.error(f"[GLOBAL SEARCH] stream injection failed for '{media_details['title']}': {e}")
+            LOGGER.error(f"[GLOBAL SEARCH] stream injection failed for '{imdbid}': {e}")
 
     streams.sort(
         key=lambda s: get_resolution_priority(s.get("name", "")),
