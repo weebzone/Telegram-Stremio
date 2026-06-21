@@ -15,7 +15,7 @@ from Backend.helper.encrypt import decode_string
 from Backend.helper.utils import track_usage
 from Backend.helper.custom_dl import ByteStreamer, ACTIVE_STREAMS, RECENT_STREAMS
 from Backend.helper.virtual_dl import resolve_virtual_parts, virtual_stream_generator
-from Backend.pyrofork.bot import work_loads, multi_clients, client_dc_map, client_failures, client_avg_mbps
+from Backend.pyrofork.bot import work_loads, multi_clients, client_dc_map, client_failures, client_avg_mbps, Userbot, USERBOT_CLIENT_INDEX
 from Backend.fastapi.security.tokens import verify_token
 
 router = APIRouter(tags=["Streaming"])
@@ -104,6 +104,12 @@ def get_parallel_prefetch(client_count: int) -> tuple[int, int]:
 @router.head("/dl/{token}/{id}/{name}")
 async def stream_handler(request: Request, token: str, id: str, name: str, token_data: dict = Depends(verify_token),):
     decoded = await decode_string(id)
+
+    if decoded.get("global"):
+        return await global_media_streamer(
+            request=request, chat_id=int(decoded["chat_id"]), msg_id=int(decoded["msg_id"]),
+            token=token, token_data=token_data, stream_id_hash=id,
+        )
 
     if "parts" in decoded:
         return await virtual_media_streamer(
@@ -316,6 +322,100 @@ async def virtual_media_streamer(request: Request, parts_payload: list, token: s
     )
 
     return StreamingResponse(body_gen, headers=common_headers, status_code=status, media_type=mime_type, )
+
+
+_userbot_streamer: ByteStreamer = None
+
+
+def _get_userbot_streamer() -> ByteStreamer:
+    """Lazily build (and cache) the ByteStreamer wrapping the Userbot
+    client. Returns None if no Userbot is configured."""
+    global _userbot_streamer
+    if Userbot is None:
+        return None
+    if _userbot_streamer is None:
+        _userbot_streamer = ByteStreamer(Userbot, USERBOT_CLIENT_INDEX)
+    return _userbot_streamer
+
+
+async def global_media_streamer(request: Request, chat_id: int, msg_id: int, token: str, token_data: dict = None, stream_id_hash: str = None,):
+    """Streams a single file found via Global Search, played back through
+    the Userbot session directly — these channels aren't part of the Auth
+    Channel/MultiToken infrastructure, so the regular client pool can't
+    (and shouldn't) be used here."""
+    streamer = _get_userbot_streamer()
+    if streamer is None:
+        raise HTTPException(status_code=503, detail="Global Search streaming is unavailable (no Userbot configured)")
+
+    LOGGER.info(f"[USERBOT] Stream request: chat={chat_id} msg={msg_id}")
+    try:
+        file_id = await streamer.get_file_properties(chat_id=chat_id, message_id=msg_id)
+    except Exception as e:
+        LOGGER.error(f"[USERBOT] File not accessible: chat={chat_id} msg={msg_id}: {e}")
+        raise HTTPException(status_code=404, detail="File not accessible via Global Search")
+
+    file_size = file_id.file_size
+    range_header = request.headers.get("Range", "")
+    start, end = parse_range_header(range_header, file_size)
+    req_length = end - start + 1
+    chunk_size = 1024 * 1024
+    offset = start - (start % chunk_size)
+    first_part_cut = start - offset
+    last_part_cut = (end % chunk_size) + 1
+    part_count = math.ceil(end / chunk_size) - math.floor(offset / chunk_size)
+    stream_id = secrets.token_hex(8)
+
+    meta = {
+        "request_path": str(request.url.path),
+        "client_host": request.client.host if request.client else None,
+        "title": file_id.file_name or "global-stream",
+        "user_name": token_data.get("name", "Unknown") if token_data else "Unknown",
+        "global_search": True,
+    }
+
+    asyncio.create_task(track_usage(stream_id, token, token_data))
+
+    file_name = file_id.file_name or f"{secrets.token_hex(4)}.bin"
+    mime_type = file_id.mime_type or mimetypes.guess_type(file_name)[0] or "application/octet-stream"
+    if "." not in file_name and "/" in mime_type:
+        file_name = f"{file_name}.{mime_type.split('/')[1]}"
+
+    headers = {
+        "Content-Type": mime_type,
+        "Content-Disposition": f'inline; filename="{file_name}"',
+        "Accept-Ranges": "bytes",
+        "Content-Length": str(req_length),
+        "Cache-Control": "public, max-age=3600",
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges",
+    }
+    if range_header:
+        headers["Content-Range"] = f"bytes {start}-{end}/{file_size}"
+        status = 206
+    else:
+        status = 200
+
+    if request.method == "HEAD":
+        return PlainResponse(status_code=status, headers=headers)
+
+    body_gen = await streamer.prefetch_stream(
+        file_id=file_id,
+        client_index=USERBOT_CLIENT_INDEX,
+        offset=offset,
+        first_part_cut=first_part_cut,
+        last_part_cut=last_part_cut,
+        part_count=part_count,
+        chunk_size=chunk_size,
+        prefetch=1,
+        stream_id=stream_id,
+        meta=meta,
+        parallelism=1,
+        request=request,
+        chat_id=chat_id,
+        message_id=msg_id,
+    )
+
+    return StreamingResponse(body_gen, headers=headers, status_code=status, media_type=mime_type, )
 
 @router.get("/stream/stats")
 async def get_stream_stats():
