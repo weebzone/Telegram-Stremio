@@ -17,13 +17,7 @@ from pyrogram.errors import (
 from Backend.logger import LOGGER
 from Backend.pyrofork.bot import StreamBot, Userbot
 
-# Telegram's hard cap per delete_messages() call.
 DELETE_BATCH_SIZE = 10
-
-# Errors that mean "StreamBot specifically can't do this" (ownership,
-# permissions, flood-related edit/delete restrictions, or any other RPC
-# error) — worth retrying with the Userbot if one is configured.
-# FloodWait is handled separately (sleep + retry on the *same* client first).
 _FALLBACK_WORTHY = (
     ChatAdminRequired,
     ChannelPrivate,
@@ -33,11 +27,7 @@ _FALLBACK_WORTHY = (
     UserNotParticipant,
     RPCError,
 )
-
-# Errors that mean the Userbot session itself is dead — don't keep retrying
-# operations against it for the rest of this run.
 _SESSION_DEAD = (AuthKeyUnregistered, SessionRevoked)
-
 _userbot_session_dead = False
 
 
@@ -45,10 +35,7 @@ def _userbot_usable() -> bool:
     return Userbot is not None and not _userbot_session_dead
 
 
-async def edit_message(chat_id: int, msg_id: int, new_caption: str):
-    """Edit a message's caption. Tries StreamBot first; if that fails for a
-    reason a Userbot could plausibly fix (ownership/permissions/RPC errors),
-    transparently falls back to the Userbot when one is configured."""
+async def edit_message(chat_id: int, msg_id: int, new_caption: str): 
     try:
         await StreamBot.edit_message_caption(chat_id=chat_id, message_id=msg_id, caption=new_caption)
         await sleep(2)
@@ -91,16 +78,10 @@ async def _userbot_edit(chat_id: int, msg_id: int, new_caption: str):
 
 
 async def delete_message(chat_id: int, msg_id: int):
-    """Single-message delete, kept for backward compatibility — internally
-    just calls the batch path with a one-item list."""
     await delete_messages_batch(chat_id, [msg_id])
 
 
 async def delete_messages_batch(chat_id: int, msg_ids: List[int]):
-    """Delete many messages from one chat. Chunks to Telegram's per-call
-    limit, tries StreamBot first for each chunk, and transparently falls
-    back to the Userbot (if configured) for whatever StreamBot couldn't
-    remove."""
     if not msg_ids:
         return
 
@@ -120,12 +101,10 @@ async def delete_messages_batch(chat_id: int, msg_ids: List[int]):
                 f"Could not delete {len(remaining)} message(s) in {chat_id} even with Userbot fallback"
             )
 
-        await sleep(1)  # gentle pacing between chunks
+        await sleep(1)
 
 
 async def _delete_chunk(client, client_label: str, chat_id: int, msg_ids: List[int]) -> List[int]:
-    """Attempt to delete msg_ids with `client`. Returns the ids that still
-    need another attempt (empty list on full success)."""
     global _userbot_session_dead
     try:
         await client.delete_messages(chat_id=chat_id, message_ids=msg_ids)
