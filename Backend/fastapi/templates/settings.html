@@ -285,55 +285,95 @@
 
 
 
-    <!-- ── Global Search (Userbot) ────────────────────────────────────── -->
-    <div class="settings-card">
-        <h2><i class="fa-solid fa-globe"></i> Global Search</h2>
-        <label class="toggle-wrap" style="{% if not userbot_configured %}opacity:0.5{% endif %}">
-            <input type="checkbox" class="toggle-input" id="global_search" {%="" if="" settings.global_search="" %}checked{%="" endif="" %}="" not="" userbot_configured="" %}disabled{%="">
-            <span class="toggle-track"></span>
-            <span class="toggle-label">
-                <strong>Enable Global Search</strong>
-                <span style="color:var(--text-sec);font-size:0.8rem;display:block">
-                    Search media <strong>only in the channels listed below</strong>.
-                    Results are tagged <strong>🌐 GLOBAL</strong> in the stream list for items not in your local catalog.
-                </span>
-            </span>
-        </label>
-        {% if not userbot_configured %}
-        <p style="color:var(--text-sec);font-size:0.8rem;margin-top:0.75rem">
-            <i class="fa-solid fa-circle-info"></i>
-            Requires <code>USER_SESSION_STRING</code> to be set in <code>config.env</code> (startup-critical,
-            not editable here) <strong>and a full app restart</strong>. Restart the app after setting it to unlock this option.
-        </p>
-        {% endif %}
+<!-- ── Global Search (Userbot) ────────────────────────────────────── -->
+<div class="settings-card">
+    <h2><i class="fa-solid fa-globe"></i> Global Search</h2>
 
-        <div id="global-search-fields" style="{% if not settings.global_search %}display:none{% endif %}">
-            <hr class="divider">
-            <label class="s-label">GLOBAL SEARCH CHANNELS
+    <label class="toggle-wrap" style="{% if not userbot_configured %}opacity:0.5{% endif %}">
+        <input type="checkbox" class="toggle-input" id="global_search"
+            {% if settings.global_search %}checked{% endif %}
+            {% if not userbot_configured %}disabled{% endif %}
+            onchange="toggleGlobalSearchFields()">
+        <span class="toggle-track"></span>
+        <span class="toggle-label">
+            <strong>Enable Global Search</strong>
+            <span style="color:var(--text-sec);font-size:0.8rem;display:block">
+                Search media <strong>only in the channels listed below</strong>.
+                Results are tagged <strong>🌐 GLOBAL</strong> in the stream list
+                for items not in your local catalog.
+            </span>
+        </span>
+    </label>
+
+    {% if not userbot_configured %}
+    <p style="color:var(--text-sec);font-size:0.8rem;margin-top:0.75rem">
+        <i class="fa-solid fa-circle-info"></i>
+        Requires <code>USER_SESSION_STRING</code> to be set in
+        <code>config.env</code> (startup-critical, not editable here)
+        <strong>and a full app restart</strong>.
+        Restart the app after setting it to unlock this option.
+    </p>
+    {% endif %}
+
+    <div id="global-search-fields"
+         style="{% if not settings.global_search %}display:none{% endif %}">
+
+        <hr class="divider">
+
+        <div id="global-search-channels-wrap"
+             style="{% if not userbot_configured %}opacity:0.5;pointer-events:none{% endif %}">
+
+            <label class="s-label">
+                GLOBAL SEARCH CHANNELS
                 <span style="font-weight:400;text-transform:none;letter-spacing:0">
-                    — search is restricted to these channel IDs only</span>
+                    — search is restricted to these channel IDs only
+                </span>
             </label>
+
             <p style="font-size:0.78rem;color:var(--text-sec);margin-bottom:0.75rem">
-                <i class="fa-solid fa-triangle-exclamation" style="color:var(--warning,#f59e0b)"></i>
-                Global Search will <strong>not run</strong> unless at least one channel ID is added here.
-                Enter numeric channel IDs (e.g. <code>-1001234567890</code> or bare <code>1234567890</code>).
+                <i class="fa-solid fa-triangle-exclamation"
+                   style="color:var(--warning,#f59e0b)"></i>
+                Global Search will <strong>not run</strong> unless at least one
+                channel ID is added here.
+                Enter numeric channel IDs
+                (e.g. <code>-1001234567890</code> or bare
+                <code>1234567890</code>).
             </p>
+
             <div class="multi-list-items" id="global_search_channels_items">
                 {% for ch in settings.global_search_channels %}
                 <div class="multi-item">
-                    <input type="text" class="s-input" value="{{ ch }}" data-list="global_search_channels" placeholder="-100xxxxxxxxxx">
-                    <button class="remove-btn" title="Remove">
+                    <input type="text"
+                           class="s-input"
+                           value="{{ ch }}"
+                           data-list="global_search_channels"
+                           placeholder="-100xxxxxxxxxx">
+
+                    <button class="remove-btn"
+                            onclick="removeItem(this)"
+                            title="Remove">
                         <i class="fa-solid fa-xmark"></i>
                     </button>
                 </div>
                 {% endfor %}
             </div>
+
             <div class="add-row">
-                <input type="text" id="global_search_channels_new" class="s-input" placeholder="-100xxxxxxxxxx or bare numeric ID">
-                <button class="add-btn">+ Add Channel</button>
+                <input type="text"
+                       id="global_search_channels_new"
+                       class="s-input"
+                       placeholder="-100xxxxxxxxxx or bare numeric ID"
+                       onkeydown="if(event.key==='Enter'){event.preventDefault();addItem('global_search_channels')}">
+
+                <button class="add-btn"
+                        onclick="addItem('global_search_channels')">
+                    + Add Channel
+                </button>
             </div>
+
         </div>
     </div>
+</div>
 
 
 
@@ -467,7 +507,11 @@ function toggleSubFields() {
 
 function toggleGlobalSearchFields() {
     const enabled = document.getElementById('global_search').checked;
-    document.getElementById('global-search-fields').style.display = enabled ? '' : 'none';
+    const fields = document.getElementById('global-search-fields');
+
+    if (fields) {
+        fields.style.display = enabled ? '' : 'none';
+    }
 }
 
 /* ── Password visibility ──────────────────────────────────────────────── */
@@ -618,6 +662,7 @@ function renderSettings(s) {
     document.getElementById('show_proxy_and_non_proxy_both').checked = !!s.show_proxy_and_non_proxy_both;
     document.getElementById('global_search').checked = !!s.global_search;
     toggleSubFields();
+    toggleGlobalSearchFields();
 
     // Plain text/number fields
     document.getElementById('admin_username').value = s.admin_username || '';
