@@ -22,42 +22,53 @@
 
 ## 🧭 Quick Navigation
 
-- [🚀 Introduction](#-introduction)
-  - [✨ Key Features](#-key-features)
-  - [🆕 New Features](#-new-features)
-  - [� Subscription Management](#-subscription-management)
-  - [💳 Subscription Management](#-subscription-management-config)
-  - [📋 Plans](#-subscription-plans)
-  - [🤖 Bot Payment Flow](#-bot-payment-flow)
-  - [🗃️ Access Management](#️-access-management)
-  - [🎬 Stremio Addon Integration](#-stremio-addon-integration)
-- [⚙️ How It Works](#️-how-it-works)
-  - [Overview](#overview)
-  - [Upload Guidelines](#upload-guidelines)
-  - [Quality Replacement](#-quality-replacement-logic)
-  - [Updating CAMRip](#-updating-camrip-or-low-quality-files)
-  - [Behind The Scenes](#behind-the-scenes)
-- [🤖 Bot Commands](#-bot-commands)
-  - [Command List](#command-list)
-  - [`/set` Command Usage](#set-command-usage)
-- [🔧 Configuration Guide](#-configuration-guide)
-  - [🧩 Startup Config](#-startup-config)
-  - [🗄️ Storage](#️-storage)
-  - [🎬 API](#-api)
-  - [🌐 Server](#-server)
-  - [🔄 Update Settings](#-update-settings)
-  - [🔐 Admin Panel](#-admin-panel)
+* [🚀 Introduction](#-introduction)
 
-  - [🧰 Additional CDN Bots (Multi-Token System)](#-additional-cdn-bots-multi-token-system)
+  * [✨ Key Features](#-key-features)
+  * [💳 Subscription Management](#-subscription-management)
+  * [📋 Subscription Plans](#-subscription-plans)
+  * [🤖 Bot Payment Flow](#-bot-payment-flow)
+  * [🗃️ Access Management](#️-access-management)
+  * [🎬 Stremio Addon Integration](#-stremio-addon-integration)
 
-- [�🚀 Deployment Guide](#-deployment-guide)
-  - [✅ Recommended Prerequisites](#-recommended-prerequisites)
-  - [🐙 Heroku Guide](#-heroku-guide)
-  - [🐳 VPS Guide (Recommended)](#-vps-guide)
-- [📺 Setting up Stremio](#-setting-up-stremio)
-  - [🌐 Add the Addon](#-step-3-add-the-addon)
-  - [⚙️ Optional: Remove Cinemeta](#️-optional-remove-cinemeta)
-- [🏅 Contributor](#-contributor)
+* [⚙️ How It Works](#️-how-it-works)
+
+  * [📖 Overview](#overview)
+  * [📤 Upload Guidelines](#upload-guidelines)
+  * [🔁 Quality Replacement Logic](#-quality-replacement-logic)
+  * [🎥 Updating CAMRip or Low-Quality Files](#-updating-camrip-or-low-quality-files)
+  * [⚙️ Behind the Scenes](#behind-the-scenes)
+
+* [🤖 Bot Commands](#-bot-commands)
+
+  * [📜 Command List](#command-list)
+  * [⚙️ /set Command Usage](#set-command-usage)
+
+* [🔧 Configuration Guide](#-configuration-guide)
+
+  * [🚀 Quick Setup](#-quick-setup)
+  * [🧩 Startup Configuration](#-startup-configuration)
+  * [📚 Media & Catalog Settings](#-media--catalog-settings)
+  * [🌐 Proxy Settings](#-proxy-settings)
+  * [💳 Subscription System](#-subscription-system)
+  * [🧠 Admin Panel](#-admin-panel)
+  * [🔄 Update Settings](#-update-settings)
+  * [🗄️ Multi-Database Support](#️-multi-database-support)
+  * [🔑 Multi-Token System](#-multi-token-system)
+  * [🔍 Global Search Requirements](#-global-search-requirements)
+
+* [🚀 Deployment Guide](#-deployment-guide)
+
+  * [✅ Recommended Prerequisites](#-recommended-prerequisites)
+  * [🐙 Heroku Guide](#-heroku-guide)
+  * [🐳 VPS Guide (Recommended)](#-vps-guide-recommended)
+
+* [📺 Setting Up Stremio](#-setting-up-stremio)
+
+  * [🌐 Add the Addon](#-step-3-add-the-addon)
+  * [⚙️ Optional: Remove Cinemeta](#️-optional-remove-cinemeta)
+
+* [🏅 Contributors](#-contributors)
 
 
 # 🚀 Introduction
@@ -67,32 +78,21 @@ This project is a **next-generation Telegram Stremio Media Server** that allows 
 
 ## ✨ Key Features
 
-- ⚙️ **Multiple MongoDB Support** 
-- 📡 **Multiple Channel Support** 
-- ⚡ **Fast Streaming Experience**
-- 🔑 **Multi Token Load Balancer** 
-- 🎬 **IMDB and TMDB Metadata Integration** 
-- ♾️ **No File Expiration** 
-- 🧠 **Admin Panel Support** 
-- 💳 **Subscription Management** — Plans, payment approval, auto token generation, and expiry enforcement
-- 🔐 **Access Management** — View, extend, reduce, revoke, and reassign subscriptions from the admin UI
-
-
-## 🆕 New Features
-
-- ⚡ **Speed Test** – Speed testing added for all bots on each file to optimize streaming performance.
-- 🔄 **Improved Load Balancer** – Enhanced load balancing algorithm for better traffic distribution across multiple tokens.
-- 🚫 **Failed Bot Management** – Max failed bots will be marked as shadow or idle for buffer optimization. This is due to some data center bots having rate-limiting constraints.
-- 📊 **Bot-wise Analysis** – Detailed bot performance analytics available in the admin dashboard for monitoring and optimization.
-- 🧹 **Deleted File Detection** – Automatic detection of deleted files on every restart, with admin capability to manually remove them from the database.
-- 🛠️ **Additional Admin Features** – Various small enhancements and improvements for administrators.
-- 🆓 **Free Mode Toggle** – Administrators can turn off the `SUBSCRIPTION` requirement in `config.env` to allow all users immediate access via an automatically generated API token.
-- 🔄 **Automatic Stream Cleanup** – Deleting a source message in the Telegram channel instantly deletes all corresponding streams and qualities from the Stremio Addon Database and Admin Panel, preventing dead links.
-- 🏷️ **Manual IMDb/TMDb Override** – Users can instantly update or fix incorrect metadata for a file by simply editing the Telegram channel message caption and pasting the correct IMDb/TMDB URL.
-- 🛡️ **Stream Stability & Recovery** – Intelligent `b""` empty-chunk fallback that securely pads video streams with zero bytes, and reduced chunk retry lockups (from 6 to 3) to instantaneously recover from stalled parts without breaking the video player.
-- 🎯 **DC-Aware Bot Selection** – The underlying streaming load-balancer now ensures that a bot located in the exact same Data Center as the media file is prioritized. This substantially minimizes cross-DC round-trips and timeouts.
-- 🌐 **Addon Proxy Integration** – Built-in functionality targeting `config.env` configurations (`Proxy`, `ProxyType`, `HTTP_Proxy_URL`, `SHOW_ProxyAndNonProxyBoth`) allows instant proxying or caching of video streams (such as routing through Cloudflare Workers) natively on Stremio.
-
+- ⚙️ **Multiple MongoDB Database Support**
+- 📡 **Multiple Telegram Channel Support**
+- ⚡ **Ultra-Fast Streaming Experience**
+- 🔑 **Multi-Token Load Balancer**
+- 🎬 **IMDb & TMDb Metadata Integration**
+- 🧩 **Seamless Split File Streaming Support**
+- 🎞️ **Play Multi-Part Videos as a Single Stream**
+- ♾️ **Permanent Streaming Links (No Expiration)**
+- 🧠 **Powerful Admin Dashboard**
+- 💳 **Subscription & Premium Management**
+- 🔐 **Advanced Access Control System**
+- 📚 **Custom & Automatic Catalog Generation**
+- 🖥️ **Web-Based Configuration Panel**
+- 🌐 **Built-in Addon Proxy Support**
+- 🔍 **Global Search Across Selected Channels**
 
 
 
@@ -151,18 +151,19 @@ Harikatha.Sambhavami.Yuge.Yuge.S01E04.Dark.Hours.1080p.WEB-DL.DUAL.DDP5.1.Atmos.
 
 ### 🔁 Quality Replacement Logic
 
-When you upload multiple files with the **same quality label** (like `720p` or `1080p`),
-the **latest file automatically replaces the old one**.
+> Works only when **Replace Mode** is enabled.
 
-> Example:
-> If you already uploaded `Ghosted 2023 720p` and then upload another `720p` version,
-> the bot **replaces the old file** to keep your catalog clean and organized.
+If a newly uploaded file has the same quality label (`720p`, `1080p`, `4K`, etc.) as an existing file, the bot automatically replaces the older entry with the new one.
 
-This helps avoid duplicate entries in Stremio and ensures only the most recent file is used.
+**Example:** Uploading a new `Ghosted (2023) 720p` file will replace the existing `720p` version in the catalog.
+
+This prevents duplicate quality entries and ensures only the latest version is available for streaming.
 
 ---
 
 ### 🆙 Updating CAMRip or Low-Quality Files
+
+> Works only when **Replace Mode** is enabled.
 
 If you initially uploaded a **CAMRip or low-quality version**, you can easily replace it with a better one:
 
@@ -176,13 +177,27 @@ If you initially uploaded a **CAMRip or low-quality version**, you can easily re
 
 ### 🏷️ Fixing Incorrect Metadata (Manual Override)
 
-If the addon incorrectly identifies a movie or TV show, or if the metadata is entirely missing, you can fix it effortlessly by editing the message in your Telegram channel:
+If the addon identifies a movie or TV show incorrectly, or if metadata is missing altogether, you can easily correct it using one of the following methods:
 
-1. Copy the correct **IMDb URL** or **TMDB URL** for the movie/show.
-2. Edit the message caption in your Telegram **AUTH CHANNEL** and paste the URL.
-3. The bot will automatically wipe the old, incorrect database entry for that file and instantly re-fetch the metadata using your provided link.
+#### Method 1: IMDb / TMDb URL Override
 
-✅ The Stremio addon catalog will update dynamically to reflect the correctly identified media.
+1. Copy the correct **IMDb** or **TMDb** URL for the movie or TV show.
+2. Edit the message caption in your Telegram **AUTH CHANNEL** and paste the URL anywhere in the caption.
+3. The bot will automatically:
+
+   * Remove the existing metadata entry associated with that file.
+   * Re-scan the provided URL.
+   * Fetch and save the correct metadata.
+
+#### Method 2: Scan Metadata from the Web Panel
+
+1. Open the media entry from the Movies or TV Shows section.
+2. Click **Edit**.
+3. Select **Scan Metadata**.
+4. Search for the correct title and choose the matching result.
+5. Apply the changes.
+
+✅ The addon will update the metadata instantly and refresh the catalog entry.
 
 ---
 
@@ -245,95 +260,119 @@ The `/set` command is used to manually upload a specific Movie or TV show to you
 💡 **Tip:** Use `/log` if you encounter any upload or parsing issues.
 
 
+
 # 🔧 Configuration Guide
 
-All environment variables for this project are defined in the `config.env` file. A detailed explanation of each parameter is provided below.
+> 💡 You only need to edit `config.env` for startup credentials, database connection, and optional Userbot configuration. Everything else can be managed from the Web UI.
 
-### 🧩 Startup Config
+---
 
-| Variable | Description |
-| :--- | :--- |
-| **`API_ID`** | Your Telegram **API ID** from [my.telegram.org](https://my.telegram.org). Used for authenticating your Telegram session. |
-| **`API_HASH`** | Your Telegram **API Hash** from [my.telegram.org](https://my.telegram.org). |
-| **`BOT_TOKEN`** | The main bot’s **access token** from [@BotFather](https://t.me/BotFather). Handles user requests and media fetching. |
-| **`HELPER_BOT_TOKEN`** | **Secondary bot token** used to assist the main bot with tasks like deleting, editing, or managing. |
-| **`OWNER_ID`** | Your **Telegram user ID**. This ID has full administrative access. |
-| **`REPLACE_MODE`** | When `true`, new files replace existing files of the same quality. When `false`, multiple files of the same quality are allowed. |
-| **`HIDE_CATALOG`** | When `true`, the default Telegram Stremio Catalog is hidden, and streams only show in the Cinemata catalog (i.e., Cinemata addon is mandatory). Default is `false`. |
-| **`PARALLEL`** | Controls the queue size for chunks buffered ahead. Keeps the player buffer full without overloading Telegram. Example: `PARALLEL = 4` means 4 chunks are buffered ahead. Default is `1`. |
-| **`PRE_FETCH`** | Controls the number of workers downloading chunks simultaneously. Example: `PRE_FETCH = 3` means 3 workers download concurrently. Higher values can improve speed but increase API load. Default is `1`. |
+## 🧩 Startup Configuration
 
-### 🗄️ Storage
+| Variable                  | Description                                                                                                 |
+| :------------------------ | :---------------------------------------------------------------------------------------------------------- |
+| **`API_ID`**              | Telegram API ID obtained from `my.telegram.org`. Required for all Telegram client connections.              |
+| **`API_HASH`**            | Telegram API Hash obtained from `my.telegram.org`. Required for Telegram authentication.                    |
+| **`BOT_TOKEN`**           | Main bot token generated via `@BotFather`. Used for streaming, indexing, and user interactions.             |
+| **`OWNER_ID`**            | Your Telegram User ID. Grants full administrative access to the system.                                     |
+| **`DATABASE`**            | MongoDB connection URI(s). Used to store metadata, settings, catalogs, subscriptions, and application data. |
+| **`PORT`**                | Port on which the FastAPI server runs. Default: `8000`.                                                     |
+| **`USER_SESSION_STRING`** | Optional Userbot session string. Required only for Global Search functionality.                             |
 
-| Variable | Description |
-| :--- | :--- |
-| **`AUTH_CHANNEL`** | One or more **Telegram channel IDs** (comma-separated) where the bot is authorized to fetch or stream content. *Example: `-1001234567890, -1009876543210`*. |
-| **`DATABASE`** | MongoDB Atlas connection URI(s). You **must provide at least two databases**, separated by commas (`,`) for load balancing and redundancy. <br>Example: <br>`mongodb+srv://user:pass@cluster0.mongodb.net/db1, mongodb+srv://user:pass@cluster1.mongodb.net/db2` |
+---
 
-> 💡 **Tip:** Create your MongoDB Atlas cluster [here](https://www.mongodb.com/cloud/atlas).
+# ⚙️ Web Panel Configuration
 
-### 🎬 API
+The following settings are automatically loaded from the database and can be managed through the Web Admin Panel.
 
-| Variable | Description |
-| :--- | :--- |
-| **`TMDB_API`** | Your **TMDB API key** from [themoviedb.org](https://www.themoviedb.org/settings/api). Used to fetch movie and TV metadata. |
+## 📚 Media & Catalog Settings
 
-### 🌐 Server
+| Variable                     | Description                                                                                                    |
+| :--------------------------- | :------------------------------------------------------------------------------------------------------------- |
+| **`REPLACE_MODE`**           | When enabled, newly uploaded files replace existing files with the same quality label (`720p`, `1080p`, etc.). |
+| **`HIDE_CATALOG`**           | Hides the default Telegram Stremio catalog and shows streams only through Cinemata integration.                |
+| **`AUTH_CHANNEL`**           | Telegram channel IDs used for media indexing and streaming. Multiple channels are supported.                   |
+| **`TMDB_API`**               | TMDb API key used to fetch movie and TV show metadata automatically.                                           |
+| **`GLOBAL_SEARCH`**          | Enables searching media across configured Global Search channels. Requires a valid `USER_SESSION_STRING`.      |
+| **`GLOBAL_SEARCH_CHANNELS`** | List of channel IDs included in Global Search. Searches are restricted to these channels only.                 |
 
-| Variable | Description |
-| :--- | :--- |
-| **`BASE_URL`** | The Domain or Heroku app URL (e.g. `https://your-domain.com`). Crucial for Stremio addon setup. |
-| **`PORT`** | The port number on which your FastAPI server will run. *Default: `8000`*. |
+---
 
-### 🔄 Update Settings
+## 🌐 Proxy Settings
 
-| Variable | Description |
-| :--- | :--- |
-| **`UPSTREAM_REPO`** | GitHub repository URL for automatic updates. |
-| **`UPSTREAM_BRANCH`** | The branch name to track in your upstream repo. *Default: `master`*. |
+| Variable                            | Description                                                             |
+| :---------------------------------- | :---------------------------------------------------------------------- |
+| **`HTTP_PROXY_URL`**                | Optional HTTP proxy used for metadata requests and external API access. |
+| **`SHOW_PROXY_AND_NON_PROXY_BOTH`** | Shows both proxied and direct stream links simultaneously.              |
 
-### 🔐 Admin Panel
+---
 
-| Variable | Description |
-| :--- | :--- |
-| **`ADMIN_USERNAME`** | Username for logging into the Admin Panel. |
-| **`ADMIN_PASSWORD`** | Password for Admin Panel access.|
- **⚠️ Change from default values for security.** 
+## 💳 Subscription System
 
-### 💳 Subscription Management Config
+| Variable                    | Description                                                                |
+| :-------------------------- | :------------------------------------------------------------------------- |
+| **`SUBSCRIPTION`**          | Enables subscription-based access control for streams.                     |
+| **`SUBSCRIPTION_GROUP_ID`** | Telegram group/channel where approved subscribers are invited.             |
+| **`APPROVER_IDS`**          | Telegram user IDs allowed to approve or reject subscription requests.      |
+| **`SUBSCRIPTION_URL`**      | Bot or payment URL displayed to users when their subscription has expired. |
 
-Enable the subscription feature to gate access to streams behind a paid plan. When `SUBSCRIPTION=True`, every user must have an active subscription to stream content.
+---
 
-| Variable | Description |
-| :--- | :--- |
-| **`SUBSCRIPTION`** | Enable (`True`) or disable (`False`) the subscription gate. When enabled, users without an active subscription see an expired message in Stremio instead of streams. *Default: `False`*. |
-| **`SUBSCRIPTION_GROUP_ID`** | Telegram **group/channel ID** where approved subscribers are invited. Users receive an invite link upon payment approval. |
-| **`APPROVER_IDS`** | Comma-separated Telegram user IDs of admins who can **approve or reject** subscription payment requests. |
-| **`SUBSCRIPTION_URL`** | Telegram bot URL (e.g. `https://t.me/your_bot`) shown to expired users in Stremio so they can renew. |
+## 🧠 Admin Panel
 
-> 💡 `SUBSCRIPTION_GROUP_ID` and `APPROVER_IDS` must be set **without quotes** in `config.env`.
+| Variable             | Description                                                                                      |
+| :------------------- | :----------------------------------------------------------------------------------------------- |
+| **`ADMIN_USERNAME`** | Username used to access the Web Admin Panel.                                                     |
+| **`ADMIN_PASSWORD`** | Password used to access the Web Admin Panel. Change the default values immediately for security. |
 
-### 🧰 Additional CDN Bots (Multi-Token System)
+---
 
-| Variable | Description |
-| :--- | :--- |
-| **`MULTI_TOKEN1`**, **`MULTI_TOKEN2`**, ... | Extra bot tokens used to distribute traffic and prevent Telegram rate-limiting. Add each bot as an **Admin** in your `AUTH_CHANNEL`(s). |
+## 🔄 Update Settings
 
-#### About `MULTI_TOKEN`
+| Variable              | Description                                   |
+| :-------------------- | :-------------------------------------------- |
+| **`UPSTREAM_REPO`**   | Git repository URL used by the update system. |
+| **`UPSTREAM_BRANCH`** | Branch that the updater should track.         |
 
-If your bot handles a high number of downloads/requests at a time, Telegram may limit your main bot.  
-To avoid this, you can use **MULTI_TOKEN** system:
+---
 
-- Create multiple bots using [@BotFather](https://t.me/BotFather).
-- Add each bot as **Admin** in your `AUTH_CHANNEL`(s).
-- Add the tokens in your `config.env` as `MULTI_TOKEN1`, `MULTI_TOKEN2`, `MULTI_TOKEN3`, and so on.
-- The system will automatically distribute the load among all these bots!
+## 🗄️ Multi-Database Support
 
-> ⚠️ **Real Limitation:** 
-> Even if you configure 10 bots in your system, **a single stream will typically only use 1 bot**. Extra bots do not make a single stream download 10x faster. Their primary purpose is to help handle **multiple users streaming simultaneously** without hitting rate limits:
-> - User 1 → assigned to Bot 1
-> - User 2 → assigned to Bot 2
-> - User 3 → assigned to Bot 3
+| Variable              | Description                                                                                                                             |
+| :-------------------- | :-------------------------------------------------------------------------------------------------------------------------------------- |
+| **`EXTRA_DATABASES`** | Additional MongoDB databases used for load balancing, scalability, and redundancy. Can be added or removed directly from the Web Panel. |
+
+---
+
+## 🔑 Multi-Token System
+
+| Variable           | Description                                                                                |
+| :----------------- | :----------------------------------------------------------------------------------------- |
+| **`MULTI_TOKENS`** | Additional bot tokens used to distribute download traffic and reduce Telegram rate limits. |
+
+### About Multi-Token Support
+
+If your addon handles a large number of concurrent streams or downloads, Telegram may rate-limit a single bot.
+
+To avoid this:
+
+1. Create multiple bots using `@BotFather`.
+2. Add each bot as an admin in all AUTH CHANNELS.
+3. Add their tokens in the **Multi Token** section of the Web Panel.
+4. The system automatically distributes traffic across all available bots.
+
+---
+
+## 🔍 Global Search Requirements
+
+Global Search requires a valid Userbot session.
+
+* Configure `USER_SESSION_STRING` in `config.env`.
+* Enable **Global Search** from the Web Panel.
+* Add one or more **Global Search Channels**.
+* Searches will only be performed within the configured Global Search channels.
+
+> ⚠️ If `USER_SESSION_STRING` is not configured, Global Search cannot be enabled.
 
 
 ---
