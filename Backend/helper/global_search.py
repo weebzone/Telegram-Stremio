@@ -70,8 +70,6 @@ def _title_score(result_title: str, expected_title: str) -> float:
 
 
 def _matches_episode(parsed: dict, season: Optional[int], episode: Optional[int]) -> bool:
-    """Explicit conflicting season/episode = hard reject.
-    Missing season/episode in filename = ambiguous, keep it."""
     if season is not None:
         rs = parsed.get("season")
         if rs is not None:
@@ -111,9 +109,6 @@ def _parse_and_validate(
 
 
 def _video_filename(message) -> Optional[str]:
-    """Return filename/caption if the message is any kind of video content.
-    Accepts both Telegram Video messages AND Documents with a video mime type
-    (the latter is how most channel uploads arrive)."""
     if message.video:
         return (message.caption or "").strip() or getattr(message.video, "file_name", None) or "video.mkv"
     if message.document:
@@ -128,8 +123,6 @@ def _video_filename(message) -> Optional[str]:
 
 
 def _resolve_channel_ids(channel_ids: List[str]) -> List[int]:
-    """Convert stored channel id strings to canonical Telegram supergroup/channel
-    form (-100XXXXXXXXXX). Each unique channel produces exactly one entry."""
     resolved = []
     seen: set = set()
     for c in channel_ids:
@@ -140,7 +133,6 @@ def _resolve_channel_ids(channel_ids: List[str]) -> List[int]:
             raw = int(c)
         except ValueError:
             continue
-        # Normalise to the -100 form Pyrogram always accepts for channels
         canonical = raw if raw < 0 else int(f"-100{raw}")
         if canonical not in seen:
             seen.add(canonical)
@@ -149,7 +141,6 @@ def _resolve_channel_ids(channel_ids: List[str]) -> List[int]:
 
 
 async def _get_chat_title(client, chat_id: int) -> str:
-    """Resolve a chat title once and cache it for the lifetime of the process."""
     if chat_id in _chat_title_cache:
         return _chat_title_cache[chat_id]
     try:
@@ -170,16 +161,9 @@ async def _search_channel(
     season: Optional[int],
     episode: Optional[int],
 ) -> List[Dict]:
-    """Search one channel with BOTH the VIDEO and DOCUMENT filters, merge and
-    deduplicate by message id, then validate each filename. Returns a list of
-    result dicts ready to be encoded into stream tokens."""
 
     results: List[Dict] = []
     seen_msg_ids: set = set()
-
-    # The two filters that between them cover every video upload style:
-    #   - VIDEO   → messages sent as Telegram native video (inline player)
-    #   - DOCUMENT → files uploaded as documents (most channel movie/episode posts)
     filters_to_try = [enums.MessagesFilter.VIDEO, enums.MessagesFilter.DOCUMENT]
 
     for msg_filter in filters_to_try:
@@ -226,7 +210,7 @@ async def _search_channel(
                     "quality": quality,
                 })
 
-                LOGGER.info(f"[GLOBAL SEARCH] Result found: {filename} in {chat_title}")
+                LOGGER.debug(f"[GLOBAL SEARCH] Result found: {filename} in {chat_title}")
 
                 if len(results) >= MAX_RESULTS_PER_CHAT:
                     break
@@ -258,9 +242,6 @@ async def global_search(
     season: Optional[int] = None,
     episode: Optional[int] = None,
 ) -> List[Dict]:
-    """Search the configured global_search_channels in parallel for media
-    matching expected_title (+ season/episode for TV shows). Returns up to
-    MAX_RESULTS validated result dicts."""
     expected_title = (expected_title or "").strip()
     if not expected_title or not is_global_search_enabled():
         return []
@@ -275,6 +256,9 @@ async def global_search(
     search_query = expected_title
     if season is not None and episode is not None:
         search_query = f"{expected_title} S{int(season):02d}E{int(episode):02d}"
+    elif year is not None:
+        search_query = f"{expected_title} {year}"
+        
 
     key = search_query.lower()
     now = time.time()
@@ -294,9 +278,6 @@ async def global_search(
                 f"[USERBOT] Search started: '{search_query}' "
                 f"across {len(target_ids)} channel(s)"
             )
-
-            # Resolve chat titles once up-front (one get_chat() per channel,
-            # not one per result) then fire all channel searches in parallel.
             title_tasks = [_get_chat_title(Userbot, cid) for cid in target_ids]
             chat_titles = await asyncio.gather(*title_tasks, return_exceptions=True)
 
@@ -317,7 +298,6 @@ async def global_search(
                 if isinstance(r, list):
                     all_results.extend(r)
 
-            # Global cap
             all_results = all_results[:MAX_RESULTS]
 
             LOGGER.info(
