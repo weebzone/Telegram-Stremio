@@ -12,6 +12,7 @@ from Backend.helper.pyro import restart_notification, setup_bot_commands
 from Backend.pyrofork.bot import Userbot, StreamBot
 from Backend.pyrofork.clients import initialize_clients
 from Backend.helper import subscription_task_manager
+from Backend.helper.scan_manager import scan_manager, dbcheck_manager
 from Backend.helper.link_checker import DeadLinkChecker
 from Backend.fastapi.main import app
 from Backend.helper.auto_catalog import (
@@ -31,10 +32,8 @@ async def start_services():
 
         await SettingsManager.initialize(db)
         await asleep(0.5)
-
-        # Restore any interrupted WebUI scan (resumable) and bind DB to tools.
+        
         try:
-            from Backend.helper.scan_manager import scan_manager, dbcheck_manager
             await scan_manager.load(db)
             dbcheck_manager.bind_db(db)
         except Exception as e:
