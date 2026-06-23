@@ -1,25 +1,3 @@
-"""
-WebUI-driven Tools engine — replaces the old /scan, /rescan, /scanstatus,
-/cancelscan and /dbcheck bot commands with resumable, DB-persisted background
-workers that the Tools page drives over HTTP.
-
-Two singletons are exported:
-
-    scan_manager     — ScanManager: indexes channel content into the DB.
-                       Progress (per-channel cursor + counters) is persisted to
-                       the tracking DB so an interrupted scan (server restart,
-                       crash, manual stop) can be *resumed* from exactly where it
-                       left off. Only a "rescan" wipes the saved position.
-
-    dbcheck_manager  — DbCheckManager: verifies every indexed Telegram stream
-                       still exists, reports live progress, and can purge the
-                       dead entries it finds.
-
-Both workers are written to respect Telegram limits (bounded batch sizes,
-inter-batch delays, FloodWait back-off, modest concurrency) so the bot does not
-get rate-limited or banned.
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -38,7 +16,7 @@ from Backend.helper.pyro import clean_filename, get_readable_file_size, remove_u
 # Tunables — kept conservative so we never trip Telegram's flood limits.
 # ─────────────────────────────────────────────────────────────────────────────
 SCAN_BATCH_SIZE = 200          # get_messages accepts up to 200 ids per call
-SCAN_MAX_EMPTY_BATCHES = 5     # stop after this many consecutive empty batches
+SCAN_MAX_EMPTY_BATCHES = 10    # stop after this many consecutive empty batches
 SCAN_MAX_ID_CAP = 1_000_000    # hard ceiling to avoid runaway loops
 SCAN_BATCH_DELAY = 0.5         # seconds to sleep between batches
 SCAN_PERSIST_EVERY = 1         # persist state every N batches
