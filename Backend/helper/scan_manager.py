@@ -1,0 +1,750 @@
+"""
+WebUI-driven Tools engine — replaces the old /scan, /rescan, /scanstatus,
+/cancelscan and /dbcheck bot commands with resumable, DB-persisted background
+workers that the Tools page drives over HTTP.
+
+Two singletons are exported:
+
+    scan_manager     — ScanManager: indexes channel content into the DB.
+                       Progress (per-channel cursor + counters) is persisted to
+                       the tracking DB so an interrupted scan (server restart,
+                       crash, manual stop) can be *resumed* from exactly where it
+                       left off. Only a "rescan" wipes the saved position.
+
+    dbcheck_manager  — DbCheckManager: verifies every indexed Telegram stream
+                       still exists, reports live progress, and can purge the
+                       dead entries it finds.
+
+Both workers are written to respect Telegram limits (bounded batch sizes,
+inter-batch delays, FloodWait back-off, modest concurrency) so the bot does not
+get rate-limited or banned.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import time
+from typing import Any, Dict, List, Optional
+
+from pyrogram.errors import FloodWait, ChannelPrivate, ChatAdminRequired
+
+from Backend.logger import LOGGER
+from Backend.helper.encrypt import encode_string, decode_string
+from Backend.helper.metadata import metadata
+from Backend.helper.pyro import clean_filename, get_readable_file_size, remove_urls
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Tunables — kept conservative so we never trip Telegram's flood limits.
+# ─────────────────────────────────────────────────────────────────────────────
+SCAN_BATCH_SIZE = 200          # get_messages accepts up to 200 ids per call
+SCAN_MAX_EMPTY_BATCHES = 5     # stop after this many consecutive empty batches
+SCAN_MAX_ID_CAP = 1_000_000    # hard ceiling to avoid runaway loops
+SCAN_BATCH_DELAY = 0.5         # seconds to sleep between batches
+SCAN_PERSIST_EVERY = 1         # persist state every N batches
+
+DBCHECK_CONCURRENCY = 5        # concurrent get_messages during integrity check
+DBCHECK_BATCH_DELAY = 0.3      # seconds between concurrent groups
+DBCHECK_PAGE_SIZE = 100        # mongo pagination size
+
+_STATE_COLLECTION = "scan_state"
+_SCAN_DOC_ID = "scan"
+
+
+def _now() -> float:
+    return time.time()
+
+
+def _fmt_elapsed(seconds: float) -> str:
+    s = int(seconds)
+    m, s = divmod(s, 60)
+    h, m = divmod(m, 60)
+    if h:
+        return f"{h}h {m}m {s}s"
+    if m:
+        return f"{m}m {s}s"
+    return f"{s}s"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  ScanManager — resumable channel indexer
+# ═════════════════════════════════════════════════════════════════════════════
+class ScanManager:
+    def __init__(self) -> None:
+        self._db = None
+        self._task: Optional[asyncio.Task] = None
+        self._cancel = False
+        self._lock = asyncio.Lock()
+        self.state: Dict[str, Any] = self._blank_state()
+
+    # ── State helpers ────────────────────────────────────────────────────────
+    @staticmethod
+    def _blank_state() -> Dict[str, Any]:
+        return {
+            "status": "idle",            # idle|running|paused|completed|cancelled|error
+            "mode": "scan",              # scan|rescan
+            "selected_channels": [],     # channels chosen for the active run
+            "pending": [],               # channels still to finish this run
+            "current_channel": None,
+            "current_channel_name": "",
+            "current_id": 0,             # last message id reached in current channel
+            "cursors": {},               # {channel_id: next_message_id} — persistent
+            "counters": {
+                "total_found": 0,
+                "processed": 0,
+                "indexed": 0,
+                "skipped_dup": 0,
+                "skipped_meta": 0,
+                "skipped_nonvid": 0,
+                "errors": 0,
+            },
+            "started_at": 0.0,
+            "updated_at": 0.0,
+            "finished_at": 0.0,
+            "error": None,
+        }
+
+    @staticmethod
+    def _blank_counters() -> Dict[str, int]:
+        return {
+            "total_found": 0,
+            "processed": 0,
+            "indexed": 0,
+            "skipped_dup": 0,
+            "skipped_meta": 0,
+            "skipped_nonvid": 0,
+            "errors": 0,
+        }
+
+    def bind_db(self, db) -> None:
+        self._db = db
+
+    async def load(self, db) -> None:
+        """Load persisted state on boot. A scan that was 'running' when the
+        process died is flipped to 'paused' so the user can resume it."""
+        self._db = db
+        try:
+            doc = await db.dbs["tracking"][_STATE_COLLECTION].find_one({"_id": _SCAN_DOC_ID})
+        except Exception as e:
+            LOGGER.error(f"[ScanManager] load failed: {e}")
+            doc = None
+
+        if doc:
+            doc.pop("_id", None)
+            merged = self._blank_state()
+            merged.update(doc)
+            # Normalise cursor keys to str (mongo keys are strings anyway)
+            merged["cursors"] = {str(k): int(v) for k, v in (merged.get("cursors") or {}).items()}
+            if merged["status"] == "running":
+                merged["status"] = "paused"
+            self.state = merged
+            if self.state["status"] == "paused":
+                LOGGER.info("[ScanManager] Found an interrupted scan — marked as paused (resumable).")
+            await self._persist()
+        else:
+            self.state = self._blank_state()
+
+    async def _persist(self) -> None:
+        if self._db is None:
+            return
+        self.state["updated_at"] = _now()
+        try:
+            doc = dict(self.state)
+            doc["_id"] = _SCAN_DOC_ID
+            await self._db.dbs["tracking"][_STATE_COLLECTION].update_one(
+                {"_id": _SCAN_DOC_ID}, {"$set": doc}, upsert=True
+            )
+        except Exception as e:
+            LOGGER.error(f"[ScanManager] persist failed: {e}")
+
+    # ── Public status (serialisable for the API) ─────────────────────────────
+    def get_status(self) -> Dict[str, Any]:
+        s = self.state
+        elapsed = 0.0
+        if s["started_at"]:
+            end = s["finished_at"] or _now()
+            elapsed = max(0.0, end - s["started_at"])
+        return {
+            "status": s["status"],
+            "mode": s["mode"],
+            "is_running": s["status"] == "running",
+            "resumable": s["status"] in ("paused", "cancelled") and bool(s["pending"]),
+            "selected_channels": list(s["selected_channels"]),
+            "pending": list(s["pending"]),
+            "current_channel": s["current_channel"],
+            "current_channel_name": s["current_channel_name"],
+            "current_id": s["current_id"],
+            "counters": dict(s["counters"]),
+            "elapsed": _fmt_elapsed(elapsed),
+            "elapsed_seconds": int(elapsed),
+            "error": s["error"],
+        }
+
+    # ── Duplicate detection ──────────────────────────────────────────────────
+    async def _stream_id_exists(self, channel: int, msg_id: int) -> bool:
+        db = self._db
+        try:
+            stream_hash = await encode_string({"chat_id": channel, "msg_id": msg_id})
+        except Exception:
+            return False
+        for i in range(1, db.current_db_index + 1):
+            storage = db.dbs.get(f"storage_{i}")
+            if storage is None:
+                continue
+            if await storage["movie"].find_one({"telegram.id": stream_hash}):
+                return True
+            if await storage["tv"].find_one({"seasons.episodes.telegram.id": stream_hash}):
+                return True
+        return False
+
+    # ── Control: start / resume / cancel ─────────────────────────────────────
+    async def start(self, client, channels: List[str], mode: str = "scan") -> Dict[str, Any]:
+        """Start (or resume) a scan.
+
+        mode == "rescan"  → purge selected channels, reset their cursors, fresh scan.
+        mode == "scan"    → resume any pending work, scanning each channel from its
+                            saved cursor (so previously-indexed messages are skipped
+                            and we continue exactly where we left off).
+        """
+        async with self._lock:
+            if self.state["status"] == "running":
+                return {"ok": False, "message": "A scan is already running."}
+
+            channels = [str(c).strip() for c in (channels or []) if str(c).strip()]
+
+            if mode == "scan" and not channels and self.state["pending"]:
+                # Plain resume of an interrupted run
+                channels = list(self.state["pending"])
+
+            if not channels:
+                return {"ok": False, "message": "No channels selected."}
+
+            if mode == "rescan":
+                # Purge + reset cursors for the selected channels
+                for ch in channels:
+                    try:
+                        ch_int = int(str(ch).replace("-100", ""))
+                    except ValueError:
+                        continue
+                    try:
+                        await self._purge_channel_entries(ch_int)
+                    except Exception as e:
+                        LOGGER.error(f"[ScanManager] purge failed for {ch}: {e}")
+                    self.state["cursors"].pop(str(ch), None)
+                self.state["selected_channels"] = list(channels)
+                self.state["pending"] = list(channels)
+                self.state["counters"] = self._blank_counters()
+            else:
+                # Resume / fresh incremental scan
+                resuming = self.state["status"] in ("paused", "cancelled") and self.state["pending"]
+                if resuming:
+                    # Merge any newly-selected channels into the pending queue
+                    merged_pending = list(self.state["pending"])
+                    for ch in channels:
+                        if ch not in merged_pending:
+                            merged_pending.append(ch)
+                    self.state["pending"] = merged_pending
+                    self.state["selected_channels"] = list(
+                        dict.fromkeys(self.state["selected_channels"] + channels)
+                    )
+                else:
+                    self.state["selected_channels"] = list(channels)
+                    self.state["pending"] = list(channels)
+                    self.state["counters"] = self._blank_counters()
+
+            self.state["mode"] = mode
+            self.state["status"] = "running"
+            self.state["error"] = None
+            self.state["finished_at"] = 0.0
+            self.state["started_at"] = _now()
+            self._cancel = False
+            await self._persist()
+
+            self._task = asyncio.create_task(self._run(client))
+            return {"ok": True, "message": f"{'Rescan' if mode == 'rescan' else 'Scan'} started.",
+                    "status": self.get_status()}
+
+    async def cancel(self) -> Dict[str, Any]:
+        if self.state["status"] != "running":
+            return {"ok": False, "message": "No scan is currently running."}
+        self._cancel = True
+        return {"ok": True, "message": "Stop requested — the scan will pause after the current batch."}
+
+    # ── Worker ────────────────────────────────────────────────────────────────
+    async def _run(self, client) -> None:
+        try:
+            while self.state["pending"] and not self._cancel:
+                ch = self.state["pending"][0]
+                try:
+                    ch_id = int(ch)
+                except ValueError:
+                    LOGGER.warning(f"[ScanManager] invalid channel id: {ch}")
+                    self.state["pending"].pop(0)
+                    await self._persist()
+                    continue
+
+                completed = await self._scan_channel(client, ch_id, ch)
+                if self._cancel:
+                    break
+                if completed:
+                    # channel done for this run — drop it from pending
+                    if self.state["pending"] and self.state["pending"][0] == ch:
+                        self.state["pending"].pop(0)
+                    await self._persist()
+
+            if self._cancel:
+                self.state["status"] = "cancelled"
+                LOGGER.info("[ScanManager] Scan cancelled by user (resumable).")
+            else:
+                self.state["status"] = "completed"
+                self.state["current_channel"] = None
+                self.state["current_channel_name"] = ""
+                LOGGER.info("[ScanManager] Scan completed.")
+            self.state["finished_at"] = _now()
+            await self._persist()
+
+        except (ChannelPrivate, ChatAdminRequired) as e:
+            self.state["status"] = "error"
+            self.state["error"] = f"Access denied to channel — make sure the bot is an admin. ({e})"
+            self.state["finished_at"] = _now()
+            LOGGER.error(f"[ScanManager] {self.state['error']}")
+            await self._persist()
+        except asyncio.CancelledError:
+            # Process is shutting down — leave status running so load() flips to paused
+            await self._persist()
+            raise
+        except Exception as e:
+            self.state["status"] = "error"
+            self.state["error"] = str(e)
+            self.state["finished_at"] = _now()
+            LOGGER.error(f"[ScanManager] Unexpected error: {e}")
+            await self._persist()
+
+    async def _scan_channel(self, client, chat_id: int, ch_key: str) -> bool:
+        """Scan one channel from its saved cursor. Returns True if it ran to the
+        natural end (so it can be removed from the pending queue), False if it
+        was interrupted (cancel / shutdown)."""
+        db = self._db
+        s = self.state
+
+        try:
+            chat = await client.get_chat(chat_id)
+            s["current_channel_name"] = getattr(chat, "title", str(chat_id))
+        except (ChannelPrivate, ChatAdminRequired):
+            raise
+        except Exception as e:
+            s["current_channel_name"] = str(chat_id)
+            LOGGER.warning(f"[ScanManager] Could not resolve channel name for {chat_id}: {e}")
+
+        s["current_channel"] = ch_key
+        current = int(s["cursors"].get(str(ch_key), 1) or 1)
+        LOGGER.info(f"[ScanManager] Scanning {s['current_channel_name']} ({chat_id}) from id {current}")
+
+        empty_streak = 0
+        batch_count = 0
+
+        while empty_streak < SCAN_MAX_EMPTY_BATCHES and current < SCAN_MAX_ID_CAP:
+            if self._cancel:
+                return False
+
+            batch_ids = list(range(current, min(current + SCAN_BATCH_SIZE, SCAN_MAX_ID_CAP)))
+            try:
+                messages = await client.get_messages(chat_id, batch_ids)
+            except FloodWait as e:
+                LOGGER.info(f"[ScanManager] FloodWait {e.value}s — sleeping…")
+                await asyncio.sleep(e.value)
+                try:
+                    messages = await client.get_messages(chat_id, batch_ids)
+                except Exception as ex:
+                    LOGGER.error(f"[ScanManager] Retry failed at {current}: {ex}")
+                    s["counters"]["errors"] += 1
+                    current += SCAN_BATCH_SIZE
+                    empty_streak += 1
+                    s["cursors"][str(ch_key)] = current
+                    s["current_id"] = current
+                    continue
+            except Exception as e:
+                LOGGER.error(f"[ScanManager] Batch fetch error at {current}: {e}")
+                s["counters"]["errors"] += 1
+                current += SCAN_BATCH_SIZE
+                empty_streak += 1
+                s["cursors"][str(ch_key)] = current
+                s["current_id"] = current
+                continue
+
+            if not isinstance(messages, list):
+                messages = [messages]
+
+            batch_had_content = False
+            for message in messages:
+                if self._cancel:
+                    s["cursors"][str(ch_key)] = current
+                    s["current_id"] = current
+                    await self._persist()
+                    return False
+                if message is None or message.empty:
+                    continue
+
+                batch_had_content = True
+                s["counters"]["total_found"] += 1
+                await self._process_message(message, chat_id)
+                s["counters"]["processed"] += 1
+
+            empty_streak = 0 if batch_had_content else empty_streak + 1
+            current += SCAN_BATCH_SIZE
+            s["cursors"][str(ch_key)] = current
+            s["current_id"] = current
+
+            batch_count += 1
+            if batch_count % SCAN_PERSIST_EVERY == 0:
+                await self._persist()
+
+            await asyncio.sleep(SCAN_BATCH_DELAY)
+
+        await self._persist()
+        LOGGER.info(f"[ScanManager] Finished {s['current_channel_name']} at id {current}")
+        return True
+
+    async def _process_message(self, message, chat_id: int) -> None:
+        s = self.state
+        db = self._db
+
+        is_video = bool(message.video)
+        is_video_doc = False
+        if message.document and not is_video:
+            mime = getattr(message.document, "mime_type", "") or ""
+            is_video_doc = mime.startswith("video/")
+
+        if not (is_video or is_video_doc):
+            s["counters"]["skipped_nonvid"] += 1
+            return
+
+        file = message.video or message.document
+        title = message.caption or file.file_name
+        msg_id = message.id
+        size = get_readable_file_size(file.file_size)
+        channel_int = int(str(chat_id).replace("-100", ""))
+
+        try:
+            if await self._stream_id_exists(channel_int, msg_id):
+                s["counters"]["skipped_dup"] += 1
+                return
+        except Exception as e:
+            LOGGER.warning(f"[ScanManager] Dup-check error msg {msg_id}: {e}")
+
+        try:
+            metadata_info = await metadata(clean_filename(title), channel_int, msg_id)
+        except Exception as e:
+            LOGGER.warning(f"[ScanManager] Metadata exception for msg {msg_id}: {e}")
+            metadata_info = None
+
+        if metadata_info is None:
+            s["counters"]["skipped_meta"] += 1
+            return
+
+        title_clean = remove_urls(title)
+        if not title_clean.endswith(('.mkv', '.mp4')):
+            title_clean += '.mkv'
+
+        try:
+            updated_id = await db.insert_media(
+                metadata_info,
+                channel=channel_int,
+                msg_id=msg_id,
+                size=size,
+                name=title_clean,
+            )
+            if updated_id:
+                s["counters"]["indexed"] += 1
+            else:
+                s["counters"]["skipped_meta"] += 1
+        except Exception as e:
+            LOGGER.error(f"[ScanManager] DB insert error msg {msg_id}: {e}")
+            s["counters"]["errors"] += 1
+
+    # ── Purge (rescan helper) ────────────────────────────────────────────────
+    async def _purge_channel_entries(self, channel_int: int) -> int:
+        db = self._db
+        purged = 0
+        for i in range(1, db.current_db_index + 1):
+            storage = db.dbs.get(f"storage_{i}")
+            if storage is None:
+                continue
+
+            async for movie in storage["movie"].find({}):
+                remaining = []
+                changed = False
+                for q in movie.get("telegram", []):
+                    try:
+                        decoded = await decode_string(q["id"])
+                        if int(decoded["chat_id"]) == channel_int:
+                            purged += 1
+                            changed = True
+                            continue
+                    except Exception:
+                        pass
+                    remaining.append(q)
+                if changed:
+                    if remaining:
+                        movie["telegram"] = remaining
+                        await storage["movie"].replace_one({"_id": movie["_id"]}, movie)
+                    else:
+                        await storage["movie"].delete_one({"_id": movie["_id"]})
+
+            async for tv in storage["tv"].find({}):
+                tv_changed = False
+                for season in tv.get("seasons", []):
+                    for episode in season.get("episodes", []):
+                        remaining = []
+                        for q in episode.get("telegram", []):
+                            try:
+                                decoded = await decode_string(q["id"])
+                                if int(decoded["chat_id"]) == channel_int:
+                                    purged += 1
+                                    tv_changed = True
+                                    continue
+                            except Exception:
+                                pass
+                            remaining.append(q)
+                        episode["telegram"] = remaining
+                    season["episodes"] = [ep for ep in season["episodes"] if ep.get("telegram")]
+                tv["seasons"] = [se for se in tv["seasons"] if se.get("episodes")]
+                if tv_changed:
+                    if tv["seasons"]:
+                        await storage["tv"].replace_one({"_id": tv["_id"]}, tv)
+                    else:
+                        await storage["tv"].delete_one({"_id": tv["_id"]})
+        return purged
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  DbCheckManager — integrity checker + dead-link purge
+# ═════════════════════════════════════════════════════════════════════════════
+class DbCheckManager:
+    def __init__(self) -> None:
+        self._db = None
+        self._task: Optional[asyncio.Task] = None
+        self._cancel = False
+        self._lock = asyncio.Lock()
+        self.state: Dict[str, Any] = self._blank_state()
+
+    @staticmethod
+    def _blank_state() -> Dict[str, Any]:
+        return {
+            "status": "idle",   # idle|running|completed|cancelled|error
+            "checked": 0,
+            "alive": 0,
+            "dead": 0,
+            "errors": 0,
+            "purged": 0,
+            "speed": 0,
+            "dead_entries": [],   # [{"id": hash, "title": str}]
+            "started_at": 0.0,
+            "finished_at": 0.0,
+            "error": None,
+        }
+
+    def bind_db(self, db) -> None:
+        self._db = db
+
+    def get_status(self) -> Dict[str, Any]:
+        s = self.state
+        elapsed = 0.0
+        if s["started_at"]:
+            end = s["finished_at"] or _now()
+            elapsed = max(0.0, end - s["started_at"])
+        return {
+            "status": s["status"],
+            "is_running": s["status"] == "running",
+            "checked": s["checked"],
+            "alive": s["alive"],
+            "dead": s["dead"],
+            "errors": s["errors"],
+            "purged": s["purged"],
+            "speed": s["speed"],
+            "dead_count": len(s["dead_entries"]),
+            "dead_entries": list(s["dead_entries"]),
+            "elapsed": _fmt_elapsed(elapsed),
+            "elapsed_seconds": int(elapsed),
+            "error": s["error"],
+        }
+
+    # ── Control ───────────────────────────────────────────────────────────────
+    async def start(self, client) -> Dict[str, Any]:
+        async with self._lock:
+            if self.state["status"] == "running":
+                return {"ok": False, "message": "A DB check is already running."}
+            self.state = self._blank_state()
+            self.state["status"] = "running"
+            self.state["started_at"] = _now()
+            self._cancel = False
+            self._task = asyncio.create_task(self._run(client))
+            return {"ok": True, "message": "DB check started.", "status": self.get_status()}
+
+    async def cancel(self) -> Dict[str, Any]:
+        if self.state["status"] != "running":
+            return {"ok": False, "message": "No DB check is currently running."}
+        self._cancel = True
+        return {"ok": True, "message": "Stop requested — finishing the current batch."}
+
+    # ── Single-message check ───────────────────────────────────────────────────
+    async def _check_message(self, client, stream_hash: str):
+        try:
+            decoded = await decode_string(stream_hash)
+            # split files store a parts list — every part must be alive
+            if isinstance(decoded, dict) and "parts" in decoded:
+                parts = decoded.get("parts") or []
+                if not parts:
+                    return False
+                for part in parts:
+                    alive = await self._check_one(client, part.get("chat_id"), part.get("msg_id"))
+                    if alive is None:
+                        return None
+                    if not alive:
+                        return False
+                return True
+            return await self._check_one(client, decoded.get("chat_id"), decoded.get("msg_id"))
+        except FloodWait as e:
+            await asyncio.sleep(e.value)
+            return await self._check_message(client, stream_hash)
+        except Exception:
+            return None
+
+    async def _check_one(self, client, chat_id, msg_id):
+        if chat_id is None or msg_id is None:
+            return False
+        try:
+            chat_id = int(f"-100{chat_id}")
+            msg_id = int(msg_id)
+            msg = await client.get_messages(chat_id, msg_id)
+            if msg is None or msg.empty:
+                return False
+            return True
+        except FloodWait as e:
+            await asyncio.sleep(e.value)
+            return await self._check_one(client, str(chat_id).replace("-100", ""), msg_id)
+        except Exception:
+            return None
+
+    async def _process_batch(self, client, batch: List[str]):
+        tasks = [self._check_message(client, h) for h in batch]
+        return await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def _record_results(self, batch: List[str], results) -> None:
+        s = self.state
+        for stream_hash, result in zip(batch, results):
+            s["checked"] += 1
+            if result is True:
+                s["alive"] += 1
+            elif result is False:
+                s["dead"] += 1
+                title = None
+                try:
+                    title = await self._db.get_title_by_stream_id(stream_hash)
+                except Exception:
+                    pass
+                s["dead_entries"].append({"id": stream_hash, "title": title or "Unknown"})
+            else:
+                s["errors"] += 1
+        elapsed = max(1, int(_now() - s["started_at"]))
+        s["speed"] = s["checked"] // elapsed
+
+    # ── Worker ──────────────────────────────────────────────────────────────────
+    async def _run(self, client) -> None:
+        db = self._db
+        s = self.state
+        try:
+            for i in range(1, db.current_db_index + 1):
+                storage = db.dbs.get(f"storage_{i}")
+                if storage is None:
+                    continue
+
+                # Movies
+                last_id = None
+                while not self._cancel:
+                    query = {"_id": {"$gt": last_id}} if last_id else {}
+                    docs = await storage["movie"].find(query).sort("_id", 1) \
+                        .limit(DBCHECK_PAGE_SIZE).to_list(length=DBCHECK_PAGE_SIZE)
+                    if not docs:
+                        break
+                    for movie in docs:
+                        last_id = movie["_id"]
+                        stream_ids = [q.get("id") for q in movie.get("telegram", []) if q.get("id")]
+                        for x in range(0, len(stream_ids), DBCHECK_CONCURRENCY):
+                            if self._cancel:
+                                break
+                            batch = stream_ids[x:x + DBCHECK_CONCURRENCY]
+                            results = await self._process_batch(client, batch)
+                            await self._record_results(batch, results)
+                            await asyncio.sleep(DBCHECK_BATCH_DELAY)
+
+                # TV
+                last_id = None
+                while not self._cancel:
+                    query = {"_id": {"$gt": last_id}} if last_id else {}
+                    docs = await storage["tv"].find(query).sort("_id", 1) \
+                        .limit(DBCHECK_PAGE_SIZE).to_list(length=DBCHECK_PAGE_SIZE)
+                    if not docs:
+                        break
+                    for show in docs:
+                        last_id = show["_id"]
+                        stream_ids = []
+                        for season in show.get("seasons", []):
+                            for episode in season.get("episodes", []):
+                                for q in episode.get("telegram", []):
+                                    if q.get("id"):
+                                        stream_ids.append(q["id"])
+                        for x in range(0, len(stream_ids), DBCHECK_CONCURRENCY):
+                            if self._cancel:
+                                break
+                            batch = stream_ids[x:x + DBCHECK_CONCURRENCY]
+                            results = await self._process_batch(client, batch)
+                            await self._record_results(batch, results)
+                            await asyncio.sleep(DBCHECK_BATCH_DELAY)
+
+            s["status"] = "cancelled" if self._cancel else "completed"
+            s["finished_at"] = _now()
+            LOGGER.info(f"[DbCheck] {s['status']} — checked {s['checked']}, dead {s['dead']}")
+        except asyncio.CancelledError:
+            s["status"] = "cancelled"
+            s["finished_at"] = _now()
+            raise
+        except Exception as e:
+            s["status"] = "error"
+            s["error"] = str(e)
+            s["finished_at"] = _now()
+            LOGGER.error(f"[DbCheck] Error: {e}")
+
+    # ── Purge ────────────────────────────────────────────────────────────────────
+    async def purge(self, stream_ids: Optional[List[str]] = None) -> Dict[str, Any]:
+        """Delete the given dead stream entries (defaults to the ones found in the
+        last check). Returns how many were purged."""
+        db = self._db
+        if stream_ids is None:
+            stream_ids = [d["id"] for d in self.state.get("dead_entries", [])]
+        stream_ids = [h for h in stream_ids if h]
+        if not stream_ids:
+            return {"ok": False, "message": "No dead links to purge.", "purged": 0}
+
+        purged = 0
+        for x in range(0, len(stream_ids), DBCHECK_CONCURRENCY):
+            batch = stream_ids[x:x + DBCHECK_CONCURRENCY]
+            results = await asyncio.gather(
+                *[db.delete_media_by_stream_id(h) for h in batch],
+                return_exceptions=True,
+            )
+            purged += sum(1 for r in results if r is True)
+
+        # Drop purged ids from the in-memory dead list
+        purged_set = set(stream_ids)
+        self.state["dead_entries"] = [
+            d for d in self.state.get("dead_entries", []) if d["id"] not in purged_set
+        ]
+        self.state["purged"] = self.state.get("purged", 0) + purged
+        return {"ok": True, "message": f"Purged {purged} dead entr{'y' if purged == 1 else 'ies'}.",
+                "purged": purged}
+
+
+# ── Singletons ──────────────────────────────────────────────────────────────
+scan_manager = ScanManager()
+dbcheck_manager = DbCheckManager()

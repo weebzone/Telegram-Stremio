@@ -32,6 +32,15 @@ async def start_services():
         await SettingsManager.initialize(db)
         await asleep(0.5)
 
+        # Restore any interrupted WebUI scan (resumable) and bind DB to tools.
+        try:
+            from Backend.helper.scan_manager import scan_manager, dbcheck_manager
+            await scan_manager.load(db)
+            dbcheck_manager.bind_db(db)
+        except Exception as e:
+            LOGGER.error(f"Failed to restore scan manager state on startup: {e}")
+        await asleep(0.3)
+
         try:
             await db.reload_extra_databases(SettingsManager.current().extra_databases)
         except Exception as e:

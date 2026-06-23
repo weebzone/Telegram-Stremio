@@ -290,6 +290,23 @@ async def custom_catalogs_page(request: Request, _: bool = Depends(require_auth)
 
 
 
+async def tools_page(request: Request, _: bool = Depends(require_auth)):
+    theme_name = request.session.get("theme", "dark_professional")
+    theme = get_theme(theme_name)
+    current_user = get_current_user(request)
+
+    return templates.TemplateResponse(
+        "tools.html",
+        {
+            "request": request,
+            "theme": theme,
+            "themes": get_all_themes(),
+            "current_theme": theme_name,
+            "current_user": current_user,
+        },
+    )
+
+
 async def settings_page(request: Request, _: bool = Depends(require_auth)):
     theme_name = request.session.get("theme", "dark_professional")
     theme = get_theme(theme_name)

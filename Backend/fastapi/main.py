@@ -12,7 +12,7 @@ from Backend.fastapi.routes.template_routes import (
     login_page, login_post, logout, set_theme, dashboard_page,
     media_management_page, edit_media_page, public_status_page, stremio_guide_page,
     admin_dashboard_page, admin_subscriptions_page, admin_access_page,
-    custom_catalogs_page, settings_page
+    custom_catalogs_page, settings_page, tools_page
 )
 from Backend.fastapi.routes.api_routes import (
     list_media_api, delete_media_api, update_media_api,
@@ -32,7 +32,9 @@ from Backend.fastapi.routes.api_routes import (
     add_custom_catalog_item_api, remove_custom_catalog_item_api,
     auto_sync_custom_catalogs_api, auto_catalog_sync_status_api,
     get_auto_catalog_settings_api, update_auto_catalog_settings_api,
-    get_settings_api, update_settings_api
+    get_settings_api, update_settings_api,
+    get_tools_channels_api, start_scan_api, cancel_scan_api, scan_status_api,
+    start_dbcheck_api, cancel_dbcheck_api, dbcheck_status_api, purge_dead_links_api
 )
 
 templates = Jinja2Templates(directory="Backend/fastapi/templates")
@@ -386,6 +388,43 @@ async def get_settings(_: bool = Depends(require_auth)):
 @app.put("/api/admin/settings")
 async def update_settings(payload: dict, _: bool = Depends(require_auth)):
     return await update_settings_api(payload)
+
+# --- Tools (WebUI replacement for /scan, /rescan, /dbcheck bot commands) ---
+@app.get("/admin/tools", response_class=HTMLResponse)
+async def admin_tools(request: Request, _: bool = Depends(require_auth)):
+    return await tools_page(request, _)
+
+@app.get("/api/admin/tools/channels")
+async def tools_channels(_: bool = Depends(require_auth)):
+    return await get_tools_channels_api()
+
+@app.post("/api/admin/tools/scan/start")
+async def tools_scan_start(payload: dict, _: bool = Depends(require_auth)):
+    return await start_scan_api(payload)
+
+@app.post("/api/admin/tools/scan/cancel")
+async def tools_scan_cancel(_: bool = Depends(require_auth)):
+    return await cancel_scan_api()
+
+@app.get("/api/admin/tools/scan/status")
+async def tools_scan_status(_: bool = Depends(require_auth)):
+    return await scan_status_api()
+
+@app.post("/api/admin/tools/dbcheck/start")
+async def tools_dbcheck_start(_: bool = Depends(require_auth)):
+    return await start_dbcheck_api()
+
+@app.post("/api/admin/tools/dbcheck/cancel")
+async def tools_dbcheck_cancel(_: bool = Depends(require_auth)):
+    return await cancel_dbcheck_api()
+
+@app.get("/api/admin/tools/dbcheck/status")
+async def tools_dbcheck_status(_: bool = Depends(require_auth)):
+    return await dbcheck_status_api()
+
+@app.post("/api/admin/tools/dead-links/purge")
+async def tools_purge_dead_links(payload: dict | None = None, _: bool = Depends(require_auth)):
+    return await purge_dead_links_api(payload)
 
 @app.exception_handler(401)
 async def auth_exception_handler(request: Request, exc):

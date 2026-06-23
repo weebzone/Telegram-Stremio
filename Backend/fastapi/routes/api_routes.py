@@ -1065,3 +1065,119 @@ async def update_settings_api(payload: dict) -> dict:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Tools — WebUI replacement for /scan, /rescan, /scanstatus, /cancelscan,
+#  /dbcheck. All driven from the Tools page; no bot commands remain.
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _scan_client():
+    """Pick a Telegram client capable of fetching channel messages.
+
+    Prefer the primary StreamBot (it must be an admin in the AUTH channels to
+    index them); fall back to any connected client."""
+    if StreamBot is not None:
+        return StreamBot
+    if multi_clients:
+        return multi_clients.get(0) or next(iter(multi_clients.values()))
+    return None
+
+
+async def get_tools_channels_api() -> dict:
+    """Return the configured AUTH channels with friendly names for the picker."""
+    channels = list(SettingsManager.current().auth_channels)
+    client = _scan_client()
+    result = []
+    for ch in channels:
+        name = str(ch)
+        try:
+            if client is not None:
+                chat = await client.get_chat(int(ch) if str(ch).lstrip("-").isdigit() else ch)
+                name = getattr(chat, "title", None) or getattr(chat, "first_name", None) or str(ch)
+        except Exception as e:
+            LOGGER.warning(f"[Tools] Could not resolve channel {ch}: {e}")
+        result.append({"id": str(ch), "name": name})
+    return {"status": "success", "data": result}
+
+
+async def start_scan_api(payload: dict) -> dict:
+    from Backend.helper.scan_manager import scan_manager
+    client = _scan_client()
+    if client is None:
+        raise HTTPException(status_code=503, detail="No Telegram client is connected yet.")
+
+    mode = str(payload.get("mode", "scan")).lower()
+    if mode not in ("scan", "rescan"):
+        raise HTTPException(status_code=400, detail="mode must be 'scan' or 'rescan'.")
+    channels = payload.get("channels") or []
+    if not isinstance(channels, list):
+        raise HTTPException(status_code=400, detail="'channels' must be a list.")
+
+    result = await scan_manager.start(client, channels, mode=mode)
+    if not result.get("ok"):
+        raise HTTPException(status_code=409, detail=result.get("message", "Could not start scan."))
+    return {"status": "success", **result}
+
+
+async def cancel_scan_api() -> dict:
+    from Backend.helper.scan_manager import scan_manager
+    result = await scan_manager.cancel()
+    return {"status": "success" if result.get("ok") else "error", **result}
+
+
+async def scan_status_api() -> dict:
+    from Backend.helper.scan_manager import scan_manager
+    return {"status": "success", "data": scan_manager.get_status()}
+
+
+async def start_dbcheck_api() -> dict:
+    from Backend.helper.scan_manager import dbcheck_manager
+    client = _scan_client()
+    if client is None:
+        raise HTTPException(status_code=503, detail="No Telegram client is connected yet.")
+    result = await dbcheck_manager.start(client)
+    if not result.get("ok"):
+        raise HTTPException(status_code=409, detail=result.get("message", "Could not start DB check."))
+    return {"status": "success", **result}
+
+
+async def cancel_dbcheck_api() -> dict:
+    from Backend.helper.scan_manager import dbcheck_manager
+    result = await dbcheck_manager.cancel()
+    return {"status": "success" if result.get("ok") else "error", **result}
+
+
+async def dbcheck_status_api() -> dict:
+    from Backend.helper.scan_manager import dbcheck_manager
+    return {"status": "success", "data": dbcheck_manager.get_status()}
+
+
+async def purge_dead_links_api(payload: dict | None = None) -> dict:
+    """Purge dead links.
+
+    - With no body (or {"source": "dbcheck"}): purge the dead entries found by
+      the most recent DB check.
+    - {"source": "flagged"}: purge every entry flagged is_dead in the DB
+      (these come from the background Dead-Link Checker).
+    - {"stream_ids": [...]}: purge a specific set.
+    """
+    from Backend.helper.scan_manager import dbcheck_manager
+    payload = payload or {}
+    source = str(payload.get("source", "dbcheck")).lower()
+    stream_ids = payload.get("stream_ids")
+
+    if stream_ids is not None:
+        result = await dbcheck_manager.purge(stream_ids)
+    elif source == "flagged":
+        try:
+            flagged = await db.get_all_dead_links()
+            ids = list({d.get("quality_id") for d in flagged if d.get("quality_id")})
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Could not load flagged dead links: {e}")
+        result = await dbcheck_manager.purge(ids)
+    else:
+        result = await dbcheck_manager.purge()
+
+    return {"status": "success" if result.get("ok") else "error", **result}
