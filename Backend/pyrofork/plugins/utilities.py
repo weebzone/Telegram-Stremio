@@ -1,13 +1,3 @@
-"""
-Utilities Plugin — stats dashboard.
-
-Commands (owner-only, private chat):
-    /stats                  — DB dashboard (counts, sizes, uptime)
-
-Note: the former /search, /dbcheck, /scan, /rescan, /scanstatus and /cancelscan
-commands have been migrated to the WebUI "Tools" page (/admin/tools).
-"""
-
 import time
 from pyrogram import filters, Client, enums
 from pyrogram.types import Message
