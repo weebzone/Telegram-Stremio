@@ -13,13 +13,6 @@ from pyrogram.types import BotCommand
 from pyrogram import enums
 
 
-
-
-# ---------------------------------------------------------------------------
-# Pre-compiled patterns used in clean_filename
-# ---------------------------------------------------------------------------
-
-# Broad emoji / unicode-symbol regex (covers all major Unicode emoji blocks)
 _EMOJI_PATTERN = re.compile(
     "["
     "\U0001F600-\U0001F64F"   # emoticons
@@ -36,7 +29,6 @@ _EMOJI_PATTERN = re.compile(
     re.UNICODE,
 )
 
-# Decorative / non-filename characters that are not emojis but still break PTN
 _DECORATION_PATTERN = re.compile(
     r"[•·‣⁃◦⦿⦾❖✦✧✪✫✬✭✮★☆♦♣♠♥►◄→←↑↓»«|¦‖⟨⟩⌨⌚⌛⏰⏱⏲⏳✔✖✗✘✅❌❎⚠⛔🚫]+",
     re.UNICODE,
@@ -47,7 +39,6 @@ _CHANNEL_TAG_PATTERN = re.compile(
     r"_@[A-Za-z]+_|@[A-Za-z]+_|[\[\]\s@]*@[^.\s\[\]]+[\]\[\s@]*"
 )
 
-# Common audio/source tags that are *not* relevant to the title
 _CODEC_TAG_PATTERN = re.compile(
     r"(?<=\W)(org|AMZN|DDP|DD|NF|AAC|TVDL|5\.1|2\.1|2\.0|7\.0|7\.1|5\.0|~|\b\w+kbps\b)(?=\W)",
     re.IGNORECASE,
@@ -105,17 +96,6 @@ def get_readable_file_size(size_in_bytes):
 
 
 def clean_filename(filename: str) -> str:
-    """
-    Sanitise a raw Telegram caption / file name so PTN can parse it correctly.
-
-    Processing order:
-      1. Strip emoji sequences (they silently confuse PTN)
-      2. Strip decorative unicode punctuation (•, ★, »…)
-      3. Replace non-ASCII characters that survived with spaces
-      4. Remove Telegram channel / username tags
-      5. Remove common audio/source codec tags
-      6. Collapse whitespace
-    """
     if not filename:
         return "unknown_file"
 
