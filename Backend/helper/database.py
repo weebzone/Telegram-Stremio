@@ -843,6 +843,91 @@ class Database:
             result.append(quality_to_update)
         return result
 
+    async def _delete_quality_media(self, quality: dict) -> None:
+        """Delete the underlying Telegram message(s) backing a single quality entry.
+
+        Works for both normal (single message) entries and split groups (one
+        message per part). Failures are logged but never raised so a failed
+        Telegram delete can't abort the database update.
+        """
+        parts = quality.get("parts")
+        if parts:
+            for part in parts:
+                try:
+                    chat_id = int(f"-100{part['chat_id']}")
+                    msg_id = int(part["msg_id"])
+                    create_task(delete_message(chat_id, msg_id))
+                except Exception as e:
+                    LOGGER.error(f"Failed to delete split part message: {e}")
+            return
+
+        old_id = quality.get("id")
+        if not old_id:
+            return
+        try:
+            decoded = await decode_string(old_id)
+            chat_id = int(f"-100{decoded['chat_id']}")
+            msg_id = int(decoded["msg_id"])
+            create_task(delete_message(chat_id, msg_id))
+        except Exception as e:
+            LOGGER.error(f"Failed to delete old quality message: {e}")
+
+    async def _apply_quality_update(
+        self, existing_qualities: List[dict], quality_to_update: dict
+    ) -> List[dict]:
+        """Merge an incoming quality entry into an existing list of qualities.
+
+        Handles three scenarios:
+          * Incoming split part: merge with the matching split group. When
+            REPLACE_MODE is on, any other version of the same quality (a normal
+            file or a different split group) is deleted first so only the new
+            split group survives.
+          * Incoming normal file with REPLACE_MODE on: delete every existing
+            entry of the same quality (normal file or split group, including all
+            split parts) and keep only the new normal file.
+          * REPLACE_MODE off: keep existing entries and append the new one.
+        """
+        target_quality = quality_to_update.get("quality")
+        incoming_group_key = quality_to_update.get("group_key")
+        replace_mode = SettingsManager.current().replace_mode
+
+        if incoming_group_key:
+            # Incoming is a split part.
+            if replace_mode:
+                # Remove any other version of this quality (a normal file or a
+                # different split group); the matching split group is preserved
+                # so its parts can be merged below.
+                stale = [
+                    q for q in existing_qualities
+                    if q.get("quality") == target_quality
+                    and q.get("group_key") != incoming_group_key
+                ]
+                for q in stale:
+                    await self._delete_quality_media(q)
+                existing_qualities = [
+                    q for q in existing_qualities
+                    if not (
+                        q.get("quality") == target_quality
+                        and q.get("group_key") != incoming_group_key
+                    )
+                ]
+            return await self._merge_split_part(existing_qualities, quality_to_update)
+
+        # Incoming is a normal (non-split) file.
+        if replace_mode:
+            stale = [q for q in existing_qualities if q.get("quality") == target_quality]
+            for q in stale:
+                await self._delete_quality_media(q)
+            existing_qualities = [
+                q for q in existing_qualities if q.get("quality") != target_quality
+            ]
+            existing_qualities.append(quality_to_update)
+            return existing_qualities
+
+        # REPLACE_MODE off: allow duplicate qualities.
+        existing_qualities.append(quality_to_update)
+        return existing_qualities
+
     async def update_movie(self, movie_data: MovieSchema) -> Optional[ObjectId]:
         try:
             movie_dict = movie_data.dict()
@@ -856,7 +941,6 @@ class Database:
         release_year = movie_dict["release_year"]
 
         quality_to_update = movie_dict["telegram"][0]
-        target_quality = quality_to_update["quality"]
 
         current_db_key = f"storage_{self.current_db_index}"
         total_storage_dbs = len(self.dbs) - 1
@@ -901,31 +985,7 @@ class Database:
         movie_id = existing_movie["_id"]
         existing_qualities = existing_movie.get("telegram", [])
 
-        if quality_to_update.get("group_key"):
-            existing_qualities = await self._merge_split_part(existing_qualities, quality_to_update)
-
-        elif SettingsManager.current().replace_mode:
-            to_delete = [q for q in existing_qualities if q.get("quality") == target_quality]
-
-            for q in to_delete:
-                try:
-                    old_id = q.get("id")
-                    if old_id:
-                        decoded = await decode_string(old_id)
-                        chat_id = int(f"-100{decoded['chat_id']}")
-                        msg_id = int(decoded['msg_id'])
-                        create_task(delete_message(chat_id, msg_id))
-                except Exception as e:
-                    LOGGER.error(f"Failed to delete old quality: {e}")
-
-            existing_qualities = [
-                q for q in existing_qualities if q.get("quality") != target_quality
-            ]
-            existing_qualities.append(quality_to_update)
-
-        else:
-            # allow duplicate qualities
-            existing_qualities.append(quality_to_update)
+        existing_qualities = await self._apply_quality_update(existing_qualities, quality_to_update)
 
         existing_movie["telegram"] = existing_qualities
         existing_movie["updated_on"] = datetime.utcnow()
@@ -1026,38 +1086,9 @@ class Database:
                 existing_episode.setdefault("telegram", [])
 
                 for quality in episode["telegram"]:
-                    target_quality = quality.get("quality")
-
-                    if quality.get("group_key"):
-                        existing_episode["telegram"] = await self._merge_split_part(
-                            existing_episode["telegram"], quality
-                        )
-
-                    elif SettingsManager.current().replace_mode:
-                        to_delete = [
-                            q for q in existing_episode["telegram"]
-                            if q.get("quality") == target_quality
-                        ]
-
-                        for q in to_delete:
-                            try:
-                                old_id = q.get("id")
-                                if old_id:
-                                    decoded = await decode_string(old_id)
-                                    chat_id = int(f"-100{decoded['chat_id']}")
-                                    msg_id = int(decoded['msg_id'])
-                                    create_task(delete_message(chat_id, msg_id))
-                            except Exception as e:
-                                LOGGER.error(f"Failed to delete old quality: {e}")
-
-                        existing_episode["telegram"] = [
-                            q for q in existing_episode["telegram"]
-                            if q.get("quality") != target_quality
-                        ]
-                        existing_episode["telegram"].append(quality)
-
-                    else:
-                        existing_episode["telegram"].append(quality)
+                    existing_episode["telegram"] = await self._apply_quality_update(
+                        existing_episode["telegram"], quality
+                    )
 
         existing_tv["updated_on"] = datetime.utcnow()
 
