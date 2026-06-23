@@ -1710,6 +1710,43 @@ class Database:
                 
         return False
 
+    async def clear_dead_link(self, media_type: str, tmdb_id: int, db_index: int, quality_id: str) -> bool:
+        """
+        Clears the 'is_dead' flag from a specific telegram quality entry
+        (i.e. marks a previously-flagged link as alive again).
+        """
+        db_key = f"storage_{db_index}"
+
+        if media_type == "movie":
+            result = await self.dbs[db_key]["movie"].update_one(
+                {"tmdb_id": tmdb_id, "telegram.id": quality_id},
+                {"$set": {"telegram.$.is_dead": False, "updated_on": datetime.utcnow()}}
+            )
+            return result.modified_count > 0
+
+        elif media_type == "tv":
+            tv = await self.dbs[db_key]["tv"].find_one({"tmdb_id": tmdb_id})
+            if not tv or "seasons" not in tv:
+                return False
+
+            found = False
+            for s_idx, season in enumerate(tv["seasons"]):
+                for e_idx, episode in enumerate(season.get("episodes", [])):
+                    for q_idx, quality in enumerate(episode.get("telegram", [])):
+                        if quality.get("id") == quality_id:
+                            tv["seasons"][s_idx]["episodes"][e_idx]["telegram"][q_idx]["is_dead"] = False
+                            found = True
+                            break
+                    if found: break
+                if found: break
+
+            if found:
+                tv["updated_on"] = datetime.utcnow()
+                result = await self.dbs[db_key]["tv"].replace_one({"tmdb_id": tmdb_id}, tv)
+                return result.modified_count > 0
+
+        return False
+
     async def get_all_dead_links(self) -> List[dict]:
         """
         Scans all active storage databases for both movies and TV shows, returning a
