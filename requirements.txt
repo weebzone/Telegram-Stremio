@@ -1,9 +1,11 @@
 aiofiles
 fastapi
+guessit
 httpx
 motor
 parse-torrent-title
 pyrofork
+rapidfuzz
 python-dotenv
 pytz
 tgcrypto
