@@ -46,16 +46,10 @@
 
 * [🔧 Configuration Guide](#-configuration-guide)
 
-  * [🚀 Quick Setup](#-quick-setup)
-  * [🧩 Startup Configuration](#-startup-configuration)
-  * [📚 Media & Catalog Settings](#-media--catalog-settings)
-  * [🌐 Proxy Settings](#-proxy-settings)
-  * [💳 Subscription System](#-subscription-system)
-  * [🧠 Admin Panel](#-admin-panel)
-  * [🔄 Update Settings](#-update-settings)
-  * [🗄️ Multi-Database Support](#️-multi-database-support)
-  * [🔑 Multi-Token System](#-multi-token-system)
-  * [🔍 Global Search Requirements](#-global-search-requirements)
+  * [🪜 Step 1: Create Your config.env File](#-step-1-create-your-configenv-file)
+  * [🔑 Step 2: How to Get Each Value](#-step-2-how-to-get-each-value)
+  * [📱 Step 3: Generate Your Telegram Session String](#-step-3-generate-your-telegram-session-string)
+  * [🧩 Step 4: Configure Everything Else (Web Settings Page)](#-step-4-configure-everything-else-web-settings-page)
 
 * [🚀 Deployment Guide](#-deployment-guide)
 
@@ -248,7 +242,7 @@ The `/set` command is used to manually upload a specific Movie or TV show to you
 **Example:**
 
 ```
-/set https://m.imdb.com/title/tt665723
+/set https://www.imdb.com/title/tt0468569/
 ```
 
 **Steps:**
@@ -263,117 +257,200 @@ The `/set` command is used to manually upload a specific Movie or TV show to you
 
 # 🔧 Configuration Guide
 
-> 💡 You only need to edit `config.env` for startup credentials, database connection, and optional Userbot configuration. Everything else can be managed from the Web UI.
+> 😌 **Don’t worry — setup is easier than it looks.**
+> You only fill in **6 values once** inside a single file called `config.env`. Everything else (TMDB key, channels, admin login, subscriptions, proxy…) is configured later from a friendly **Web Settings page** — no code, no restarts.
+
+Think of configuration as **two simple layers**:
+
+| Layer | Where | When you set it | What goes here |
+| :--- | :--- | :--- | :--- |
+| 🧱 **Startup** | `config.env` file | Once, before first launch | The core credentials needed to boot |
+| 🎛️ **Runtime** | **Web Settings page** | Anytime, after launch | Everything else — saved to the database, applied live |
 
 ---
 
-## 🧩 Startup Configuration
+## 🪜 Step 1: Create Your config.env File
 
-| Variable                  | Description                                                                                                 |
-| :------------------------ | :---------------------------------------------------------------------------------------------------------- |
-| **`API_ID`**              | Telegram API ID obtained from `my.telegram.org`. Required for all Telegram client connections.              |
-| **`API_HASH`**            | Telegram API Hash obtained from `my.telegram.org`. Required for Telegram authentication.                    |
-| **`BOT_TOKEN`**           | Main bot token generated via `@BotFather`. Used for streaming, indexing, and user interactions.             |
-| **`OWNER_ID`**            | Your Telegram User ID. Grants full administrative access to the system.                                     |
-| **`DATABASE`**            | MongoDB connection URI(s). Used to store metadata, settings, catalogs, subscriptions, and application data. |
-| **`PORT`**                | Port on which the FastAPI server runs. Default: `8000`.                                                     |
-| **`USER_SESSION_STRING`** | Optional Userbot session string. Required only for Global Search functionality.                             |
+After cloning the project, copy the sample file and open it for editing:
 
----
+```bash
+cp sample_config.env config.env
+nano config.env
+```
 
-# ⚙️ Web Panel Configuration
+Fill in these values:
 
-The following settings are automatically loaded from the database and can be managed through the Web Admin Panel.
+| Variable | Required | What it is |
+| :--- | :---: | :--- |
+| `API_ID` | ✅ | Telegram API ID (from my.telegram.org) |
+| `API_HASH` | ✅ | Telegram API Hash (from my.telegram.org) |
+| `BOT_TOKEN` | ✅ | Your bot token (from @BotFather) |
+| `OWNER_ID` | ✅ | Your numeric Telegram user ID |
+| `DATABASE` | ✅ | **Two** MongoDB URIs, separated by a comma |
+| `PORT` | ✅ | Web server port (keep `8000` unless it’s busy) |
+| `USER_SESSION_STRING` | ⬜ | Optional — only needed for **Global Search** |
 
-## 📚 Media & Catalog Settings
+A completed file looks like this (these are just example values):
 
-| Variable                     | Description                                                                                                    |
-| :--------------------------- | :------------------------------------------------------------------------------------------------------------- |
-| **`REPLACE_MODE`**           | When enabled, newly uploaded files replace existing files with the same quality label (`720p`, `1080p`, etc.). |
-| **`HIDE_CATALOG`**           | Hides the default Telegram Stremio catalog and shows streams only through Cinemata integration.                |
-| **`AUTH_CHANNEL`**           | Telegram channel IDs used for media indexing and streaming. Multiple channels are supported.                   |
-| **`TMDB_API`**               | TMDb API key used to fetch movie and TV show metadata automatically.                                           |
-| **`GLOBAL_SEARCH`**          | Enables searching media across configured Global Search channels. Requires a valid `USER_SESSION_STRING`.      |
-| **`GLOBAL_SEARCH_CHANNELS`** | List of channel IDs included in Global Search. Searches are restricted to these channels only.                 |
+```env
+API_ID="1234567"
+API_HASH="abc123def456ghi789jkl012mno345pq"
+BOT_TOKEN="1234567890:AAEabcdEFGhijkLMnOPqrsTUVwxyz12345"
+USER_SESSION_STRING=""
+OWNER_ID="987654321"
+DATABASE="mongodb+srv://user:pass@cluster0.xxxx.mongodb.net/tracking,mongodb+srv://user:pass@cluster0.xxxx.mongodb.net/storage1"
+PORT="8000"
+```
 
----
-
-## 🌐 Proxy Settings
-
-| Variable                            | Description                                                             |
-| :---------------------------------- | :---------------------------------------------------------------------- |
-| **`HTTP_PROXY_URL`**                | Optional HTTP proxy used for metadata requests and external API access. |
-| **`SHOW_PROXY_AND_NON_PROXY_BOTH`** | Shows both proxied and direct stream links simultaneously.              |
+> 💾 To save in nano: press `Ctrl + O`, then `Enter`, then `Ctrl + X`.
 
 ---
 
-## 💳 Subscription System
+## 🔑 Step 2: How to Get Each Value
 
-| Variable                    | Description                                                                |
-| :-------------------------- | :------------------------------------------------------------------------- |
-| **`SUBSCRIPTION`**          | Enables subscription-based access control for streams.                     |
-| **`SUBSCRIPTION_GROUP_ID`** | Telegram group/channel where approved subscribers are invited.             |
-| **`APPROVER_IDS`**          | Telegram user IDs allowed to approve or reject subscription requests.      |
-| **`SUBSCRIPTION_URL`**      | Bot or payment URL displayed to users when their subscription has expired. |
+Take it one line at a time — each value comes from a quick, free step.
 
----
+### 🆔 API_ID & API_HASH
+1. Go to **https://my.telegram.org** and log in with your phone number.
+2. Open **API development tools**.
+3. Create an app (any title works, e.g. `stremio`).
+4. Copy **App api_id** → `API_ID` and **App api_hash** → `API_HASH`.
 
-## 🧠 Admin Panel
+### 🤖 BOT_TOKEN
+1. Open **@BotFather** in Telegram.
+2. Send `/newbot` and follow the prompts (choose a name and a username).
+3. Copy the token it gives you → `BOT_TOKEN`.
+4. ⭐ Add this bot as an **admin** in every channel you’ll use for media.
 
-| Variable             | Description                                                                                      |
-| :------------------- | :----------------------------------------------------------------------------------------------- |
-| **`ADMIN_USERNAME`** | Username used to access the Web Admin Panel.                                                     |
-| **`ADMIN_PASSWORD`** | Password used to access the Web Admin Panel. Change the default values immediately for security. |
+### 👤 OWNER_ID
+1. Open **@userinfobot** in Telegram (or send `/id` to **@MissRose_bot**).
+2. It replies with your numeric ID → `OWNER_ID`.
 
----
+### 🗄️ DATABASE (two MongoDB URIs)
+You need **two** free MongoDB databases — the first stores tracking/metadata, the second stores your media references.
 
-## 🔄 Update Settings
+1. Create a free account at **https://www.mongodb.com/atlas** (the forever-free **M0** tier is enough to start).
+2. Create a cluster → in **Database Access**, add a database user and password.
+3. In **Network Access**, add `0.0.0.0/0` (allow access from anywhere).
+4. Click **Connect → Drivers** and copy the connection string, e.g.
+   `mongodb+srv://user:pass@cluster0.xxxx.mongodb.net/`
+5. Add a database name at the end of each (e.g. `/tracking` and `/storage1`).
+6. Put **both** strings on one line, separated by a comma:
+   ```
+   DATABASE="mongodb+srv://.../tracking,mongodb+srv://.../storage1"
+   ```
 
-| Variable              | Description                                   |
-| :-------------------- | :-------------------------------------------- |
-| **`UPSTREAM_REPO`**   | Git repository URL used by the update system. |
-| **`UPSTREAM_BRANCH`** | Branch that the updater should track.         |
+> 💡 You can use the **same cluster** for both — just give them two different database names. Need more space later? Add extra storage databases from the Web Settings page (no restart required).
 
----
+### 🔢 PORT
+Leave it as `8000` unless that port is already in use. Your reverse proxy / domain will point here.
 
-## 🗄️ Multi-Database Support
-
-| Variable              | Description                                                                                                                             |
-| :-------------------- | :-------------------------------------------------------------------------------------------------------------------------------------- |
-| **`EXTRA_DATABASES`** | Additional MongoDB databases used for load balancing, scalability, and redundancy. Can be added or removed directly from the Web Panel. |
-
----
-
-## 🔑 Multi-Token System
-
-| Variable           | Description                                                                                |
-| :----------------- | :----------------------------------------------------------------------------------------- |
-| **`MULTI_TOKENS`** | Additional bot tokens used to distribute download traffic and reduce Telegram rate limits. |
-
-### About Multi-Token Support
-
-If your addon handles a large number of concurrent streams or downloads, Telegram may rate-limit a single bot.
-
-To avoid this:
-
-1. Create multiple bots using `@BotFather`.
-2. Add each bot as an admin in all AUTH CHANNELS.
-3. Add their tokens in the **Multi Token** section of the Web Panel.
-4. The system automatically distributes traffic across all available bots.
+### 📱 USER_SESSION_STRING (optional)
+Only needed if you want **Global Search**. It’s safe and quick to generate — see **Step 3** below. If you don’t need Global Search, leave it empty.
 
 ---
 
-## 🔍 Global Search Requirements
+## 📱 Step 3: Generate Your Telegram Session String
 
-Global Search requires a valid Userbot session.
+> 😊 **No app installation required — and it’s safe.**
+> A session string is simply a “stay logged in” token for **your own** Telegram account, exactly like signing into Telegram Web. The bot never sees your password, and you can revoke access anytime from **Telegram → Settings → Devices**.
 
-* Configure `USER_SESSION_STRING` in `config.env`.
-* Enable **Global Search** from the Web Panel.
-* Add one or more **Global Search Channels**.
-* Searches will only be performed within the configured Global Search channels.
+> ⏭️ **Skip this step** entirely if you don’t plan to use Global Search.
 
-> ⚠️ If `USER_SESSION_STRING` is not configured, Global Search cannot be enabled.
+### 🌐 Easiest Method: Google Colab (works right in your phone’s browser)
 
+1️⃣ Open **https://colab.new** in your browser.
+
+2️⃣ Sign in with your Google account.
+
+3️⃣ Tap **“+ Code”** to add a new code cell.
+
+4️⃣ Paste the code below and press ▶ **Run**:
+
+```python
+!pip install pyrogram tgcrypto
+
+import asyncio
+from pyrogram import Client
+
+api_id = int(input("API ID: "))
+api_hash = input("API HASH: ")
+
+async def main():
+    async with Client("temp_session", api_id, api_hash) as app:
+        print("\nYour USER_SESSION_STRING is:\n")
+        print(await app.export_session_string())
+
+await main()
+```
+
+5️⃣ Enter your **API ID** and **API HASH** when prompted.
+
+6️⃣ Enter the **login code** Telegram sends you (and your 2-step password, if you have one).
+
+7️⃣ Your **USER_SESSION_STRING** is printed on screen — copy the whole string into `config.env`.
+
+> 🔒 **Keep it private.** Anyone who has this string can access your account, so never share it or commit it to a public repository. To invalidate it instantly, just remove the session from Telegram’s **Devices** list.
+
+---
+
+## 🧩 Step 4: Configure Everything Else (Web Settings Page)
+
+Once the server is running, open it in your browser:
+
+| Setup | Open this URL |
+| :--- | :--- |
+| **VPS with a domain** | `https://your-domain.com` |
+| **Local / direct IP** | `http://<your-vps-ip>:8000` |
+
+You’ll land on the **login page** (`/login`). Sign in with the default credentials:
+
+```
+Username: admin
+Password: admin
+```
+
+Then go to **Settings** (`/admin/settings`).
+
+> 🚨 **Do this first:** change the admin password in the **Admin Authentication** card, then click **Save Settings**.
+
+Everything below is stored in the database and applied **instantly — no restart needed** (the only exception is `USER_SESSION_STRING`, which lives in `config.env`).
+
+### ⚙️ General
+| Option | What it does |
+| :--- | :--- |
+| **Replace Mode** | When a new file has the same quality (`720p`, `1080p`…) as an existing one, it replaces the old entry. Recommended **ON**. |
+| **Hide Catalog** | Hides the public Stremio catalog (direct streams still work). |
+
+### 🛡️ Admin Authentication
+| Field | What to enter |
+| :--- | :--- |
+| **Admin Username / Password** | Your Web Panel login. Leave the password blank to keep the current one. **Change the defaults right away.** |
+| **AUTH_CHANNELS** | The channel(s) the bot indexes and streams from. Add each one by `@username` or `-100…` ID. Make sure your bot is an **admin** in each channel. |
+
+### 🎬 Media & Content
+| Field | What to enter |
+| :--- | :--- |
+| **TMDB API Key** | A free TMDB **v3** key from themoviedb.org → Settings → API. Powers automatic metadata matching. |
+| **Base URL** | Your public address, e.g. `https://your-domain.com`. **Important:** Stremio uses this to reach your streams. |
+| **Upstream Repo / Branch** | Optional — used by `/restart` to auto-update (e.g. repo `weebzone/Telegram-Stremio`, branch `main`). |
+
+### 💳 Subscription (optional)
+Turn this on to monetise access. Set the **Subscription Group ID**, **Subscription URL**, **Payment Instructions** (your UPI / bank / PayPal text), an optional **Payment QR image URL**, and the **Approver IDs** (who can approve requests). The full flow is described in [Subscription Management](#-subscription-management).
+
+### 🌐 Global Search (optional)
+Requires `USER_SESSION_STRING` in `config.env` plus one app restart to unlock. Then enable the toggle and add the **channel IDs** to search. Results that aren’t in your local catalog are tagged **🌐 GLOBAL** in Stremio.
+
+### 🌐 Proxy (optional)
+Set an **HTTP Proxy URL** for outbound metadata/API requests, and optionally **show both** proxied and direct stream links.
+
+### 🗄️ Extra Storage Databases
+Your first two databases (from `config.env`) are **locked** as *Tracking* and *Storage 1*. Add more MongoDB URIs here to expand storage capacity — 🟢 means connected. Remove entries only from the **end** of the list, since existing media reference databases by position.
+
+### 📨 Multi-Token Clients
+Add extra **bot tokens** for faster parallel streaming under heavy load. Create more bots with @BotFather, add them as **admins** in all your AUTH channels, then paste their tokens here. Changes apply immediately.
+
+> ✅ Click **Save Settings** when you’re done. That’s it — you’re live!
 
 ---
 
@@ -767,7 +844,7 @@ If you want to use **only** your **Telegram Stremio Media Server addon** for met
   - Refresh the page (**F5**). You will now be able to **remove Cinemeta** from your addons list.
 
 
-## 🏅 **Contributor**
+## 🏅 Contributors
 
 |<img width="80" src="https://avatars.githubusercontent.com/u/113664541">|<img width="80" src="https://avatars.githubusercontent.com/u/13152917">|<img width="80" src="https://avatars.githubusercontent.com/u/14957082">|<img width="80" src="https://raw.githubusercontent.com/vflixa1prime/Readme/main/VFlixPRime.png">|
 |:---:|:---:|:---:|:---:|
