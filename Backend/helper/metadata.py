@@ -40,12 +40,15 @@ _CINEMETA_THRESHOLD = 0.60
 _TMDB_THRESHOLD = 0.55
 # Score at which a candidate is treated as a confident match and the search stops.
 _STRONG_MATCH = 0.92
+# How many top TMDb candidates to re-check against their alternative titles.
+_ALT_TITLE_LOOKUPS = 5
 
 # Per-run caches keyed by query / id.
 IMDB_CACHE: dict = {}
 TMDB_SEARCH_CACHE: dict = {}
 TMDB_DETAILS_CACHE: dict = {}
 EPISODE_CACHE: dict = {}
+ALT_TITLES_CACHE: dict = {}
 
 # Limits concurrent external API calls.
 API_SEMAPHORE = asyncio.Semaphore(12)
@@ -300,7 +303,7 @@ async def safe_tmdb_search(title: str, type_: str, year: Optional[int] = None):
 
     try:
         results = await _tmdb_raw_search(title, type_, year)
-        best = _pick_best_tmdb_result(results, title, year, type_)
+        best = await _pick_best_tmdb_result(results, title, year, type_)
         if best is None and results:
             top = results[0]
             top_title = getattr(top, "title" if type_ == "movie" else "name", "?")
@@ -323,18 +326,59 @@ def _tmdb_title_year(item, media_type: str) -> tuple[str, int]:
 
 
 # Score TMDb results and return the best above threshold, or None.
-def _pick_best_tmdb_result(results, query_title: str, query_year: Optional[int], media_type: str):
+async def _pick_best_tmdb_result(results, query_title: str, query_year: Optional[int], media_type: str):
     if not results:
         return None
+
+    scored = []
     best_item, best_score = None, 0.0
     for item in results:
         r_title, r_year = _tmdb_title_year(item, media_type)
         score = _score_candidate(query_title, query_year, r_title, r_year)
+        scored.append((score, item, r_year))
         if score > best_score:
             best_score, best_item = score, item
+
+    if best_score >= _STRONG_MATCH:
+        return best_item
+
+    # Re-check the strongest candidates against TMDb alternative titles so dubbed /
+    # regional releases match (e.g. query "Rise Roar Revolt" -> TMDb title "RRR").
+    scored.sort(key=lambda x: x[0], reverse=True)
+    for _, item, r_year in scored[:_ALT_TITLE_LOOKUPS]:
+        alt_titles = await _tmdb_alternative_titles(media_type, getattr(item, "id", None))
+        for alt in alt_titles:
+            alt_score = _score_candidate(query_title, query_year, alt, r_year)
+            if alt_score > best_score:
+                best_score, best_item = alt_score, item
+                if best_score >= _STRONG_MATCH:
+                    break
         if best_score >= _STRONG_MATCH:
             break
+
     return best_item if best_score >= _TMDB_THRESHOLD and best_item is not None else None
+
+
+# Fetch and cache the alternative/localized titles for a TMDb movie or tv id.
+async def _tmdb_alternative_titles(media_type: str, tmdb_id) -> list[str]:
+    if not tmdb_id:
+        return []
+    cache_key = (media_type, tmdb_id)
+    if cache_key in ALT_TITLES_CACHE:
+        return ALT_TITLES_CACHE[cache_key]
+    titles: list[str] = []
+    try:
+        client = get_tmdb_client()
+        async with API_SEMAPHORE:
+            target = client.movie(tmdb_id) if media_type == "movie" else client.tv(tmdb_id)
+            alt = await target.alternative_titles()
+        # Movies expose `.titles`, TV exposes `.results`; support both shapes.
+        entries = list(getattr(alt, "titles", None) or []) + list(getattr(alt, "results", None) or [])
+        titles = [t for t in (getattr(e, "title", "") for e in entries) if t]
+    except Exception as e:
+        LOGGER.warning(f"TMDb alternative-titles fetch failed for {media_type} id={tmdb_id}: {e}")
+    ALT_TITLES_CACHE[cache_key] = titles
+    return titles
 
 
 # Fetch and cache full TMDb details (with images) for a movie or tv id.
