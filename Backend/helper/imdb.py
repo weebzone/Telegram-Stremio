@@ -101,7 +101,9 @@ async def search_title_multi(query: str, type: str, limit: int = 8) -> List[Dict
 async def get_detail(imdb_id: str, media_type: str) -> Optional[Dict[str, Any]]:
     data = await _fetch_json(f"{BASE_URL}/meta/{_cinemeta_type(media_type)}/{imdb_id}.json")
     meta = (data or {}).get("meta")
-    if not meta:
+    # Cinemeta occasionally returns a record with a null name for newer/obscure
+    # titles; treat that as "no usable data" so callers fall back to TMDb cleanly.
+    if not meta or not meta.get("name"):
         return None
 
     year_value = 0
@@ -114,19 +116,19 @@ async def get_detail(imdb_id: str, media_type: str) -> Optional[Dict[str, Any]]:
     return {
         "id": meta.get("imdb_id") or meta.get("id"),
         "moviedb_id": meta.get("moviedb_id"),
-        "type": meta.get("type", media_type),
-        "title": meta.get("name", ""),
-        "plot": meta.get("description", ""),
-        "genre": meta.get("genres") or meta.get("genre", []),
+        "type": meta.get("type") or media_type,
+        "title": meta.get("name") or "",
+        "plot": meta.get("description") or "",
+        "genre": meta.get("genres") or meta.get("genre") or [],
         "releaseDetailed": {"year": year_value},
-        "rating": {"star": float(meta.get("imdbRating", 0) or 0)},
-        "poster": meta.get("poster", ""),
-        "background": meta.get("background", ""),
-        "logo": meta.get("logo", ""),
+        "rating": {"star": float(meta.get("imdbRating") or 0)},
+        "poster": meta.get("poster") or "",
+        "background": meta.get("background") or "",
+        "logo": meta.get("logo") or "",
         "runtime": meta.get("runtime") or 0,
-        "director": meta.get("director", []),
-        "cast": meta.get("cast", []),
-        "videos": meta.get("videos", []),
+        "director": meta.get("director") or [],
+        "cast": meta.get("cast") or [],
+        "videos": meta.get("videos") or [],
     }
 
 
