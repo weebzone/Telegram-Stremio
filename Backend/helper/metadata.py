@@ -177,7 +177,7 @@ def parse_media_name(name: str) -> dict:
         "excess": ptn.get("excess"),
     }
 
-    if _guessit and not (parsed["title"] and len(str(parsed["title"]).strip()) >= 2):
+    if _guessit:
         try:
             g = _guessit(name)
             parsed["title"] = parsed["title"] or _first(g.get("title"))
