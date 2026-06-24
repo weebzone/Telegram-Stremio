@@ -12,45 +12,29 @@ from Backend.helper.settings_manager import SettingsManager
 from Backend.helper.encrypt import encode_string
 from Backend.helper.split_files import parse_split_info
 from themoviedb import aioTMDb
+from rapidfuzz import fuzz
+from guessit import guessit as _guessit
+from difflib import SequenceMatcher
 
-# RapidFuzz gives better release-name matching; fall back to stdlib if unavailable.
 try:
-    from rapidfuzz import fuzz
-
     def _fuzzy_ratio(a: str, b: str) -> float:
         return fuzz.token_set_ratio(a, b) / 100.0
-except Exception:  # pragma: no cover - fallback path
-    from difflib import SequenceMatcher
-
+except Exception:
     def _fuzzy_ratio(a: str, b: str) -> float:
         return SequenceMatcher(None, a, b).ratio()
 
-# GuessIt is optional; when present it parses messy captions PTN cannot.
-try:
-    from guessit import guessit as _guessit
-except Exception:  # pragma: no cover - fallback path
-    _guessit = None
 
-
-# ----------------- Configuration & caches -----------------
-
-# Minimum title-similarity to accept a Cinemeta result.
 _CINEMETA_THRESHOLD = 0.60
-# Minimum title-similarity to accept a TMDb result.
 _TMDB_THRESHOLD = 0.55
-# Score at which a candidate is treated as a confident match and the search stops.
 _STRONG_MATCH = 0.92
-# How many top TMDb candidates to re-check against their alternative titles.
 _ALT_TITLE_LOOKUPS = 5
 
-# Per-run caches keyed by query / id.
 IMDB_CACHE: dict = {}
 TMDB_SEARCH_CACHE: dict = {}
 TMDB_DETAILS_CACHE: dict = {}
 EPISODE_CACHE: dict = {}
 ALT_TITLES_CACHE: dict = {}
 
-# Limits concurrent external API calls.
 API_SEMAPHORE = asyncio.Semaphore(12)
 
 _MULTIPART_RE = re.compile(r"(?:part|cd|disc|disk)[s._-]*\d+(?=\.\w+$)", re.IGNORECASE)
@@ -69,14 +53,9 @@ def get_tmdb_client() -> aioTMDb:
     return _tmdb_client
 
 
-# ----------------- Image helpers -----------------
-
-# Build a full TMDb image URL from a relative path.
 def format_tmdb_image(path: str, size="w500") -> str:
     return f"https://image.tmdb.org/t/p/{size}{path}" if path else ""
 
-
-# Pick the best logo (English preferred) from a TMDb images object.
 def get_tmdb_logo(images) -> str:
     logos = getattr(images, "logos", None) if images else None
     if not logos:
@@ -89,8 +68,6 @@ def get_tmdb_logo(images) -> str:
             return format_tmdb_image(logo.file_path, "w300")
     return ""
 
-
-# Build Metahub poster/backdrop/logo URLs for an IMDb id.
 def format_imdb_images(imdb_id: str) -> dict:
     if not imdb_id:
         return {"poster": "", "backdrop": "", "logo": ""}
@@ -101,9 +78,6 @@ def format_imdb_images(imdb_id: str) -> dict:
     }
 
 
-# ----------------- ID extraction -----------------
-
-# Extract an IMDb (tt…) or TMDb (numeric, URL-only) id from arbitrary text.
 def extract_default_id(text: str) -> str | None:
     if not text:
         return None
@@ -118,8 +92,6 @@ def extract_default_id(text: str) -> str | None:
         return tmdb_url.group(1)
     return None
 
-
-# Split a supplied default id into (imdb_id, tmdb_id, is_explicit_imdb, use_tmdb).
 def _split_default_id(default_id) -> tuple[str | None, int | None, bool, bool]:
     if not default_id:
         return None, None, False, False
@@ -130,10 +102,6 @@ def _split_default_id(default_id) -> tuple[str | None, int | None, bool, bool]:
         return None, int(value), False, True
     return None, None, False, False
 
-
-# ----------------- Fuzzy-matching helpers -----------------
-
-# Lower-case, drop a leading article and collapse punctuation to spaces.
 def _normalize_title(title: str) -> str:
     if not title:
         return ""
@@ -142,24 +110,18 @@ def _normalize_title(title: str) -> str:
     t = re.sub(r"[^\w\s]", " ", t)
     return re.sub(r"\s+", " ", t).strip()
 
-
-# Fuzzy similarity (0-1) between two titles after normalization.
 def _title_similarity(t1: str, t2: str) -> float:
     n1, n2 = _normalize_title(t1), _normalize_title(t2)
     if not n1 or not n2:
         return 0.0
     return _fuzzy_ratio(n1, n2)
 
-
-# Return the first 4-digit year found in a value, else 0.
 def _year_from_str(year_val) -> int:
     if not year_val:
         return 0
     m = re.search(r"(\d{4})", str(year_val))
     return int(m.group(1)) if m else 0
 
-
-# Score a candidate by title similarity, adjusted by how close the year is.
 def _score_candidate(query_title: str, query_year: Optional[int], result_title: str, result_year: int) -> float:
     score = _title_similarity(query_title, result_title)
     if query_year and result_year:
@@ -172,8 +134,6 @@ def _score_candidate(query_title: str, query_year: Optional[int], result_title: 
             score = max(0.0, score - 0.10 * (diff - 2))
     return score
 
-
-# Build ordered search-query variants (most to least specific) for better recall.
 def _build_query_variants(title: str, year: Optional[int] = None) -> List[str]:
     variants: List[str] = [title]
     if year:
@@ -198,15 +158,9 @@ def _build_query_variants(title: str, year: Optional[int] = None) -> List[str]:
             ordered.append(v)
     return ordered
 
-
-# ----------------- Filename / caption parsing -----------------
-
-# Take the first element when GuessIt returns a list for a field.
 def _first(value):
     return value[0] if isinstance(value, list) else value
 
-
-# Parse title/year/season/episode/quality from a name, using GuessIt to fill PTN gaps.
 def parse_media_name(name: str) -> dict:
     try:
         ptn = PTN.parse(name) or {}
@@ -223,7 +177,6 @@ def parse_media_name(name: str) -> dict:
         "excess": ptn.get("excess"),
     }
 
-    # GuessIt handles emoji-heavy / decorated captions PTN leaves without a title.
     if _guessit and not (parsed["title"] and len(str(parsed["title"]).strip()) >= 2):
         try:
             g = _guessit(name)
@@ -237,10 +190,6 @@ def parse_media_name(name: str) -> dict:
 
     return parsed
 
-
-# ----------------- Cached API wrappers -----------------
-
-# Search Cinemeta across query variants and return the best-scoring IMDb id, or None.
 async def safe_imdb_search(title: str, type_: str, year: Optional[int] = None) -> str | None:
     cache_key = f"imdb::{type_}::{title}::{year}"
     if cache_key in IMDB_CACHE:
@@ -282,8 +231,6 @@ async def safe_imdb_search(title: str, type_: str, year: Optional[int] = None) -
     IMDB_CACHE[cache_key] = None
     return None
 
-
-# Run a TMDb search (movie or tv) returning raw results, retrying without year when empty.
 async def _tmdb_raw_search(title: str, media_type: str, year: Optional[int]):
     client = get_tmdb_client()
     async with API_SEMAPHORE:
@@ -294,8 +241,6 @@ async def _tmdb_raw_search(title: str, media_type: str, year: Optional[int]):
             return results
         return await client.search().tv(query=title)
 
-
-# Search TMDb and return the best-scoring result above threshold, or None.
 async def safe_tmdb_search(title: str, type_: str, year: Optional[int] = None):
     cache_key = f"tmdb_search::{type_}::{title}::{year}"
     if cache_key in TMDB_SEARCH_CACHE:
@@ -315,8 +260,6 @@ async def safe_tmdb_search(title: str, type_: str, year: Optional[int] = None):
         TMDB_SEARCH_CACHE[cache_key] = None
         return None
 
-
-# Read a TMDb result's title and year regardless of movie/tv shape.
 def _tmdb_title_year(item, media_type: str) -> tuple[str, int]:
     if media_type == "movie":
         date = getattr(item, "release_date", None)
@@ -324,8 +267,6 @@ def _tmdb_title_year(item, media_type: str) -> tuple[str, int]:
     date = getattr(item, "first_air_date", None)
     return getattr(item, "name", "") or "", getattr(date, "year", 0) if date else 0
 
-
-# Score TMDb results and return the best above threshold, or None.
 async def _pick_best_tmdb_result(results, query_title: str, query_year: Optional[int], media_type: str):
     if not results:
         return None
@@ -342,8 +283,6 @@ async def _pick_best_tmdb_result(results, query_title: str, query_year: Optional
     if best_score >= _STRONG_MATCH:
         return best_item
 
-    # Re-check the strongest candidates against TMDb alternative titles so dubbed /
-    # regional releases match (e.g. query "Rise Roar Revolt" -> TMDb title "RRR").
     scored.sort(key=lambda x: x[0], reverse=True)
     for _, item, r_year in scored[:_ALT_TITLE_LOOKUPS]:
         alt_titles = await _tmdb_alternative_titles(media_type, getattr(item, "id", None))
@@ -358,8 +297,6 @@ async def _pick_best_tmdb_result(results, query_title: str, query_year: Optional
 
     return best_item if best_score >= _TMDB_THRESHOLD and best_item is not None else None
 
-
-# Fetch and cache the alternative/localized titles for a TMDb movie or tv id.
 async def _tmdb_alternative_titles(media_type: str, tmdb_id) -> list[str]:
     if not tmdb_id:
         return []
@@ -372,7 +309,6 @@ async def _tmdb_alternative_titles(media_type: str, tmdb_id) -> list[str]:
         async with API_SEMAPHORE:
             target = client.movie(tmdb_id) if media_type == "movie" else client.tv(tmdb_id)
             alt = await target.alternative_titles()
-        # Movies expose `.titles`, TV exposes `.results`; support both shapes.
         entries = list(getattr(alt, "titles", None) or []) + list(getattr(alt, "results", None) or [])
         titles = [t for t in (getattr(e, "title", "") for e in entries) if t]
     except Exception as e:
@@ -380,8 +316,6 @@ async def _tmdb_alternative_titles(media_type: str, tmdb_id) -> list[str]:
     ALT_TITLES_CACHE[cache_key] = titles
     return titles
 
-
-# Fetch and cache full TMDb details (with images) for a movie or tv id.
 async def _tmdb_details(media_type: str, item_id):
     cache_key = (media_type, item_id)
     if cache_key in TMDB_DETAILS_CACHE:
@@ -399,8 +333,6 @@ async def _tmdb_details(media_type: str, item_id):
         TMDB_DETAILS_CACHE[cache_key] = None
         return None
 
-
-# Fetch and cache TMDb episode details.
 async def _tmdb_episode_details(tv_id, season, episode):
     key = (tv_id, season, episode)
     if key in EPISODE_CACHE:
@@ -414,8 +346,6 @@ async def _tmdb_episode_details(tv_id, season, episode):
         EPISODE_CACHE[key] = None
         return None
 
-
-# Fetch and cache Cinemeta/IMDb details for an id.
 async def _cached_imdb_detail(imdb_id: str, media_type: str):
     cached = IMDB_CACHE.get(imdb_id)
     if isinstance(cached, dict):
@@ -425,8 +355,6 @@ async def _cached_imdb_detail(imdb_id: str, media_type: str):
     IMDB_CACHE[imdb_id] = detail
     return detail
 
-
-# Fetch and cache a Cinemeta/IMDb episode.
 async def _cached_imdb_season(imdb_id: str, season, episode):
     key = f"{imdb_id}::{season}::{episode}"
     if key in EPISODE_CACHE:
@@ -436,8 +364,6 @@ async def _cached_imdb_season(imdb_id: str, season, episode):
     EPISODE_CACHE[key] = ep
     return ep
 
-
-# Resolve the IMDb id linked to a TMDb item, or None.
 async def _tmdb_external_imdb_id(media_type: str, tmdb_id) -> str | None:
     try:
         details = await _tmdb_details(media_type, tmdb_id)
@@ -447,16 +373,13 @@ async def _tmdb_external_imdb_id(media_type: str, tmdb_id) -> str | None:
         return None
 
 
-# ----------------- Shared metadata builders -----------------
 
-# Extract cast member names from a TMDb details object.
 def _extract_cast(details) -> list:
     credits = getattr(details, "credits", None) or {}
     cast = getattr(credits, "cast", []) or []
     return [getattr(c, "name", None) or getattr(c, "original_name", None) for c in cast]
 
 
-# Format a runtime in minutes as a display string.
 def _format_runtime(minutes) -> str:
     return f"{minutes} min" if minutes else ""
 
