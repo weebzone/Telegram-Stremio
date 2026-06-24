@@ -57,10 +57,10 @@
   * [🐙 Heroku Guide](#-heroku-guide)
   * [🐳 VPS Guide (Recommended)](#-vps-guide-recommended)
 
-* [📺 Setting Up Stremio](#-setting-up-stremio)
+* [📺 Setting Up Your App (Nuvio Recommended)](#-setting-up-your-app-nuvio-recommended)
 
-  * [🌐 Add the Addon](#-step-3-add-the-addon)
-  * [⚙️ Optional: Remove Cinemeta](#️-optional-remove-cinemeta)
+  * [📥 Install Nuvio](#-step-1-install-nuvio)
+  * [🌐 Add the Addon](#-step-2-add-the-addon)
 
 * [🏅 Contributors](#-contributors)
 
@@ -433,7 +433,7 @@ Everything below is stored in the database and applied **instantly — no restar
 | :--- | :--- |
 | **TMDB API Key** | A free TMDB **v3** key from themoviedb.org → Settings → API. Powers automatic metadata matching. |
 | **Base URL** | Your public address, e.g. `https://your-domain.com`. **Important:** Stremio uses this to reach your streams. |
-| **Upstream Repo / Branch** | Optional — used by `/restart` to auto-update (e.g. repo `weebzone/Telegram-Stremio`, branch `main`). |
+| **Upstream Repo / Branch** | Optional — used by `/restart` to auto-update (e.g. repo `weebzone/Telegram-Stremio`, branch `master`). |
 
 ### 💳 Subscription (optional)
 Turn this on to monetise access. Set the **Subscription Group ID**, **Subscription URL**, **Payment Instructions** (your UPI / bank / PayPal text), an optional **Payment QR image URL**, and the **Approver IDs** (who can approve requests). The full flow is described in [Subscription Management](#-subscription-management).
@@ -739,109 +739,36 @@ sudo apt install caddy
 ➡️ `https://your-domain.com`
 
 
-# 📺 Setting up Stremio
+# 📺 Setting Up Your App (Nuvio Recommended)
 
-Follow these steps to connect your deployed addon to the **Stremio** app.
+Your media server works as a standard **Stremio-style addon**, so it plays in any compatible client. For the **best compatibility and smoothest experience across devices, we recommend the [Nuvio](https://play.google.com/store/apps/details?id=com.nuvio.app) app** — a free, open-source media hub for **Android, Android TV, Fire TV, iOS, Windows, and TV** that supports Stremio addon manifest URLs natively. *(Content was rephrased for compliance with licensing restrictions.)*
 
-### 📥 Step 1: Download Stremio
+> 💡 Already using **Stremio**? It works too — just install the same addon URL below. Nuvio simply tends to handle these Telegram streams more reliably across more devices.
 
-Download Stremio for your device:
-👉 [https://www.stremio.com/downloads](https://www.stremio.com/downloads)
+## 📥 Step 1: Install Nuvio
 
-### 👤 Step 2: Sign In
+Download Nuvio from an official source:
 
-  - Create or log in to your **Stremio account**.
+| Platform | Source |
+| :--- | :--- |
+| **Android / Android TV / Fire TV** | [Google Play](https://play.google.com/store/apps/details?id=com.nuvio.app) |
+| **All platforms / latest builds** | [GitHub — tapframe/NuvioStreaming](https://github.com/tapframe/NuvioStreaming) |
 
-### 🌐 Step 3: Add the Addon
+> 🔗 *(Optional)* Connect **Trakt** in the app to sync your watch history and progress across devices.
 
-1.  Open the **Stremio App**.
-2.  Go to the **Addon Section** (usually represented by a puzzle piece icon 🧩).
-3.  In the search bar, paste the appropriate addon URL:
+## 🌐 Step 2: Add the Addon
+
+1. Open **Nuvio** and go to the **Addons** section.
+2. Paste your addon **manifest URL** and install it:
 
 | Deployment Method | Addon URL |
 | :--- | :--- |
 | **Heroku** | `https://<your-heroku-app>.herokuapp.com/stremio/manifest.json` |
 | **Custom Domain** | `https://<your-domain>/stremio/manifest.json` |
 
+3. Done! 🎉 Your Telegram library now appears in the catalog and streams directly.
 
-## ⚙️ Optional: Remove Cinemeta
-
-If you want to use **only** your **Telegram Stremio Media Server addon** for metadata and streaming, follow this guide to remove the default `Cinemeta` addon.
-
-### 1️⃣ Step 1: Uninstall Other Addons
-
-1.  Go to the **Addon Section** in the Stremio App.
-2.  **Uninstall all addons** except your Telegram Stremio Media Server.
-3.  Attempt to remove **Cinemeta**. If Stremio prevents it, proceed to Step 2.
-
-### 2️⃣ Step 2: Remove “Cinemeta” Protection
-
-1.  Log in to your **Stremio account** using **Chrome or Chromium-based browser** :
-    👉 [https://web.stremio.com/](https://web.stremio.com/)
-2.  Once logged in, open your **browser console** (`Ctrl + Shift + J` on Windows/Linux or `Cmd + Option + J` on macOS).
-3.  Copy and paste the code below into the console and press **Enter**:
-
-<!-- end list -->
-
-```js
-(function() {
-
-	const token = JSON.parse(localStorage.getItem("profile")).auth.key;
-
-    const requestData = {
-        type: "AddonCollectionGet",
-        authKey: token,
-        update: true
-    };
-
-    fetch('https://api.strem.io/api/addonCollectionGet', {
-        method: 'POST',
-        body: JSON.stringify(requestData)
-    })
-    .then(response => response.json())
-    .then(data => {
-
-    if (data && data.result) {
-
-        let result = JSON.stringify(data.result).substring(1).replace(/"protected":true/g, '"protected":false').replace('"idPrefixes":["tmdb:"]', '"idPrefixes":["tmdb:","tt"]');
-            
-        const index = result.indexOf("}}],");
-            
-        if (index !== -1) {
-            result = result.substring(0, index + 3) + "}";
-        }
-
-		let addons = '{"type":"AddonCollectionSet","authKey":"' + token + '",' + result;
-
-		fetch('https://api.strem.io/api/addonCollectionSet', {
-    		method: 'POST',
-			body: addons 
-		})
-      	.then(response => response.text())
-      	.then(data => {
-      		console.log('Success:', data);
-      	})
-      	.catch((error) => {
-      		console.error('Error:', error);
-      	});
-
-        } else {
-            console.error('Error:', error);
-        }
-    })
-    .catch((error) => {
-        console.error('Erro:', error);
-    });
-})();
-```
-
-### 3️⃣ Step 3: Confirm Success
-
-  - Wait until you see this message in the console:
-    ```
-    Success: {"result":{"success":true}}
-    ```
-  - Refresh the page (**F5**). You will now be able to **remove Cinemeta** from your addons list.
+> 🔑 If you run in **subscription mode**, each user installs their own **personal** addon URL (`/stremio/{token}/manifest.json`) that the bot gives them.
 
 
 ## 🏅 Contributors
