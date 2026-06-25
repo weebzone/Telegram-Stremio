@@ -580,8 +580,30 @@ async def manage_subscriber_api(user_id: int, payload: dict) -> dict:
             raise HTTPException(status_code=400, detail="Invalid action")
             
         success = await db.manage_subscriber(user_id, action, days)
+
+        # On revoke, also remove the user from the subscription group so the
+        # action takes effect immediately instead of waiting for the checker.
+        if success and action == "delete" and SettingsManager.current().subscription:
+            group_id = SettingsManager.current().subscription_group_id
+            if group_id:
+                try:
+                    # ban + unban kicks without permanently blocking re-join
+                    await StreamBot.ban_chat_member(group_id, user_id)
+                    await StreamBot.unban_chat_member(group_id, user_id)
+                except Exception as exc:
+                    LOGGER.warning(f"Revoke: could not remove user {user_id} from group: {exc}")
+
+        # Reflect the change immediately in the stremio membership cache.
         if success:
-            return {"status": "success", "message": "User subscription updated successfully"}
+            try:
+                from Backend.fastapi.routes.stremio_routes import invalidate_membership_cache
+                invalidate_membership_cache(user_id)
+            except Exception:
+                pass
+
+        if success:
+            verb = {"extend": "extended", "reduce": "reduced", "delete": "revoked"}.get(action, "updated")
+            return {"status": "success", "message": f"User subscription {verb} successfully"}
         else:
             raise HTTPException(status_code=404, detail="User not found or update failed")
     except HTTPException:
@@ -1049,7 +1071,7 @@ async def update_settings_api(payload: dict) -> dict:
 
     # Strip whitespace from string fields
     for key in ("tmdb_api", "base_url", "upstream_repo", "upstream_branch",
-                "admin_username", "admin_password", "http_proxy_url", "subscription_url",
+                "admin_username", "admin_password", "http_proxy_url",
                 "payment_instructions", "payment_qr_url"):
         if key in payload and isinstance(payload[key], str):
             payload[key] = payload[key].strip()

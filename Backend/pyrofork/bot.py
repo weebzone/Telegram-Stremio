@@ -33,6 +33,26 @@ client_dc_map = {}
 client_failures = {}
 client_avg_mbps = {}
 
+
+def get_streambot_url() -> str:
+    """Public ``t.me`` link of the Stream bot.
+
+    Used everywhere a user needs to be pointed back to the bot (renew an
+    expired plan, join the subscription channel, etc.). ``StreamBot.username``
+    is populated at startup in ``Backend/__main__.py`` after the client starts.
+    Falls back to ``https://t.me/`` if the username is not yet available.
+    """
+    try:
+        username = getattr(StreamBot, "username", None)
+        if not username:
+            me = getattr(StreamBot, "me", None)
+            username = getattr(me, "username", None) if me else None
+        if username:
+            return f"https://t.me/{username}"
+    except Exception:
+        pass
+    return "https://t.me/"
+
 if Userbot is not None:
     work_loads[USERBOT_CLIENT_INDEX] = 0
     client_failures[USERBOT_CLIENT_INDEX] = 0

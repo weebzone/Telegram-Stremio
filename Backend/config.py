@@ -33,7 +33,6 @@ class Telegram:
     ADMIN_PASSWORD               = getenv("ADMIN_PASSWORD", "admin")
     SUBSCRIPTION                 = getenv("SUBSCRIPTION", "false").lower() == "true"
     SUBSCRIPTION_GROUP_ID        = int(getenv("SUBSCRIPTION_GROUP_ID", "0"))
-    SUBSCRIPTION_URL             = getenv("SUBSCRIPTION_URL", "https://t.me/")
     APPROVER_IDS                 = [int(x.strip()) for x in (getenv("APPROVER_IDS") or "").split(",") if x.strip().isdigit()]
     HTTP_PROXY_URL               = getenv("HTTP_Proxy_URL", "")
     SHOW_PROXY_AND_NON_PROXY_BOTH = getenv("SHOW_ProxyAndNonProxyBoth", "false").lower() == "true"

@@ -318,43 +318,52 @@ class Database:
         return [convert_objectid_to_str(u) for u in users]
 
     async def manage_subscriber(self, user_id: int, action: str, days: int = 0) -> bool:
-        user = await self.get_user(user_id)
-        if not user:
-            return False
-            
+        from datetime import timedelta
         now = datetime.utcnow()
-        if action == "extend" or action == "reduce":
-            from datetime import timedelta
-            current_expiry = user.get("subscription_expiry")
-            
+        user = await self.get_user(user_id)
+
+        if action in ("extend", "reduce"):
+            current_expiry = user.get("subscription_expiry") if user else None
+
             if action == "extend":
-                if current_expiry and current_expiry > now:
-                    new_expiry = current_expiry + timedelta(days=days)
-                else:
-                    new_expiry = now + timedelta(days=days)
-            else: # reduce
+                base = current_expiry if (current_expiry and current_expiry > now) else now
+                new_expiry = base + timedelta(days=days)
+            else:  # reduce
                 if current_expiry:
                     new_expiry = current_expiry - timedelta(days=days)
                     if new_expiry < now:
-                        new_expiry = now # Just expire them
+                        new_expiry = now  # Just expire them
                 else:
-                    new_expiry = now # Already expired or none
-            
+                    new_expiry = now  # Already expired / no subscription
+
             status = "active" if new_expiry > now else "expired"
-            
-            result = await self.dbs["tracking"]["users"].update_one(
+
+            # Upsert so the action works even when the user has no tracking
+            # record yet (e.g. a token-only entry on the Access page).
+            await self.dbs["tracking"]["users"].update_one(
                 {"_id": user_id},
-                {"$set": {"subscription_expiry": new_expiry, "subscription_status": status}}
+                {
+                    "$set": {"subscription_expiry": new_expiry, "subscription_status": status},
+                    "$setOnInsert": {
+                        "first_name": f"User {user_id}",
+                        "username": None,
+                        "created_at": now,
+                    },
+                },
+                upsert=True
             )
-            return result.modified_count > 0
-            
+            return True
+
         elif action == "delete":
-            result = await self.dbs["tracking"]["users"].update_one(
+            # Revoke: end the subscription immediately. Idempotent — succeeds
+            # even if the user has no active subscription so the button never
+            # returns a spurious 404.
+            await self.dbs["tracking"]["users"].update_one(
                 {"_id": user_id},
-                {"$unset": {"subscription_expiry": "", "subscription_status": ""}}
+                {"$set": {"subscription_status": "expired", "subscription_expiry": now}}
             )
-            return result.modified_count > 0
-            
+            return True
+
         return False
 
     async def assign_subscription(self, user_id: int, days: int) -> dict:

@@ -17,7 +17,6 @@ _DEFAULTS: Dict[str, Any] = {
     "admin_password": "admin",
     "subscription": False,
     "subscription_group_id": 0,
-    "subscription_url": "https://t.me/",
     "approver_ids": [],
     "payment_instructions": "",
     "payment_qr_url": "",
@@ -47,7 +46,6 @@ def _seed_from_env() -> Dict[str, Any]:
         "admin_password":               Telegram.ADMIN_PASSWORD,
         "subscription":                 Telegram.SUBSCRIPTION,
         "subscription_group_id":        Telegram.SUBSCRIPTION_GROUP_ID,
-        "subscription_url":             Telegram.SUBSCRIPTION_URL,
         "approver_ids":                 list(Telegram.APPROVER_IDS),
         "global_search_channels":       [],
         "http_proxy_url":               Telegram.HTTP_PROXY_URL,
@@ -122,10 +120,6 @@ class Settings:
     @property
     def http_proxy_url(self) -> str:
         return str(self._d.get("http_proxy_url") or "")
-
-    @property
-    def subscription_url(self) -> str:
-        return str(self._d.get("subscription_url") or "https://t.me/")
 
     @property
     def payment_instructions(self) -> str:
@@ -279,7 +273,7 @@ class SettingsManager:
                 LOGGER.error(f"SettingsManager reinit subscription: {exc}")
                 results["subscription"] = f"error: {exc}"
         else:
-            sub_keys = {"subscription_group_id", "approver_ids", "subscription_url",
+            sub_keys = {"subscription_group_id", "approver_ids",
                         "payment_instructions", "payment_qr_url"}
             if any(old.get(k) != new.get(k) for k in sub_keys):
                 results["subscription"] = "settings reloaded in-memory"

@@ -243,19 +243,14 @@
         </label>
 
         <div id="sub-fields" style="{% if not settings.subscription %}display:none{% endif %}">
-            <div class="grid-2" style="margin-bottom:1rem">
-                <div>
-                    <label class="s-label" for="subscription_group_id">Subscription Group ID</label>
-                    <input type="number" id="subscription_group_id" class="s-input"
-                        value="{{ settings.subscription_group_id }}"
-                        placeholder="-100xxxxxxxx">
-                </div>
-                <div>
-                    <label class="s-label" for="subscription_url">Subscription URL</label>
-                    <input type="url" id="subscription_url" class="s-input"
-                        value="{{ settings.subscription_url }}"
-                        placeholder="https://t.me/your_group">
-                </div>
+            <div style="margin-bottom:1rem">
+                <label class="s-label" for="subscription_group_id">Subscription Group ID</label>
+                <input type="number" id="subscription_group_id" class="s-input"
+                    value="{{ settings.subscription_group_id }}"
+                    placeholder="-100xxxxxxxx">
+                <span style="color:var(--text-sec);font-size:0.78rem;display:block;margin-top:0.4rem">
+                    Users are pointed back to your bot automatically for renewals and joining.
+                </span>
             </div>
 
             <!-- Payment method -->
@@ -603,7 +598,6 @@ async function saveSettings() {
         auth_channels:                 collectList('auth_channels'),
         subscription:                  document.getElementById('subscription').checked,
         subscription_group_id:         parseInt(document.getElementById('subscription_group_id').value || '0', 10),
-        subscription_url:              document.getElementById('subscription_url').value.trim(),
         payment_instructions:          document.getElementById('payment_instructions').value.trim(),
         payment_qr_url:                document.getElementById('payment_qr_url').value.trim(),
         approver_ids:                  collectList('approver_ids').map(Number),
@@ -693,7 +687,6 @@ function renderSettings(s) {
     document.getElementById('upstream_repo').value = s.upstream_repo || '';
     document.getElementById('upstream_branch').value = s.upstream_branch || '';
     document.getElementById('subscription_group_id').value = s.subscription_group_id || 0;
-    document.getElementById('subscription_url').value = s.subscription_url || '';
     document.getElementById('http_proxy_url').value = s.http_proxy_url || '';
 
     // Simple multi-value lists

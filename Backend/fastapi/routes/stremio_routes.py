@@ -10,6 +10,7 @@ from datetime import datetime, timezone, timedelta
 from Backend.fastapi.security.tokens import verify_token
 from Backend.logger import LOGGER
 from Backend.helper.global_search import global_search, is_global_search_enabled
+from Backend.pyrofork.bot import get_streambot_url
 
 router = APIRouter(prefix="/stremio", tags=["Stremio Addon"])
 
@@ -17,6 +18,27 @@ router = APIRouter(prefix="/stremio", tags=["Stremio Addon"])
 ADDON_NAME = "Telegram"
 ADDON_VERSION = __version__
 PAGE_SIZE = 15
+
+# Short-lived cache for subscription-group membership checks so Stremio's
+# frequent stream polling doesn't hammer Telegram's get_chat_member API.
+# Maps (group_id, user_id) -> (monotonic_timestamp, is_member).
+_membership_cache: dict = {}
+_MEMBERSHIP_TTL = 120  # seconds
+_MEMBERSHIP_CACHE_MAX = 5000  # hard cap to prevent unbounded growth
+
+
+def invalidate_membership_cache(user_id: int | None = None) -> None:
+    """Drop cached membership results.
+
+    Called after an admin revokes/kicks a user so the new state is reflected
+    on the very next stream request instead of waiting for the TTL. Pass
+    ``None`` to clear everything (e.g. when the group id changes).
+    """
+    if user_id is None:
+        _membership_cache.clear()
+        return
+    for key in [k for k in _membership_cache if k[1] == user_id]:
+        _membership_cache.pop(key, None)
 
 # Define available genres
 GENRES = [
@@ -409,6 +431,57 @@ async def _global_streams_for(token: str, imdb_id: str, media_type: str, season_
     return streams
 
 
+async def _is_subscription_member(user_id: int) -> bool:
+    """Return ``True`` when the user is currently a member of the configured
+    subscription group/channel.
+
+    Results are cached briefly because Stremio polls the stream endpoint
+    frequently and we don't want to hit Telegram's ``get_chat_member`` rate
+    limit on every request.
+
+    Fails *open* (returns ``True``) on unexpected errors — e.g. the bot lacks
+    admin rights or Telegram is temporarily unreachable — so a transient issue
+    never blocks a legitimate, paying user from streaming. A user who has
+    genuinely left/been removed raises ``UserNotParticipant`` and is blocked.
+    """
+    import time
+    from Backend.pyrofork.bot import StreamBot
+    from pyrogram.enums import ChatMemberStatus
+    from pyrogram.errors import UserNotParticipant
+
+    group_id = SettingsManager.current().subscription_group_id
+    if not group_id:
+        # No group configured — nothing to gate on.
+        return True
+
+    cache_key = (group_id, user_id)
+    cached = _membership_cache.get(cache_key)
+    now_ts = time.monotonic()
+    if cached and (now_ts - cached[0]) < _MEMBERSHIP_TTL:
+        return cached[1]
+
+    try:
+        member = await StreamBot.get_chat_member(group_id, user_id)
+        result = member.status not in (ChatMemberStatus.LEFT, ChatMemberStatus.BANNED)
+    except UserNotParticipant:
+        result = False
+    except Exception as e:
+        # Fail open and do NOT cache, so the next request retries.
+        LOGGER.warning(f"[SUBSCRIPTION] Membership check failed for user {user_id}: {e}")
+        return True
+
+    # Prune the cache if it grows too large (drop entries past their TTL,
+    # then fall back to clearing everything if still over the cap).
+    if len(_membership_cache) >= _MEMBERSHIP_CACHE_MAX:
+        for k in [k for k, v in _membership_cache.items() if (now_ts - v[0]) >= _MEMBERSHIP_TTL]:
+            _membership_cache.pop(k, None)
+        if len(_membership_cache) >= _MEMBERSHIP_CACHE_MAX:
+            _membership_cache.clear()
+
+    _membership_cache[cache_key] = (now_ts, result)
+    return result
+
+
 @router.get("/{token}/stream/{media_type}/{id}.json")
 async def get_streams(
     token: str,
@@ -421,12 +494,27 @@ async def get_streams(
         return {
             "streams": [
                 {
-                    "name": "🚫 Subscription Expired",
-                    "title": "Your subscription has expired.\nRenew via the bot to continue watching.",
-                    "url": SettingsManager.current().subscription_url
+                    "name": "🚫 Plan Expired",
+                    "title": "Your plan is expired.\nRenew it from the bot to continue watching.",
+                    "url": get_streambot_url()
                 }
             ]
         }
+
+    # When the subscription feature is on, the user must be a current member of
+    # the configured subscription group/channel to stream anything.
+    if SettingsManager.current().subscription:
+        user_id = token_data.get("user_id")
+        if user_id and not await _is_subscription_member(int(user_id)):
+            return {
+                "streams": [
+                    {
+                        "name": "📢 Join Required",
+                        "title": "First join the channel to stream it.\nTap here to open the bot and join.",
+                        "url": get_streambot_url()
+                    }
+                ]
+            }
 
     if token_data.get("limit_exceeded"):
         limit_type = token_data["limit_exceeded"]

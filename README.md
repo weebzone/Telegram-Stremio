@@ -436,7 +436,7 @@ Everything below is stored in the database and applied **instantly — no restar
 | **Upstream Repo / Branch** | Optional — used by `/restart` to auto-update (e.g. repo `weebzone/Telegram-Stremio`, branch `master`). |
 
 ### 💳 Subscription (optional)
-Turn this on to monetise access. Set the **Subscription Group ID**, **Subscription URL**, **Payment Instructions** (your UPI / bank / PayPal text), an optional **Payment QR image URL**, and the **Approver IDs** (who can approve requests). The full flow is described in [Subscription Management](#-subscription-management).
+Turn this on to monetise access. Set the **Subscription Group ID**, **Payment Instructions** (your UPI / bank / PayPal text), an optional **Payment QR image URL**, and the **Approver IDs** (who can approve requests). Renewal and "join the channel" prompts shown in Stremio point users back to **your bot automatically** — no separate URL to configure. The full flow is described in [Subscription Management](#-subscription-management).
 
 ### 🌐 Global Search (optional)
 Requires `USER_SESSION_STRING` in `config.env` plus one app restart to unlock. Then enable the toggle and add the **channel IDs** to search. Results that aren’t in your local catalog are tagged **🌐 GLOBAL** in Stremio.
@@ -552,19 +552,31 @@ The addon manifest updates dynamically per user:
 
 The manifest `version` encodes the expiry date — when an admin extends or revokes a subscription, the version changes and Stremio detects an update.
 
-### Expired Stream
+### Subscription Stream Gating
 
-When a user's subscription expires, instead of streams they see:
+When the subscription feature is enabled, the addon checks every stream request and shows a single actionable entry instead of the streams when the user isn't eligible. In both cases the stream link opens **your bot** (derived automatically from the bot's username — there is no URL to configure).
+
+**Plan expired** — the user's subscription has lapsed:
 
 ```json
 {
-  "name": "🚫 Subscription Expired",
-  "title": "Your subscription has expired.\nRenew via the bot to continue watching.",
-  "url": "https://t.me/your_bot"   ← SUBSCRIPTION_URL from config
+  "name": "🚫 Plan Expired",
+  "title": "Your plan is expired.\nRenew it from the bot to continue watching.",
+  "url": "https://t.me/your_bot"
 }
 ```
 
-Clicking the stream name opens the bot directly for renewal.
+**Not joined** — the user is active but has left / never joined the subscription channel (the `Subscription Group ID`):
+
+```json
+{
+  "name": "📢 Join Required",
+  "title": "First join the channel to stream it.\nTap here to open the bot and join.",
+  "url": "https://t.me/your_bot"
+}
+```
+
+Clicking the stream name opens the bot directly so the user can renew or rejoin. The membership check fails open — if Telegram is briefly unreachable or the bot can't read the group, legitimate users are never blocked.
 
 ### Configure & Reinstall Page
 
