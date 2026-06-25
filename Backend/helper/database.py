@@ -328,18 +328,16 @@ class Database:
             if action == "extend":
                 base = current_expiry if (current_expiry and current_expiry > now) else now
                 new_expiry = base + timedelta(days=days)
-            else:  # reduce
+            else:
                 if current_expiry:
                     new_expiry = current_expiry - timedelta(days=days)
                     if new_expiry < now:
-                        new_expiry = now  # Just expire them
+                        new_expiry = now
                 else:
-                    new_expiry = now  # Already expired / no subscription
+                    new_expiry = now
 
             status = "active" if new_expiry > now else "expired"
 
-            # Upsert so the action works even when the user has no tracking
-            # record yet (e.g. a token-only entry on the Access page).
             await self.dbs["tracking"]["users"].update_one(
                 {"_id": user_id},
                 {
@@ -355,9 +353,6 @@ class Database:
             return True
 
         elif action == "delete":
-            # Revoke: end the subscription immediately. Idempotent — succeeds
-            # even if the user has no active subscription so the button never
-            # returns a spurious 404.
             await self.dbs["tracking"]["users"].update_one(
                 {"_id": user_id},
                 {"$set": {"subscription_status": "expired", "subscription_expiry": now}}
