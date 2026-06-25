@@ -6,9 +6,6 @@ from Backend import db
 from datetime import datetime
 from Backend.logger import LOGGER
 
-
-
-
 async def subscription_checker_loop(bot: Client):
     while True:
         try:
@@ -61,10 +58,8 @@ async def subscription_checker_loop(bot: Client):
             await asyncio.sleep(3600)
 
         except asyncio.CancelledError:
-            # Raised by subscription_task_manager.stop() — exit cleanly,
-            # don't swallow it as a generic error.
             LOGGER.info("Subscription checker loop cancelled.")
             raise
         except Exception as e:
             LOGGER.error(f"Error in subscription checker loop: {e}")
-            await asyncio.sleep(300)  # Wait 5 minutes before retrying on error
+            await asyncio.sleep(300)
