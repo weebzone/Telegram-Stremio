@@ -19,21 +19,12 @@ ADDON_NAME = "Telegram"
 ADDON_VERSION = __version__
 PAGE_SIZE = 15
 
-# Short-lived cache for subscription-group membership checks so Stremio's
-# frequent stream polling doesn't hammer Telegram's get_chat_member API.
-# Maps (group_id, user_id) -> (monotonic_timestamp, is_member).
 _membership_cache: dict = {}
-_MEMBERSHIP_TTL = 120  # seconds
-_MEMBERSHIP_CACHE_MAX = 5000  # hard cap to prevent unbounded growth
+_MEMBERSHIP_TTL = 60  # seconds
+_MEMBERSHIP_CACHE_MAX = 5000  
 
 
 def invalidate_membership_cache(user_id: int | None = None) -> None:
-    """Drop cached membership results.
-
-    Called after an admin revokes/kicks a user so the new state is reflected
-    on the very next stream request instead of waiting for the TTL. Pass
-    ``None`` to clear everything (e.g. when the group id changes).
-    """
     if user_id is None:
         _membership_cache.clear()
         return
@@ -387,11 +378,6 @@ async def get_meta(token: str, media_type: str, id: str, token_data: dict = Depe
     return {"meta": meta_obj}
 
 async def _global_streams_for(token: str, imdb_id: str, media_type: str, season_num: Optional[int], episode_num: Optional[int]) -> list:
-    """Builds Global Search stream entries for a catalog item that has no
-    local DB row at all. Since there's no local title to read, the
-    canonical title (and, for a specific episode, confirmation it exists)
-    is resolved from Cinemeta via Backend.helper.imdb — the same source
-    used everywhere else in this codebase for metadata."""
     from Backend.helper.imdb import get_detail, get_season
 
     imdb_media_type = "tvSeries" if media_type == "series" else "movie"
@@ -432,18 +418,6 @@ async def _global_streams_for(token: str, imdb_id: str, media_type: str, season_
 
 
 async def _is_subscription_member(user_id: int) -> bool:
-    """Return ``True`` when the user is currently a member of the configured
-    subscription group/channel.
-
-    Results are cached briefly because Stremio polls the stream endpoint
-    frequently and we don't want to hit Telegram's ``get_chat_member`` rate
-    limit on every request.
-
-    Fails *open* (returns ``True``) on unexpected errors — e.g. the bot lacks
-    admin rights or Telegram is temporarily unreachable — so a transient issue
-    never blocks a legitimate, paying user from streaming. A user who has
-    genuinely left/been removed raises ``UserNotParticipant`` and is blocked.
-    """
     import time
     from Backend.pyrofork.bot import StreamBot
     from pyrogram.enums import ChatMemberStatus
@@ -451,7 +425,6 @@ async def _is_subscription_member(user_id: int) -> bool:
 
     group_id = SettingsManager.current().subscription_group_id
     if not group_id:
-        # No group configured — nothing to gate on.
         return True
 
     cache_key = (group_id, user_id)
@@ -470,8 +443,6 @@ async def _is_subscription_member(user_id: int) -> bool:
         LOGGER.warning(f"[SUBSCRIPTION] Membership check failed for user {user_id}: {e}")
         return True
 
-    # Prune the cache if it grows too large (drop entries past their TTL,
-    # then fall back to clearing everything if still over the cap).
     if len(_membership_cache) >= _MEMBERSHIP_CACHE_MAX:
         for k in [k for k, v in _membership_cache.items() if (now_ts - v[0]) >= _MEMBERSHIP_TTL]:
             _membership_cache.pop(k, None)
@@ -510,7 +481,7 @@ async def get_streams(
                 "streams": [
                     {
                         "name": "📢 Join Required",
-                        "title": "First join the channel to stream it.\nTap here to open the bot and join.",
+                        "title": "First join the channel to stream it.\nThen wait for 2 min for verification",
                         "url": get_streambot_url()
                     }
                 ]
@@ -589,9 +560,6 @@ async def get_streams(
                         "url": original_url
                     })
     elif is_global_search_enabled():
-        # Not in the local catalog at all — resolve the real title via
-        # Cinemeta (we have no local DB row to read a title from) and
-        # search for it across the Userbot's channels instead.
         try:
             streams.extend(
                 await _global_streams_for(token, imdb_id, media_type, season_num, episode_num)
