@@ -19,7 +19,6 @@ from pyrogram.errors import (
 from Backend.logger import LOGGER
 from Backend.helper.settings_manager import SettingsManager
 from Backend.helper.encrypt import encode_string
-from Backend.helper.split_files import parse_combined_episodes, combined_covers
 
 MAX_RESULTS          = 50
 MAX_RESULTS_PER_CHAT = 50
@@ -108,16 +107,6 @@ def _parse_and_validate(
         parsed = PTN.parse(filename)
     except Exception:
         return None
-
-    # Combined files (episode range or whole-season "Combined"): keep only when
-    # they cover the requested season/episode, instead of skipping outright.
-    combined = parse_combined_episodes(filename)
-    if combined:
-        if not combined_covers(combined, season, episode):
-            return None
-        if _title_score(parsed.get("title", ""), expected_title) < MIN_TITLE_SCORE:
-            return None
-        return parsed
 
     # Skip files marked as combined in PTN excess tags
     if "excess" in parsed and any("combined" in item.lower() for item in parsed["excess"]):
