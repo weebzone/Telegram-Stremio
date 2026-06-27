@@ -33,7 +33,7 @@
         </div>
 
         <div class="glass-panel p-5 rounded-[2rem] flex items-center gap-4">
-            <div class="w-12 h-12 rounded-2xl bg-accent/10 flex items-center justify-center text-accent shadow-[0_0_15px_rgba(var(--accent-rgb),0.3)]">
+            <div class="w-12 h-12 rounded-2xl bg-accent/10 flex items-center justify-center text-accent shadow-[0_0_15px_color-mix(in_srgb,var(--accent)_35%,transparent)]">
                 <i class="fa-solid fa-robot"></i>
             </div>
             <div>
@@ -53,7 +53,7 @@
         </div>
 
         <div class="glass-panel p-5 rounded-[2rem] flex items-center gap-4">
-            <div class="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center text-text-secondary">
+            <div class="w-12 h-12 rounded-2xl bg-surface flex items-center justify-center text-text-secondary">
                 <i class="fa-solid fa-code-branch"></i>
             </div>
             <div>
@@ -72,7 +72,7 @@
 
                 <div class="grid md:grid-cols-2 gap-4">
                     {% for db_stat in system_stats.databases %}
-                    <div class="glass-panel p-6 rounded-[2rem] border-white/5 bg-card/10">
+                    <div class="glass-panel p-6 rounded-[2rem] border-hairline bg-card/10">
                         <div class="flex justify-between items-start mb-6">
                             <h4 class="font-bold text-text">{{ db_stat.db_name.replace("storage_", "Node ") }}</h4>
                             <span class="text-[10px] bg-primary/10 text-primary px-2 py-1 rounded-lg font-bold uppercase">Online</span>
@@ -89,7 +89,7 @@
                                     <span class="text-text-secondary">Disk Usage</span>
                                     <span class="text-primary">{{ "%.1f"|format(db_stat.storageSize / 1024 / 1024) }} MB</span>
                                 </div>
-                                <div class="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
+                                <div class="w-full h-1.5 bg-surface rounded-full overflow-hidden">
                                     {% set storage_percent = (db_stat.storageSize / (500 * 1024 * 1024) * 100) | round %}
                                     <div class="h-full bg-gradient-to-r from-primary to-accent transition-all duration-1000" style="width: {{ storage_percent }}%"></div>
                                 </div>
@@ -101,7 +101,7 @@
             </section>
 
             <section class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <a href="/media/manage?media_type=movie" class="glass-panel p-6 rounded-[2rem] hover:bg-primary/5 transition-all group border border-white/5">
+                <a href="/media/manage?media_type=movie" class="glass-panel p-6 rounded-[2rem] hover:bg-primary/5 transition-all group border border-hairline">
                     <div class="flex items-center gap-4">
                         <div class="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
                             <i class="fa-solid fa-film text-2xl"></i>
@@ -110,11 +110,11 @@
                             <h4 class="font-bold text-text">Manage Movies</h4>
                             <p class="text-xs text-text-secondary">Organize and edit library</p>
                         </div>
-                        <i class="fa-solid fa-chevron-right ml-auto text-white/20 group-hover:text-primary group-hover:translate-x-1 transition-all"></i>
+                        <i class="fa-solid fa-chevron-right ml-auto text-muted group-hover:text-primary group-hover:translate-x-1 transition-all"></i>
                     </div>
                 </a>
 
-                <a href="/media/manage?media_type=tv" class="glass-panel p-6 rounded-[2rem] hover:bg-accent/5 transition-all group border border-white/5">
+                <a href="/media/manage?media_type=tv" class="glass-panel p-6 rounded-[2rem] hover:bg-accent/5 transition-all group border border-hairline">
                     <div class="flex items-center gap-4">
                         <div class="w-14 h-14 rounded-2xl bg-accent/10 flex items-center justify-center text-accent group-hover:scale-110 transition-transform">
                             <i class="fa-solid fa-tv text-2xl"></i>
@@ -123,7 +123,7 @@
                             <h4 class="font-bold text-text">Manage TV Shows</h4>
                             <p class="text-xs text-text-secondary">Handle series and episodes</p>
                         </div>
-                        <i class="fa-solid fa-chevron-right ml-auto text-white/20 group-hover:text-accent group-hover:translate-x-1 transition-all"></i>
+                        <i class="fa-solid fa-chevron-right ml-auto text-muted group-hover:text-accent group-hover:translate-x-1 transition-all"></i>
                     </div>
                 </a>
             </section>
@@ -131,7 +131,7 @@
 
         <div class="lg:col-span-1">
             <div class="glass-panel rounded-[2.5rem] overflow-hidden h-full">
-                <div class="p-6 border-b border-white/5">
+                <div class="p-6 border-b border-hairline">
                     <div class="flex items-center justify-between gap-3 mb-2">
                         <h3 class="flex items-center gap-2 text-lg font-bold">
                             <i class="fa-solid fa-circle-play text-red-500 animate-pulse"></i> Live Network
@@ -180,7 +180,7 @@
                                         </span>
                                     </div>
 
-                                    <div class="grid grid-cols-2 gap-3 mt-4 pt-4 border-t border-white/5">
+                                    <div class="grid grid-cols-2 gap-3 mt-4 pt-4 border-t border-hairline">
                                         <div class="text-center">
                                             <p class="text-[9px] text-text-secondary uppercase tracking-widest font-bold">Speed</p>
                                             <p class="text-xs font-bold text-text">{{ "%.3f"|format(stream.avg_mbps or 0) }} MB/s</p>
@@ -199,7 +199,7 @@
                                         </div>
                                     </div>
 
-                                    <div class="mt-4 pt-4 border-t border-white/5 space-y-2">
+                                    <div class="mt-4 pt-4 border-t border-hairline space-y-2">
                                         <div class="flex items-center justify-between text-xs gap-3">
                                             <span class="text-text-secondary">Started</span>
                                             <span class="text-text text-right truncate max-w-[65%] live-started" data-start-ts="{{ stream.start_ts or 0 }}">—</span>
@@ -212,8 +212,8 @@
                                 </div>
                                 {% endfor %}
                             {% else %}
-                                <div class="glass-panel p-8 rounded-[2rem] text-center border-dashed border-white/10">
-                                    <i class="fa-solid fa-satellite-dish text-4xl text-white/10 mb-3"></i>
+                                <div class="glass-panel p-8 rounded-[2rem] text-center border-dashed border-hairline">
+                                    <i class="fa-solid fa-satellite-dish text-4xl text-muted mb-3"></i>
                                     <p class="text-sm text-text-secondary font-medium">No active streams right now</p>
                                     <p class="text-xs text-text-secondary mt-1">The live network is idle at the moment.</p>
                                 </div>
@@ -227,7 +227,7 @@
 
     <section class="mt-12">
         <div class="glass-panel rounded-[2.5rem] overflow-hidden">
-            <div class="p-5 sm:p-8 border-b border-white/5 flex flex-col md:flex-row md:justify-between md:items-center gap-4">
+            <div class="p-5 sm:p-8 border-b border-hairline flex flex-col md:flex-row md:justify-between md:items-center gap-4">
                 <div>
                     <h3 class="text-lg sm:text-xl font-bold text-text">Access Management</h3>
                     <p class="text-xs sm:text-sm text-text-secondary">Control API tokens, daily quotas, and monthly quotas</p>
@@ -238,29 +238,29 @@
                 </button>
             </div>
 
-            <div id="create-form-container" class="hidden p-5 sm:p-8 bg-white/5 border-b border-white/5 animate-in fade-in slide-in-from-top-4">
+            <div id="create-form-container" class="hidden p-5 sm:p-8 bg-surface border-b border-hairline animate-in fade-in slide-in-from-top-4">
                 <form onsubmit="createToken(event)" class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
                     <div class="md:col-span-2">
                         <label class="text-[10px] font-bold uppercase text-text-secondary tracking-widest ml-2 mb-1 block">Token Alias</label>
                         <input type="text" id="token-name" placeholder="E.g., Living Room TV" required
-                            class="w-full px-4 py-3 rounded-xl border border-white/10 focus:border-primary outline-none text-sm text-text placeholder:text-text-secondary bg-[color-mix(in_srgb,var(--card)_88%,var(--bg)_12%)]">
+                            class="w-full px-4 py-3 rounded-xl border border-hairline focus:border-primary outline-none text-sm text-text placeholder:text-text-secondary bg-[color-mix(in_srgb,var(--card)_88%,var(--bg)_12%)]">
                     </div>
 
                     <div>
                         <label class="text-[10px] font-bold uppercase text-text-secondary tracking-widest ml-2 mb-1 block">Daily (GB)</label>
                         <input type="number" id="daily-limit" value="0" step="0.1" min="0"
-                            class="w-full px-4 py-3 rounded-xl border border-white/10 focus:border-primary outline-none text-sm text-text placeholder:text-text-secondary bg-[color-mix(in_srgb,var(--card)_88%,var(--bg)_12%)]">
+                            class="w-full px-4 py-3 rounded-xl border border-hairline focus:border-primary outline-none text-sm text-text placeholder:text-text-secondary bg-[color-mix(in_srgb,var(--card)_88%,var(--bg)_12%)]">
                     </div>
 
                     <div>
                         <label class="text-[10px] font-bold uppercase text-text-secondary tracking-widest ml-2 mb-1 block">Monthly (GB)</label>
                         <input type="number" id="monthly-limit" value="0" step="0.1" min="0"
-                            class="w-full px-4 py-3 rounded-xl border border-white/10 focus:border-primary outline-none text-sm text-text placeholder:text-text-secondary bg-[color-mix(in_srgb,var(--card)_88%,var(--bg)_12%)]">
+                            class="w-full px-4 py-3 rounded-xl border border-hairline focus:border-primary outline-none text-sm text-text placeholder:text-text-secondary bg-[color-mix(in_srgb,var(--card)_88%,var(--bg)_12%)]">
                     </div>
 
                     <div class="flex gap-2">
                         <button type="submit" class="flex-1 py-3 bg-primary text-background font-bold rounded-xl text-sm">Create</button>
-                        <button type="button" onclick="toggleCreateForm()" class="px-4 py-3 bg-white/5 text-text-secondary rounded-xl hover:bg-white/10 transition-colors">
+                        <button type="button" onclick="toggleCreateForm()" class="px-4 py-3 bg-surface text-text-secondary rounded-xl hover:bg-surface-2 transition-colors">
                             <i class="fa-solid fa-xmark"></i>
                         </button>
                     </div>
@@ -270,7 +270,7 @@
             <div class="overflow-x-auto hidden md:block">
                 <table class="w-full text-left">
                     <thead>
-                        <tr class="bg-white/5 text-[10px] uppercase tracking-[0.2em] font-bold text-text-secondary">
+                        <tr class="bg-surface text-[10px] uppercase tracking-[0.2em] font-bold text-text-secondary">
                             <th class="py-5 px-8">Client Name</th>
                             <th class="py-5 px-8">Usage</th>
                             <th class="py-5 px-8">Limits</th>
@@ -278,9 +278,9 @@
                             <th class="py-5 px-8 text-right">Actions</th>
                         </tr>
                     </thead>
-                    <tbody class="divide-y divide-white/5">
+                    <tbody class="divide-y divide-hairline">
                         {% for token in api_tokens %}
-                        <tr class="group hover:bg-white/[0.02] transition-colors" id="token-row-{{ loop.index0 }}">
+                        <tr class="group hover:bg-surface transition-colors" id="token-row-{{ loop.index0 }}">
                             <td class="py-6 px-8">
                                 <p class="font-bold text-text">{{ token.name }}</p>
                                 <p class="text-[10px] text-text-secondary uppercase mt-1">
@@ -312,7 +312,7 @@
 
                             <td class="py-6 px-8">
                                 <button onclick='copyUrl({{ ((request.base_url|string).replace("http:", "https:") ~ "stremio/" ~ token.token ~ "/manifest.json")|tojson }})'
-                                    class="flex items-center gap-2 px-3 py-1.5 bg-background/50 rounded-lg border border-white/5 text-[10px] font-bold text-text-secondary hover:text-primary hover:border-primary/30 transition-all">
+                                    class="flex items-center gap-2 px-3 py-1.5 bg-background/50 rounded-lg border border-hairline text-[10px] font-bold text-text-secondary hover:text-primary hover:border-primary/30 transition-all">
                                     <i class="fa-solid fa-link text-[8px]"></i> COPY MANIFEST
                                 </button>
                             </td>
@@ -320,11 +320,11 @@
                             <td class="py-6 px-8 text-right">
                                 <div class="flex justify-end gap-2">
                                     <button onclick='openEditModal({{ token.token|tojson }}, {{ token.limits.daily_limit_gb|default(0)|tojson }}, {{ token.limits.monthly_limit_gb|default(0)|tojson }})'
-                                        class="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-text-secondary hover:bg-blue-500 hover:text-white transition-all token-action-btn">
+                                        class="w-8 h-8 rounded-lg bg-surface flex items-center justify-center text-text-secondary hover:bg-blue-500 hover:text-white transition-all token-action-btn">
                                         <i class="fa-solid fa-pen-to-square text-xs"></i>
                                     </button>
                                     <button onclick='revokeToken({{ token.token|tojson }})'
-                                        class="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-text-secondary hover:bg-red-500 hover:text-white transition-all token-action-btn">
+                                        class="w-8 h-8 rounded-lg bg-surface flex items-center justify-center text-text-secondary hover:bg-red-500 hover:text-white transition-all token-action-btn">
                                         <i class="fa-solid fa-trash text-xs"></i>
                                     </button>
                                 </div>
@@ -343,7 +343,7 @@
                 </table>
             </div>
 
-            <div class="md:hidden divide-y divide-white/5">
+            <div class="md:hidden divide-y divide-hairline">
                 {% for token in api_tokens %}
                 <div class="p-5 space-y-4" id="token-card-{{ loop.index0 }}">
                     <div class="flex items-start justify-between gap-3">
@@ -355,17 +355,17 @@
                         </div>
                         <div class="flex gap-2 shrink-0">
                             <button onclick='openEditModal({{ token.token|tojson }}, {{ token.limits.daily_limit_gb|default(0)|tojson }}, {{ token.limits.monthly_limit_gb|default(0)|tojson }})'
-                                class="w-9 h-9 rounded-lg bg-white/5 flex items-center justify-center text-text-secondary hover:bg-blue-500 hover:text-white transition-all">
+                                class="w-9 h-9 rounded-lg bg-surface flex items-center justify-center text-text-secondary hover:bg-blue-500 hover:text-white transition-all">
                                 <i class="fa-solid fa-pen-to-square text-xs"></i>
                             </button>
                             <button onclick='revokeToken({{ token.token|tojson }})'
-                                class="w-9 h-9 rounded-lg bg-white/5 flex items-center justify-center text-text-secondary hover:bg-red-500 hover:text-white transition-all">
+                                class="w-9 h-9 rounded-lg bg-surface flex items-center justify-center text-text-secondary hover:bg-red-500 hover:text-white transition-all">
                                 <i class="fa-solid fa-trash text-xs"></i>
                             </button>
                         </div>
                     </div>
 
-                    <div class="grid grid-cols-2 gap-3 pt-3 border-t border-white/5">
+                    <div class="grid grid-cols-2 gap-3 pt-3 border-t border-hairline">
                         <div>
                             <p class="text-[10px] uppercase font-bold tracking-widest text-text-secondary mb-1">Daily</p>
                             <p class="text-xs font-medium text-text">
@@ -383,7 +383,7 @@
                     </div>
 
                     <button onclick='copyUrl({{ ((request.base_url|string).replace("http:", "https:") ~ "stremio/" ~ token.token ~ "/manifest.json")|tojson }})'
-                        class="w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-background/50 rounded-xl border border-white/5 text-[10px] font-bold text-text-secondary hover:text-primary hover:border-primary/30 transition-all">
+                        class="w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-background/50 rounded-xl border border-hairline text-[10px] font-bold text-text-secondary hover:text-primary hover:border-primary/30 transition-all">
                         <i class="fa-solid fa-link text-[8px]"></i> COPY MANIFEST
                     </button>
                 </div>
@@ -400,7 +400,7 @@
 </div>
 
 <div id="edit-modal" class="fixed inset-0 bg-background/80 backdrop-blur-md hidden flex items-center justify-center z-50 p-4">
-    <div class="glass-panel rounded-[2rem] p-8 w-full max-w-md border border-white/10 shadow-2xl">
+    <div class="glass-panel rounded-[2rem] p-8 w-full max-w-md border border-hairline shadow-2xl">
         <h3 class="text-xl font-bold mb-2">Edit Limits</h3>
         <p class="text-sm text-text-secondary mb-6">Modify daily and monthly data quotas for this token.</p>
 
@@ -409,17 +409,17 @@
             <div>
                 <label class="text-[10px] font-bold uppercase text-text-secondary tracking-widest ml-1 mb-1 block">Daily Limit (GB)</label>
                 <input type="number" id="edit-daily" step="0.1" min="0"
-                    class="w-full px-4 py-3 rounded-xl border border-white/10 focus:border-primary outline-none text-text placeholder:text-text-secondary bg-[color-mix(in_srgb,var(--card)_88%,var(--bg)_12%)]">
+                    class="w-full px-4 py-3 rounded-xl border border-hairline focus:border-primary outline-none text-text placeholder:text-text-secondary bg-[color-mix(in_srgb,var(--card)_88%,var(--bg)_12%)]">
             </div>
             <div>
                 <label class="text-[10px] font-bold uppercase text-text-secondary tracking-widest ml-1 mb-1 block">Monthly Limit (GB)</label>
                 <input type="number" id="edit-monthly" step="0.1" min="0"
-                    class="w-full px-4 py-3 rounded-xl border border-white/10 focus:border-primary outline-none text-text placeholder:text-text-secondary bg-[color-mix(in_srgb,var(--card)_88%,var(--bg)_12%)]">
+                    class="w-full px-4 py-3 rounded-xl border border-hairline focus:border-primary outline-none text-text placeholder:text-text-secondary bg-[color-mix(in_srgb,var(--card)_88%,var(--bg)_12%)]">
             </div>
         </div>
 
         <div class="mt-8 flex gap-3">
-            <button onclick="closeEditModal()" class="flex-1 py-3 bg-white/5 hover:bg-white/10 text-text rounded-xl font-bold transition-all">Cancel</button>
+            <button onclick="closeEditModal()" class="flex-1 py-3 bg-surface hover:bg-surface-2 text-text rounded-xl font-bold transition-all">Cancel</button>
             <button onclick="saveTokenLimits()" class="flex-1 py-3 bg-primary text-background rounded-xl font-bold transition-all">Save Changes</button>
         </div>
     </div>
@@ -428,7 +428,7 @@
 
 <style>
     .shadow-glow {
-        filter: drop-shadow(0 0 8px rgba(var(--primary-rgb), 0.4));
+        filter: drop-shadow(0 0 8px color-mix(in srgb, var(--primary) 45%, transparent));
     }
 
     .stream-card {
@@ -771,7 +771,7 @@
                     </span>
                 </div>
 
-                <div class="grid grid-cols-2 gap-3 mt-4 pt-4 border-t border-white/5">
+                <div class="grid grid-cols-2 gap-3 mt-4 pt-4 border-t border-hairline">
                     <div class="text-center">
                         <p class="text-[9px] text-text-secondary uppercase tracking-widest font-bold">Speed</p>
                         <p class="text-xs font-bold text-text">${avgSpeed}</p>
@@ -790,7 +790,7 @@
                     </div>
                 </div>
 
-                <div class="mt-4 pt-4 border-t border-white/5 space-y-2">
+                <div class="mt-4 pt-4 border-t border-hairline space-y-2">
                     <div class="flex items-center justify-between text-xs gap-3">
                         <span class="text-text-secondary">Stream ID</span>
                         <span class="font-mono text-text text-right truncate max-w-[65%]">${streamId}</span>
@@ -806,8 +806,8 @@
 
     function renderEmptyState(icon, title, subtitle) {
         return `
-            <div class="glass-panel p-8 rounded-[2rem] text-center border-dashed border-white/10">
-                <i class="${icon} text-4xl text-white/10 mb-3"></i>
+            <div class="glass-panel p-8 rounded-[2rem] text-center border-dashed border-hairline">
+                <i class="${icon} text-4xl text-muted mb-3"></i>
                 <p class="text-sm text-text-secondary font-medium">${escapeHtml(title)}</p>
                 <p class="text-xs text-text-secondary mt-1">${escapeHtml(subtitle)}</p>
             </div>

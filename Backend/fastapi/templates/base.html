@@ -8,6 +8,10 @@
 <script src="https://cdn.tailwindcss.com"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"/>
 
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
 <style>
 :root {
     color-scheme: {{ 'dark' if theme.is_dark else 'light' }};
@@ -19,9 +23,24 @@
     --border: {{ theme.colors.border }};
     --text: {{ theme.colors.text }};
     --text-sec: {{ theme.colors.text_secondary }};
+
+    --surface: color-mix(in srgb, var(--text) 5%, transparent);
+    --surface-2: color-mix(in srgb, var(--text) 9%, transparent);
+    --surface-3: color-mix(in srgb, var(--text) 14%, transparent);
+    --hairline: color-mix(in srgb, var(--text) 12%, transparent);
+    --hairline-strong: color-mix(in srgb, var(--text) 20%, transparent);
+    --muted: color-mix(in srgb, var(--text) 42%, transparent);
+    --ring: color-mix(in srgb, var(--primary) 35%, transparent);
+    --shadow-color: {{ '0,0,0' if theme.is_dark else '15,23,42' }};
+    --shadow-soft: 0 10px 30px rgba(var(--shadow-color), {{ '0.35' if theme.is_dark else '0.10' }});
+    --shadow-strong: 0 24px 60px rgba(var(--shadow-color), {{ '0.45' if theme.is_dark else '0.16' }});
 }
 
+html { scroll-behavior: smooth; }
+
 body {
+    font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    -webkit-font-smoothing: antialiased;
     background-color: var(--bg);
     color: var(--text);
     background-image: 
@@ -35,13 +54,80 @@ body {
 }
 
 .glass-panel {
-    background: color-mix(in srgb, var(--card) 45%, transparent);
+    background: color-mix(in srgb, var(--card) 55%, transparent);
     backdrop-filter: blur(20px);
-    border: 1px solid var(--border);
-    box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--hairline);
+    box-shadow: var(--shadow-soft);
 }
 
 .glass-pill { border-radius: 9999px; }
+
+.surface-card {
+    background: color-mix(in srgb, var(--card) 92%, var(--bg));
+    border: 1px solid var(--hairline);
+    border-radius: 1.5rem;
+}
+
+.btn-primary {
+    background: var(--primary);
+    color: var(--bg);
+    font-weight: 700;
+    border-radius: 1rem;
+    transition: filter .2s ease, transform .12s ease, box-shadow .2s ease;
+    box-shadow: 0 8px 22px color-mix(in srgb, var(--primary) 30%, transparent);
+}
+.btn-primary:hover { filter: brightness(1.08); }
+.btn-primary:active { transform: scale(.97); }
+
+.btn-ghost {
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--hairline);
+    border-radius: 1rem;
+    font-weight: 700;
+    transition: background .2s ease, border-color .2s ease;
+}
+.btn-ghost:hover { background: var(--surface-2); border-color: var(--hairline-strong); }
+
+.badge {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    font-size: .65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .12em;
+    padding: .25rem .6rem;
+    border-radius: 9999px;
+    background: color-mix(in srgb, var(--primary) 14%, transparent);
+    color: var(--primary);
+}
+
+.field {
+    width: 100%;
+    background: color-mix(in srgb, var(--card) 88%, var(--bg));
+    color: var(--text);
+    border: 1px solid var(--hairline);
+    border-radius: 1rem;
+    transition: border-color .2s ease, box-shadow .2s ease;
+}
+.field:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px var(--ring);
+}
+
+.tabular { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+
+::selection { background: color-mix(in srgb, var(--primary) 30%, transparent); color: var(--text); }
+
+:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+* { scrollbar-width: thin; scrollbar-color: var(--hairline-strong) transparent; }
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-thumb { background: var(--hairline-strong); border-radius: 9999px; border: 2px solid transparent; background-clip: padding-box; }
+*::-webkit-scrollbar-thumb:hover { background: var(--muted); }
 
 .nav-link {
     color: var(--text-sec);
@@ -210,6 +296,10 @@ tailwind.config = {
     darkMode: 'class',
     theme: {
         extend: {
+            fontFamily: {
+                sans: ['Inter', 'system-ui', 'sans-serif'],
+                mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace']
+            },
             colors: {
                 primary: 'var(--primary)',
                 secondary: 'var(--secondary)',
@@ -218,7 +308,17 @@ tailwind.config = {
                 card: 'var(--card)',
                 border: 'var(--border)',
                 text: 'var(--text)',
-                'text-secondary': 'var(--text-sec)'
+                'text-secondary': 'var(--text-sec)',
+                surface: 'var(--surface)',
+                'surface-2': 'var(--surface-2)',
+                'surface-3': 'var(--surface-3)',
+                hairline: 'var(--hairline)',
+                'hairline-strong': 'var(--hairline-strong)',
+                muted: 'var(--muted)'
+            },
+            boxShadow: {
+                soft: 'var(--shadow-soft)',
+                strong: 'var(--shadow-strong)'
             }
         }
     }
@@ -242,7 +342,7 @@ tailwind.config = {
     </a>
 
     {% if current_user %}
-    <div id="nav-container" class="hidden md:flex absolute left-1/2 -translate-x-1/2 items-center gap-1 p-1 bg-black/10 rounded-full border border-white/5">
+    <div id="nav-container" class="hidden md:flex absolute left-1/2 -translate-x-1/2 items-center gap-1 p-1 bg-black/10 rounded-full border border-hairline">
         <div id="active-pill" class="pointer-events-none"></div>
         <a href="/" class="nav-link">Home</a>
         <a href="/media/manage" class="nav-link">Media</a>
@@ -257,7 +357,7 @@ tailwind.config = {
 
     <div class="flex items-center gap-3">
         {% if current_user %}
-            <button id="menu-btn" class="md:hidden w-10 h-10 flex items-center justify-center text-xl hover:bg-white/10 rounded-full transition">
+            <button id="menu-btn" class="md:hidden w-10 h-10 flex items-center justify-center text-xl hover:bg-surface-2 rounded-full transition">
                 <i id="menu-icon" class="fa-solid fa-bars"></i>
             </button>
 
@@ -267,7 +367,7 @@ tailwind.config = {
                 </button>
 
                 <div id="user-dropdown" class="absolute right-0 top-14 w-72 glass-panel rounded-2xl p-4 opacity-0 scale-95 pointer-events-none transition-all duration-200 origin-top-right z-50">
-                    <div class="mb-3 border-b border-white/10 pb-3">
+                    <div class="mb-3 border-b border-hairline pb-3">
                         <p class="text-sm font-bold text-text">{{ current_user }}</p>
                         <p class="text-[10px] text-green-400 font-bold uppercase tracking-wider flex items-center gap-1">
                             <span class="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span> Online
