@@ -38,27 +38,47 @@
 
 html { scroll-behavior: smooth; }
 
+@media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after {
+        animation-duration: .001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: .001ms !important;
+    }
+}
+
 body {
     font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
     -webkit-font-smoothing: antialiased;
     background-color: var(--bg);
     color: var(--text);
-    background-image: 
-        radial-gradient(circle at 15% 10%, color-mix(in srgb, var(--primary) 12%, transparent), transparent 40%),
-        radial-gradient(circle at 85% 80%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 40%),
-        radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--card) 40%, transparent), transparent 60%);
-    background-attachment: fixed;
     min-height: 100vh;
     display: flex;
     flex-direction: column;
 }
 
+body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-image:
+        radial-gradient(circle at 15% 10%, color-mix(in srgb, var(--primary) 12%, transparent), transparent 40%),
+        radial-gradient(circle at 85% 80%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 40%),
+        radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--card) 40%, transparent), transparent 60%);
+}
+
 .glass-panel {
-    background: color-mix(in srgb, var(--card) 55%, transparent);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
+    background: color-mix(in srgb, var(--card) 90%, var(--bg));
     border: 1px solid var(--hairline);
     box-shadow: var(--shadow-soft);
+}
+
+.glass-nav {
+    background: color-mix(in srgb, var(--card) 78%, transparent);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
 }
 
 .glass-pill { border-radius: 9999px; }
@@ -330,7 +350,7 @@ tailwind.config = {
 
 <div id="overlay" class="fixed inset-0 z-40 opacity-0 pointer-events-none"></div>
 
-<nav id="navbar" class="fixed top-6 left-1/2 -translate-x-1/2 w-[95%] max-w-6xl z-50 glass-panel glass-pill px-5 py-3 flex justify-between items-center transition-all duration-300">
+<nav id="navbar" class="fixed top-6 left-1/2 -translate-x-1/2 w-[95%] max-w-6xl z-50 glass-panel glass-nav glass-pill px-5 py-3 flex justify-between items-center transition-all duration-300">
     
     <a href="/" class="flex items-center gap-3 shrink-0">
         <div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center shadow-[0_0_15px_var(--primary)]">
@@ -554,11 +574,23 @@ if(btn) btn.onclick = toggleMenu;
 if(userBtn) userBtn.onclick = toggleUser;
 overlay.onclick = () => { closeMenu(); closeUser(); };
 
+let scrollTicking = false;
+let navScrolled = false;
 window.addEventListener("scroll", () => {
     if (isMenuOpen) closeMenu();
     if (isUserOpen) closeUser();
-    navbar.classList.toggle("nav-scrolled", window.scrollY > 20);
-});
+    if (!scrollTicking) {
+        scrollTicking = true;
+        requestAnimationFrame(() => {
+            const past = window.scrollY > 20;
+            if (past !== navScrolled) {
+                navScrolled = past;
+                navbar.classList.toggle("nav-scrolled", past);
+            }
+            scrollTicking = false;
+        });
+    }
+}, { passive: true });
 
 document.addEventListener("keydown", e => {
     if (e.key === "Escape") { closeMenu(); closeUser(); }

@@ -5,16 +5,14 @@
 {% block content %}
 <style>
   .glass-card {
-    background: color-mix(in srgb, var(--card) 52%, transparent);
+    background: color-mix(in srgb, var(--card) 94%, var(--bg));
     border: 1px solid color-mix(in srgb, var(--border) 95%, transparent);
-    backdrop-filter: blur(22px);
     box-shadow: 0 18px 50px rgba(0, 0, 0, 0.22);
   }
 
   .glass-card-soft {
-    background: color-mix(in srgb, var(--card) 40%, transparent);
+    background: color-mix(in srgb, var(--card) 86%, var(--bg));
     border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
-    backdrop-filter: blur(18px);
   }
 
   .section-title {
@@ -286,11 +284,11 @@
                                 ⭐ {{ media_details.rating }}
                             </span>
                             {% endif %}
-                            <span class="inline-flex items-center px-3 py-1 rounded-full bg-surface-3 text-white text-sm font-semibold backdrop-blur-md border border-hairline-strong">
+                            <span class="inline-flex items-center px-3 py-1 rounded-full bg-surface-3 text-white text-sm font-semibold border border-hairline-strong">
                                 {{ media_details.release_year }}
                             </span>
                             {% if media_details.genres %}
-                            <span class="inline-flex items-center px-3 py-1 rounded-full bg-surface-3 text-white text-sm font-semibold backdrop-blur-md border border-hairline-strong">
+                            <span class="inline-flex items-center px-3 py-1 rounded-full bg-surface-3 text-white text-sm font-semibold border border-hairline-strong">
                                 {{ media_details.genres|length }} genre{{ 's' if media_details.genres|length != 1 else '' }}
                             </span>
                             {% endif %}

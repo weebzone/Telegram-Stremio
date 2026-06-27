@@ -72,10 +72,8 @@
 
     .glass-btn {
         border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
-        background: color-mix(in srgb, var(--card) 70%, transparent);
+        background: color-mix(in srgb, var(--card) 92%, var(--bg));
         color: var(--text);
-        backdrop-filter: blur(14px);
-        -webkit-backdrop-filter: blur(14px);
         transition: all 0.25s ease;
         box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
     }
@@ -149,12 +147,10 @@
         border-radius: 1.5rem;
         background: linear-gradient(
             180deg,
-            color-mix(in srgb, var(--card) 72%, transparent),
-            color-mix(in srgb, var(--card) 48%, transparent)
+            color-mix(in srgb, var(--card) 96%, var(--bg)),
+            color-mix(in srgb, var(--card) 88%, var(--bg))
         );
         border: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
-        backdrop-filter: blur(18px);
-        -webkit-backdrop-filter: blur(18px);
         box-shadow: 0 12px 30px rgba(0,0,0,0.18);
         transition: transform 0.28s ease, border-color 0.28s ease, box-shadow 0.28s ease;
     }
