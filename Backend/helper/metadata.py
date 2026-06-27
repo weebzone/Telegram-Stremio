@@ -10,7 +10,7 @@ from Backend.logger import LOGGER
 from Backend.helper.imdb import get_detail, get_season, search_title, search_title_multi
 from Backend.helper.settings_manager import SettingsManager
 from Backend.helper.encrypt import encode_string
-from Backend.helper.split_files import parse_split_info
+from Backend.helper.split_files import parse_split_info, parse_combined_episodes
 from themoviedb import aioTMDb
 from rapidfuzz import fuzz
 from guessit import guessit as _guessit
@@ -47,36 +47,20 @@ API_SEMAPHORE = asyncio.Semaphore(12)
 
 _MULTIPART_RE = re.compile(r"(?:part|cd|disc|disk)[s._-]*\d+(?=\.\w+$)", re.IGNORECASE)
 
-# Combined episode files (e.g. "S01 [E04-06]") are grouped under a special season.
+# Combined episode files (e.g. "S01 [E04-06]" or "S01 Combined") are grouped under a special season.
 COMBINED_SEASON = 0
-_COMBINED_EPISODES_RE = re.compile(
-    r"E(?:P|PISODE)?[\s._-]*0*(\d{1,4})[\s._-]*(?:-|–|~|to)+[\s._-]*(?:E(?:P|PISODE)?[\s._-]*)?0*(\d{1,4})(?=\D|$)",
-    re.IGNORECASE,
-)
-_COMBINED_SEASON_RE = re.compile(r"S(?:EASON)?[\s._-]*0*(\d{1,3})", re.IGNORECASE)
 
 
-# Detect a combined episode range like "S01 E04-06"; returns season/start/end or None.
-def parse_combined_episodes(name: str) -> dict | None:
-    if not name:
-        return None
-    match = _COMBINED_EPISODES_RE.search(name)
-    if not match:
-        return None
-    start, end = int(match.group(1)), int(match.group(2))
-    if not (1 <= start < end <= 99):
-        return None
-    season_match = _COMBINED_SEASON_RE.search(name)
-    season = int(season_match.group(1)) if season_match else 1
-    return {"season": season, "start": start, "end": end}
-
-
-# Re-file a combined range under the special season with a descriptive title.
+# Re-file a combined entry under the special season with a descriptive title.
 def _apply_combined_override(payload: dict, combined: dict) -> None:
     season, start, end = combined["season"], combined["start"], combined["end"]
     payload["season_number"] = COMBINED_SEASON
-    payload["episode_number"] = season * 1000 + start
-    payload["episode_title"] = f"S{season:02d} E{start:02d}-E{end:02d} (Combined)"
+    if start is None:
+        payload["episode_number"] = season * 1000
+        payload["episode_title"] = f"S{season:02d} Complete (Combined)"
+    else:
+        payload["episode_number"] = season * 1000 + start
+        payload["episode_title"] = f"S{season:02d} E{start:02d}-E{end:02d} (Combined)"
 
 _tmdb_client: aioTMDb | None = None
 _tmdb_client_key: str | None = None
@@ -579,7 +563,7 @@ async def metadata(filename: str, channel: int, msg_id, override_id: str = None)
     quality = parsed.get("quality")
 
     if combined:
-        season, episode = combined["season"], combined["start"]
+        season, episode = combined["season"], combined["start"] or 1
     elif isinstance(season, list) or isinstance(episode, list):
         LOGGER.warning(f"Invalid season/episode format for {filename}: {parsed}")
         return None

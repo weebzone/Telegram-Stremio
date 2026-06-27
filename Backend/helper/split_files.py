@@ -39,6 +39,48 @@ def parse_split_info(filename: str) -> Optional[Tuple[str, int]]:
     return _normalize(remainder), part_num
 
 
+_COMBINED_EPISODES_RE = re.compile(
+    r"E(?:P|PISODE)?[\s._-]*0*(\d{1,4})[\s._-]*(?:-|–|~|to)+[\s._-]*(?:E(?:P|PISODE)?[\s._-]*)?0*(\d{1,4})(?=\D|$)",
+    re.IGNORECASE,
+)
+_COMBINED_SEASON_RE = re.compile(r"S(?:EASON)?[\s._-]*0*(\d{1,3})", re.IGNORECASE)
+_COMBINED_KEYWORD_RE = re.compile(r"\bcombined\b", re.IGNORECASE)
+
+
+def _combined_season(name: str) -> Optional[int]:
+    match = _COMBINED_SEASON_RE.search(name)
+    return int(match.group(1)) if match else None
+
+
+# Detect a combined file: an episode range ("S01 E04-06") or a whole-season
+# "Combined" file. Returns {season, start, end} (start/end None for whole season).
+def parse_combined_episodes(filename: str) -> Optional[dict]:
+    if not filename:
+        return None
+
+    match = _COMBINED_EPISODES_RE.search(filename)
+    if match:
+        start, end = int(match.group(1)), int(match.group(2))
+        if 1 <= start < end <= 99:
+            return {"season": _combined_season(filename) or 1, "start": start, "end": end}
+
+    if _COMBINED_KEYWORD_RE.search(filename):
+        season = _combined_season(filename)
+        if season is not None:
+            return {"season": season, "start": None, "end": None}
+
+    return None
+
+
+# True when a combined file covers the requested season/episode.
+def combined_covers(combined: dict, season: Optional[int], episode: Optional[int]) -> bool:
+    if season is not None and combined["season"] != int(season):
+        return False
+    if episode is None or combined["start"] is None:
+        return True
+    return combined["start"] <= int(episode) <= combined["end"]
+
+
 def strip_part_suffix(filename: str) -> str:
     if not filename:
         return filename
