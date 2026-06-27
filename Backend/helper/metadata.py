@@ -47,6 +47,37 @@ API_SEMAPHORE = asyncio.Semaphore(12)
 
 _MULTIPART_RE = re.compile(r"(?:part|cd|disc|disk)[s._-]*\d+(?=\.\w+$)", re.IGNORECASE)
 
+# Combined episode files (e.g. "S01 [E04-06]") are grouped under a special season.
+COMBINED_SEASON = 0
+_COMBINED_EPISODES_RE = re.compile(
+    r"E(?:P|PISODE)?[\s._-]*0*(\d{1,4})[\s._-]*(?:-|–|~|to)+[\s._-]*(?:E(?:P|PISODE)?[\s._-]*)?0*(\d{1,4})(?=\D|$)",
+    re.IGNORECASE,
+)
+_COMBINED_SEASON_RE = re.compile(r"S(?:EASON)?[\s._-]*0*(\d{1,3})", re.IGNORECASE)
+
+
+# Detect a combined episode range like "S01 E04-06"; returns season/start/end or None.
+def parse_combined_episodes(name: str) -> dict | None:
+    if not name:
+        return None
+    match = _COMBINED_EPISODES_RE.search(name)
+    if not match:
+        return None
+    start, end = int(match.group(1)), int(match.group(2))
+    if not (1 <= start < end <= 99):
+        return None
+    season_match = _COMBINED_SEASON_RE.search(name)
+    season = int(season_match.group(1)) if season_match else 1
+    return {"season": season, "start": start, "end": end}
+
+
+# Re-file a combined range under the special season with a descriptive title.
+def _apply_combined_override(payload: dict, combined: dict) -> None:
+    season, start, end = combined["season"], combined["start"], combined["end"]
+    payload["season_number"] = COMBINED_SEASON
+    payload["episode_number"] = season * 1000 + start
+    payload["episode_title"] = f"S{season:02d} E{start:02d}-E{end:02d} (Combined)"
+
 _tmdb_client: aioTMDb | None = None
 _tmdb_client_key: str | None = None
 
@@ -531,12 +562,14 @@ async def metadata(filename: str, channel: int, msg_id, override_id: str = None)
         LOGGER.info(f"Skipping {filename}: split video file not meant to be combined in Stremio")
         return None
 
+    combined = parse_combined_episodes(filename)
+
     excess = parsed.get("excess")
-    if excess and any("combined" in item.lower() for item in excess):
+    if not combined and excess and any("combined" in item.lower() for item in excess):
         LOGGER.info(f"Skipping {filename}: contains 'combined'")
         return None
 
-    split_info = parse_split_info(filename)
+    split_info = None if combined else parse_split_info(filename)
     part_number = split_info[1] if split_info else None
 
     title = parsed.get("title")
@@ -545,7 +578,9 @@ async def metadata(filename: str, channel: int, msg_id, override_id: str = None)
     year = parsed.get("year")
     quality = parsed.get("quality")
 
-    if isinstance(season, list) or isinstance(episode, list):
+    if combined:
+        season, episode = combined["season"], combined["start"]
+    elif isinstance(season, list) or isinstance(episode, list):
         LOGGER.warning(f"Invalid season/episode format for {filename}: {parsed}")
         return None
     if season and not episode:
@@ -571,6 +606,8 @@ async def metadata(filename: str, channel: int, msg_id, override_id: str = None)
         if season and episode:
             LOGGER.info(f"Fetching TV metadata: {title} S{season:02d}E{episode:02d} (year={year})")
             result = await fetch_tv_metadata(title, season, episode, encoded_string, year, quality, default_id)
+            if result is not None and combined:
+                _apply_combined_override(result, combined)
         else:
             LOGGER.info(f"Fetching Movie metadata: {title} (year={year})")
             result = await fetch_movie_metadata(title, encoded_string, year, quality, default_id)
