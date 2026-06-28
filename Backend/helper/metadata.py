@@ -11,7 +11,7 @@ from Backend.helper.imdb import get_detail, get_season, search_title, search_tit
 from Backend.helper.settings_manager import SettingsManager
 from Backend.helper.encrypt import encode_string
 from Backend.helper.split_files import parse_split_info, parse_combined_episodes
-from Backend.helper.anime import fetch_anime_metadata
+from Backend.helper.anime import fetch_anime_metadata, fetch_anime_movie_metadata
 from themoviedb import aioTMDb
 from rapidfuzz import fuzz
 from guessit import guessit as _guessit
@@ -564,6 +564,24 @@ async def _fetch_anime_tv(title, season, episode, encoded_string, year, quality)
     return result
 
 
+# Resolve anime movie metadata, filling the imdb_id from tmdb when ani.zip lacks it.
+async def _fetch_anime_movie(title, encoded_string, year, quality) -> dict | None:
+    try:
+        result = await fetch_anime_movie_metadata(title, encoded_string, year, quality)
+    except Exception as e:
+        LOGGER.warning(f"[ANIME] movie metadata error for '{title}': {e}")
+        return None
+    if result is None:
+        return None
+    if not result.get("imdb_id") and result.get("tmdb_id"):
+        result["imdb_id"] = await _tmdb_external_imdb_id("movie", result["tmdb_id"])
+    if not result.get("imdb_id"):
+        LOGGER.info(f"[ANIME] No imdb id for movie '{title}' -> falling back to TMDb/Cinemeta")
+        return None
+    LOGGER.info(f"[ANIME] Matched movie '{result.get('title')}' [{result.get('imdb_id')}]")
+    return result
+
+
 # Parse a filename/caption and resolve full movie or TV metadata for the indexer.
 async def metadata(filename: str, channel: int, msg_id, override_id: str = None) -> dict | None:
     try:
@@ -629,7 +647,11 @@ async def metadata(filename: str, channel: int, msg_id, override_id: str = None)
                 _apply_combined_override(result, combined)
         else:
             LOGGER.info(f"Fetching Movie metadata: {title} (year={year})")
-            result = await fetch_movie_metadata(title, encoded_string, year, quality, default_id)
+            result = None
+            if not default_id and _is_anime_channel(channel):
+                result = await _fetch_anime_movie(title, encoded_string, year, quality)
+            if result is None:
+                result = await fetch_movie_metadata(title, encoded_string, year, quality, default_id)
         if result is not None:
             result["group_key"] = group_key
             result["part_number"] = part_number
