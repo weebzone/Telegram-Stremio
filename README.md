@@ -65,7 +65,7 @@ pinned: false
   * [✅ Recommended Prerequisites](#-recommended-prerequisites)
   * [🐙 Heroku Guide](#-heroku-guide)
   * [🐳 VPS Guide (Recommended)](#-vps-guide-recommended)
-  * [🤗 Hugging Face Guide (Free, Phone-Friendly)](#-hugging-face-guide-free-phone-friendly)
+  * [🤗 Hugging Face Guide](#-hugging-face-guide)
 
 * [📺 Setting Up Your App (Nuvio Recommended)](#-setting-up-your-app-nuvio-recommended)
 
