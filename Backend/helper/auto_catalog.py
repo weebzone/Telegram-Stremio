@@ -13,8 +13,6 @@ from Backend.logger import LOGGER
 AUTO_CATALOG_REGION = "IN"
 AUTO_SYNC_CONCURRENCY = 5
 
-# Hourly quick sync. It only starts after the admin has saved at least one
-# auto-catalog option from /catalogs, so first boot stays clean.
 AUTO_CATALOG_INTERVAL_SYNC = True
 AUTO_CATALOG_SYNC_INTERVAL_MINUTES = 60
 
@@ -96,14 +94,11 @@ _PROVIDER_ALIASES = {
 _auto_sync_lock = asyncio.Lock()
 _auto_sync_task: Optional[asyncio.Task] = None
 
-# Bounds concurrent instant (per-upload) classifications so a burst of forwarded
-# files doesn't flood TMDb with hundreds of simultaneous requests.
 INSTANT_SYNC_CONCURRENCY = 3
 _instant_sync_semaphore = asyncio.Semaphore(INSTANT_SYNC_CONCURRENCY)
 
 
 def _tmdb_api_key() -> str:
-    # Prefer the key saved from the web Settings page; fall back to env config.
     try:
         from Backend.helper.settings_manager import SettingsManager
         key = SettingsManager.current().tmdb_api
@@ -187,8 +182,6 @@ async def get_auto_catalog_settings(db) -> dict:
     state = await db.dbs["tracking"]["state"].find_one({"_id": "auto_catalog_settings"}) or {}
     configured = isinstance(state.get("enabled_keys"), list)
 
-    # Important: first boot should not auto-create catalogs.
-    # Until the admin saves settings from /catalogs, enabled_keys stays empty.
     enabled_keys = state.get("enabled_keys") if configured else []
 
     enabled_set = {key for key in enabled_keys if key in CATALOG_BY_KEY}
@@ -218,7 +211,6 @@ async def update_auto_catalog_settings(db, enabled_keys: List[str]) -> dict:
         {"$set": {"enabled_keys": clean_keys, "updated_at": now}},
         upsert=True,
     )
-    # Selection changed -> re-tag existing media on the next sync.
     await _invalidate_synced_flags(db)
     return await get_auto_catalog_settings(db)
 
@@ -370,11 +362,6 @@ async def _iter_all_media(db, *, full_rebuild: bool = False):
         for collection_name in ["movie", "tv"]:
             cursor = db.dbs[db_key][collection_name].find({"tmdb_id": {"$exists": True, "$ne": None}})
             async for doc in cursor:
-                # Always trust the storage DB the doc was physically read from.
-                # The stored "db_index" field can be stale (legacy/imported docs or
-                # docs moved between storage DBs), which would make update_document
-                # write to the wrong database, so the synced flag never persists and
-                # the item gets re-classified on every run.
                 doc["db_index"] = db_index
                 doc["media_type"] = "tv" if collection_name == "tv" else "movie"
                 if not full_rebuild and _is_already_synced(doc):
@@ -420,12 +407,6 @@ async def _classify_one(db, client: httpx.AsyncClient, semaphore: asyncio.Semaph
 
 
 async def sync_single_media(db, *, tmdb_id, media_type: str) -> dict:
-    """Classify and index a single media item immediately (used on upload).
-
-    Fetches TMDb data for just this item, persists the classification fields,
-    and adds it to every enabled auto catalog it matches — without waiting for
-    the hourly quick sync. Safe to call as a background task.
-    """
     if tmdb_id in (None, "", 0):
         return {"ok": False, "reason": "no_tmdb_id"}
 
@@ -441,8 +422,6 @@ async def sync_single_media(db, *, tmdb_id, media_type: str) -> dict:
     if not enabled_names:
         return {"ok": False, "reason": "no_enabled_catalogs"}
 
-    # A full/quick sync is already iterating the whole library; let it own the
-    # write to avoid racing its rebuild. The item will be picked up there.
     if _auto_sync_lock.locked():
         return {"ok": False, "reason": "sync_running"}
 
