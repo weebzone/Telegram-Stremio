@@ -61,6 +61,7 @@ class TVShowSchema(BaseModel):
     media_type: str
     updated_on: datetime = Field(default_factory=datetime.utcnow)
     seasons: List[Season] = Field(default_factory=list)
+    is_anime: Optional[bool] = False
 
 
 # ---------------------------
@@ -83,3 +84,4 @@ class MovieSchema(BaseModel):
     media_type: str
     updated_on: datetime = Field(default_factory=datetime.utcnow)
     telegram: Optional[List[QualityDetail]]
+    is_anime: Optional[bool] = False

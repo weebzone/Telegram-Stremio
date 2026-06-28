@@ -786,6 +786,7 @@ class Database:
                 cast=metadata_info['cast'],
                 runtime=metadata_info['runtime'],
                 media_type=metadata_info['media_type'],
+                is_anime=metadata_info.get('is_anime', False),
                 telegram=[quality_detail]
             )
             return await self.update_movie(media)
@@ -805,6 +806,7 @@ class Database:
                 cast=metadata_info['cast'],
                 runtime=metadata_info['runtime'],
                 media_type=metadata_info['media_type'],
+                is_anime=metadata_info.get('is_anime', False),
                 seasons=[Season(
                     season_number=metadata_info['season_number'],
                     episodes=[Episode(
@@ -987,6 +989,8 @@ class Database:
             existing_movie["imdb_id"] = imdb_id
         if tmdb_id and not existing_movie.get("tmdb_id"):
             existing_movie["tmdb_id"] = tmdb_id
+        if movie_dict.get("is_anime"):
+            existing_movie["is_anime"] = True
 
         existing_qualities = existing_movie.get("telegram", [])
 
@@ -1070,6 +1074,8 @@ class Database:
             existing_tv["imdb_id"] = imdb_id
         if tmdb_id and not existing_tv.get("tmdb_id"):
             existing_tv["tmdb_id"] = tmdb_id
+        if tv_show_dict.get("is_anime"):
+            existing_tv["is_anime"] = True
 
         for season in tv_show_dict["seasons"]:
             existing_season = next(

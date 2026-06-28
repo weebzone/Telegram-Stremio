@@ -246,6 +246,9 @@ def classify_media_from_tmdb(doc: dict, details: dict, watch_data: dict, enabled
     media_type = _media_type(doc)
     original_language = details.get("original_language") or doc.get("original_language") or ""
 
+    if doc.get("is_anime"):
+        tags.add("Anime")
+
     origin_country = details.get("origin_country") or []
     production_countries = [
         c.get("iso_3166_1")

@@ -637,11 +637,13 @@ async def metadata(filename: str, channel: int, msg_id, override_id: str = None)
 
     group_key = f"{channel}:{quality}:{split_info[0]}" if split_info else None
 
+    anime_channel = _is_anime_channel(channel)
+
     try:
         if season and episode:
             LOGGER.info(f"Fetching TV metadata: {title} S{season:02d}E{episode:02d} (year={year})")
             result = None
-            if not default_id and _is_anime_channel(channel):
+            if not default_id and anime_channel:
                 result = await _fetch_anime_tv(title, season, episode, encoded_string, year, quality)
             if result is None:
                 result = await fetch_tv_metadata(title, season, episode, encoded_string, year, quality, default_id)
@@ -650,11 +652,13 @@ async def metadata(filename: str, channel: int, msg_id, override_id: str = None)
         else:
             LOGGER.info(f"Fetching Movie metadata: {title} (year={year})")
             result = None
-            if not default_id and _is_anime_channel(channel):
+            if not default_id and anime_channel:
                 result = await _fetch_anime_movie(title, encoded_string, year, quality)
             if result is None:
                 result = await fetch_movie_metadata(title, encoded_string, year, quality, default_id)
         if result is not None:
+            if anime_channel:
+                result["is_anime"] = True
             result["group_key"] = group_key
             result["part_number"] = part_number
         return result
