@@ -11,6 +11,7 @@ from Backend.helper.imdb import get_detail, get_season, search_title, search_tit
 from Backend.helper.settings_manager import SettingsManager
 from Backend.helper.encrypt import encode_string
 from Backend.helper.split_files import parse_split_info, parse_combined_episodes
+from Backend.helper.anime import fetch_anime_metadata
 from themoviedb import aioTMDb
 from rapidfuzz import fuzz
 from guessit import guessit as _guessit
@@ -61,6 +62,8 @@ def _apply_combined_override(payload: dict, combined: dict) -> None:
     else:
         payload["episode_number"] = season * 1000 + start
         payload["episode_title"] = f"S{season:02d} E{start:02d}-E{end:02d} (Combined)"
+    if not payload.get("episode_backdrop"):
+        payload["episode_backdrop"] = payload.get("backdrop") or payload.get("poster") or ""
 
 _tmdb_client: aioTMDb | None = None
 _tmdb_client_key: str | None = None
@@ -534,6 +537,33 @@ def _build_imdb_tv_payload(imdb, ep, imdb_id, title, season, episode, quality, e
 
 # ----------------- Main entry-point -----------------
 
+# True when a file's channel is configured as an anime channel.
+def _is_anime_channel(channel) -> bool:
+    anime_channels = SettingsManager.current().anime_channels
+    if not anime_channels:
+        return False
+    target = str(channel).replace("-100", "")
+    return any(str(c).strip().replace("-100", "") == target for c in anime_channels)
+
+
+# Resolve anime TV metadata, filling the imdb_id from tmdb when ani.zip lacks it.
+async def _fetch_anime_tv(title, season, episode, encoded_string, year, quality) -> dict | None:
+    try:
+        result = await fetch_anime_metadata(title, season, episode, encoded_string, year, quality)
+    except Exception as e:
+        LOGGER.warning(f"[ANIME] metadata error for '{title}': {e}")
+        return None
+    if result is None:
+        return None
+    if not result.get("imdb_id") and result.get("tmdb_id"):
+        result["imdb_id"] = await _tmdb_external_imdb_id("tv", result["tmdb_id"])
+    if not result.get("imdb_id"):
+        LOGGER.info(f"[ANIME] No imdb id for '{title}' -> falling back to TMDb/Cinemeta")
+        return None
+    LOGGER.info(f"[ANIME] Matched '{result.get('title')}' [{result.get('imdb_id')}] S{season:02d}E{episode:02d}")
+    return result
+
+
 # Parse a filename/caption and resolve full movie or TV metadata for the indexer.
 async def metadata(filename: str, channel: int, msg_id, override_id: str = None) -> dict | None:
     try:
@@ -567,9 +597,10 @@ async def metadata(filename: str, channel: int, msg_id, override_id: str = None)
     elif isinstance(season, list) or isinstance(episode, list):
         LOGGER.warning(f"Invalid season/episode format for {filename}: {parsed}")
         return None
-    if season and not episode:
-        LOGGER.warning(f"Missing episode in {filename}: {parsed}")
-        return None
+    elif season and not episode:
+        # Season pack with no episode number (e.g. "Season 01") -> whole-season combined.
+        combined = {"season": season, "start": None, "end": None}
+        episode = 1
     if not quality:
         LOGGER.warning(f"Skipping {filename}: No resolution (parsed={parsed})")
         return None
@@ -589,7 +620,11 @@ async def metadata(filename: str, channel: int, msg_id, override_id: str = None)
     try:
         if season and episode:
             LOGGER.info(f"Fetching TV metadata: {title} S{season:02d}E{episode:02d} (year={year})")
-            result = await fetch_tv_metadata(title, season, episode, encoded_string, year, quality, default_id)
+            result = None
+            if not default_id and _is_anime_channel(channel):
+                result = await _fetch_anime_tv(title, season, episode, encoded_string, year, quality)
+            if result is None:
+                result = await fetch_tv_metadata(title, season, episode, encoded_string, year, quality, default_id)
             if result is not None and combined:
                 _apply_combined_override(result, combined)
         else:

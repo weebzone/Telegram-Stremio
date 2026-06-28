@@ -189,6 +189,36 @@
                 onkeydown="if(event.key==='Enter'){event.preventDefault();addItem('auth_channels')}">
             <button class="add-btn" onclick="addItem('auth_channels')">+ Add Channel</button>
         </div>
+
+        <hr class="divider">
+
+        <!-- Anime Channels -->
+        <label class="s-label">ANIME_CHANNELS
+            <span style="font-weight:400;text-transform:none;letter-spacing:0">
+                — files from these channels use AniList + api.ani.zip for accurate metadata</span>
+        </label>
+        <p style="font-size:0.78rem;color:var(--text-sec);margin-bottom:0.75rem">
+            Enter numeric channel IDs (e.g. <code>-1001234567890</code> or bare
+            <code>1234567890</code>). Use this for anime channels where IMDb/TMDB
+            matching is inaccurate.
+        </p>
+        <div class="multi-list-items" id="anime_channels_items">
+            {% for ch in settings.anime_channels %}
+            <div class="multi-item">
+                <input type="text" class="s-input" value="{{ ch }}" data-list="anime_channels"
+                    placeholder="-100xxxxxxxxxx">
+                <button class="remove-btn" onclick="removeItem(this)" title="Remove">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            {% endfor %}
+        </div>
+        <div class="add-row">
+            <input type="text" id="anime_channels_new" class="s-input"
+                placeholder="-100xxxxxxxxxx or bare numeric ID"
+                onkeydown="if(event.key==='Enter'){event.preventDefault();addItem('anime_channels')}">
+            <button class="add-btn" onclick="addItem('anime_channels')">+ Add Channel</button>
+        </div>
     </div>
 
     <!-- ── Media & Content ─────────────────────────────────────────────── -->
@@ -595,6 +625,7 @@ async function saveSettings() {
         upstream_repo:                 document.getElementById('upstream_repo').value.trim(),
         upstream_branch:               document.getElementById('upstream_branch').value.trim(),
         auth_channels:                 collectList('auth_channels'),
+        anime_channels:                collectList('anime_channels'),
         subscription:                  document.getElementById('subscription').checked,
         subscription_group_id:         parseInt(document.getElementById('subscription_group_id').value || '0', 10),
         payment_instructions:          document.getElementById('payment_instructions').value.trim(),
@@ -690,6 +721,7 @@ function renderSettings(s) {
 
     // Simple multi-value lists
     rebuildSimpleList('auth_channels_items', s.auth_channels, 'text');
+    rebuildSimpleList('anime_channels_items', s.anime_channels, 'text');
     rebuildSimpleList('approver_ids_items', s.approver_ids, 'number');
     rebuildSimpleList('multi_tokens_items', s.multi_tokens, 'text');
     rebuildSimpleList('global_search_channels_items', s.global_search_channels, 'text');
