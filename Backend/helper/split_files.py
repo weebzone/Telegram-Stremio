@@ -2,10 +2,6 @@ import re
 from typing import Optional, Tuple
 
 _VIDEO_EXTENSIONS = r'mkv|mp4|avi|ts|m4v|mov|wmv|webm|flv|m2ts|mpg|mpeg'
-# The ONLY supported split-archive convention: a 3-digit (allow 2 for safety)
-# numeric suffix appended after the original video filename + extension, e.g.
-# "Movie.1080p.mkv.001", ".002", ".003". No other numeric naming is treated as
-# a split part, so normal files like "Anime-12.mkv" are never misclassified.
 _TRAILING_NUMERIC_PATTERN = re.compile(rf'(?i)\.({_VIDEO_EXTENSIONS})\.(\d{{2,3}})$')
 _NORMALIZE_RE = re.compile(r'[\.\-_ ]+')
 
@@ -15,9 +11,6 @@ def _normalize(base: str) -> str:
 
 
 def _find_split_match(name: str) -> Optional[Tuple[int, int, int, Optional[str]]]:
-    # A numeric suffix after a real video extension (".mkv.001"). This is the
-    # only accepted split format (HJSplit/7z style); it is unambiguous and
-    # cannot collide with episode/season numbering.
     m = _TRAILING_NUMERIC_PATTERN.search(name)
     if m:
         return m.start(), m.end(), int(m.group(2)), m.group(1)
@@ -52,8 +45,6 @@ def _combined_season(name: str) -> Optional[int]:
     return int(match.group(1)) if match else None
 
 
-# Detect a combined file: an episode range ("S01 E04-06") or a whole-season
-# "Combined" file. Returns {season, start, end} (start/end None for whole season).
 def parse_combined_episodes(filename: str) -> Optional[dict]:
     if not filename:
         return None
