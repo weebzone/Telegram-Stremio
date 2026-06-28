@@ -41,8 +41,6 @@ async def process_file():
                 LOGGER.info(f"{metadata_info['media_type']} updated with ID: {updated_id}")
             else:
                 LOGGER.info("Update failed due to validation errors.")
-        # Categorise the freshly indexed media into auto catalogs immediately,
-        # outside the db_lock so the queue keeps draining. Fire-and-forget.
         if updated_id:
             start_single_media_catalog_sync(
                 db,
