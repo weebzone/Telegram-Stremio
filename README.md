@@ -65,6 +65,7 @@ pinned: false
   * [✅ Recommended Prerequisites](#-recommended-prerequisites)
   * [🐙 Heroku Guide](#-heroku-guide)
   * [🐳 VPS Guide (Recommended)](#-vps-guide-recommended)
+  * [🤗 Hugging Face Guide (Free, Phone-Friendly)](#-hugging-face-guide-free-phone-friendly)
 
 * [📺 Setting Up Your App (Nuvio Recommended)](#-setting-up-your-app-nuvio-recommended)
 
@@ -758,6 +759,85 @@ sudo apt install caddy
 
 ✅ Your API will now be available securely at:
 ➡️ `https://your-domain.com`
+
+
+## 🤗 Hugging Face Guide (Free, Phone-Friendly)
+
+Deploy a **free, always-online** instance entirely from your **phone's browser** — no VPS, no domain, and no Docker knowledge required. Hugging Face builds the Docker image **on its own servers**; you only tap a few buttons.
+
+> 💡 **How it works:** this repo ships a GitHub Action that automatically pushes your code to your Hugging Face Space on every change. The Space then builds the included `Dockerfile` and runs your server.
+
+### ⭐ Step 1: Star this Repository
+
+Open the repo and tap **⭐ Star** at the top right. It helps the project and keeps it on your radar.
+
+➡️ [github.com/weebzone/Telegram-Stremio](https://github.com/weebzone/Telegram-Stremio)
+
+### 🍴 Step 2: Fork the Repository
+
+Tap **Fork** (top right) → **Create fork**. This gives you your **own copy** so you can add private secrets and run the deploy workflow.
+
+### 🔑 Step 3: Create a Hugging Face Write Token
+
+1. Sign in (or sign up) at [huggingface.co](https://huggingface.co).
+2. Go to **Profile → Settings → Access Tokens**.
+3. Tap **Create new token**, choose the **Write** role, and copy the token.
+
+### 🚀 Step 4: Create a Docker Space
+
+1. Go to [huggingface.co/new-space](https://huggingface.co/new-space).
+2. Give it a name, select **Docker** as the SDK (pick the **Blank** template).
+3. Set visibility to **Public** (required so Stremio/Nuvio can reach your addon).
+4. Tap **Create Space**.
+
+Your Space ID is `<your-hf-username>/<your-space-name>` — note it down.
+
+### 🔐 Step 5: Add Deploy Credentials to Your GitHub Fork
+
+In **your forked repo** → **Settings → Secrets and variables → Actions**:
+
+| Type         | Name          | Value                                  |
+| ------------ | ------------- | -------------------------------------- |
+| **Secret**   | `HF_TOKEN`    | the Write token from Step 3            |
+| **Variable** | `HF_SPACE_ID` | `<your-hf-username>/<your-space-name>` |
+
+> Add the secret under the **Secrets** tab and the variable under the **Variables** tab.
+
+### 🤖 Step 6: Add Your Bot Secrets to the Space
+
+On your **Hugging Face Space → Settings → Variables and secrets**, add the same values you'd normally put in `config.env`:
+
+| Secret                | Required | Where to get it                        |
+| --------------------- | -------- | -------------------------------------- |
+| `API_ID`              | ✅        | [my.telegram.org](https://my.telegram.org) |
+| `API_HASH`            | ✅        | [my.telegram.org](https://my.telegram.org) |
+| `BOT_TOKEN`           | ✅        | [@BotFather](https://t.me/BotFather)   |
+| `OWNER_ID`            | ✅        | your numeric Telegram ID               |
+| `DATABASE`            | ✅        | two comma-separated MongoDB URIs       |
+| `USER_SESSION_STRING` | ⬜        | optional (Global Search)               |
+
+> ℹ️ You don't need a `config.env` file on Hugging Face — these secrets are read directly as environment variables. The included `Dockerfile` already listens on the right port (`app_port: 8000` is preset in this README).
+
+### ▶️ Step 7: Deploy
+
+In **your forked repo** → **Actions** tab → select **Deploy to Hugging Face Space** → **Run workflow**.
+
+After this first run, **every push to your fork auto-deploys**. Watch the build progress on your Hugging Face Space page — once it shows **Running**, you're live.
+
+### 🎬 Step 8: Use Your Addon
+
+Your addon manifest will be available at:
+
+```
+https://<your-hf-username>-<your-space-name>.hf.space/stremio/manifest.json
+```
+
+1. Open `https://<your-hf-username>-<your-space-name>.hf.space/login`
+2. Log in (default `admin` / `admin`) and **immediately change the password**.
+3. Set your **Base URL** in the web Settings page to `https://<your-hf-username>-<your-space-name>.hf.space`.
+4. Add the manifest URL to Stremio/Nuvio and enjoy. 🎉
+
+> ⚠️ **Free-tier notes:** Free Spaces sleep after inactivity and have ephemeral storage. That's fine here — all media data lives in your external MongoDB, and regular addon traffic keeps the Space awake. Keep the Space **public** so clients can reach it.
 
 
 # 📺 Setting Up Your App (Nuvio Recommended)
