@@ -430,6 +430,20 @@ def _extract_cast(details) -> list:
     return [getattr(c, "name", None) or getattr(c, "original_name", None) for c in cast]
 
 
+# Collect ISO 3166-1 country codes from a TMDb details object (origin_country
+# and production_countries), used by the auto-catalog classifier.
+def _tmdb_country_codes(details) -> list:
+    codes: list = []
+    for code in (getattr(details, "origin_country", None) or []):
+        if code and code not in codes:
+            codes.append(code)
+    for country in (getattr(details, "production_countries", None) or []):
+        code = getattr(country, "iso_3166_1", None) or (country.get("iso_3166_1") if isinstance(country, dict) else None)
+        if code and code not in codes:
+            codes.append(code)
+    return codes
+
+
 def _format_runtime(minutes) -> str:
     return f"{minutes} min" if minutes else ""
 
@@ -451,6 +465,8 @@ def _build_tmdb_movie_payload(movie, quality, encoded_string) -> dict:
         "runtime": str(_format_runtime(getattr(movie, "runtime", None))),
         "media_type": "movie",
         "genres": [g.name for g in (movie.genres or [])],
+        "original_language": getattr(movie, "original_language", None),
+        "origin_country": _tmdb_country_codes(movie),
         "quality": quality,
         "encoded_string": encoded_string,
     }
@@ -476,6 +492,8 @@ def _build_tmdb_tv_payload(tv, ep, season, episode, quality, encoded_string) -> 
         "media_type": "tv",
         "cast": _extract_cast(tv),
         "runtime": str(runtime),
+        "original_language": getattr(tv, "original_language", None),
+        "origin_country": _tmdb_country_codes(tv),
         "season_number": season,
         "episode_number": episode,
         "episode_title": getattr(ep, "name", fallback_ep_title) if ep else fallback_ep_title,

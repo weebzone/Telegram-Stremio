@@ -510,6 +510,83 @@ class Database:
         except Exception:
             return False
 
+    async def find_media_doc(self, media_type: str, tmdb_id: int) -> Optional[Tuple[dict, int]]:
+        """Locate a media doc by tmdb_id across storage DBs.
+
+        Returns (doc, db_index) using the storage DB the doc physically lives
+        in (not the possibly-stale db_index field), or None if not found.
+        """
+        collection_name = "tv" if str(media_type).lower() in ["tv", "series"] else "movie"
+        try:
+            tmdb_id = int(tmdb_id)
+        except (TypeError, ValueError):
+            return None
+
+        for i in range(1, self.current_db_index + 1):
+            db_key = f"storage_{i}"
+            if db_key not in self.dbs:
+                continue
+            doc = await self.dbs[db_key][collection_name].find_one({"tmdb_id": tmdb_id})
+            if doc:
+                doc["db_index"] = i
+                return doc, i
+        return None
+
+    async def purge_media_from_catalogs(self, tmdb_id: int, media_type: str) -> int:
+        """Remove a media item from every catalog (auto + manual).
+
+        Called when a movie/TV doc is fully deleted so dead entries do not
+        linger in any catalog. Matches on tmdb_id + media_type only (db_index
+        omitted) so stale indexes are still cleaned up. Keeps item_count in
+        sync via an aggregation-pipeline update.
+        """
+        if tmdb_id in (None, "", 0):
+            return 0
+        try:
+            tmdb_id = int(tmdb_id)
+        except (TypeError, ValueError):
+            return 0
+
+        media_type = "tv" if str(media_type).lower() in ["tv", "series"] else "movie"
+        collection = self.dbs["tracking"]["custom_catalogs"]
+        now = datetime.utcnow()
+        try:
+            result = await collection.update_many(
+                {"items": {"$elemMatch": {"tmdb_id": tmdb_id, "media_type": media_type}}},
+                [
+                    {
+                        "$set": {
+                            "items": {
+                                "$filter": {
+                                    "input": "$items",
+                                    "as": "it",
+                                    "cond": {
+                                        "$not": [
+                                            {
+                                                "$and": [
+                                                    {"$eq": ["$$it.tmdb_id", tmdb_id]},
+                                                    {"$eq": ["$$it.media_type", media_type]},
+                                                ]
+                                            }
+                                        ]
+                                    },
+                                }
+                            }
+                        }
+                    },
+                    {"$set": {"item_count": {"$size": "$items"}, "updated_at": now}},
+                ],
+            )
+            if result.modified_count:
+                LOGGER.info(
+                    f"Purged {media_type} tmdb_id {tmdb_id} from "
+                    f"{result.modified_count} catalog(s)."
+                )
+            return result.modified_count
+        except Exception as e:
+            LOGGER.error(f"Failed to purge tmdb_id {tmdb_id} from catalogs: {e}")
+            return 0
+
     async def custom_catalog_contains_item(
         self, catalog_id: str, tmdb_id: int, db_index: int, media_type: str
     ) -> bool:
@@ -701,6 +778,7 @@ class Database:
 
                 if len(new_telegram) == 0:
                     await db["movie"].delete_one({"_id": movie["_id"]})
+                    await self.purge_media_from_catalogs(movie.get("tmdb_id"), "movie")
                 else:
                     movie["telegram"] = new_telegram
                     movie["updated_on"] = datetime.utcnow()
@@ -731,6 +809,7 @@ class Database:
 
                 if len(tv["seasons"]) == 0:
                     await db["tv"].delete_one({"_id": tv["_id"]})
+                    await self.purge_media_from_catalogs(tv.get("tmdb_id"), "tv")
                 else:
                     tv["updated_on"] = datetime.utcnow()
                     await db["tv"].replace_one({"_id": tv["_id"]}, tv)
@@ -787,6 +866,8 @@ class Database:
                 runtime=metadata_info['runtime'],
                 media_type=metadata_info['media_type'],
                 is_anime=metadata_info.get('is_anime', False),
+                original_language=metadata_info.get('original_language'),
+                origin_country=metadata_info.get('origin_country', []) or [],
                 telegram=[quality_detail]
             )
             return await self.update_movie(media)
@@ -807,6 +888,8 @@ class Database:
                 runtime=metadata_info['runtime'],
                 media_type=metadata_info['media_type'],
                 is_anime=metadata_info.get('is_anime', False),
+                original_language=metadata_info.get('original_language'),
+                origin_country=metadata_info.get('origin_country', []) or [],
                 seasons=[Season(
                     season_number=metadata_info['season_number'],
                     episodes=[Episode(
@@ -1418,6 +1501,7 @@ class Database:
             result = await self.dbs[db_key]["tv"].delete_one({"tmdb_id": tmdb_id})
         
         if result.deleted_count > 0:
+            await self.purge_media_from_catalogs(tmdb_id, "tv" if media_type != "Movie" else "movie")
             LOGGER.info(f"{media_type} with tmdb_id {tmdb_id} deleted successfully.")
             return True
         LOGGER.info(f"No document found with tmdb_id {tmdb_id}.")
@@ -1458,6 +1542,7 @@ class Database:
                 movie["telegram"] = [q for q in movie.get("telegram", []) if q.get("id") != stream_id_hash]
                 if len(movie["telegram"]) == 0:
                     await db["movie"].delete_one({"_id": movie["_id"]})
+                    await self.purge_media_from_catalogs(movie.get("tmdb_id"), "movie")
                 else:
                     movie['updated_on'] = datetime.utcnow()
                     await db["movie"].replace_one({"_id": movie["_id"]}, movie)
@@ -1477,6 +1562,7 @@ class Database:
                                         tv["seasons"] = [s for s in tv.get("seasons", []) if s.get("season_number") != season.get("season_number")]
                                         if len(tv["seasons"]) == 0:
                                             await db["tv"].delete_one({"_id": tv["_id"]})
+                                            await self.purge_media_from_catalogs(tv.get("tmdb_id"), "tv")
                                             return True
                                 tv['updated_on'] = datetime.utcnow()
                                 await db["tv"].replace_one({"_id": tv["_id"]}, tv)

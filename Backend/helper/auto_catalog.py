@@ -96,6 +96,11 @@ _PROVIDER_ALIASES = {
 _auto_sync_lock = asyncio.Lock()
 _auto_sync_task: Optional[asyncio.Task] = None
 
+# Bounds concurrent instant (per-upload) classifications so a burst of forwarded
+# files doesn't flood TMDb with hundreds of simultaneous requests.
+INSTANT_SYNC_CONCURRENCY = 3
+_instant_sync_semaphore = asyncio.Semaphore(INSTANT_SYNC_CONCURRENCY)
+
 
 def _tmdb_api_key() -> str:
     # Prefer the key saved from the web Settings page; fall back to env config.
@@ -249,12 +254,12 @@ def classify_media_from_tmdb(doc: dict, details: dict, watch_data: dict, enabled
     if doc.get("is_anime"):
         tags.add("Anime")
 
-    origin_country = details.get("origin_country") or []
+    origin_country = details.get("origin_country") or doc.get("origin_country") or []
     production_countries = [
         c.get("iso_3166_1")
         for c in details.get("production_countries", []) or []
         if c.get("iso_3166_1")
-    ]
+    ] or (doc.get("production_countries") or [])
 
     for tag in _LANGUAGE_CATALOGS.get(original_language, []):
         tags.add(tag)
@@ -288,11 +293,21 @@ def classify_media_from_tmdb(doc: dict, details: dict, watch_data: dict, enabled
         except Exception:
             pass
 
-    for provider_name in _extract_provider_names(watch_data):
-        bucket = _provider_bucket(provider_name)
-        if bucket:
-            providers.add(bucket)
-            tags.add(bucket)
+    provider_names = _extract_provider_names(watch_data)
+    if provider_names:
+        for provider_name in provider_names:
+            bucket = _provider_bucket(provider_name)
+            if bucket:
+                providers.add(bucket)
+    else:
+        # No live watch-provider data (fetch failed / quota / no key): reuse the
+        # OTT buckets already stored on the doc so a re-classify keeps OTT tags.
+        for stored in (doc.get("watch_providers") or []):
+            if stored:
+                providers.add(stored)
+
+    for bucket in providers:
+        tags.add(bucket)
 
     tags = {tag for tag in tags if tag in enabled_names}
 
@@ -402,6 +417,74 @@ async def _classify_one(db, client: httpx.AsyncClient, semaphore: asyncio.Semaph
         except Exception as e:
             LOGGER.warning(f"Auto catalog classification failed for {doc.get('title')} ({doc.get('tmdb_id')}): {e}")
             return doc, {"auto_tags": [tag for tag in (doc.get("auto_tags", []) or []) if tag in enabled_names]}
+
+
+async def sync_single_media(db, *, tmdb_id, media_type: str) -> dict:
+    """Classify and index a single media item immediately (used on upload).
+
+    Fetches TMDb data for just this item, persists the classification fields,
+    and adds it to every enabled auto catalog it matches — without waiting for
+    the hourly quick sync. Safe to call as a background task.
+    """
+    if tmdb_id in (None, "", 0):
+        return {"ok": False, "reason": "no_tmdb_id"}
+
+    try:
+        tmdb_id = int(tmdb_id)
+    except (TypeError, ValueError):
+        return {"ok": False, "reason": "bad_tmdb_id"}
+
+    if not await has_auto_catalog_settings(db):
+        return {"ok": False, "reason": "not_configured"}
+
+    enabled_names = await _enabled_catalog_names(db)
+    if not enabled_names:
+        return {"ok": False, "reason": "no_enabled_catalogs"}
+
+    # A full/quick sync is already iterating the whole library; let it own the
+    # write to avoid racing its rebuild. The item will be picked up there.
+    if _auto_sync_lock.locked():
+        return {"ok": False, "reason": "sync_running"}
+
+    located = await db.find_media_doc(media_type, tmdb_id)
+    if not located:
+        return {"ok": False, "reason": "not_found"}
+
+    doc, db_index = located
+    doc["db_index"] = db_index
+    doc["media_type"] = "tv" if media_type in ["tv", "series"] else "movie"
+
+    timeout = httpx.Timeout(18.0, connect=10.0)
+    semaphore = asyncio.Semaphore(1)
+    async with _instant_sync_semaphore:
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+            media_doc, classification = await _classify_one(db, client, semaphore, doc, enabled_names)
+
+    tags = [tag for tag in (classification.get("auto_tags") or []) if tag in enabled_names]
+    if tags:
+        item = _doc_item(media_doc)
+        await _flush_quick_items(db, {tag: [item] for tag in tags})
+
+    LOGGER.info(
+        f"Auto catalog instant index: '{media_doc.get('title')}' "
+        f"(tmdb_id={tmdb_id}) -> {tags or 'no matching catalogs'}"
+    )
+    return {"ok": True, "tags": tags}
+
+
+def start_single_media_catalog_sync(db, *, tmdb_id, media_type: str) -> None:
+    """Fire-and-forget launcher for instant per-item categorization."""
+    async def runner():
+        try:
+            await sync_single_media(db, tmdb_id=tmdb_id, media_type=media_type)
+        except Exception:
+            LOGGER.exception("Instant auto catalog index failed")
+
+    try:
+        asyncio.create_task(runner())
+    except RuntimeError:
+        # No running loop (shouldn't happen inside the bot); ignore.
+        LOGGER.warning("Instant auto catalog index skipped: no running event loop.")
 
 
 async def _flush_quick_items(db, catalog_items: Dict[str, List[dict]]) -> None:
