@@ -1,0 +1,44 @@
+name: Deploy to Hugging Face Space
+
+# Auto-syncs this repo to your Hugging Face Docker Space.
+# Runs on every push to main/master and can also be triggered manually.
+#
+# One-time setup (all doable from a phone browser):
+#   1. Create a Docker Space on huggingface.co (SDK = Docker).
+#   2. HF profile -> Settings -> Access Tokens -> create a token with "Write" role.
+#   3. In this GitHub repo: Settings -> Secrets and variables -> Actions
+#        - Add a SECRET   named HF_TOKEN     = <your write token>
+#        - Add a VARIABLE named HF_SPACE_ID  = <your-username>/<your-space-name>
+#   4. Run this workflow (Actions tab -> Deploy to Hugging Face Space -> Run workflow),
+#      or just push any commit. The Space builds the Dockerfile automatically.
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  sync-to-hub:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: true
+
+      - name: Push to Hugging Face Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_SPACE_ID: ${{ vars.HF_SPACE_ID }}
+        run: |
+          set -e
+          if [ -z "$HF_TOKEN" ] || [ -z "$HF_SPACE_ID" ]; then
+            echo "::error::Missing HF_TOKEN secret or HF_SPACE_ID variable. See setup notes in this file."
+            exit 1
+          fi
+          HF_USER="${HF_SPACE_ID%%/*}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git push --force "https://${HF_USER}:${HF_TOKEN}@huggingface.co/spaces/${HF_SPACE_ID}.git" HEAD:main
+          echo "Pushed to https://huggingface.co/spaces/${HF_SPACE_ID}"
