@@ -72,15 +72,6 @@ def parse_combined_episodes(filename: str) -> Optional[dict]:
     return None
 
 
-# True when a combined file covers the requested season/episode.
-def combined_covers(combined: dict, season: Optional[int], episode: Optional[int]) -> bool:
-    if season is not None and combined["season"] != int(season):
-        return False
-    if episode is None or combined["start"] is None:
-        return True
-    return combined["start"] <= int(episode) <= combined["end"]
-
-
 def strip_part_suffix(filename: str) -> str:
     if not filename:
         return filename
