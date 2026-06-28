@@ -177,22 +177,29 @@ async def get_manifest(token: str, token_data: dict = Depends(verify_token)):
         try:
             custom_catalogs = await db.get_custom_catalogs(visible_only=True)
             for catalog in custom_catalogs:
+                items = catalog.get("items") or []
+                has_movie = any(i.get("media_type") == "movie" for i in items)
+                has_series = any(i.get("media_type") == "tv" for i in items)
+                if not has_movie and not has_series:
+                    continue
                 catalog_id = str(catalog.get("_id"))
                 catalog_name = catalog.get("name") or "Custom Catalog"
-                catalogs.append({
-                    "type": "movie",
-                    "id": f"custom_{catalog_id}",
-                    "name": catalog_name,
-                    "extra": [{"name": "skip"}],
-                    "extraSupported": ["skip"],
-                })
-                catalogs.append({
-                    "type": "series",
-                    "id": f"custom_{catalog_id}",
-                    "name": catalog_name,
-                    "extra": [{"name": "skip"}],
-                    "extraSupported": ["skip"],
-                })
+                if has_movie:
+                    catalogs.append({
+                        "type": "movie",
+                        "id": f"custom_{catalog_id}",
+                        "name": catalog_name,
+                        "extra": [{"name": "skip"}],
+                        "extraSupported": ["skip"],
+                    })
+                if has_series:
+                    catalogs.append({
+                        "type": "series",
+                        "id": f"custom_{catalog_id}",
+                        "name": catalog_name,
+                        "extra": [{"name": "skip"}],
+                        "extraSupported": ["skip"],
+                    })
         except Exception:
             pass
 

@@ -205,7 +205,24 @@ async def update_auto_catalog_settings(db, enabled_keys: List[str]) -> dict:
         {"$set": {"enabled_keys": clean_keys, "updated_at": now}},
         upsert=True,
     )
+    # Selection changed -> re-tag existing media on the next sync.
+    await _invalidate_synced_flags(db)
     return await get_auto_catalog_settings(db)
+
+
+async def _invalidate_synced_flags(db) -> None:
+    for db_index in range(1, db.current_db_index + 1):
+        db_key = f"storage_{db_index}"
+        if db_key not in db.dbs:
+            continue
+        for collection_name in ["movie", "tv"]:
+            try:
+                await db.dbs[db_key][collection_name].update_many(
+                    {"auto_catalog.synced": True},
+                    {"$set": {"auto_catalog.synced": False}},
+                )
+            except Exception as e:
+                LOGGER.warning(f"Auto catalog: failed to reset synced flags in {db_key}.{collection_name}: {e}")
 
 
 async def _enabled_catalog_names(db) -> Set[str]:
@@ -536,10 +553,6 @@ async def run_auto_catalog_sync(db, *, force: bool = False, full_rebuild: bool =
                     scanned += 1
 
                     if already_synced and not force and not full_rebuild:
-                        skipped += 1
-                        continue
-
-                    if already_synced and force and not full_rebuild:
                         skipped += 1
                         continue
 
