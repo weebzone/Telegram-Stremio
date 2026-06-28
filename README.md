@@ -761,9 +761,9 @@ sudo apt install caddy
 ➡️ `https://your-domain.com`
 
 
-## 🤗 Hugging Face Guide (Free, Phone-Friendly)
+## 🤗 Hugging Face Guide
 
-Deploy a **free, always-online** instance entirely from your **phone's browser** — no VPS, no domain, and no Docker knowledge required. Hugging Face builds the Docker image **on its own servers**; you only tap a few buttons.
+Deploy a **free, always-online** instance — no VPS, no domain, and no Docker knowledge required. Hugging Face builds the Docker image **on its own servers**; you only tap a few buttons.
 
 > 💡 **How it works:** this repo ships a GitHub Action that automatically pushes your code to your Hugging Face Space on every change. The Space then builds the included `Dockerfile` and runs your server.
 
@@ -836,9 +836,6 @@ https://<your-hf-username>-<your-space-name>.hf.space/stremio/manifest.json
 2. Log in (default `admin` / `admin`) and **immediately change the password**.
 3. Set your **Base URL** in the web Settings page to `https://<your-hf-username>-<your-space-name>.hf.space`.
 4. Add the manifest URL to Stremio/Nuvio and enjoy. 🎉
-
-> ⚠️ **Free-tier notes:** Free Spaces sleep after inactivity and have ephemeral storage. That's fine here — all media data lives in your external MongoDB, and regular addon traffic keeps the Space awake. Keep the Space **public** so clients can reach it.
-
 
 # 📺 Setting Up Your App (Nuvio Recommended)
 
