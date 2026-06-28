@@ -98,6 +98,14 @@ _auto_sync_task: Optional[asyncio.Task] = None
 
 
 def _tmdb_api_key() -> str:
+    # Prefer the key saved from the web Settings page; fall back to env config.
+    try:
+        from Backend.helper.settings_manager import SettingsManager
+        key = SettingsManager.current().tmdb_api
+        if key:
+            return key
+    except Exception:
+        pass
     return getattr(Telegram, "TMDB_API", "") or ""
 
 
@@ -356,13 +364,7 @@ async def _classify_one(db, client: httpx.AsyncClient, semaphore: asyncio.Semaph
     async with semaphore:
         try:
             details, watch_data = await _fetch_tmdb_data(client, doc)
-            classification = classify_media_from_tmdb(doc, details, watch_data, enabled_names) if details else {
-                "original_language": doc.get("original_language", ""),
-                "origin_country": doc.get("origin_country", []),
-                "production_countries": doc.get("production_countries", []),
-                "watch_providers": doc.get("watch_providers", []),
-                "auto_tags": [tag for tag in (doc.get("auto_tags", []) or []) if tag in enabled_names],
-            }
+            classification = classify_media_from_tmdb(doc, details or {}, watch_data or {}, enabled_names)
 
             now = datetime.utcnow()
             update_data = {
@@ -531,6 +533,12 @@ async def run_auto_catalog_sync(db, *, force: bool = False, full_rebuild: bool =
             await _write_status(db, summary)
             LOGGER.info(f"Auto catalog sync skipped: {summary}")
             return summary
+
+        if not _tmdb_api_key():
+            LOGGER.warning(
+                "Auto catalog: no TMDB API key configured — only 'Top Rated' and "
+                "'Recently Added' will populate; language & OTT catalogs need a TMDB key."
+            )
 
         try:
             timeout = httpx.Timeout(18.0, connect=10.0)
