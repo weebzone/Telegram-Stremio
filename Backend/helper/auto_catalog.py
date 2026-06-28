@@ -363,7 +363,7 @@ async def _iter_all_media(db, *, full_rebuild: bool = False):
 async def _classify_one(db, client: httpx.AsyncClient, semaphore: asyncio.Semaphore, doc: dict, enabled_names: Set[str]) -> tuple[dict, dict]:
     async with semaphore:
         try:
-            details, watch_data = await _fetch_tmdb_data(client, doc)
+            details, watch_data = await asyncio.wait_for(_fetch_tmdb_data(client, doc), timeout=30)
             classification = classify_media_from_tmdb(doc, details or {}, watch_data or {}, enabled_names)
 
             now = datetime.utcnow()
@@ -380,7 +380,10 @@ async def _classify_one(db, client: httpx.AsyncClient, semaphore: asyncio.Semaph
                     "source_updated_on": doc.get("updated_on"),
                 },
             }
-            await db.update_document(_media_type(doc), int(doc.get("tmdb_id")), int(doc.get("db_index", 1)), update_data)
+            await asyncio.wait_for(
+                db.update_document(_media_type(doc), int(doc.get("tmdb_id")), int(doc.get("db_index", 1)), update_data),
+                timeout=30,
+            )
             return doc, classification
         except Exception as e:
             LOGGER.warning(f"Auto catalog classification failed for {doc.get('title')} ({doc.get('tmdb_id')}): {e}")
@@ -542,7 +545,7 @@ async def run_auto_catalog_sync(db, *, force: bool = False, full_rebuild: bool =
 
         try:
             timeout = httpx.Timeout(18.0, connect=10.0)
-            limits = httpx.Limits(max_connections=AUTO_SYNC_CONCURRENCY + 2, max_keepalive_connections=AUTO_SYNC_CONCURRENCY)
+            limits = httpx.Limits(max_connections=AUTO_SYNC_CONCURRENCY * 2 + 4, max_keepalive_connections=AUTO_SYNC_CONCURRENCY)
             semaphore = asyncio.Semaphore(AUTO_SYNC_CONCURRENCY)
 
             async def consume_result(media_doc: dict, classification: dict) -> None:
@@ -560,7 +563,7 @@ async def run_auto_catalog_sync(db, *, force: bool = False, full_rebuild: bool =
                 async for _, _, doc, already_synced in _iter_all_media(db, full_rebuild=full_rebuild):
                     scanned += 1
 
-                    if already_synced and not force and not full_rebuild:
+                    if already_synced and not full_rebuild:
                         skipped += 1
                         continue
 
