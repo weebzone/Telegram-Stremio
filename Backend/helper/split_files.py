@@ -5,6 +5,9 @@ _VIDEO_EXTENSIONS = r'mkv|mp4|avi|ts|m4v|mov|wmv|webm|flv'
 _TRAILING_NUMERIC_PATTERN = re.compile(rf'(?i)\.({_VIDEO_EXTENSIONS})\.(\d{{2,3}})$')
 _NUMERIC_PATTERN = re.compile(r'(?i)[\.\-_](\d{2,3})(?=[\.\-_][a-z0-9]{2,4}$)')
 _NORMALIZE_RE = re.compile(r'[\.\-_ ]+')
+# Tail of an episode range, e.g. the "E08" in "S01E05-E08" or "06" in "E01-06".
+# Used to stop the weak numeric pattern from reading a range end as a split part.
+_RANGE_TAIL_RE = re.compile(r'(?i)e?p?\d{1,4}$')
 
 
 def _normalize(base: str) -> str:
@@ -12,14 +15,22 @@ def _normalize(base: str) -> str:
 
 
 def _find_split_match(name: str) -> Optional[Tuple[int, int, int, Optional[str]]]:
+    # Strong signal: a numeric suffix after a real video extension (e.g. ".mkv.001").
+    # This is the unambiguous HJSplit/7z style and is always treated as a split part.
     m = _TRAILING_NUMERIC_PATTERN.search(name)
     if m:
         return m.start(), m.end(), int(m.group(2)), m.group(1)
 
+    # Weak signal: a bare number before the extension (e.g. "movie.001.dat").
+    # Reject it when the number is actually the end of an episode range
+    # ("Show.E01-06.mkv" -> "06" must NOT become split part 6).
     m = _NUMERIC_PATTERN.search(name)
     if m:
         part_num = int(m.group(1))
-        if 1 <= part_num <= 99:
+        separator = name[m.start()]
+        prefix = name[:m.start()]
+        is_range_tail = separator in '-–~' and bool(_RANGE_TAIL_RE.search(prefix))
+        if not is_range_tail and 1 <= part_num <= 99:
             return m.start(), m.end(), part_num, None
 
     return None

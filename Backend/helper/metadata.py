@@ -621,7 +621,12 @@ async def metadata(filename: str, channel: int, msg_id, override_id: str = None)
         LOGGER.info(f"Skipping {filename}: contains 'combined'")
         return None
 
-    split_info = None if combined else parse_split_info(filename)
+    # Split detection (.001/.002 etc.) is orthogonal to combined-episode
+    # detection: a file can be BOTH a combined-episodes/whole-season file AND
+    # split into parts. Computing them independently ensures the parts of a
+    # split combined file are still grouped (via group_key) and recombined,
+    # instead of being dropped into the combined folder as separate entries.
+    split_info = parse_split_info(filename)
     part_number = split_info[1] if split_info else None
 
     title = parsed.get("title")
