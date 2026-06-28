@@ -10,7 +10,7 @@ from Backend.logger import LOGGER
 from Backend.helper.imdb import get_detail, get_season, search_title, search_title_multi
 from Backend.helper.settings_manager import SettingsManager
 from Backend.helper.encrypt import encode_string
-from Backend.helper.split_files import parse_split_info, parse_combined_episodes
+from Backend.helper.split_files import parse_split_info, parse_combined_episodes, strip_part_suffix
 from Backend.helper.anime import fetch_anime_metadata, fetch_anime_movie_metadata
 from themoviedb import aioTMDb
 from rapidfuzz import fuzz
@@ -604,30 +604,34 @@ async def _fetch_anime_movie(title, encoded_string, year, quality) -> dict | Non
 
 # Parse a filename/caption and resolve full movie or TV metadata for the indexer.
 async def metadata(filename: str, channel: int, msg_id, override_id: str = None) -> dict | None:
-    try:
-        parsed = parse_media_name(filename)
-    except Exception as e:
-        LOGGER.error(f"Parsing failed for {filename}: {e}\n{traceback.format_exc()}")
-        return None
-
     if _MULTIPART_RE.search(filename):
         LOGGER.info(f"Skipping {filename}: split video file not meant to be combined in Stremio")
         return None
 
-    combined = parse_combined_episodes(filename)
+    # Detect split parts (.001/.002 etc.) on the RAW name first, then parse all
+    # metadata from the part-stripped name. If the numeric suffix is left in
+    # place the parser misreads it as an episode number (and the year as a
+    # season), e.g. a movie split "Memories (2013) ...mkv.001" wrongly becomes
+    # "Memories S2013E01". Split detection is orthogonal to combined-episode
+    # detection: a file can be BOTH split AND a combined/whole-season file, so
+    # the parts of a split combined file still group (via group_key) and
+    # recombine instead of landing in the combined folder as separate entries.
+    split_info = parse_split_info(filename)
+    part_number = split_info[1] if split_info else None
+    parse_target = strip_part_suffix(filename) if split_info else filename
+
+    try:
+        parsed = parse_media_name(parse_target)
+    except Exception as e:
+        LOGGER.error(f"Parsing failed for {filename}: {e}\n{traceback.format_exc()}")
+        return None
+
+    combined = parse_combined_episodes(parse_target)
 
     excess = parsed.get("excess")
     if not combined and excess and any("combined" in item.lower() for item in excess):
         LOGGER.info(f"Skipping {filename}: contains 'combined'")
         return None
-
-    # Split detection (.001/.002 etc.) is orthogonal to combined-episode
-    # detection: a file can be BOTH a combined-episodes/whole-season file AND
-    # split into parts. Computing them independently ensures the parts of a
-    # split combined file are still grouped (via group_key) and recombined,
-    # instead of being dropped into the combined folder as separate entries.
-    split_info = parse_split_info(filename)
-    part_number = split_info[1] if split_info else None
 
     title = parsed.get("title")
     season = parsed.get("season")
