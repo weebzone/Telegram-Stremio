@@ -3,11 +3,15 @@ import re
 from typing import Optional, List
 
 import httpx
+from rapidfuzz import fuzz
 
 from Backend.logger import LOGGER
 
 ANILIST_URL = "https://graphql.anilist.co"
 ANIZIP_URL = "https://api.ani.zip/mappings"
+
+# Min title similarity to trust an AniList hit; below this we fall back to TMDb/Cinemeta.
+_ANIME_TITLE_THRESHOLD = 0.55
 
 _client: Optional[httpx.AsyncClient] = None
 _client_lock = asyncio.Lock()
@@ -20,6 +24,7 @@ _HTML_RE = re.compile(r"<[^>]+>")
 _ANILIST_FIELDS = """
     id
     title { romaji english }
+    synonyms
     seasonYear
     startDate { year }
     description(asHtml: false)
@@ -65,6 +70,59 @@ def _strip_html(text: str) -> str:
     return re.sub(r"\s+", " ", _HTML_RE.sub(" ", text)).strip()
 
 
+def _normalize_title(title: str) -> str:
+    if not title:
+        return ""
+    t = title.lower().strip()
+    t = re.sub(r"^\b(the|a|an)\b\s+", "", t)
+    t = re.sub(r"[^\w\s]", " ", t)
+    return re.sub(r"\s+", " ", t).strip()
+
+
+# Coverage-aware fuzzy ratio (mirrors metadata._fuzzy_ratio).
+def _fuzzy_ratio(a: str, b: str) -> float:
+    if not a or not b:
+        return 0.0
+    try:
+        set_ratio = fuzz.token_set_ratio(a, b) / 100.0
+        sort_ratio = fuzz.token_sort_ratio(a, b) / 100.0
+        a_tokens, b_tokens = a.split(), b.split()
+        coverage = min(len(a_tokens), len(b_tokens)) / max(len(a_tokens), len(b_tokens)) if a_tokens and b_tokens else 0.0
+        return max(sort_ratio, set_ratio * coverage)
+    except Exception:
+        return 0.0
+
+
+# Best similarity between the parsed title and the AniList titles/synonyms.
+def _title_match_score(query: str, media: dict) -> float:
+    titles = media.get("title") or {}
+    candidates = [titles.get("romaji"), titles.get("english"), *(media.get("synonyms") or [])]
+    q = _normalize_title(query)
+    if not q:
+        return 0.0
+    best = 0.0
+    for cand in candidates:
+        cn = _normalize_title(cand)
+        if cn:
+            best = max(best, _fuzzy_ratio(q, cn))
+    return best
+
+
+# Drop an AniList hit whose title is too far from the parsed title.
+def _validate_match(media: Optional[dict], title: str, context: str) -> Optional[dict]:
+    if not media:
+        return None
+    score = _title_match_score(title, media)
+    if score < _ANIME_TITLE_THRESHOLD:
+        matched = (media.get("title") or {})
+        LOGGER.info(
+            f"[ANIME] Rejecting low-confidence {context} match for '{title}': "
+            f"got '{matched.get('english') or matched.get('romaji')}' (score={score:.2f}) -> fallback"
+        )
+        return None
+    return media
+
+
 def _season_queries(title: str, season: Optional[int]) -> List[str]:
     if season and int(season) > 1:
         return [f"{title} Season {season}", f"{title} {season}", title]
@@ -92,6 +150,7 @@ async def search_anime(title: str, season: Optional[int] = None) -> Optional[dic
         media = await _anilist_request(query)
         if media:
             break
+    media = _validate_match(media, title, "TV")
     _SEARCH_CACHE[cache_key] = media
     return media
 
@@ -101,6 +160,7 @@ async def search_anime_movie(title: str) -> Optional[dict]:
     if cache_key in _SEARCH_CACHE:
         return _SEARCH_CACHE[cache_key]
     media = await _anilist_request(title, _ANILIST_MOVIE_QUERY)
+    media = _validate_match(media, title, "movie")
     _SEARCH_CACHE[cache_key] = media
     return media
 
