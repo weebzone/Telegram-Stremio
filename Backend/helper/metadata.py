@@ -48,19 +48,20 @@ API_SEMAPHORE = asyncio.Semaphore(12)
 
 _MULTIPART_RE = re.compile(r"(?:part|cd|disc|disk)[s._-]*\d+(?=\.\w+$)", re.IGNORECASE)
 
-# Combined files (ranges or whole-season packs) collapse into one "Combined"
-# entry per real season, so each season has a single combine slot.
-COMBINED_EPISODE = 0
+# Combined files are grouped in the Specials folder (season 0) as a single
+# "Season N Combined" entry per real season.
+COMBINED_SEASON = 0
+COMBINED_EPISODE_BASE = 1000
 
 
-# Re-file a combined entry into its season's single Combined slot. A range/Full
-# label is appended to the quality so distinct combined files coexist while an
-# identical re-upload still replaces correctly under replace mode.
+# Re-file a combined entry into its season's single Combined slot inside Specials.
+# A range/Full label is appended to the quality so distinct combined files coexist
+# while an identical re-upload still replaces correctly under replace mode.
 def _apply_combined_override(payload: dict, combined: dict) -> None:
-    start, end = combined["start"], combined["end"]
-    payload["season_number"] = combined["season"]
-    payload["episode_number"] = COMBINED_EPISODE
-    payload["episode_title"] = "Combined"
+    season, start, end = combined["season"], combined["start"], combined["end"]
+    payload["season_number"] = COMBINED_SEASON
+    payload["episode_number"] = COMBINED_EPISODE_BASE + season
+    payload["episode_title"] = f"Season {season} Combined"
     label = "Full" if start is None else f"E{start:02d}-E{end:02d}"
     payload["quality"] = f"{payload.get('quality') or 'HD'} {label}"
     if not payload.get("episode_backdrop"):
