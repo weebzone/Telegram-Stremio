@@ -1,7 +1,7 @@
 import asyncio
 import re
 import traceback
-from typing import Optional, List
+from typing import Optional, List, Dict
 
 import PTN
 
@@ -30,6 +30,32 @@ EPISODE_CACHE: dict = {}
 ALT_TITLES_CACHE: dict = {}
 
 API_SEMAPHORE = asyncio.Semaphore(12)
+
+_INFLIGHT: Dict[tuple, asyncio.Future] = {}
+
+
+async def _cached_call(store: dict, key, ns: str, producer):
+    if key in store:
+        return store[key]
+    flight_key = (ns, key)
+    fut = _INFLIGHT.get(flight_key)
+    if fut is not None:
+        return await fut
+    fut = asyncio.get_running_loop().create_future()
+    _INFLIGHT[flight_key] = fut
+    try:
+        result = await producer()
+    except Exception as e:
+        _INFLIGHT.pop(flight_key, None)
+        if not fut.done():
+            fut.set_exception(e)
+            fut.exception()  # mark retrieved to silence asyncio warning when no waiters
+        raise
+    store[key] = result
+    _INFLIGHT.pop(flight_key, None)
+    if not fut.done():
+        fut.set_result(result)
+    return result
 
 _MULTIPART_RE = re.compile(r"(?:part|cd|disc|disk)[s._-]*\d+(?=\.\w+$)", re.IGNORECASE)
 
@@ -240,48 +266,46 @@ def _apply_combined_override(payload: dict, combined: dict) -> None:
 # ── Search (Cinemeta / TMDb) ────────────────────────────────────────────────
 async def safe_imdb_search(title: str, type_: str, year: Optional[int] = None) -> str | None:
     cache_key = f"imdb::{type_}::{title}::{year}"
-    if cache_key in IMDB_CACHE:
-        return IMDB_CACHE[cache_key]
 
-    query_variants = _build_query_variants(title, year)
-    best_id: str | None = None
-    best_score = 0.0
-    best_title = ""
-    year_reliable = type_ == "movie"
+    async def _produce():
+        query_variants = _build_query_variants(title, year)
+        best_id: str | None = None
+        best_score = 0.0
+        best_title = ""
+        year_reliable = type_ == "movie"
 
-    for query in query_variants:
-        try:
-            async with API_SEMAPHORE:
-                results = await search_title_multi(query=query, type=type_, limit=8)
-            for r in results:
-                score = _score_candidate(
-                    title, year, r.get("title", ""), _year_from_str(r.get("year", "")),
-                    year_reliable=year_reliable,
-                )
-                if score > best_score:
-                    best_score, best_id, best_title = score, r.get("id"), r.get("title", "")
-                if best_score >= _STRONG_MATCH:
-                    break
-        except Exception as e:
-            LOGGER.warning(f"Cinemeta search variant '{query}' [{type_}] failed: {e}")
-        if best_score >= _STRONG_MATCH:
-            break
+        for query in query_variants:
+            try:
+                async with API_SEMAPHORE:
+                    results = await search_title_multi(query=query, type=type_, limit=8)
+                for r in results:
+                    score = _score_candidate(
+                        title, year, r.get("title", ""), _year_from_str(r.get("year", "")),
+                        year_reliable=year_reliable,
+                    )
+                    if score > best_score:
+                        best_score, best_id, best_title = score, r.get("id"), r.get("title", "")
+                    if best_score >= _STRONG_MATCH:
+                        break
+            except Exception as e:
+                LOGGER.warning(f"Cinemeta search variant '{query}' [{type_}] failed: {e}")
+            if best_score >= _STRONG_MATCH:
+                break
 
-    if best_score >= _CINEMETA_THRESHOLD and best_id:
-        LOGGER.info(f"Cinemeta match: '{title}' (year={year}) -> '{best_title}' [{best_id}] (score={best_score:.2f})")
-        IMDB_CACHE[cache_key] = best_id
-        return best_id
+        if best_score >= _CINEMETA_THRESHOLD and best_id:
+            LOGGER.info(f"Cinemeta match: '{title}' (year={year}) -> '{best_title}' [{best_id}] (score={best_score:.2f})")
+            return best_id
 
-    if best_id:
-        LOGGER.info(
-            f"Cinemeta low-confidence for '{title}' (year={year}, type={type_}) | "
-            f"best '{best_title}' [{best_id}] score={best_score:.2f} -> falling back to TMDb"
-        )
-    else:
-        LOGGER.info(f"Cinemeta returned no results for '{title}' (year={year}, type={type_}) -> falling back to TMDb")
+        if best_id:
+            LOGGER.info(
+                f"Cinemeta low-confidence for '{title}' (year={year}, type={type_}) | "
+                f"best '{best_title}' [{best_id}] score={best_score:.2f} -> falling back to TMDb"
+            )
+        else:
+            LOGGER.info(f"Cinemeta returned no results for '{title}' (year={year}, type={type_}) -> falling back to TMDb")
+        return None
 
-    IMDB_CACHE[cache_key] = None
-    return None
+    return await _cached_call(IMDB_CACHE, cache_key, "imdb_search", _produce)
 
 
 async def _tmdb_raw_search(title: str, media_type: str, year: Optional[int]):
@@ -297,22 +321,21 @@ async def _tmdb_raw_search(title: str, media_type: str, year: Optional[int]):
 
 async def safe_tmdb_search(title: str, type_: str, year: Optional[int] = None):
     cache_key = f"tmdb_search::{type_}::{title}::{year}"
-    if cache_key in TMDB_SEARCH_CACHE:
-        return TMDB_SEARCH_CACHE[cache_key]
 
-    try:
-        results = await _tmdb_raw_search(title, type_, year)
-        best = await _pick_best_tmdb_result(results, title, year, type_)
-        if best is None and results:
-            top = results[0]
-            top_title = getattr(top, "title" if type_ == "movie" else "name", "?")
-            LOGGER.info(f"TMDb '{title}' (year={year}) top result '{top_title}' did not meet threshold")
-        TMDB_SEARCH_CACHE[cache_key] = best
-        return best
-    except Exception as e:
-        LOGGER.error(f"TMDb search failed for '{title}' [{type_}]: {e}")
-        TMDB_SEARCH_CACHE[cache_key] = None
-        return None
+    async def _produce():
+        try:
+            results = await _tmdb_raw_search(title, type_, year)
+            best = await _pick_best_tmdb_result(results, title, year, type_)
+            if best is None and results:
+                top = results[0]
+                top_title = getattr(top, "title" if type_ == "movie" else "name", "?")
+                LOGGER.info(f"TMDb '{title}' (year={year}) top result '{top_title}' did not meet threshold")
+            return best
+        except Exception as e:
+            LOGGER.error(f"TMDb search failed for '{title}' [{type_}]: {e}")
+            return None
+
+    return await _cached_call(TMDB_SEARCH_CACHE, cache_key, "tmdb_search", _produce)
 
 
 def _tmdb_title_year(item, media_type: str) -> tuple[str, int]:
@@ -359,73 +382,71 @@ async def _tmdb_alternative_titles(media_type: str, tmdb_id) -> list[str]:
     if not tmdb_id:
         return []
     cache_key = (media_type, tmdb_id)
-    if cache_key in ALT_TITLES_CACHE:
-        return ALT_TITLES_CACHE[cache_key]
-    titles: list[str] = []
-    try:
-        client = get_tmdb_client()
-        async with API_SEMAPHORE:
-            target = client.movie(tmdb_id) if media_type == "movie" else client.tv(tmdb_id)
-            alt = await target.alternative_titles()
-        entries = list(getattr(alt, "titles", None) or []) + list(getattr(alt, "results", None) or [])
-        titles = [t for t in (getattr(e, "title", "") for e in entries) if t]
-    except Exception as e:
-        LOGGER.warning(f"TMDb alternative-titles fetch failed for {media_type} id={tmdb_id}: {e}")
-    ALT_TITLES_CACHE[cache_key] = titles
-    return titles
+
+    async def _produce():
+        titles: list[str] = []
+        try:
+            client = get_tmdb_client()
+            async with API_SEMAPHORE:
+                target = client.movie(tmdb_id) if media_type == "movie" else client.tv(tmdb_id)
+                alt = await target.alternative_titles()
+            entries = list(getattr(alt, "titles", None) or []) + list(getattr(alt, "results", None) or [])
+            titles = [t for t in (getattr(e, "title", "") for e in entries) if t]
+        except Exception as e:
+            LOGGER.warning(f"TMDb alternative-titles fetch failed for {media_type} id={tmdb_id}: {e}")
+        return titles
+
+    return await _cached_call(ALT_TITLES_CACHE, cache_key, "alt_titles", _produce)
 
 
 # ── Detail fetchers ─────────────────────────────────────────────────────────
 async def _tmdb_details(media_type: str, item_id):
     cache_key = (media_type, item_id)
-    if cache_key in TMDB_DETAILS_CACHE:
-        return TMDB_DETAILS_CACHE[cache_key]
-    try:
-        client = get_tmdb_client()
-        async with API_SEMAPHORE:
-            target = client.movie(item_id) if media_type == "movie" else client.tv(item_id)
-            details = await target.details(append_to_response="external_ids,credits")
-            details.images = await target.images()
-        TMDB_DETAILS_CACHE[cache_key] = details
-        return details
-    except Exception as e:
-        LOGGER.warning(f"TMDb {media_type} details fetch failed for id={item_id}: {e}")
-        TMDB_DETAILS_CACHE[cache_key] = None
-        return None
+
+    async def _produce():
+        try:
+            client = get_tmdb_client()
+            async with API_SEMAPHORE:
+                target = client.movie(item_id) if media_type == "movie" else client.tv(item_id)
+                details = await target.details(append_to_response="external_ids,credits")
+                details.images = await target.images()
+            return details
+        except Exception as e:
+            LOGGER.warning(f"TMDb {media_type} details fetch failed for id={item_id}: {e}")
+            return None
+
+    return await _cached_call(TMDB_DETAILS_CACHE, cache_key, "tmdb_details", _produce)
 
 
 async def _tmdb_episode_details(tv_id, season, episode):
     key = (tv_id, season, episode)
-    if key in EPISODE_CACHE:
-        return EPISODE_CACHE[key]
-    try:
-        async with API_SEMAPHORE:
-            details = await get_tmdb_client().episode(tv_id, season, episode).details()
-        EPISODE_CACHE[key] = details
-        return details
-    except Exception:
-        EPISODE_CACHE[key] = None
-        return None
+
+    async def _produce():
+        try:
+            async with API_SEMAPHORE:
+                return await get_tmdb_client().episode(tv_id, season, episode).details()
+        except Exception:
+            return None
+
+    return await _cached_call(EPISODE_CACHE, key, "tmdb_ep", _produce)
 
 
 async def _cached_imdb_detail(imdb_id: str, media_type: str):
-    cached = IMDB_CACHE.get(imdb_id)
-    if isinstance(cached, dict):
-        return cached
-    async with API_SEMAPHORE:
-        detail = await get_detail(imdb_id=imdb_id, media_type=media_type)
-    IMDB_CACHE[imdb_id] = detail
-    return detail
+    async def _produce():
+        async with API_SEMAPHORE:
+            return await get_detail(imdb_id=imdb_id, media_type=media_type)
+
+    return await _cached_call(IMDB_CACHE, imdb_id, "imdb_detail", _produce)
 
 
 async def _cached_imdb_season(imdb_id: str, season, episode):
     key = f"{imdb_id}::{season}::{episode}"
-    if key in EPISODE_CACHE:
-        return EPISODE_CACHE[key]
-    async with API_SEMAPHORE:
-        ep = await get_season(imdb_id=imdb_id, season_id=season, episode_id=episode)
-    EPISODE_CACHE[key] = ep
-    return ep
+
+    async def _produce():
+        async with API_SEMAPHORE:
+            return await get_season(imdb_id=imdb_id, season_id=season, episode_id=episode)
+
+    return await _cached_call(EPISODE_CACHE, key, "imdb_season", _produce)
 
 
 async def _tmdb_external_imdb_id(media_type: str, tmdb_id) -> str | None:

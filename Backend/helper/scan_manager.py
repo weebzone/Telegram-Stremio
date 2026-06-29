@@ -18,6 +18,7 @@ SCAN_MAX_ID_CAP = 1_000_000
 SCAN_BATCH_DELAY = 0.5         
 SCAN_PERSIST_EVERY = 1         
 SCAN_PROBE_TEXT = "🔄"         
+SCAN_PROCESS_CONCURRENCY = 8   
 
 DBCHECK_CONCURRENCY = 5        
 DBCHECK_BATCH_DELAY = 0.3      
@@ -48,6 +49,7 @@ class ScanManager:
         self._task: Optional[asyncio.Task] = None
         self._cancel = False
         self._lock = asyncio.Lock()
+        self._db_lock = asyncio.Lock()
         self.state: Dict[str, Any] = self._blank_state()
 
     # ── State helpers ────────────────────────────────────────────────────────
@@ -358,20 +360,27 @@ class ScanManager:
             if not isinstance(messages, list):
                 messages = [messages]
 
-            batch_had_content = False
-            for message in messages:
-                if self._cancel:
-                    s["cursors"][str(ch_key)] = current
-                    s["current_id"] = current
-                    await self._persist()
-                    return False
-                if message is None or message.empty:
-                    continue
+            to_process = [m for m in messages if m is not None and not m.empty]
+            batch_had_content = bool(to_process)
 
-                batch_had_content = True
-                s["counters"]["total_found"] += 1
-                await self._process_message(message, chat_id)
-                s["counters"]["processed"] += 1
+            if to_process:
+                s["counters"]["total_found"] += len(to_process)
+                sem = asyncio.Semaphore(SCAN_PROCESS_CONCURRENCY)
+
+                async def _worker(msg):
+                    async with sem:
+                        if self._cancel:
+                            return
+                        await self._process_message(msg, chat_id)
+                        s["counters"]["processed"] += 1
+
+                await asyncio.gather(*(_worker(m) for m in to_process))
+
+            if self._cancel:
+                s["cursors"][str(ch_key)] = current
+                s["current_id"] = current
+                await self._persist()
+                return False
 
             empty_streak = 0 if batch_had_content else empty_streak + 1
             current = upper
@@ -464,14 +473,15 @@ class ScanManager:
             title_clean += '.mkv'
 
         try:
-            updated_id = await db.insert_media(
-                metadata_info,
-                channel=channel_int,
-                msg_id=msg_id,
-                size=size,
-                name=title_clean,
-                raw_size=raw_size,
-            )
+            async with self._db_lock:
+                updated_id = await db.insert_media(
+                    metadata_info,
+                    channel=channel_int,
+                    msg_id=msg_id,
+                    size=size,
+                    name=title_clean,
+                    raw_size=raw_size,
+                )
             if updated_id:
                 s["counters"]["indexed"] += 1
             else:
