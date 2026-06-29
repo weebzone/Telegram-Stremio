@@ -17,22 +17,7 @@ from rapidfuzz import fuzz
 from guessit import guessit as _guessit
 from difflib import SequenceMatcher
 
-def _fuzzy_ratio(a: str, b: str) -> float:
-    if not a or not b:
-        return 0.0
-    try:
-        set_ratio = fuzz.token_set_ratio(a, b) / 100.0
-        sort_ratio = fuzz.token_sort_ratio(a, b) / 100.0
-        a_tokens, b_tokens = a.split(), b.split()
-        if a_tokens and b_tokens:
-            coverage = min(len(a_tokens), len(b_tokens)) / max(len(a_tokens), len(b_tokens))
-        else:
-            coverage = 0.0
-        return max(sort_ratio, set_ratio * coverage)
-    except Exception:
-        return SequenceMatcher(None, a, b).ratio()
-
-
+# ── Config & caches ────────────────────────────────────────────────────────
 _CINEMETA_THRESHOLD = 0.60
 _TMDB_THRESHOLD = 0.55
 _STRONG_MATCH = 0.92
@@ -48,30 +33,16 @@ API_SEMAPHORE = asyncio.Semaphore(12)
 
 _MULTIPART_RE = re.compile(r"(?:part|cd|disc|disk)[s._-]*\d+(?=\.\w+$)", re.IGNORECASE)
 
-# Combined files are grouped in the Specials folder (season 0) as a single
-# "Season N Combined" entry per real season.
+# Combined files share one "Season N Combined" entry per real season, filed in
+# the Specials folder (season 0).
 COMBINED_SEASON = 0
 COMBINED_EPISODE_BASE = 1000
-
-
-# Re-file a combined entry into its season's single Combined slot inside Specials.
-# A range/Full label is appended to the quality so distinct combined files coexist
-# while an identical re-upload still replaces correctly under replace mode.
-def _apply_combined_override(payload: dict, combined: dict) -> None:
-    season, start, end = combined["season"], combined["start"], combined["end"]
-    payload["season_number"] = COMBINED_SEASON
-    payload["episode_number"] = COMBINED_EPISODE_BASE + season
-    payload["episode_title"] = f"Season {season} Combined"
-    label = "Full" if start is None else f"E{start:02d}-E{end:02d}"
-    payload["quality"] = f"{payload.get('quality') or 'HD'} {label}"
-    if not payload.get("episode_backdrop"):
-        payload["episode_backdrop"] = payload.get("backdrop") or payload.get("poster") or ""
 
 _tmdb_client: aioTMDb | None = None
 _tmdb_client_key: str | None = None
 
 
-# Return a cached TMDb client, rebuilding it when the configured API key changes.
+# ── TMDb client & image helpers ─────────────────────────────────────────────
 def get_tmdb_client() -> aioTMDb:
     global _tmdb_client, _tmdb_client_key
     current_key = SettingsManager.current().tmdb_api
@@ -83,6 +54,7 @@ def get_tmdb_client() -> aioTMDb:
 
 def format_tmdb_image(path: str, size="w500") -> str:
     return f"https://image.tmdb.org/t/p/{size}{path}" if path else ""
+
 
 def get_tmdb_logo(images) -> str:
     logos = getattr(images, "logos", None) if images else None
@@ -96,6 +68,7 @@ def get_tmdb_logo(images) -> str:
             return format_tmdb_image(logo.file_path, "w300")
     return ""
 
+
 def format_imdb_images(imdb_id: str) -> dict:
     if not imdb_id:
         return {"poster": "", "backdrop": "", "logo": ""}
@@ -106,6 +79,7 @@ def format_imdb_images(imdb_id: str) -> dict:
     }
 
 
+# ── ID & title helpers ──────────────────────────────────────────────────────
 def extract_default_id(text: str) -> str | None:
     if not text:
         return None
@@ -120,6 +94,7 @@ def extract_default_id(text: str) -> str | None:
         return tmdb_url.group(1)
     return None
 
+
 def _split_default_id(default_id) -> tuple[str | None, int | None, bool, bool]:
     if not default_id:
         return None, None, False, False
@@ -130,6 +105,7 @@ def _split_default_id(default_id) -> tuple[str | None, int | None, bool, bool]:
         return None, int(value), False, True
     return None, None, False, False
 
+
 def _normalize_title(title: str) -> str:
     if not title:
         return ""
@@ -138,17 +114,31 @@ def _normalize_title(title: str) -> str:
     t = re.sub(r"[^\w\s]", " ", t)
     return re.sub(r"\s+", " ", t).strip()
 
+
+def _fuzzy_ratio(a: str, b: str) -> float:
+    if not a or not b:
+        return 0.0
+    try:
+        set_ratio = fuzz.token_set_ratio(a, b) / 100.0
+        sort_ratio = fuzz.token_sort_ratio(a, b) / 100.0
+        a_tokens, b_tokens = a.split(), b.split()
+        coverage = min(len(a_tokens), len(b_tokens)) / max(len(a_tokens), len(b_tokens)) if a_tokens and b_tokens else 0.0
+        return max(sort_ratio, set_ratio * coverage)
+    except Exception:
+        return SequenceMatcher(None, a, b).ratio()
+
+
 def _title_similarity(t1: str, t2: str) -> float:
     n1, n2 = _normalize_title(t1), _normalize_title(t2)
-    if not n1 or not n2:
-        return 0.0
-    return _fuzzy_ratio(n1, n2)
+    return _fuzzy_ratio(n1, n2) if n1 and n2 else 0.0
+
 
 def _year_from_str(year_val) -> int:
     if not year_val:
         return 0
     m = re.search(r"(\d{4})", str(year_val))
     return int(m.group(1)) if m else 0
+
 
 def _score_candidate(
     query_title: str,
@@ -158,7 +148,6 @@ def _score_candidate(
     year_reliable: bool = True,
 ) -> float:
     score = _title_similarity(query_title, result_title)
-    
     if score < 0.5:
         return score
 
@@ -172,10 +161,10 @@ def _score_candidate(
                     score = min(1.0, score + 0.20)
                 elif diff == 1:
                     score = min(1.0, score + 0.07)
-        else:
-            if diff == 0 and score >= 0.80:
-                score = min(1.0, score + 0.05)
+        elif diff == 0 and score >= 0.80:
+            score = min(1.0, score + 0.05)
     return score
+
 
 def _build_query_variants(title: str, year: Optional[int] = None) -> List[str]:
     variants: List[str] = [title]
@@ -201,9 +190,12 @@ def _build_query_variants(title: str, year: Optional[int] = None) -> List[str]:
             ordered.append(v)
     return ordered
 
+
 def _first(value):
     return value[0] if isinstance(value, list) else value
 
+
+# ── Filename parsing ────────────────────────────────────────────────────────
 def parse_media_name(name: str) -> dict:
     try:
         ptn = PTN.parse(name) or {}
@@ -233,6 +225,19 @@ def parse_media_name(name: str) -> dict:
 
     return parsed
 
+
+def _apply_combined_override(payload: dict, combined: dict) -> None:
+    season, start, end = combined["season"], combined["start"], combined["end"]
+    payload["season_number"] = COMBINED_SEASON
+    payload["episode_number"] = COMBINED_EPISODE_BASE + season
+    payload["episode_title"] = f"Season {season} Combined"
+    label = "Full" if start is None else f"E{start:02d}-E{end:02d}"
+    payload["quality"] = f"{payload.get('quality') or 'HD'} {label}"
+    if not payload.get("episode_backdrop"):
+        payload["episode_backdrop"] = payload.get("backdrop") or payload.get("poster") or ""
+
+
+# ── Search (Cinemeta / TMDb) ────────────────────────────────────────────────
 async def safe_imdb_search(title: str, type_: str, year: Optional[int] = None) -> str | None:
     cache_key = f"imdb::{type_}::{title}::{year}"
     if cache_key in IMDB_CACHE:
@@ -242,7 +247,6 @@ async def safe_imdb_search(title: str, type_: str, year: Optional[int] = None) -
     best_id: str | None = None
     best_score = 0.0
     best_title = ""
-
     year_reliable = type_ == "movie"
 
     for query in query_variants:
@@ -279,6 +283,7 @@ async def safe_imdb_search(title: str, type_: str, year: Optional[int] = None) -
     IMDB_CACHE[cache_key] = None
     return None
 
+
 async def _tmdb_raw_search(title: str, media_type: str, year: Optional[int]):
     client = get_tmdb_client()
     async with API_SEMAPHORE:
@@ -288,6 +293,7 @@ async def _tmdb_raw_search(title: str, media_type: str, year: Optional[int]):
                 results = await client.search().movies(query=title)
             return results
         return await client.search().tv(query=title)
+
 
 async def safe_tmdb_search(title: str, type_: str, year: Optional[int] = None):
     cache_key = f"tmdb_search::{type_}::{title}::{year}"
@@ -308,6 +314,7 @@ async def safe_tmdb_search(title: str, type_: str, year: Optional[int] = None):
         TMDB_SEARCH_CACHE[cache_key] = None
         return None
 
+
 def _tmdb_title_year(item, media_type: str) -> tuple[str, int]:
     if media_type == "movie":
         date = getattr(item, "release_date", None)
@@ -315,12 +322,12 @@ def _tmdb_title_year(item, media_type: str) -> tuple[str, int]:
     date = getattr(item, "first_air_date", None)
     return getattr(item, "name", "") or "", getattr(date, "year", 0) if date else 0
 
+
 async def _pick_best_tmdb_result(results, query_title: str, query_year: Optional[int], media_type: str):
     if not results:
         return None
 
     year_reliable = media_type == "movie"
-
     scored = []
     best_item, best_score = None, 0.0
     for item in results:
@@ -347,6 +354,7 @@ async def _pick_best_tmdb_result(results, query_title: str, query_year: Optional
 
     return best_item if best_score >= _TMDB_THRESHOLD and best_item is not None else None
 
+
 async def _tmdb_alternative_titles(media_type: str, tmdb_id) -> list[str]:
     if not tmdb_id:
         return []
@@ -366,6 +374,8 @@ async def _tmdb_alternative_titles(media_type: str, tmdb_id) -> list[str]:
     ALT_TITLES_CACHE[cache_key] = titles
     return titles
 
+
+# ── Detail fetchers ─────────────────────────────────────────────────────────
 async def _tmdb_details(media_type: str, item_id):
     cache_key = (media_type, item_id)
     if cache_key in TMDB_DETAILS_CACHE:
@@ -383,6 +393,7 @@ async def _tmdb_details(media_type: str, item_id):
         TMDB_DETAILS_CACHE[cache_key] = None
         return None
 
+
 async def _tmdb_episode_details(tv_id, season, episode):
     key = (tv_id, season, episode)
     if key in EPISODE_CACHE:
@@ -396,6 +407,7 @@ async def _tmdb_episode_details(tv_id, season, episode):
         EPISODE_CACHE[key] = None
         return None
 
+
 async def _cached_imdb_detail(imdb_id: str, media_type: str):
     cached = IMDB_CACHE.get(imdb_id)
     if isinstance(cached, dict):
@@ -404,6 +416,7 @@ async def _cached_imdb_detail(imdb_id: str, media_type: str):
         detail = await get_detail(imdb_id=imdb_id, media_type=media_type)
     IMDB_CACHE[imdb_id] = detail
     return detail
+
 
 async def _cached_imdb_season(imdb_id: str, season, episode):
     key = f"{imdb_id}::{season}::{episode}"
@@ -414,6 +427,7 @@ async def _cached_imdb_season(imdb_id: str, season, episode):
     EPISODE_CACHE[key] = ep
     return ep
 
+
 async def _tmdb_external_imdb_id(media_type: str, tmdb_id) -> str | None:
     try:
         details = await _tmdb_details(media_type, tmdb_id)
@@ -423,15 +437,13 @@ async def _tmdb_external_imdb_id(media_type: str, tmdb_id) -> str | None:
         return None
 
 
-
+# ── Payload builders ────────────────────────────────────────────────────────
 def _extract_cast(details) -> list:
     credits = getattr(details, "credits", None) or {}
     cast = getattr(credits, "cast", []) or []
     return [getattr(c, "name", None) or getattr(c, "original_name", None) for c in cast]
 
 
-# Collect ISO 3166-1 country codes from a TMDb details object (origin_country
-# and production_countries), used by the auto-catalog classifier.
 def _tmdb_country_codes(details) -> list:
     codes: list = []
     for code in (getattr(details, "origin_country", None) or []):
@@ -448,7 +460,6 @@ def _format_runtime(minutes) -> str:
     return f"{minutes} min" if minutes else ""
 
 
-# Build the indexer movie payload from a TMDb details object.
 def _build_tmdb_movie_payload(movie, quality, encoded_string) -> dict:
     release = getattr(movie, "release_date", None)
     return {
@@ -472,7 +483,6 @@ def _build_tmdb_movie_payload(movie, quality, encoded_string) -> dict:
     }
 
 
-# Build the indexer TV payload from TMDb series + episode details.
 def _build_tmdb_tv_payload(tv, ep, season, episode, quality, encoded_string) -> dict:
     first_air = getattr(tv, "first_air_date", None)
     series_runtime = tv.episode_run_time[0] if getattr(tv, "episode_run_time", None) else None
@@ -505,7 +515,6 @@ def _build_tmdb_tv_payload(tv, ep, season, episode, quality, encoded_string) -> 
     }
 
 
-# Build the indexer movie payload from Cinemeta/IMDb details.
 def _build_imdb_movie_payload(imdb, imdb_id, title, quality, encoded_string) -> dict:
     images = format_imdb_images(imdb_id)
     return {
@@ -527,7 +536,6 @@ def _build_imdb_movie_payload(imdb, imdb_id, title, quality, encoded_string) -> 
     }
 
 
-# Build the indexer TV payload from Cinemeta/IMDb series + episode details.
 def _build_imdb_tv_payload(imdb, ep, imdb_id, title, season, episode, quality, encoded_string) -> dict:
     images = format_imdb_images(imdb_id)
     return {
@@ -555,9 +563,7 @@ def _build_imdb_tv_payload(imdb, ep, imdb_id, title, season, episode, quality, e
     }
 
 
-# ----------------- Main entry-point -----------------
-
-# True when a file's channel is configured as an anime channel.
+# ── Anime helpers ───────────────────────────────────────────────────────────
 def _is_anime_channel(channel) -> bool:
     anime_channels = SettingsManager.current().anime_channels
     if not anime_channels:
@@ -566,7 +572,6 @@ def _is_anime_channel(channel) -> bool:
     return any(str(c).strip().replace("-100", "") == target for c in anime_channels)
 
 
-# Resolve anime TV metadata, filling the imdb_id from tmdb when ani.zip lacks it.
 async def _fetch_anime_tv(title, season, episode, encoded_string, year, quality) -> dict | None:
     try:
         result = await fetch_anime_metadata(title, season, episode, encoded_string, year, quality)
@@ -584,7 +589,6 @@ async def _fetch_anime_tv(title, season, episode, encoded_string, year, quality)
     return result
 
 
-# Resolve anime movie metadata, filling the imdb_id from tmdb when ani.zip lacks it.
 async def _fetch_anime_movie(title, encoded_string, year, quality) -> dict | None:
     try:
         result = await fetch_anime_movie_metadata(title, encoded_string, year, quality)
@@ -602,20 +606,103 @@ async def _fetch_anime_movie(title, encoded_string, year, quality) -> dict | Non
     return result
 
 
-# Parse a filename/caption and resolve full movie or TV metadata for the indexer.
+# ── TV & movie resolution ───────────────────────────────────────────────────
+async def fetch_tv_metadata(title, season, episode, encoded_string, year=None, quality=None, default_id=None) -> dict | None:
+    imdb_id, tmdb_id, explicit_imdb_id, use_tmdb = _split_default_id(default_id)
+    imdb_tv = None
+    imdb_ep = None
+
+    if not imdb_id and not tmdb_id:
+        imdb_id = await safe_imdb_search(title, "tvSeries", year)
+        use_tmdb = not bool(imdb_id)
+
+    if imdb_id and not use_tmdb:
+        try:
+            imdb_tv = await _cached_imdb_detail(imdb_id, "tvSeries")
+            imdb_ep = await _cached_imdb_season(imdb_id, season, episode)
+        except Exception as e:
+            LOGGER.warning(f"IMDb TV fetch failed [{imdb_id}] -> {e}")
+            imdb_tv = imdb_ep = None
+            use_tmdb = True
+
+    # Reject a wrong Cinemeta hit (skipped for user-supplied ids).
+    if imdb_tv and not use_tmdb and not explicit_imdb_id:
+        sim = _title_similarity(title, imdb_tv.get("title", ""))
+        if sim < _CINEMETA_THRESHOLD:
+            LOGGER.info(f"IMDb TV title mismatch for '{title}': got '{imdb_tv.get('title', '')}' (sim={sim:.2f}) -> TMDb")
+            imdb_tv = None
+            use_tmdb = True
+
+    if use_tmdb or not imdb_tv:
+        LOGGER.info(f"No valid Cinemeta TV data for '{title}' S{season:02d}E{episode:02d} -> using TMDb")
+        if not tmdb_id:
+            tmdb_search = await safe_tmdb_search(title, "tv", year) or (await safe_tmdb_search(title, "tv", None) if year else None)
+            if not tmdb_search:
+                LOGGER.info(f"No TMDb TV result for '{title}' S{season:02d}E{episode:02d} (year={year})")
+                return None
+            tmdb_id = tmdb_search.id
+
+        tv = await _tmdb_details("tv", tmdb_id)
+        if not tv:
+            LOGGER.info(f"TMDb TV details failed for id={tmdb_id} ('{title}')")
+            return None
+        ep = await _tmdb_episode_details(tmdb_id, season, episode)
+        return _build_tmdb_tv_payload(tv, ep, season, episode, quality, encoded_string)
+
+    return _build_imdb_tv_payload(imdb_tv, imdb_ep or {}, imdb_id, title, season, episode, quality, encoded_string)
+
+
+async def fetch_movie_metadata(title, encoded_string, year=None, quality=None, default_id=None) -> dict | None:
+    imdb_id, tmdb_id, explicit_imdb_id, use_tmdb = _split_default_id(default_id)
+    imdb_details = None
+
+    if not imdb_id and not tmdb_id:
+        imdb_id = await safe_imdb_search(title, "movie", year)
+        use_tmdb = not bool(imdb_id)
+
+    if imdb_id and not use_tmdb:
+        try:
+            imdb_details = await _cached_imdb_detail(imdb_id, "movie")
+        except Exception as e:
+            LOGGER.warning(f"IMDb movie fetch failed [{title}] -> {e}")
+            imdb_details = None
+            use_tmdb = True
+
+    # Reject a wrong Cinemeta hit (skipped for user-supplied ids).
+    if imdb_details and not use_tmdb and not explicit_imdb_id:
+        sim = _title_similarity(title, imdb_details.get("title", ""))
+        if sim < _CINEMETA_THRESHOLD:
+            LOGGER.info(f"IMDb movie title mismatch for '{title}': got '{imdb_details.get('title', '')}' (sim={sim:.2f}) -> TMDb")
+            imdb_details = None
+            use_tmdb = True
+
+    if use_tmdb or not imdb_details:
+        LOGGER.info(f"No valid Cinemeta movie data for '{title}' (year={year}) -> using TMDb")
+        if not tmdb_id:
+            tmdb_result = await safe_tmdb_search(title, "movie", year) or (await safe_tmdb_search(title, "movie", None) if year else None)
+            if not tmdb_result:
+                LOGGER.info(f"No TMDb movie found for '{title}' (year={year})")
+                return None
+            tmdb_id = tmdb_result.id
+
+        movie = await _tmdb_details("movie", tmdb_id)
+        if not movie:
+            LOGGER.info(f"TMDb movie details failed for id={tmdb_id} ('{title}')")
+            return None
+        return _build_tmdb_movie_payload(movie, quality, encoded_string)
+
+    return _build_imdb_movie_payload(imdb_details, imdb_id, title, quality, encoded_string)
+
+
+# ── Main entry point ────────────────────────────────────────────────────────
 async def metadata(filename: str, channel: int, msg_id, override_id: str = None) -> dict | None:
     if _MULTIPART_RE.search(filename):
         LOGGER.info(f"Skipping {filename}: split video file not meant to be combined in Stremio")
         return None
 
-    # Detect split parts (.001/.002 etc.) on the RAW name first, then parse all
-    # metadata from the part-stripped name. If the numeric suffix is left in
-    # place the parser misreads it as an episode number (and the year as a
-    # season), e.g. a movie split "Memories (2013) ...mkv.001" wrongly becomes
-    # "Memories S2013E01". Split detection is orthogonal to combined-episode
-    # detection: a file can be BOTH split AND a combined/whole-season file, so
-    # the parts of a split combined file still group (via group_key) and
-    # recombine instead of landing in the combined folder as separate entries.
+    # Detect split parts (.001/.002) on the RAW name, then parse from the
+    # part-stripped name so the numeric suffix isn't misread as an episode.
+    # A file can be both split and a combined/whole-season file.
     split_info = parse_split_info(filename)
     part_number = split_info[1] if split_info else None
     parse_target = strip_part_suffix(filename) if split_info else filename
@@ -645,7 +732,7 @@ async def metadata(filename: str, channel: int, msg_id, override_id: str = None)
         LOGGER.warning(f"Invalid season/episode format for {filename}: {parsed}")
         return None
     elif season and not episode:
-        # Season pack with no episode number (e.g. "Season 01") -> whole-season combined.
+        # Season pack with no episode number -> whole-season combined.
         combined = {"season": season, "start": None, "end": None}
         episode = 1
     if not quality:
@@ -663,7 +750,6 @@ async def metadata(filename: str, channel: int, msg_id, override_id: str = None)
         encoded_string = None
 
     group_key = f"{channel}:{quality}:{split_info[0]}" if split_info else None
-
     anime_channel = _is_anime_channel(channel)
 
     try:
@@ -694,7 +780,6 @@ async def metadata(filename: str, channel: int, msg_id, override_id: str = None)
         return None
 
 
-# Pick a default id from the override, the global setting, then the filename itself.
 def _resolve_default_id(override_id, filename) -> str | None:
     for source in (override_id, getattr(Backend, "USE_DEFAULT_ID", None), filename):
         if not source:
@@ -708,102 +793,7 @@ def _resolve_default_id(override_id, filename) -> str | None:
     return None
 
 
-# ----------------- TV metadata -----------------
-
-# Resolve TV metadata, preferring Cinemeta and falling back to TMDb.
-async def fetch_tv_metadata(title, season, episode, encoded_string, year=None, quality=None, default_id=None) -> dict | None:
-    imdb_id, tmdb_id, explicit_imdb_id, use_tmdb = _split_default_id(default_id)
-    imdb_tv = None
-    imdb_ep = None
-
-    if not imdb_id and not tmdb_id:
-        imdb_id = await safe_imdb_search(title, "tvSeries", year)
-        use_tmdb = not bool(imdb_id)
-
-    if imdb_id and not use_tmdb:
-        try:
-            imdb_tv = await _cached_imdb_detail(imdb_id, "tvSeries")
-            imdb_ep = await _cached_imdb_season(imdb_id, season, episode)
-        except Exception as e:
-            LOGGER.warning(f"IMDb TV fetch failed [{imdb_id}] -> {e}")
-            imdb_tv = imdb_ep = None
-            use_tmdb = True
-
-    # Guard against Cinemeta returning a wrong hit (skipped for user-supplied ids).
-    if imdb_tv and not use_tmdb and not explicit_imdb_id:
-        sim = _title_similarity(title, imdb_tv.get("title", ""))
-        if sim < _CINEMETA_THRESHOLD:
-            LOGGER.info(f"IMDb TV title mismatch for '{title}': got '{imdb_tv.get('title', '')}' (sim={sim:.2f}) -> TMDb")
-            imdb_tv = None
-            use_tmdb = True
-
-    if use_tmdb or not imdb_tv:
-        LOGGER.info(f"No valid Cinemeta TV data for '{title}' S{season:02d}E{episode:02d} -> using TMDb")
-        if not tmdb_id:
-            tmdb_search = await safe_tmdb_search(title, "tv", year) or (await safe_tmdb_search(title, "tv", None) if year else None)
-            if not tmdb_search:
-                LOGGER.info(f"No TMDb TV result for '{title}' S{season:02d}E{episode:02d} (year={year})")
-                return None
-            tmdb_id = tmdb_search.id
-
-        tv = await _tmdb_details("tv", tmdb_id)
-        if not tv:
-            LOGGER.info(f"TMDb TV details failed for id={tmdb_id} ('{title}')")
-            return None
-        ep = await _tmdb_episode_details(tmdb_id, season, episode)
-        return _build_tmdb_tv_payload(tv, ep, season, episode, quality, encoded_string)
-
-    return _build_imdb_tv_payload(imdb_tv, imdb_ep or {}, imdb_id, title, season, episode, quality, encoded_string)
-
-
-# ----------------- Movie metadata -----------------
-
-# Resolve movie metadata, preferring Cinemeta and falling back to TMDb.
-async def fetch_movie_metadata(title, encoded_string, year=None, quality=None, default_id=None) -> dict | None:
-    imdb_id, tmdb_id, explicit_imdb_id, use_tmdb = _split_default_id(default_id)
-    imdb_details = None
-
-    if not imdb_id and not tmdb_id:
-        imdb_id = await safe_imdb_search(title, "movie", year)
-        use_tmdb = not bool(imdb_id)
-
-    if imdb_id and not use_tmdb:
-        try:
-            imdb_details = await _cached_imdb_detail(imdb_id, "movie")
-        except Exception as e:
-            LOGGER.warning(f"IMDb movie fetch failed [{title}] -> {e}")
-            imdb_details = None
-            use_tmdb = True
-
-    # Guard against Cinemeta returning a wrong hit (skipped for user-supplied ids).
-    if imdb_details and not use_tmdb and not explicit_imdb_id:
-        sim = _title_similarity(title, imdb_details.get("title", ""))
-        if sim < _CINEMETA_THRESHOLD:
-            LOGGER.info(f"IMDb movie title mismatch for '{title}': got '{imdb_details.get('title', '')}' (sim={sim:.2f}) -> TMDb")
-            imdb_details = None
-            use_tmdb = True
-
-    if use_tmdb or not imdb_details:
-        LOGGER.info(f"No valid Cinemeta movie data for '{title}' (year={year}) -> using TMDb")
-        if not tmdb_id:
-            tmdb_result = await safe_tmdb_search(title, "movie", year) or (await safe_tmdb_search(title, "movie", None) if year else None)
-            if not tmdb_result:
-                LOGGER.info(f"No TMDb movie found for '{title}' (year={year})")
-                return None
-            tmdb_id = tmdb_result.id
-
-        movie = await _tmdb_details("movie", tmdb_id)
-        if not movie:
-            LOGGER.info(f"TMDb movie details failed for id={tmdb_id} ('{title}')")
-            return None
-        return _build_tmdb_movie_payload(movie, quality, encoded_string)
-
-    return _build_imdb_movie_payload(imdb_details, imdb_id, title, quality, encoded_string)
-
-
-# ----------------- Candidate search (used by the /set command UI) -----------------
-
-# Build a single candidate dict for the picker UI.
+# ── Candidate search (/set command UI) ──────────────────────────────────────
 def _candidate_entry(source, title, year, imdb_id, tmdb_id, poster, backdrop, subtitle) -> dict:
     return {
         "source": source,
@@ -817,7 +807,6 @@ def _candidate_entry(source, title, year, imdb_id, tmdb_id, poster, backdrop, su
     }
 
 
-# Search IMDb + TMDb for picker candidates of the given media type.
 async def _search_candidates(query: str, media_type: str, year: int | None = None, limit: int = 8) -> list[dict]:
     query = (query or "").strip()
     if not query:
@@ -860,19 +849,15 @@ async def _search_candidates(query: str, media_type: str, year: int | None = Non
     return results[:limit]
 
 
-# Search movie candidates for the picker UI.
 async def search_movie_candidates(query: str, year: int | None = None, limit: int = 8) -> list[dict]:
     return await _search_candidates(query, "movie", year, limit)
 
 
-# Search TV candidates for the picker UI.
 async def search_tv_candidates(query: str, limit: int = 8) -> list[dict]:
     return await _search_candidates(query, "tv", None, limit)
 
 
-# ----------------- Manual /set command helpers -----------------
-
-# Reshape an indexer payload into the manual-rescan response shape.
+# ── Manual /set helpers ─────────────────────────────────────────────────────
 def _to_selection_payload(data: dict, media_type: str) -> dict:
     return {
         "tmdb_id": data.get("tmdb_id"),
@@ -891,7 +876,6 @@ def _to_selection_payload(data: dict, media_type: str) -> dict:
     }
 
 
-# Fetch full movie metadata for a manually selected id.
 async def fetch_selected_movie_metadata(selected_id: str) -> dict | None:
     selected_id = str(selected_id).strip()
     if not selected_id:
@@ -902,7 +886,6 @@ async def fetch_selected_movie_metadata(selected_id: str) -> dict | None:
     return _to_selection_payload(data, "movie") if data else None
 
 
-# Fetch full TV metadata for a manually selected id.
 async def fetch_selected_tv_metadata(selected_id: str) -> dict | None:
     selected_id = str(selected_id).strip()
     imdb_id, tmdb_id, _, use_tmdb = _split_default_id(selected_id)
