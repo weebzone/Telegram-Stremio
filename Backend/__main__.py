@@ -15,9 +15,7 @@ from Backend.helper import subscription_task_manager
 from Backend.helper.scan_manager import scan_manager, dbcheck_manager
 from Backend.helper.link_checker import DeadLinkChecker
 from Backend.fastapi.main import app
-from Backend.helper.auto_catalog import (
-    start_auto_catalog_sync_background, start_auto_catalog_interval_loop
-)
+from Backend.helper.auto_catalog import start_auto_catalog_sync_background
 
 
 loop = get_event_loop()
@@ -76,8 +74,6 @@ async def start_services():
 
         
         loop.create_task(start_auto_catalog_sync_background(db, delay_seconds=20, full_rebuild=False))
-
-        loop.create_task(start_auto_catalog_interval_loop(db))
 
         await subscription_task_manager.sync(StreamBot)
         

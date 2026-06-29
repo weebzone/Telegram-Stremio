@@ -13,9 +13,6 @@ from Backend.logger import LOGGER
 AUTO_CATALOG_REGION = "IN"
 AUTO_SYNC_CONCURRENCY = 5
 
-AUTO_CATALOG_INTERVAL_SYNC = True
-AUTO_CATALOG_SYNC_INTERVAL_MINUTES = 60
-
 # User can choose exactly which auto catalogs are enabled.
 AUTO_CATALOG_DEFINITIONS = [
     {"key": "bollywood", "name": "Bollywood", "group": "Language"},
@@ -47,13 +44,7 @@ AUTO_CATALOG_DEFINITIONS = [
     {"key": "crunchyroll", "name": "Crunchyroll", "group": "OTT"},
 ]
 
-CATALOG_BY_NAME = {item["name"]: item for item in AUTO_CATALOG_DEFINITIONS}
 CATALOG_BY_KEY = {item["key"]: item for item in AUTO_CATALOG_DEFINITIONS}
-DEFAULT_ENABLED_AUTO_CATALOG_KEYS = set(getattr(
-    Telegram,
-    "AUTO_CATALOG_ENABLED_KEYS",
-    [item["key"] for item in AUTO_CATALOG_DEFINITIONS]
-))
 
 _LANGUAGE_CATALOGS = {
     "hi": ["Bollywood"],
@@ -197,9 +188,6 @@ async def get_auto_catalog_settings(db) -> dict:
         "enabled_keys": sorted(enabled_set),
         "definitions": definitions,
         "region": AUTO_CATALOG_REGION,
-        "genre_catalogs_removed": True,
-        "interval_sync_enabled": bool(AUTO_CATALOG_INTERVAL_SYNC),
-        "interval_minutes": AUTO_CATALOG_SYNC_INTERVAL_MINUTES,
     }
 
 
@@ -741,48 +729,6 @@ async def start_auto_catalog_sync_background(db, *, full_rebuild: bool = False, 
         "mode": "full_rebuild" if full_rebuild else "quick_sync",
         "started_at": started_at,
     }
-
-
-async def start_auto_catalog_interval_loop(db) -> None:
-    """Run quick sync every N minutes after auto-catalog settings exist.
-
-    This avoids per-upload TMDb calls and prevents first boot from creating
-    catalogs until the admin chooses options from /catalogs.
-    """
-    if not AUTO_CATALOG_INTERVAL_SYNC:
-        LOGGER.info("Auto catalog interval sync disabled.")
-        return
-
-    interval_minutes = max(1, int(AUTO_CATALOG_SYNC_INTERVAL_MINUTES or 60))
-    interval_seconds = interval_minutes * 60
-    LOGGER.info(f"Auto catalog interval sync loop started. Interval: {interval_minutes} minutes")
-
-    while True:
-        try:
-            await asyncio.sleep(interval_seconds)
-
-            if not await has_auto_catalog_settings(db):
-                LOGGER.info("Hourly auto catalog quick sync skipped: no auto catalog selection saved yet.")
-                continue
-
-            if _auto_sync_lock.locked() or (_auto_sync_task and not _auto_sync_task.done()):
-                LOGGER.info("Hourly auto catalog quick sync skipped: another sync is already running.")
-                continue
-
-            result = await start_auto_catalog_sync_background(
-                db,
-                full_rebuild=False,
-                force=False,
-                delay_seconds=0,
-            )
-            LOGGER.info(f"Hourly auto catalog quick sync queued: {result}")
-
-        except asyncio.CancelledError:
-            LOGGER.info("Auto catalog interval sync loop stopped.")
-            break
-        except Exception as exc:
-            LOGGER.error(f"Hourly auto catalog quick sync failed: {exc}")
-            await asyncio.sleep(300)
 
 
 async def get_auto_catalog_sync_status(db) -> dict:
