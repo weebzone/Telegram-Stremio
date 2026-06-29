@@ -633,8 +633,10 @@ async def fetch_tv_metadata(title, season, episode, encoded_string, year=None, q
     imdb_tv = None
     imdb_ep = None
 
+    # Year is intentionally ignored for TV: a series' seasons can air in different
+    # years, so keying the search/cache on year would split one show into many.
     if not imdb_id and not tmdb_id:
-        imdb_id = await safe_imdb_search(title, "tvSeries", year)
+        imdb_id = await safe_imdb_search(title, "tvSeries", None)
         use_tmdb = not bool(imdb_id)
 
     if imdb_id and not use_tmdb:
@@ -657,7 +659,7 @@ async def fetch_tv_metadata(title, season, episode, encoded_string, year=None, q
     if use_tmdb or not imdb_tv:
         LOGGER.info(f"No valid Cinemeta TV data for '{title}' S{season:02d}E{episode:02d} -> using TMDb")
         if not tmdb_id:
-            tmdb_search = await safe_tmdb_search(title, "tv", year) or (await safe_tmdb_search(title, "tv", None) if year else None)
+            tmdb_search = await safe_tmdb_search(title, "tv", None)
             if not tmdb_search:
                 LOGGER.info(f"No TMDb TV result for '{title}' S{season:02d}E{episode:02d} (year={year})")
                 return None
