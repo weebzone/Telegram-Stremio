@@ -84,6 +84,24 @@
 }
 .add-btn:hover { background: color-mix(in srgb, var(--primary) 28%, transparent); }
 
+/* ── Anime channel checkbox ──────────────────────────────────────────────── */
+.auth-item .s-input { min-width: 0; }
+.anime-check {
+    display: inline-flex; align-items: center; gap: 0.35rem; flex-shrink: 0;
+    cursor: pointer; user-select: none; white-space: nowrap;
+    padding: 0.4rem 0.6rem; border-radius: 0.6rem;
+    border: 1px solid var(--border); background: transparent;
+    font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.03em; color: var(--text-sec); transition: all 0.15s;
+}
+.anime-check input { width: 0.95rem; height: 0.95rem; accent-color: var(--primary); cursor: pointer; margin: 0; }
+.anime-check:hover { border-color: color-mix(in srgb, var(--primary) 35%, transparent); }
+.anime-check.is-anime {
+    color: var(--primary);
+    border-color: color-mix(in srgb, var(--primary) 45%, transparent);
+    background: color-mix(in srgb, var(--primary) 12%, transparent);
+}
+
 /* ── Grid helpers ────────────────────────────────────────────────────────── */
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
 @media (max-width: 640px) { .grid-2 { grid-template-columns: 1fr; } }
@@ -171,12 +189,19 @@
         <!-- Auth Channels -->
         <label class="s-label">AUTH_CHANNELS
             <span style="font-weight:400;text-transform:none;letter-spacing:0">
-                — users must be a member of at least one</span>
+                — users must be a member of at least one. Tick <strong>Anime</strong> on a
+                channel to index its files with AniList + api.ani.zip metadata.</span>
         </label>
+        {% set anime_norm = settings.anime_channels | map('string') | map('replace', '-100', '') | list %}
         <div class="multi-list-items" id="auth_channels_items">
             {% for ch in settings.auth_channels %}
-            <div class="multi-item">
+            {% set is_anime = (ch | string | replace('-100', '')) in anime_norm %}
+            <div class="multi-item auth-item">
                 <input type="text" class="s-input" value="{{ ch }}" data-list="auth_channels">
+                <label class="anime-check {% if is_anime %}is-anime{% endif %}" title="Mark as anime channel — uses AniList/ani.zip metadata">
+                    <input type="checkbox" class="anime-toggle" {% if is_anime %}checked{% endif %} onchange="syncAnimeChip(this)">
+                    <span>Anime</span>
+                </label>
                 <button class="remove-btn" onclick="removeItem(this)" title="Remove">
                     <i class="fa-solid fa-xmark"></i>
                 </button>
@@ -188,36 +213,6 @@
                 placeholder="Channel username or -100xxxxx ID"
                 onkeydown="if(event.key==='Enter'){event.preventDefault();addItem('auth_channels')}">
             <button class="add-btn" onclick="addItem('auth_channels')">+ Add Channel</button>
-        </div>
-
-        <hr class="divider">
-
-        <!-- Anime Channels -->
-        <label class="s-label">ANIME_CHANNELS
-            <span style="font-weight:400;text-transform:none;letter-spacing:0">
-                — files from these channels use AniList + api.ani.zip for accurate metadata</span>
-        </label>
-        <p style="font-size:0.78rem;color:var(--text-sec);margin-bottom:0.75rem">
-            Enter numeric channel IDs (e.g. <code>-1001234567890</code> or bare
-            <code>1234567890</code>). Use this for anime channels where IMDb/TMDB
-            matching is inaccurate.
-        </p>
-        <div class="multi-list-items" id="anime_channels_items">
-            {% for ch in settings.anime_channels %}
-            <div class="multi-item">
-                <input type="text" class="s-input" value="{{ ch }}" data-list="anime_channels"
-                    placeholder="-100xxxxxxxxxx">
-                <button class="remove-btn" onclick="removeItem(this)" title="Remove">
-                    <i class="fa-solid fa-xmark"></i>
-                </button>
-            </div>
-            {% endfor %}
-        </div>
-        <div class="add-row">
-            <input type="text" id="anime_channels_new" class="s-input"
-                placeholder="-100xxxxxxxxxx or bare numeric ID"
-                onkeydown="if(event.key==='Enter'){event.preventDefault();addItem('anime_channels')}">
-            <button class="add-btn" onclick="addItem('anime_channels')">+ Add Channel</button>
         </div>
     </div>
 
@@ -571,17 +566,39 @@ function togglePwdVisibility() {
 }
 
 /* ── Multi-value list helpers ─────────────────────────────────────────── */
+function authRowHTML(value, isAnime) {
+    return `
+        <input type="text" class="s-input" value="${escapeHtmlAttr(value)}" data-list="auth_channels">
+        <label class="anime-check ${isAnime ? 'is-anime' : ''}" title="Mark as anime channel — uses AniList/ani.zip metadata">
+            <input type="checkbox" class="anime-toggle" ${isAnime ? 'checked' : ''} onchange="syncAnimeChip(this)">
+            <span>Anime</span>
+        </label>
+        <button class="remove-btn" onclick="removeItem(this)" title="Remove">
+            <i class="fa-solid fa-xmark"></i>
+        </button>
+    `;
+}
+
+function syncAnimeChip(cb) {
+    const chip = cb.closest('.anime-check');
+    if (chip) chip.classList.toggle('is-anime', cb.checked);
+}
+
 function addItem(listKey) {
     const newInput = document.getElementById(listKey + '_new');
     const value = newInput.value.trim();
     if (!value) return;
 
     const container = document.getElementById(listKey + '_items');
-    const isNumeric = listKey === 'approver_ids';
-
     const item = document.createElement('div');
-    item.className = 'multi-item';
-    item.innerHTML = `
+
+    if (listKey === 'auth_channels') {
+        item.className = 'multi-item auth-item';
+        item.innerHTML = authRowHTML(value, false);
+    } else {
+        const isNumeric = listKey === 'approver_ids';
+        item.className = 'multi-item';
+        item.innerHTML = `
         <input type="${isNumeric ? 'number' : 'text'}"
                class="s-input"
                value="${escapeHtmlAttr(value)}"
@@ -590,9 +607,25 @@ function addItem(listKey) {
             <i class="fa-solid fa-xmark"></i>
         </button>
     `;
+    }
+
     container.appendChild(item);
     newInput.value = '';
     newInput.focus();
+}
+
+function collectAnimeChannels() {
+    const container = document.getElementById('auth_channels_items');
+    if (!container) return [];
+    const out = [];
+    container.querySelectorAll('.multi-item').forEach(row => {
+        const toggle = row.querySelector('.anime-toggle');
+        const input = row.querySelector('input[data-list="auth_channels"]');
+        if (toggle && toggle.checked && input && input.value.trim()) {
+            out.push(input.value.trim());
+        }
+    });
+    return out;
 }
 
 function removeItem(btn) {
@@ -625,7 +658,7 @@ async function saveSettings() {
         upstream_repo:                 document.getElementById('upstream_repo').value.trim(),
         upstream_branch:               document.getElementById('upstream_branch').value.trim(),
         auth_channels:                 collectList('auth_channels'),
-        anime_channels:                collectList('anime_channels'),
+        anime_channels:                collectAnimeChannels(),
         subscription:                  document.getElementById('subscription').checked,
         subscription_group_id:         parseInt(document.getElementById('subscription_group_id').value || '0', 10),
         payment_instructions:          document.getElementById('payment_instructions').value.trim(),
@@ -719,9 +752,8 @@ function renderSettings(s) {
     document.getElementById('subscription_group_id').value = s.subscription_group_id || 0;
     document.getElementById('http_proxy_url').value = s.http_proxy_url || '';
 
-    // Simple multi-value lists
-    rebuildSimpleList('auth_channels_items', s.auth_channels, 'text');
-    rebuildSimpleList('anime_channels_items', s.anime_channels, 'text');
+    // Auth channels (with per-channel anime checkbox) + other multi-value lists
+    rebuildAuthChannels(s.auth_channels, s.anime_channels);
     rebuildSimpleList('approver_ids_items', s.approver_ids, 'number');
     rebuildSimpleList('multi_tokens_items', s.multi_tokens, 'text');
     rebuildSimpleList('global_search_channels_items', s.global_search_channels, 'text');
@@ -746,6 +778,20 @@ function rebuildSimpleList(containerId, values, inputType) {
                 <i class="fa-solid fa-xmark"></i>
             </button>
         `;
+        container.appendChild(item);
+    });
+}
+
+function rebuildAuthChannels(values, animeValues) {
+    const container = document.getElementById('auth_channels_items');
+    if (!container) return;
+    const animeNorm = (animeValues || []).map(v => String(v).split('-100').join(''));
+    container.innerHTML = '';
+    (values || []).forEach(val => {
+        const isAnime = animeNorm.includes(String(val).split('-100').join(''));
+        const item = document.createElement('div');
+        item.className = 'multi-item auth-item';
+        item.innerHTML = authRowHTML(val, isAnime);
         container.appendChild(item);
     });
 }
