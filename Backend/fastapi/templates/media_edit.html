@@ -469,10 +469,10 @@
         </div>
 
         {% if media_type == 'movie' and media_details.telegram %}
-        <div class="space-y-3">
+        <div class="space-y-3" id="movie-quality-list">
             {% set sorted_qualities = media_details.telegram|sort(attribute='quality') %}
             {% for quality in sorted_qualities %}
-            <div class="quality-row rounded-2xl p-4 sm:p-5">
+            <div class="quality-row rounded-2xl p-4 sm:p-5" data-quality-row>
                 <div class="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
                     <div class="min-w-0 flex-1">
                         <div class="flex flex-wrap items-center gap-2 sm:gap-3">
@@ -491,7 +491,7 @@
                         <button onclick="runSpeedTest('{{ quality.id }}', 'movie', '{{ quality.quality }}')" class="btn-ui btn-info w-full">
                             🚀 Speed Test
                         </button>
-                        <button onclick="deleteQuality('{{ quality.id }}')" class="btn-ui btn-danger w-full">
+                        <button onclick="deleteQuality('{{ quality.id }}', this)" class="btn-ui btn-danger w-full">
                             Delete
                         </button>
                     </div>
@@ -499,30 +499,39 @@
             </div>
             {% endfor %}
         </div>
+        <div id="content-empty-state" class="hidden text-center py-10">
+            <p class="muted text-sm sm:text-base">No content available</p>
+        </div>
 
         {% elif media_type == 'tv' and media_details.seasons %}
-        <div class="space-y-4 sm:space-y-5">
+        <div class="space-y-4 sm:space-y-5" id="season-list">
             {% for season in media_details.seasons|sort(attribute='season_number') %}
-            <div class="glass-card-soft rounded-3xl overflow-hidden border border-hairline">
+            <div class="glass-card-soft rounded-3xl overflow-hidden border border-hairline" data-season-block data-season="{{ season.season_number }}">
                 <div class="px-4 sm:px-5 lg:px-6 py-4 sm:py-5 border-b border-hairline bg-surface">
                     <div class="flex items-center justify-between gap-3">
-                        <div>
+                        <div class="min-w-0">
                             <h4 class="section-title text-base sm:text-lg lg:text-xl">Season {{ season.season_number }}</h4>
-                            <p class="muted text-xs sm:text-sm mt-1">{{ season.episodes|length }} episode{{ 's' if season.episodes|length != 1 else '' }}</p>
+                            <p class="muted text-xs sm:text-sm mt-1" data-ep-count>{{ season.episodes|length }} episode{{ 's' if season.episodes|length != 1 else '' }}</p>
                         </div>
 
-                        <button type="button" onclick="toggleSeason({{ loop.index0 }})" class="btn-ui btn-ghost px-3 py-2">
-                            <svg id="season-arrow-{{ loop.index0 }}" class="w-4 h-4 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-                            </svg>
-                        </button>
+                        <div class="flex items-center gap-2 flex-shrink-0">
+                            <button type="button" onclick="deleteTVSeason({{ season.season_number }}, this)" class="btn-ui btn-danger px-3 py-2 text-xs sm:text-sm" title="Delete entire Season {{ season.season_number }}">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                <span class="hidden sm:inline">Delete Season</span>
+                            </button>
+                            <button type="button" onclick="toggleSeason({{ loop.index0 }})" class="btn-ui btn-ghost px-3 py-2">
+                                <svg id="season-arrow-{{ loop.index0 }}" class="w-4 h-4 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                </svg>
+                            </button>
+                        </div>
                     </div>
                 </div>
 
                 <div id="season-content-{{ loop.index0 }}" class="season-content">
-                    <div class="divide-y divide-hairline">
+                    <div class="divide-y divide-hairline" data-episodes>
                         {% for episode in season.episodes|sort(attribute='episode_number') %}
-                        <div class="p-4 sm:p-5">
+                        <div class="p-4 sm:p-5" data-episode-block data-episode="{{ episode.episode_number }}">
                             <div class="flex flex-col xl:flex-row xl:items-start gap-4">
                                 <div class="flex-shrink-0 w-12 h-12 rounded-2xl bg-primary/15 border border-primary/20 flex items-center justify-center mx-auto xl:mx-0">
                                     <span class="text-sm font-black text-primary">{{ episode.episode_number }}</span>
@@ -531,16 +540,16 @@
                                 <div class="flex-1 min-w-0">
                                     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
                                         <h5 class="text-sm sm:text-base font-semibold text-white text-center sm:text-left">{{ episode.title }}</h5>
-                                        <button onclick="deleteTVEpisode({{ season.season_number }}, {{ episode.episode_number }})" class="btn-ui btn-danger px-3 py-2 text-xs sm:text-sm w-full sm:w-auto">
+                                        <button onclick="deleteTVEpisode({{ season.season_number }}, {{ episode.episode_number }}, this)" class="btn-ui btn-danger px-3 py-2 text-xs sm:text-sm w-full sm:w-auto">
                                             Delete Episode
                                         </button>
                                     </div>
 
-                                    {% if episode.telegram %}
-                                    <div class="space-y-2">
+                                    <div class="space-y-2" data-ep-qualities>
+                                        {% if episode.telegram %}
                                         {% set sorted_episode_qualities = episode.telegram|sort(attribute='quality') %}
                                         {% for quality in sorted_episode_qualities %}
-                                        <div class="quality-row rounded-2xl p-3 sm:p-4">
+                                        <div class="quality-row rounded-2xl p-3 sm:p-4" data-tv-quality>
                                             <div class="flex flex-col xl:flex-row xl:items-center justify-between gap-3">
                                                 <div class="min-w-0 flex-1">
                                                     <div class="flex flex-wrap items-center gap-2 sm:gap-3">
@@ -557,31 +566,28 @@
                                                     <button onclick="runSpeedTest('{{ quality.id }}', 'tv', '{{ quality.quality }}')" class="btn-ui btn-info w-full text-xs sm:text-sm">
                                                         🚀 Speed Test
                                                     </button>
-                                                    <button onclick="deleteTVQuality({{ season.season_number }}, {{ episode.episode_number }}, '{{ quality.id }}')" class="btn-ui btn-danger w-full text-xs sm:text-sm">
+                                                    <button onclick="deleteTVQuality({{ season.season_number }}, {{ episode.episode_number }}, '{{ quality.id }}', this)" class="btn-ui btn-danger w-full text-xs sm:text-sm">
                                                         Delete
                                                     </button>
                                                 </div>
                                             </div>
                                         </div>
                                         {% endfor %}
+                                        {% else %}
+                                        <p class="muted text-xs sm:text-sm text-center sm:text-left" data-no-qualities>No qualities available</p>
+                                        {% endif %}
                                     </div>
-                                    {% else %}
-                                    <p class="muted text-xs sm:text-sm text-center sm:text-left">No qualities available</p>
-                                    {% endif %}
                                 </div>
                             </div>
                         </div>
                         {% endfor %}
                     </div>
-
-                    <div class="px-4 sm:px-5 lg:px-6 py-4 border-t border-hairline bg-surface flex justify-center sm:justify-start">
-                        <button onclick="deleteTVSeason({{ season.season_number }})" class="btn-ui btn-danger px-4 py-2 text-sm">
-                            Delete Entire Season
-                        </button>
-                    </div>
                 </div>
             </div>
             {% endfor %}
+        </div>
+        <div id="content-empty-state-tv" class="hidden text-center py-10">
+            <p class="muted text-sm sm:text-base">No content available</p>
         </div>
         {% else %}
         <div class="text-center py-10">
@@ -885,7 +891,29 @@
         }
     }
 
-    async function deleteQuality(id) {
+    function _refreshSeasonHeight(node) {
+        const content = node.closest('.season-content') || (node.querySelector ? node.querySelector('.season-content') : null);
+        if (content && !content.classList.contains('season-collapsed')) {
+            requestAnimationFrame(() => { content.style.maxHeight = content.scrollHeight + 'px'; });
+        }
+    }
+
+    function _updateSeasonCount(seasonBlock) {
+        const count = seasonBlock.querySelectorAll('[data-episode-block]').length;
+        const label = seasonBlock.querySelector('[data-ep-count]');
+        if (label) label.textContent = `${count} episode${count !== 1 ? 's' : ''}`;
+        return count;
+    }
+
+    function _checkContentEmpty(listId, emptyId) {
+        const list = document.getElementById(listId);
+        if (list && !list.querySelector(list === document.getElementById('season-list') ? '[data-season-block]' : '[data-quality-row]')) {
+            list.classList.add('hidden');
+            document.getElementById(emptyId)?.classList.remove('hidden');
+        }
+    }
+
+    async function deleteQuality(id, btn) {
         if (!confirm(`Are you sure you want to delete ${id}?`)) return;
 
         try {
@@ -895,7 +923,8 @@
 
             if (response.ok) {
                 showSuccessMessage(`${id} deleted successfully`);
-                setTimeout(() => location.reload(), 900);
+                btn?.closest('[data-quality-row]')?.remove();
+                _checkContentEmpty('movie-quality-list', 'content-empty-state');
             } else {
                 const error = await response.json().catch(() => ({}));
                 showErrorMessage(`Error deleting: ${error.detail || 'Unknown error'}`);
@@ -906,7 +935,7 @@
         }
     }
 
-    async function deleteTVQuality(season, episode, id) {
+    async function deleteTVQuality(season, episode, id, btn) {
         if (!confirm(`Are you sure you want to delete ${id} from Season ${season} Episode ${episode}?`)) return;
 
         try {
@@ -916,7 +945,15 @@
 
             if (response.ok) {
                 showSuccessMessage(`${id} deleted successfully`);
-                setTimeout(() => location.reload(), 900);
+                const epBlock = btn?.closest('[data-episode-block]');
+                btn?.closest('[data-tv-quality]')?.remove();
+                if (epBlock) {
+                    const qWrap = epBlock.querySelector('[data-ep-qualities]');
+                    if (qWrap && !qWrap.querySelector('[data-tv-quality]')) {
+                        qWrap.innerHTML = '<p class="muted text-xs sm:text-sm text-center sm:text-left" data-no-qualities>No qualities available</p>';
+                    }
+                    _refreshSeasonHeight(epBlock);
+                }
             } else {
                 const error = await response.json().catch(() => ({}));
                 showErrorMessage(`Error deleting: ${error.detail || 'Unknown error'}`);
@@ -927,7 +964,7 @@
         }
     }
 
-    async function deleteTVEpisode(season, episode) {
+    async function deleteTVEpisode(season, episode, btn) {
         if (!confirm(`Delete Season ${season} Episode ${episode}? This removes the episode and all its qualities.`)) return;
 
         try {
@@ -937,7 +974,16 @@
 
             if (response.ok) {
                 showSuccessMessage(`Episode ${episode} deleted successfully`);
-                setTimeout(() => location.reload(), 900);
+                const seasonBlock = btn?.closest('[data-season-block]');
+                btn?.closest('[data-episode-block]')?.remove();
+                if (seasonBlock) {
+                    if (_updateSeasonCount(seasonBlock) === 0) {
+                        seasonBlock.remove();
+                        _checkContentEmpty('season-list', 'content-empty-state-tv');
+                    } else {
+                        _refreshSeasonHeight(seasonBlock);
+                    }
+                }
             } else {
                 const error = await response.json().catch(() => ({}));
                 showErrorMessage(`Error deleting episode: ${error.detail || 'Unknown error'}`);
@@ -948,7 +994,7 @@
         }
     }
 
-    async function deleteTVSeason(season) {
+    async function deleteTVSeason(season, btn) {
         if (!confirm(`Delete the entire Season ${season}? This action cannot be undone.`)) return;
 
         try {
@@ -958,7 +1004,8 @@
 
             if (response.ok) {
                 showSuccessMessage(`Season ${season} deleted successfully`);
-                setTimeout(() => location.reload(), 900);
+                btn?.closest('[data-season-block]')?.remove();
+                _checkContentEmpty('season-list', 'content-empty-state-tv');
             } else {
                 const error = await response.json().catch(() => ({}));
                 showErrorMessage(`Error deleting season: ${error.detail || 'Unknown error'}`);
