@@ -3,7 +3,6 @@ from pyrogram.errors import FloodWait
 from Backend.logger import LOGGER
 from Backend.helper.encrypt import decode_string
 
-# Tri-state results so we only ever flag links we positively confirmed are dead.
 ALIVE, DEAD, UNKNOWN = "alive", "dead", "unknown"
 
 
@@ -22,8 +21,7 @@ class DeadLinkChecker:
         asyncio.create_task(self._run_loop())
 
     async def _run_loop(self):
-        # Wait a minute before the first scan so the bots can boot up
-        await asyncio.sleep(60)
+        await asyncio.sleep(120)
 
         while self.is_running:
             try:
@@ -122,10 +120,6 @@ class DeadLinkChecker:
 
         chat_id = int(f"-100{chat_id}")
         msg_id = int(msg_id)
-
-        # A link is DEAD only if a client can read the message and finds it deleted or
-        # without media. Transient/access errors fall through to UNKNOWN so we never
-        # flag a file that simply could not be reached this round.
         confirmed_dead = False
         for client in clients:
             try:
