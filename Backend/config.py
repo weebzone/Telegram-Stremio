@@ -3,7 +3,6 @@ from dotenv import load_dotenv
 
 load_dotenv(path.join(path.dirname(path.dirname(__file__)), "config.env"))
 
-
 class Telegram:
     # ── Required: Telegram clients ───────────────────────────────────────────
     API_ID           = int(getenv("API_ID", "0"))
@@ -18,10 +17,7 @@ class Telegram:
     PORT     = int(getenv("PORT", "8000"))
     OWNER_ID = int(getenv("OWNER_ID", "0"))
 
-    # ── Legacy migration fallbacks ────────────────────────────────────────────
-    # These are READ ONCE by SettingsManager._seed_from_env() on first startup
-    # and then stored in the database.  Do NOT reference them elsewhere in the
-    # codebase — use SettingsManager.current().<property> instead.
+    # ── Read/Write in SettingsManager ────────────────────────────────────────────
     REPLACE_MODE                 = getenv("REPLACE_MODE", "true").lower() == "true"
     HIDE_CATALOG                 = getenv("HIDE_CATALOG", "false").lower() == "true"
     AUTH_CHANNEL                 = [c.strip() for c in (getenv("AUTH_CHANNEL") or "").split(",") if c.strip()]
