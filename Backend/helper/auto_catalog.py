@@ -1,15 +1,10 @@
 import asyncio
+import httpx
 from datetime import datetime
 from typing import Dict, List, Optional, Set, Tuple
-
-import httpx
-
 from Backend.config import Telegram
 from Backend.logger import LOGGER
 
-# -----------------------------
-# Auto catalog settings
-# -----------------------------
 AUTO_CATALOG_REGION = "IN"
 AUTO_SYNC_CONCURRENCY = 5
 
@@ -164,7 +159,6 @@ def _is_already_synced(doc: dict) -> bool:
 
 
 async def has_auto_catalog_settings(db) -> bool:
-    """Return True only after the admin saved auto-catalog options at least once."""
     state = await db.dbs["tracking"]["state"].find_one({"_id": "auto_catalog_settings"})
     return bool(state and isinstance(state.get("enabled_keys"), list))
 
@@ -280,8 +274,6 @@ def classify_media_from_tmdb(doc: dict, details: dict, watch_data: dict, enabled
             if bucket:
                 providers.add(bucket)
     else:
-        # No live watch-provider data (fetch failed / quota / no key): reuse the
-        # OTT buckets already stored on the doc so a re-classify keeps OTT tags.
         for stored in (doc.get("watch_providers") or []):
             if stored:
                 providers.add(stored)
