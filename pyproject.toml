@@ -1,6 +1,6 @@
 [project]
 name = "Telegram-Stremio"
-version = "3.4.0"
+version = "3.5.0"
 description = "A powerful, self-hosted Telegram Stremio Media Server built with FastAPI, MongoDB, and PyroFork seamlessly integrated with Stremio for automated media streaming and discovery."
 readme = "README.md"
 requires-python = ">=3.11"
