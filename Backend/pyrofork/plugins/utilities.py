@@ -1,17 +1,15 @@
 import time
-from pyrogram import filters, Client, enums
+
+from pyrogram import Client, enums, filters
 from pyrogram.types import Message
 
+from Backend import StartTime, __version__, db
 from Backend.helper.custom_filter import CustomFilters
-from Backend.logger import LOGGER
-from Backend import db, StartTime, __version__
 from Backend.helper.settings_manager import SettingsManager
+from Backend.logger import LOGGER
 
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  /stats — Quick dashboard
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
+#----- Human-readable uptime from a second count
 def _format_uptime(seconds: int) -> str:
     d, seconds = divmod(seconds, 86400)
     h, seconds = divmod(seconds, 3600)
@@ -27,6 +25,7 @@ def _format_uptime(seconds: int) -> str:
     return " ".join(parts)
 
 
+#----- Human-readable byte size
 def _format_bytes(size_bytes: int) -> str:
     for unit in ["B", "KB", "MB", "GB"]:
         if size_bytes < 1024:
@@ -35,45 +34,30 @@ def _format_bytes(size_bytes: int) -> str:
     return f"{size_bytes:.1f} TB"
 
 
+#----- Owner-only /stats: aggregate content and system metrics across DBs
 @Client.on_message(filters.command('stats') & filters.private & CustomFilters.owner, group=10)
 async def stats_command(client: Client, message: Message):
-    """Show a DB and system dashboard."""
-    status_msg = await message.reply_text(
-        "📊 Gathering stats…", quote=True
-    )
+    status_msg = await message.reply_text("📊 Gathering stats…", quote=True)
 
     try:
-        total_movies = 0
-        total_tv = 0
-        total_episodes = 0
-        total_streams = 0
-        total_db_size = 0
+        total_movies = total_tv = total_episodes = total_streams = total_db_size = 0
 
         for i in range(1, db.current_db_index + 1):
             storage = db.dbs.get(f"storage_{i}")
             if storage is None:
                 continue
 
-            # Movie counts
-            movie_count = await storage["movie"].count_documents({})
-            total_movies += movie_count
-
-            # Count movie streams
+            total_movies += await storage["movie"].count_documents({})
             async for movie in storage["movie"].find({}, {"telegram": 1}):
                 total_streams += len(movie.get("telegram", []))
 
-            # TV counts
-            tv_count = await storage["tv"].count_documents({})
-            total_tv += tv_count
-
-            # Count episodes and TV streams
+            total_tv += await storage["tv"].count_documents({})
             async for show in storage["tv"].find({}, {"seasons": 1}):
                 for season in show.get("seasons", []):
                     for episode in season.get("episodes", []):
                         total_episodes += 1
                         total_streams += len(episode.get("telegram", []))
 
-            # DB size
             try:
                 db_stats = await storage.command("dbStats")
                 total_db_size += db_stats.get("dataSize", 0)
@@ -100,5 +84,4 @@ async def stats_command(client: Client, message: Message):
 
     except Exception as e:
         LOGGER.error(f"[Stats] Error: {e}")
-        await status_msg.edit_text(f"❌ Error gathering stats: <code>{e}</code>",
-                                    parse_mode=enums.ParseMode.HTML)
+        await status_msg.edit_text(f"❌ Error gathering stats: <code>{e}</code>", parse_mode=enums.ParseMode.HTML)
