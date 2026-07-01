@@ -1,35 +1,42 @@
 import asyncio
 import json
 from datetime import datetime
-from fastapi import Request, Query, HTTPException
-from fastapi.responses import StreamingResponse
-from Backend import db, StartTime, __version__
-from Backend.logger import LOGGER
-from Backend.helper.settings_manager import SettingsManager
-from Backend.helper.pyro import get_readable_time
-from Backend.helper.metadata import (
-    search_movie_candidates,
-    search_tv_candidates,
-    fetch_selected_movie_metadata,
-    fetch_selected_tv_metadata,
-)
-from Backend.pyrofork.bot import multi_clients, StreamBot
-from Backend.helper.custom_dl import run_speed_test, _speed_test_single_client
 from time import time
+
+from fastapi import HTTPException, Query, Request
+from fastapi.responses import StreamingResponse
+
+from Backend import StartTime, __version__, db
+from Backend.fastapi.routes.stream_routes import _streamer_by_client
+from Backend.fastapi.routes.stremio_routes import invalidate_membership_cache
 from Backend.helper.auto_catalog import (
-    start_auto_catalog_sync_background,
-    get_auto_catalog_sync_status,
     get_auto_catalog_settings,
+    get_auto_catalog_sync_status,
+    start_auto_catalog_sync_background,
     update_auto_catalog_settings,
 )
-
+from Backend.helper.custom_dl import ByteStreamer, _speed_test_single_client, run_speed_test
+from Backend.helper.encrypt import decode_string
+from Backend.helper.metadata import (
+    fetch_selected_movie_metadata,
+    fetch_selected_tv_metadata,
+    search_movie_candidates,
+    search_tv_candidates,
+)
+from Backend.helper.pyro import get_readable_time
+from Backend.helper.scan_manager import dbcheck_manager, scan_manager
 from Backend.helper.settings_manager import SettingsManager
+from Backend.logger import LOGGER
+from Backend.pyrofork.bot import (
+    StreamBot,
+    client_avg_mbps,
+    client_failures,
+    multi_clients,
+    work_loads,
+)
 
 
-
-
-# --- API Routes for System Stats ---
-
+#----- System stats
 async def get_system_stats_api():
     try:
         db_stats = await db.get_database_stats()
@@ -56,9 +63,9 @@ async def get_system_stats_api():
             "server_status": "error", 
             "error": str(e)
         }
-    
-# --- API Routes for Media Management ---
 
+
+#----- Media management
 async def list_media_api(
     media_type: str = Query("movie", regex="^(movie|tv)$"),
     page: int = Query(1, ge=1),
@@ -220,8 +227,7 @@ async def delete_tv_season_api(tmdb_id: int, db_index: int, season: int):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# --- API Routes for Token Management ---
-
+#----- Token management
 async def create_token_api(payload: dict):
     try:
         token_name = payload.get("name")
@@ -258,39 +264,20 @@ async def update_token_limits_api(token: str, payload: dict):
             except (ValueError, TypeError, AttributeError):
                 return None
 
-        result = await db.update_api_token_limits(
+        await db.update_api_token_limits(
             token,
             parse_limit(daily_limit),
             parse_limit(monthly_limit)
         )
-        
-        if result:
-            return {"message": "Limits updated successfully"}
-        else:
-            return {"message": "Limits updated successfully"}
-            
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return {"message": "Limits updated successfully"}
 
-async def revoke_token_api(token: str):
-    try:
-        result = await db.revoke_api_token(token)
-        if result:
-            return {"message": "Token revoked successfully"}
-        else:
-            raise HTTPException(status_code=404, detail="Token not found")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# --- Speed Test API ---
-
+#----- Speed test
+#----- Decode a quality_id into (chat_id, msg_id); split files use the first part
 async def _resolve_speed_test_target(quality_id: str):
-    """Decode a quality_id into (chat_id, msg_id). Split files decode to a
-    'parts' list with no top-level ids, so fall back to the first part, which
-    lives in the same channel/DC and is representative of throughput."""
-    from Backend.helper.encrypt import decode_string
-
     decoded = await decode_string(quality_id)
     target = decoded["parts"][0] if decoded.get("parts") else decoded
     msg_id = target.get("msg_id")
@@ -300,16 +287,13 @@ async def _resolve_speed_test_target(quality_id: str):
     return int(f"-100{raw_cid}"), int(msg_id), decoded
 
 
+#----- Run a parallel download speed test across all connected clients
 async def speed_test_api(
     quality_id: str = Query(..., description="Encoded quality ID from DB"),
     tmdb_id: int = Query(...),
     db_index: int = Query(...),
     media_type: str = Query(..., regex="^(movie|tv)$"),
 ):
-    """
-    Decode quality_id using the same decode_string logic as the stream handler,
-    then run a parallel download speed test across all connected bot clients.
-    """
     try:
         chat_id, msg_id, decoded = await _resolve_speed_test_target(quality_id)
         if not chat_id or not msg_id:
@@ -327,21 +311,15 @@ async def speed_test_api(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# --- Speed Test SSE Streaming API ---
-
+#----- SSE speed test streaming per-client results as they finish
 async def speed_test_stream_api(
     quality_id: str,
     tmdb_id: int,
     db_index: int,
     media_type: str,
 ):
-    """
-    SSE version of the speed test. Streams each per-client result as a
-    'data:' event the moment that client finishes, so the UI can update live.
-    """
 
     async def event_generator():
-        # Decode quality_id → chat_id + message_id (split files test part 1)
         try:
             chat_id, msg_id, decoded = await _resolve_speed_test_target(quality_id)
             if not chat_id or not msg_id:
@@ -358,11 +336,10 @@ async def speed_test_stream_api(
             payload = json.dumps({"type": "error", "message": "No bot clients connected"})
             yield f"data: {payload}\n\n"
             return
-            
-        # Try to resolve the FileId to get the target DC
+
+        #----- Resolve the FileId to report the target DC
         target_dc = "?"
         try:
-            from Backend.helper.custom_dl import ByteStreamer
             primary_client = multi_clients.get(0) or next(iter(multi_clients.values()))
             streamer = ByteStreamer(primary_client)
             file_id = await streamer.get_file_properties(chat_id, int(msg_id))
@@ -370,16 +347,16 @@ async def speed_test_stream_api(
         except Exception:
             pass
 
-        # Send initial "start" event so the frontend can set up the table
+        #----- Initial start event so the frontend can build its table
         yield f"data: {json.dumps({'type': 'start', 'total': total, 'target_dc': target_dc})}\n\n"
 
-        # Run all clients in parallel; feed results into a queue as they finish
+        #----- Run all clients in parallel, feeding results into a queue
         queue: asyncio.Queue = asyncio.Queue()
 
         async def run_one(client, idx):
             async def on_progress(prog_data):
                 await queue.put({"type": "progress", "data": prog_data})
-                
+
             result = await _speed_test_single_client(
                 client, idx, chat_id, int(msg_id), progress_callback=on_progress
             )
@@ -393,11 +370,11 @@ async def speed_test_stream_api(
         completed = 0
         while completed < total:
             msg = await queue.get()
-            
+
             if msg["type"] == "progress":
                 payload = json.dumps(msg)
                 yield f"data: {payload}\n\n"
-            
+
             elif msg["type"] == "result":
                 completed += 1
                 payload = json.dumps({
@@ -408,10 +385,7 @@ async def speed_test_stream_api(
                 })
                 yield f"data: {payload}\n\n"
 
-        # Wait for any remaining tasks (should already be done)
         await asyncio.gather(*tasks, return_exceptions=True)
-
-        # Final done event
         yield f"data: {json.dumps({'type': 'done', 'total': total})}\n\n"
 
     return StreamingResponse(
@@ -419,34 +393,27 @@ async def speed_test_stream_api(
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",   # prevent nginx from buffering SSE
+            "X-Accel-Buffering": "no",
         },
     )
 
-# ---------------------------------------------------------------------------
-# Admin API Routes
-# ---------------------------------------------------------------------------
 
+#----- Admin stats
 async def get_admin_stats_api() -> dict:
-    from Backend.pyrofork.bot import work_loads, multi_clients, client_failures, client_avg_mbps
-    from Backend.fastapi.routes.stream_routes import _streamer_by_client
-    
-    # Sum cache entries across all active ByteStreamer instances
     cache_size = sum(len(s._file_id_cache) for s in _streamer_by_client.values())
-    
-    # Calculate bot workloads and health
+
     bot_stats = []
     for client_index in multi_clients:
         load = work_loads.get(client_index, 0)
         failures = client_failures.get(client_index, 0)
         mbps = client_avg_mbps.get(client_index, 0.0)
-        
+
         status = "healthy"
         if failures > 5:
             status = "degraded"
         if failures > 15:
             status = "failing"
-            
+
         bot_stats.append({
             "client_index": client_index,
             "display_name": f"Bot {client_index + 1}",
@@ -455,43 +422,44 @@ async def get_admin_stats_api() -> dict:
             "avg_mbps": round(mbps, 2),
             "status": status
         })
-        
+
     return {
         "cache_size": cache_size,
         "total_bots": len(multi_clients),
         "bot_workloads": bot_stats
     }
 
+
+#----- Clear the FileId cache across all active streamers
 async def clear_cache_api() -> dict:
-    from Backend.fastapi.routes.stream_routes import _streamer_by_client
-    from Backend.logger import LOGGER
-    
-    # Clear cache across all active ByteStreamer instances
     total_cleared = sum(len(s._file_id_cache) for s in _streamer_by_client.values())
     for streamer in _streamer_by_client.values():
         streamer._file_id_cache.clear()
     LOGGER.info(f"Admin cleared the FileId cache ({total_cleared} items purged across {len(_streamer_by_client)} clients).")
-    
+
     return {"status": "success", "message": f"{total_cleared} cached items cleared."}
 
+
+#----- List dead links recorded in the DB
 async def get_dead_links_api() -> dict:
-    from Backend import db
     try:
         dead_links = await db.get_all_dead_links()
         return {"status": "success", "data": dead_links}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
+
+#----- Recent stream analytics
 async def get_stream_analytics_api() -> dict:
-    from Backend import db
     try:
         data = await db.get_stream_analytics(limit=200)
         return {"status": "success", "data": data}
     except Exception as e:
-        from Backend.logger import LOGGER
         LOGGER.error(f"Stream analytics API error: {e}")
         return {"status": "error", "message": str(e)}
 
+
+#----- Purge all stream analytics records
 async def clear_stream_analytics_api() -> dict:
     try:
         result = await db.dbs["tracking"]["stream_analytics"].delete_many({})
@@ -504,12 +472,8 @@ async def clear_stream_analytics_api() -> dict:
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
-# ---------------------------------------------------------------------------
-# Admin Subscription Management API Routes
-# ---------------------------------------------------------------------------
-
+#----- Admin subscription management
 async def get_subscription_plans_api() -> dict:
-    from Backend import db
     try:
         plans = await db.get_subscription_plans()
         return {"status": "success", "data": plans}
@@ -517,7 +481,6 @@ async def get_subscription_plans_api() -> dict:
         return {"status": "error", "message": str(e)}
 
 async def add_subscription_plan_api(payload: dict) -> dict:
-    from Backend import db
     try:
         days = int(payload.get("days", 0))
         price = float(payload.get("price", 0.0))
@@ -535,7 +498,6 @@ async def add_subscription_plan_api(payload: dict) -> dict:
         raise HTTPException(status_code=500, detail=str(e))
 
 async def update_subscription_plan_api(plan_id: str, payload: dict) -> dict:
-    from Backend import db
     try:
         days = int(payload.get("days", 0))
         price = float(payload.get("price", 0.0))
@@ -553,7 +515,6 @@ async def update_subscription_plan_api(plan_id: str, payload: dict) -> dict:
          raise HTTPException(status_code=500, detail=str(e))
 
 async def delete_subscription_plan_api(plan_id: str) -> dict:
-    from Backend import db
     try:
         success = await db.delete_subscription_plan(plan_id)
         if success:
@@ -566,7 +527,6 @@ async def delete_subscription_plan_api(plan_id: str) -> dict:
         raise HTTPException(status_code=500, detail=str(e))
 
 async def get_all_subscribers_api() -> dict:
-    from Backend import db
     try:
         users = await db.get_all_subscribers()
         return {"status": "success", "data": users}
@@ -574,7 +534,6 @@ async def get_all_subscribers_api() -> dict:
         return {"status": "error", "message": str(e)}
 
 async def manage_subscriber_api(user_id: int, payload: dict) -> dict:
-    from Backend import db
     try:
         action = payload.get("action")
         days = int(payload.get("days", 0))
@@ -584,22 +543,19 @@ async def manage_subscriber_api(user_id: int, payload: dict) -> dict:
             
         success = await db.manage_subscriber(user_id, action, days)
 
-        # On revoke, also remove the user from the subscription group so the
-        # action takes effect immediately instead of waiting for the checker.
+        #----- On revoke, kick the user from the group immediately (ban+unban)
         if success and action == "delete" and SettingsManager.current().subscription:
             group_id = SettingsManager.current().subscription_group_id
             if group_id:
                 try:
-                    # ban + unban kicks without permanently blocking re-join
                     await StreamBot.ban_chat_member(group_id, user_id)
                     await StreamBot.unban_chat_member(group_id, user_id)
                 except Exception as exc:
                     LOGGER.warning(f"Revoke: could not remove user {user_id} from group: {exc}")
 
-        # Reflect the change immediately in the stremio membership cache.
+        #----- Reflect the change immediately in the stremio membership cache
         if success:
             try:
-                from Backend.fastapi.routes.stremio_routes import invalidate_membership_cache
                 invalidate_membership_cache(user_id)
             except Exception:
                 pass
@@ -615,16 +571,15 @@ async def manage_subscriber_api(user_id: int, payload: dict) -> dict:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# --- Access Management API ---
-
+#----- Access management
 async def get_all_tokens_api() -> dict:
     try:
         tokens = await db.get_all_api_tokens()
         now = datetime.utcnow()
         result = []
 
-        # Pre-load all subscribers into a dict keyed by user_id for O(1) lookup
-        subscriber_map = {}       # user_id (str) -> user doc
+        #----- Pre-load subscribers keyed by user_id for O(1) lookup
+        subscriber_map = {}
         if SettingsManager.current().subscription:
             try:
                 for u in await db.get_all_subscribers():
@@ -633,19 +588,18 @@ async def get_all_tokens_api() -> dict:
             except Exception:
                 pass
 
+        #----- Non-empty display name for a user
         def display_name(user, user_id, token_name=None):
-            """Return a non-empty display name for a user."""
             if user:
                 n = user.get("first_name") or user.get("username")
                 if n:
                     return n
-            # Fall back to the name stored on the token itself (set at creation time)
             if token_name:
                 return token_name
             return f"User {user_id}" if user_id else "Telegram User"
 
+        #----- Unified access entry from optional user + token records
         def build_entry(user_id, user, token_doc):
-            """ a unified access entry from optional user + token records."""
             expiry = None
             sub_status = None
             user_found = bool(user)
@@ -654,13 +608,11 @@ async def get_all_tokens_api() -> dict:
                 sub_status = user.get("subscription_status")
                 expiry = user.get("subscription_expiry")
 
-            # Token-level expiry as fallback
             if token_doc:
                 t_expiry = token_doc.get("subscription_expiry") or token_doc.get("expires_at")
                 if t_expiry and not expiry:
                     expiry = t_expiry
 
-            # Determine status
             if SettingsManager.current().subscription:
                 if not user_found:
                     is_expired = True
@@ -692,20 +644,17 @@ async def get_all_tokens_api() -> dict:
                 ),
             }
 
-        # Track user_ids that are already represented via a token row
         seen_user_ids = set()
 
-        # --- 1. Process all existing tokens ---
+        #----- 1. Process all existing tokens
         for t in tokens:
             token_user_id = t.get("user_id")
 
-            # Try to resolve user from subscriber_map using token's user_id
             user = None
             if token_user_id:
                 uid_str = str(token_user_id)
                 user = subscriber_map.get(uid_str)
                 if not user:
-                    # Fallback: query DB if not in subscriber_map (e.g. non-active subscribers)
                     try:
                         user = await db.get_user(int(token_user_id))
                     except Exception:
@@ -714,13 +663,13 @@ async def get_all_tokens_api() -> dict:
 
             result.append(build_entry(token_user_id, user, t))
 
-        # --- 2. Add subscribers who have NO token ---
+        #----- 2. Add subscribers who have no token
         for uid_str, u in subscriber_map.items():
             if uid_str in seen_user_ids:
-                continue  # already covered by a token row
+                continue
             result.append(build_entry(u.get("_id"), u, None))
 
-        # Sort: active-with-token first, then active-no-token, expired last
+        #----- Sort: active-with-token first, active-no-token next, expired last
         result.sort(key=lambda x: (x["is_expired"], not x["has_token"]))
         return {"tokens": result}
     except Exception as e:
@@ -728,7 +677,6 @@ async def get_all_tokens_api() -> dict:
 
 
 async def revoke_token_api(token: str) -> dict:
-    from Backend import db
     try:
         success = await db.revoke_api_token(token)
         if success:
@@ -740,9 +688,8 @@ async def revoke_token_api(token: str) -> dict:
         raise HTTPException(status_code=500, detail=str(e))
 
 
+#----- Assign or extend a subscription for any user_id
 async def assign_plan_api(user_id: int, days: int) -> dict:
-    """Assign (or extend) a subscription for any user by user_id, even if not in DB."""
-    from Backend import db
     try:
         if days < 1:
             raise HTTPException(status_code=400, detail="Days must be at least 1.")
@@ -754,9 +701,8 @@ async def assign_plan_api(user_id: int, days: int) -> dict:
         raise HTTPException(status_code=500, detail=str(e))
 
 
+#----- Link an orphan token to a Telegram user_id
 async def link_token_user_api(token: str, user_id: int) -> dict:
-    """Link an orphan token (no user_id) to a Telegram user_id."""
-    from Backend import db
     try:
         success = await db.link_token_user(token, user_id)
         if success:
@@ -768,8 +714,7 @@ async def link_token_user_api(token: str, user_id: int) -> dict:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-
-
+#----- Rescan: search TMDB candidates for a title
 async def search_media_rescan_api(media_type: str, query: str, year: int | None = None):
     query = (query or "").strip()
     if not query:
@@ -826,8 +771,7 @@ async def apply_media_rescan_api(request: Request, tmdb_id: int, db_index: int, 
 }
 
 
-# --- Custom Catalog APIs ---
-
+#----- Custom catalog APIs
 def _normalize_media_type(media_type: str) -> str:
     return "tv" if media_type in ["tv", "series"] else "movie"
 
@@ -1004,7 +948,7 @@ async def update_auto_catalog_settings_api(payload: dict):
 async def get_settings_api() -> dict:
 
     data = SettingsManager.current().to_dict()
-    # Never expose the raw password — let the UI know whether one is set
+    #----- Never expose the raw password; only whether one is set
     data["admin_password_set"] = bool(data.get("admin_password"))
     data["admin_password"] = ""
 
@@ -1019,11 +963,11 @@ async def get_settings_api() -> dict:
 
 async def update_settings_api(payload: dict) -> dict:
 
-    # Empty password string → don't change it
+    #----- Empty password string means leave it unchanged
     if "admin_password" in payload and not str(payload["admin_password"]).strip():
         del payload["admin_password"]
 
-    # ── Type coercion & validation ────────────────────────────────────────────
+    #----- Type coercion and validation
     bool_keys = {"replace_mode", "hide_catalog", "subscription", "show_proxy_and_non_proxy_both"}
     for key in bool_keys:
         if key in payload:
@@ -1087,7 +1031,7 @@ async def update_settings_api(payload: dict) -> dict:
             cleaned.append(channel)
         payload["anime_channels"] = cleaned
 
-    # Strip whitespace from string fields
+    #----- Strip whitespace from string fields
     for key in ("tmdb_api", "base_url", "upstream_repo", "upstream_branch",
                 "admin_username", "admin_password", "http_proxy_url",
                 "payment_instructions", "payment_qr_url"):
@@ -1101,23 +1045,17 @@ async def update_settings_api(payload: dict) -> dict:
             "reinit": reinit_results,
         }
     except ValueError as exc:
-        # Raised by db.reload_extra_databases() for unsafe/invalid DB changes
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-
 # ─────────────────────────────────────────────────────────────────────────────
-#  Tools — WebUI replacement for /scan, /rescan, /scanstatus, /cancelscan,
-#  /dbcheck. All driven from the Tools page; no bot commands remain.
+#  Tools — WebUI replacement for /scan, /rescan, /scanstatus, /cancelscan, /dbcheck
 # ─────────────────────────────────────────────────────────────────────────────
 
+#----- Pick a Telegram client capable of fetching channel messages
 def _scan_client():
-    """Pick a Telegram client capable of fetching channel messages.
-
-    Prefer the primary StreamBot (it must be an admin in the AUTH channels to
-    index them); fall back to any connected client."""
     if StreamBot is not None:
         return StreamBot
     if multi_clients:
@@ -1125,8 +1063,8 @@ def _scan_client():
     return None
 
 
+#----- Configured AUTH channels with friendly names for the picker
 async def get_tools_channels_api() -> dict:
-    """Return the configured AUTH channels with friendly names for the picker."""
     channels = list(SettingsManager.current().auth_channels)
     client = _scan_client()
     result = []
@@ -1142,8 +1080,8 @@ async def get_tools_channels_api() -> dict:
     return {"status": "success", "data": result}
 
 
+#----- Start a scan or rescan job over the given channels
 async def start_scan_api(payload: dict) -> dict:
-    from Backend.helper.scan_manager import scan_manager
     client = _scan_client()
     if client is None:
         raise HTTPException(status_code=503, detail="No Telegram client is connected yet.")
@@ -1162,18 +1100,15 @@ async def start_scan_api(payload: dict) -> dict:
 
 
 async def cancel_scan_api() -> dict:
-    from Backend.helper.scan_manager import scan_manager
     result = await scan_manager.cancel()
     return {"status": "success" if result.get("ok") else "error", **result}
 
 
 async def scan_status_api() -> dict:
-    from Backend.helper.scan_manager import scan_manager
     return {"status": "success", "data": scan_manager.get_status()}
 
 
 async def start_dbcheck_api() -> dict:
-    from Backend.helper.scan_manager import dbcheck_manager
     client = _scan_client()
     if client is None:
         raise HTTPException(status_code=503, detail="No Telegram client is connected yet.")
@@ -1184,26 +1119,16 @@ async def start_dbcheck_api() -> dict:
 
 
 async def cancel_dbcheck_api() -> dict:
-    from Backend.helper.scan_manager import dbcheck_manager
     result = await dbcheck_manager.cancel()
     return {"status": "success" if result.get("ok") else "error", **result}
 
 
 async def dbcheck_status_api() -> dict:
-    from Backend.helper.scan_manager import dbcheck_manager
     return {"status": "success", "data": dbcheck_manager.get_status()}
 
 
+#----- Purge dead links (from last dbcheck, flagged in DB, or a specific set)
 async def purge_dead_links_api(payload: dict | None = None) -> dict:
-    """Purge dead links.
-
-    - With no body (or {"source": "dbcheck"}): purge the dead entries found by
-      the most recent DB check.
-    - {"source": "flagged"}: purge every entry flagged is_dead in the DB
-      (these come from the background Dead-Link Checker).
-    - {"stream_ids": [...]}: purge a specific set.
-    """
-    from Backend.helper.scan_manager import dbcheck_manager
     payload = payload or {}
     source = str(payload.get("source", "dbcheck")).lower()
     stream_ids = payload.get("stream_ids")

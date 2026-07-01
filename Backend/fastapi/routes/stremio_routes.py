@@ -1,29 +1,36 @@
-from fastapi import APIRouter, HTTPException, Depends
+import time
+from datetime import datetime, timedelta, timezone
 from typing import Optional
-from urllib.parse import unquote, quote
-from Backend.config import Telegram
-from Backend.helper.settings_manager import SettingsManager
-from Backend import db, __version__
+from urllib.parse import quote, unquote
+
 import PTN
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse
-from datetime import datetime, timezone, timedelta
+from pyrogram.enums import ChatMemberStatus
+from pyrogram.errors import UserNotParticipant
+
+from Backend import __version__, db
+from Backend.config import Telegram
 from Backend.fastapi.security.tokens import verify_token
-from Backend.logger import LOGGER
 from Backend.helper.global_search import global_search, is_global_search_enabled
-from Backend.pyrofork.bot import get_streambot_url
+from Backend.helper.imdb import get_detail, get_season
+from Backend.helper.settings_manager import SettingsManager
+from Backend.logger import LOGGER
+from Backend.pyrofork.bot import StreamBot, get_streambot_url
 
 router = APIRouter(prefix="/stremio", tags=["Stremio Addon"])
 
-# --- Configuration ---
+#----- Addon configuration
 ADDON_NAME = "Telegram"
 ADDON_VERSION = __version__
 PAGE_SIZE = 15
 
 _membership_cache: dict = {}
-_MEMBERSHIP_TTL = 60  # seconds
-_MEMBERSHIP_CACHE_MAX = 5000  
+_MEMBERSHIP_TTL = 60
+_MEMBERSHIP_CACHE_MAX = 5000
 
 
+#----- Drop cached membership results for one user or all users
 def invalidate_membership_cache(user_id: int | None = None) -> None:
     if user_id is None:
         _membership_cache.clear()
@@ -31,7 +38,8 @@ def invalidate_membership_cache(user_id: int | None = None) -> None:
     for key in [k for k in _membership_cache if k[1] == user_id]:
         _membership_cache.pop(key, None)
 
-# Define available genres
+
+#----- Available catalog genres
 GENRES = [
     "Action", "Adventure", "Animation", "Biography", "Comedy",
     "Crime", "Documentary", "Drama", "Family", "Fantasy",
@@ -39,11 +47,11 @@ GENRES = [
     "Sci-Fi", "Sport", "Thriller", "War", "Western"
 ]
 
-# --------------- Helper Functions -----------------
 
+#----- Map an internal media item into a Stremio meta object
 def convert_to_stremio_meta(item: dict) -> dict:
     media_type = "series" if item.get("media_type") == "tv" else "movie"
-    
+
     meta = {
         "id": item.get('imdb_id'),
         "type": media_type,
@@ -64,15 +72,18 @@ def convert_to_stremio_meta(item: dict) -> dict:
     return meta
 
 
+#----- Format a movie release date as an ISO string, or None
 def format_released_date(media):
     year = media.get("release_year")
     if year:
         try:
             return datetime(int(year), 1, 1).isoformat() + "Z"
-        except:
+        except Exception:
             return None
     return None
 
+
+#----- Build a Stremio stream display name/title from a filename
 def format_stream_details(filename: str, quality: str, size: str, is_split: bool = False) -> tuple[str, str]:
     size_emoji = "📦" if is_split else "💾"
     try:
@@ -120,8 +131,8 @@ def get_resolution_priority(stream_name: str) -> int:
             return res_value
     return 1
 
-# ------------------ Routes -----------------------
 
+#----- Manifest describing the addon's catalogs/resources for this token
 @router.get("/{token}/manifest.json")
 async def get_manifest(token: str, token_data: dict = Depends(verify_token)):
     if SettingsManager.current().hide_catalog:
@@ -231,8 +242,6 @@ async def get_manifest(token: str, token_data: dict = Depends(verify_token)):
             except Exception:
                 pass
 
-    configure_url = f"{SettingsManager.current().base_url}/stremio/{token}/configure"
-
     return {
         "id": f"telegram.media.{token[:8]}",
         "version": addon_version,
@@ -258,6 +267,7 @@ async def get_manifest(token: str, token_data: dict = Depends(verify_token)):
     }
 
 
+#----- Catalog listing (latest/popular/custom, with genre/search/skip)
 @router.get("/{token}/catalog/{media_type}/{id}/{extra:path}.json")
 @router.get("/{token}/catalog/{media_type}/{id}.json")
 async def get_catalog(token: str, media_type: str, id: str, extra: Optional[str] = None, token_data: dict = Depends(verify_token)):
@@ -320,22 +330,20 @@ async def get_catalog(token: str, media_type: str, id: str, extra: Optional[str]
             else:
                 data = await db.sort_tv_shows(sort_params, page, PAGE_SIZE, genre_filter=genre_filter)
                 items = data.get("tv_shows", [])
-    except Exception as e:
+    except Exception:
         return {"metas": []}
 
     metas = [convert_to_stremio_meta(item) for item in items]
     return {"metas": metas}
 
 
+#----- Detailed metadata for a title, including series episode list
 @router.get("/{token}/meta/{media_type}/{id}.json")
 async def get_meta(token: str, media_type: str, id: str, token_data: dict = Depends(verify_token)):
     if SettingsManager.current().hide_catalog:
         raise HTTPException(status_code=404, detail="Catalog disabled")
 
-    try:
-        imdb_id = id
-    except (ValueError, IndexError):
-        raise HTTPException(status_code=400, detail="Invalid Stremio ID format")
+    imdb_id = id
 
     media = await db.get_media_details(imdb_id=imdb_id)
     if not media:
@@ -364,7 +372,7 @@ async def get_meta(token: str, media_type: str, id: str, token_data: dict = Depe
         if released_date:
             meta_obj["released"] = released_date
 
-    # --- Add Episodes ---
+    #----- Series episodes
     if media_type == "series" and "seasons" in media:
         yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
         videos = []
@@ -384,9 +392,8 @@ async def get_meta(token: str, media_type: str, id: str, token_data: dict = Depe
         meta_obj["videos"] = videos
     return {"meta": meta_obj}
 
+#----- Collect Global Search streams for a title/episode via IMDb lookup
 async def _global_streams_for(token: str, imdb_id: str, media_type: str, season_num: Optional[int], episode_num: Optional[int]) -> list:
-    from Backend.helper.imdb import get_detail, get_season
-
     imdb_media_type = "tvSeries" if media_type == "series" else "movie"
 
     detail = await get_detail(imdb_id=imdb_id, media_type=imdb_media_type)
@@ -400,7 +407,7 @@ async def _global_streams_for(token: str, imdb_id: str, media_type: str, season_
         try:
             await get_season(imdb_id=imdb_id, season_id=season_num, episode_id=episode_num)
         except Exception:
-            pass  # best-effort only; absence doesn't block the search
+            pass
 
     try:
         global_results = await global_search(
@@ -424,12 +431,8 @@ async def _global_streams_for(token: str, imdb_id: str, media_type: str, season_
     return streams
 
 
+#----- Cached check that a user is still in the subscription group (fail-open)
 async def _is_subscription_member(user_id: int) -> bool:
-    import time
-    from Backend.pyrofork.bot import StreamBot
-    from pyrogram.enums import ChatMemberStatus
-    from pyrogram.errors import UserNotParticipant
-
     group_id = SettingsManager.current().subscription_group_id
     if not group_id:
         return True
@@ -446,7 +449,6 @@ async def _is_subscription_member(user_id: int) -> bool:
     except UserNotParticipant:
         result = False
     except Exception as e:
-        # Fail open and do NOT cache, so the next request retries.
         LOGGER.warning(f"[SUBSCRIPTION] Membership check failed for user {user_id}: {e}")
         return True
 
@@ -460,6 +462,7 @@ async def _is_subscription_member(user_id: int) -> bool:
     return result
 
 
+#----- Resolve playable streams for a title (Telegram library or Global Search)
 @router.get("/{token}/stream/{media_type}/{id}.json")
 async def get_streams(
     token: str,
@@ -479,8 +482,7 @@ async def get_streams(
             ]
         }
 
-    # When the subscription feature is on, the user must be a current member of
-    # the configured subscription group/channel to stream anything.
+    #----- Subscription users must currently be members of the configured group
     if SettingsManager.current().subscription:
         user_id = token_data.get("user_id")
         if user_id and not await _is_subscription_member(int(user_id)):
@@ -592,12 +594,13 @@ async def get_streams(
             s["name"] = f"{s['name']} ({seen[s['name']]})"
     return {"streams": streams}
 
+#----- Configure/install landing page rendered as HTML for a token
 @router.get("/{token}/configure")
 async def configure_addon(token: str):
     manifest_url = f"{SettingsManager.current().base_url}/stremio/{token}/manifest.json"
     web_install_url = f"https://web.stremio.com/#/?addon_manifest={quote(manifest_url, safe='')}"
 
-    # Fetch user info for display
+    #----- Fetch user info for display
     token_doc = await db.get_api_token(token)
     user_name = "Unknown"
     expiry_str = "N/A"

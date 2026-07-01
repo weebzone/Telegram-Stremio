@@ -1,22 +1,32 @@
-import math
-import time
 import asyncio
-import secrets
+import math
 import mimetypes
+import secrets
+import time
+from collections import deque
 from typing import Dict
 from urllib.parse import unquote
-from math import ceil
-from fastapi import APIRouter, Request, HTTPException, Depends
-from fastapi.responses import Response as PlainResponse, StreamingResponse, JSONResponse
-from collections import deque
+
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import JSONResponse
+from fastapi.responses import Response as PlainResponse
+from fastapi.responses import StreamingResponse
+
 from Backend import db
-from Backend.logger import LOGGER
+from Backend.fastapi.security.tokens import verify_token
+from Backend.helper.custom_dl import ACTIVE_STREAMS, RECENT_STREAMS, ByteStreamer
 from Backend.helper.encrypt import decode_string
 from Backend.helper.utils import track_usage
-from Backend.helper.custom_dl import ByteStreamer, ACTIVE_STREAMS, RECENT_STREAMS
 from Backend.helper.virtual_dl import resolve_virtual_parts, virtual_stream_generator
-from Backend.pyrofork.bot import work_loads, multi_clients, client_dc_map, client_failures, client_avg_mbps, Userbot, USERBOT_CLIENT_INDEX
-from Backend.fastapi.security.tokens import verify_token
+from Backend.logger import LOGGER
+from Backend.pyrofork.bot import (
+    USERBOT_CLIENT_INDEX,
+    Userbot,
+    client_dc_map,
+    client_failures,
+    multi_clients,
+    work_loads,
+)
 
 router = APIRouter(tags=["Streaming"])
 
@@ -26,6 +36,8 @@ _rr_counter: int = 0
 _title_cache: Dict[str, tuple] = {}
 _TITLE_CACHE_TTL = 300
 
+
+#----- Recursively convert non-JSON-native containers to serializable forms
 def make_json_safe(obj):
     if isinstance(obj, deque):
         return list(obj)
@@ -40,6 +52,7 @@ def make_json_safe(obj):
     return obj
 
 
+#----- Parse an HTTP Range header into (start, end) bounds
 def parse_range_header(range_header: str, file_size: int):
     if not range_header:
         return 0, file_size - 1
@@ -57,25 +70,25 @@ def parse_range_header(range_header: str, file_size: int):
             start = int(start_str)
             end = int(end_str)
     except Exception:
-        raise HTTPException(status_code=416, detail="Invalid Range header", headers={"Content-Range": f"bytes */{file_size}"}, )
+        raise HTTPException(status_code=416, detail="Invalid Range header", headers={"Content-Range": f"bytes */{file_size}"})
     if start < 0:
         start = 0
     if end >= file_size:
         end = file_size - 1
     if end < start:
-        raise HTTPException(status_code=416, detail="Requested Range Not Satisfiable", headers={"Content-Range": f"bytes */{file_size}"},)
+        raise HTTPException(status_code=416, detail="Requested Range Not Satisfiable", headers={"Content-Range": f"bytes */{file_size}"})
     return start, end
 
 
+#----- Pick the least-loaded client, preferring the target DC, round-robin on ties
 def select_best_client(target_dc: int) -> int:
     global _rr_counter
+
     def _score(idx: int) -> int:
         return work_loads.get(idx, 0) + 3 * client_failures.get(idx, 0)
+
     if target_dc > 0:
-        matching = [
-            idx for idx, dc in client_dc_map.items()
-            if dc == target_dc and idx in multi_clients
-        ]
+        matching = [idx for idx, dc in client_dc_map.items() if dc == target_dc and idx in multi_clients]
     else:
         matching = []
     if not matching:
@@ -89,6 +102,7 @@ def select_best_client(target_dc: int) -> int:
     return selected
 
 
+#----- Periodically decay recorded client failure counters
 async def decay_client_failures() -> None:
     while True:
         await asyncio.sleep(300)
@@ -96,13 +110,64 @@ async def decay_client_failures() -> None:
             if client_failures.get(k, 0) > 0:
                 client_failures[k] = max(0, client_failures[k] - 1)
 
+
+#----- Parallelism/prefetch factor scaled by the number of clients
 def get_parallel_prefetch(client_count: int) -> tuple[int, int]:
-    value = min(max(ceil(client_count / 5), 1), 5)
+    value = min(max(math.ceil(client_count / 5), 1), 5)
     return value, value
 
+
+#----- Reuse (or lazily create) the cached ByteStreamer for a client index
+def _get_streamer(tg_client, index: int) -> ByteStreamer:
+    if tg_client not in _streamer_by_client:
+        _streamer_by_client[tg_client] = ByteStreamer(tg_client, index)
+    return _streamer_by_client[tg_client]
+
+
+#----- Resolve a stream title from the TTL cache, DB, or the decoded URL name
+async def _lookup_title(stream_id_hash: str, decoded_name: str):
+    if not stream_id_hash:
+        return decoded_name
+    now = time.time()
+    cached = _title_cache.get(stream_id_hash)
+    if cached and now < cached[1]:
+        return cached[0] or decoded_name
+    db_title = await db.get_title_by_stream_id(stream_id_hash)
+    _title_cache[stream_id_hash] = (db_title, now + _TITLE_CACHE_TTL)
+    return db_title or decoded_name
+
+
+#----- Derive a display file name and mime type from file properties
+def _resolve_filename_mime(file_id):
+    file_name = file_id.file_name or f"{secrets.token_hex(4)}.bin"
+    mime_type = file_id.mime_type or mimetypes.guess_type(file_name)[0] or "application/octet-stream"
+    if "." not in file_name and "/" in mime_type:
+        file_name = f"{file_name}.{mime_type.split('/')[1]}"
+    return file_name, mime_type
+
+
+#----- Build the shared streaming response headers and status code
+def _build_stream_headers(mime_type, file_name, req_length, range_header, start, end, file_size):
+    headers = {
+        "Content-Type": mime_type,
+        "Content-Disposition": f'inline; filename="{file_name}"',
+        "Accept-Ranges": "bytes",
+        "Content-Length": str(req_length),
+        "Cache-Control": "public, max-age=3600",
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges",
+    }
+    status = 200
+    if range_header:
+        headers["Content-Range"] = f"bytes {start}-{end}/{file_size}"
+        status = 206
+    return headers, status
+
+
+#----- Entry point: decode the id and dispatch to the matching streamer
 @router.get("/dl/{token}/{id}/{name}")
 @router.head("/dl/{token}/{id}/{name}")
-async def stream_handler(request: Request, token: str, id: str, name: str, token_data: dict = Depends(verify_token),):
+async def stream_handler(request: Request, token: str, id: str, name: str, token_data: dict = Depends(verify_token)):
     decoded = await decode_string(id)
 
     if decoded.get("global"):
@@ -121,18 +186,18 @@ async def stream_handler(request: Request, token: str, id: str, name: str, token
     if not msg_id:
         raise HTTPException(status_code=400, detail="Missing id")
     chat_id = int(f"-100{decoded['chat_id']}")
-    return await media_streamer(request=request, chat_id=chat_id, msg_id=int(msg_id),
+    return await media_streamer(
+        request=request, chat_id=chat_id, msg_id=int(msg_id),
         token=token, token_data=token_data, stream_id_hash=id,
     )
 
-async def media_streamer(request: Request, chat_id: int, msg_id: int, token: str, token_data: dict = None, stream_id_hash: str = None,):
+
+#----- Stream a single Telegram file, with optional multi-client parallelism
+async def media_streamer(request: Request, chat_id: int, msg_id: int, token: str, token_data: dict = None, stream_id_hash: str = None):
     index = select_best_client(0)
     tg_client = multi_clients[index]
-    if tg_client not in _streamer_by_client:
-        _streamer_by_client[tg_client] = ByteStreamer(tg_client, index)
-    streamer: ByteStreamer = _streamer_by_client[tg_client]
+    streamer: ByteStreamer = _get_streamer(tg_client, index)
     file_id = await streamer.get_file_properties(chat_id=chat_id, message_id=msg_id)
-    target_dc = file_id.dc_id
     file_size = file_id.file_size
     range_header = request.headers.get("Range", "")
     start, end = parse_range_header(range_header, file_size)
@@ -144,16 +209,7 @@ async def media_streamer(request: Request, chat_id: int, msg_id: int, token: str
     part_count = math.ceil(end / chunk_size) - math.floor(offset / chunk_size)
     stream_id = secrets.token_hex(8)
     decoded_name = unquote(request.path_params.get("name", ""))
-    db_title = None
-    if stream_id_hash:
-        _now = time.time()
-        _cached = _title_cache.get(stream_id_hash)
-        if _cached and _now < _cached[1]:
-            db_title = _cached[0]
-        else:
-            db_title = await db.get_title_by_stream_id(stream_id_hash)
-            _title_cache[stream_id_hash] = (db_title, _now + _TITLE_CACHE_TTL)
-    final_title = db_title if db_title else decoded_name
+    final_title = await _lookup_title(stream_id_hash, decoded_name)
     meta = {
         "request_path": str(request.url.path),
         "client_host": request.client.host if request.client else None,
@@ -165,24 +221,19 @@ async def media_streamer(request: Request, chat_id: int, msg_id: int, token: str
     parallelism, prefetch_count = get_parallel_prefetch(token_count)
     extra_clients_for_stream = []
     if parallelism > 1 and len(multi_clients) > 1:
-        other_indices = sorted(
-            (i for i in multi_clients if i != index),
-            key=lambda i: work_loads.get(i, 0),
-        )
+        other_indices = sorted((i for i in multi_clients if i != index), key=lambda i: work_loads.get(i, 0))
+
         async def _get_extra_file_id(ec_idx: int):
             ec_client = multi_clients[ec_idx]
-            if ec_client not in _streamer_by_client:
-                _streamer_by_client[ec_client] = ByteStreamer(ec_client, ec_idx)
-            ec_streamer = _streamer_by_client[ec_client]
+            ec_streamer = _get_streamer(ec_client, ec_idx)
             try:
                 ec_fid = await ec_streamer.get_file_properties(chat_id=chat_id, message_id=msg_id)
                 return (ec_idx, ec_streamer, ec_fid)
             except Exception as e:
                 LOGGER.warning("Extra client %s file_id fetch failed: %s", ec_idx, e)
                 return None
-        results = await asyncio.gather(*[
-            _get_extra_file_id(i) for i in other_indices[:parallelism - 1]
-        ])
+
+        results = await asyncio.gather(*[_get_extra_file_id(i) for i in other_indices[:parallelism - 1]])
         extra_clients_for_stream = [r for r in results if r is not None]
 
     body_gen = await streamer.prefetch_stream(
@@ -205,56 +256,19 @@ async def media_streamer(request: Request, chat_id: int, msg_id: int, token: str
 
     asyncio.create_task(track_usage(stream_id, token, token_data))
 
-    file_name = file_id.file_name or f"{secrets.token_hex(4)}.bin"
-    mime_type = file_id.mime_type or mimetypes.guess_type(file_name)[0] or "application/octet-stream"
+    file_name, mime_type = _resolve_filename_mime(file_id)
+    headers, status = _build_stream_headers(mime_type, file_name, req_length, range_header, start, end, file_size)
 
-    if "." not in file_name and "/" in mime_type:
-        file_name = f"{file_name}.{mime_type.split('/')[1]}"
-    
     if request.method == "HEAD":
-        headers = {
-            "Content-Type": mime_type,
-            "Content-Length": str(req_length),
-            "Content-Disposition": f'inline; filename="{file_name}"',
-            "Accept-Ranges": "bytes",
-            "Cache-Control": "public, max-age=3600",
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges",
-        }
-
-        if range_header:
-            headers["Content-Range"] = f"bytes {start}-{end}/{file_size}"
-
-        return PlainResponse(
-            status_code=206 if range_header else 200,
-            headers=headers,
-        )
-
-    headers = {
-        "Content-Type": mime_type,
-        "Content-Disposition": f'inline; filename="{file_name}"',
-        "Accept-Ranges": "bytes",
-        "Content-Length": str(req_length),
-        "Cache-Control": "public, max-age=3600",
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges",
-    }
-
-    if range_header:
-        headers["Content-Range"] = f"bytes {start}-{end}/{file_size}"
-        status = 206
-    else:
-        status = 200
-
-    return StreamingResponse(body_gen, headers=headers, status_code=status, media_type=mime_type, )
+        return PlainResponse(status_code=status, headers=headers)
+    return StreamingResponse(body_gen, headers=headers, status_code=status, media_type=mime_type)
 
 
-async def virtual_media_streamer(request: Request, parts_payload: list, token: str, token_data: dict = None, stream_id_hash: str = None,):
+#----- Stream media reconstructed from multiple split parts
+async def virtual_media_streamer(request: Request, parts_payload: list, token: str, token_data: dict = None, stream_id_hash: str = None):
     index = select_best_client(0)
     tg_client = multi_clients[index]
-    if tg_client not in _streamer_by_client:
-        _streamer_by_client[tg_client] = ByteStreamer(tg_client, index)
-    streamer: ByteStreamer = _streamer_by_client[tg_client]
+    streamer: ByteStreamer = _get_streamer(tg_client, index)
 
     parts, file_size = await resolve_virtual_parts(parts_payload, streamer)
     if not parts or file_size <= 0:
@@ -266,17 +280,7 @@ async def virtual_media_streamer(request: Request, parts_payload: list, token: s
     chunk_size = 1024 * 1024
     stream_id = secrets.token_hex(8)
     decoded_name = unquote(request.path_params.get("name", ""))
-
-    db_title = None
-    if stream_id_hash:
-        _now = time.time()
-        _cached = _title_cache.get(stream_id_hash)
-        if _cached and _now < _cached[1]:
-            db_title = _cached[0]
-        else:
-            db_title = await db.get_title_by_stream_id(stream_id_hash)
-            _title_cache[stream_id_hash] = (db_title, _now + _TITLE_CACHE_TTL)
-    final_title = db_title if db_title else decoded_name
+    final_title = await _lookup_title(stream_id_hash, decoded_name)
 
     meta = {
         "request_path": str(request.url.path),
@@ -291,26 +295,8 @@ async def virtual_media_streamer(request: Request, parts_payload: list, token: s
 
     asyncio.create_task(track_usage(stream_id, token, token_data))
 
-    first_file_id = parts[0]["file_id"]
-    file_name = first_file_id.file_name or f"{secrets.token_hex(4)}.bin"
-    mime_type = first_file_id.mime_type or mimetypes.guess_type(file_name)[0] or "application/octet-stream"
-    if "." not in file_name and "/" in mime_type:
-        file_name = f"{file_name}.{mime_type.split('/')[1]}"
-
-    common_headers = {
-        "Content-Type": mime_type,
-        "Content-Disposition": f'inline; filename="{file_name}"',
-        "Accept-Ranges": "bytes",
-        "Content-Length": str(req_length),
-        "Cache-Control": "public, max-age=3600",
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges",
-    }
-    if range_header:
-        common_headers["Content-Range"] = f"bytes {start}-{end}/{file_size}"
-        status = 206
-    else:
-        status = 200
+    file_name, mime_type = _resolve_filename_mime(parts[0]["file_id"])
+    common_headers, status = _build_stream_headers(mime_type, file_name, req_length, range_header, start, end, file_size)
 
     if request.method == "HEAD":
         return PlainResponse(status_code=status, headers=common_headers)
@@ -320,16 +306,14 @@ async def virtual_media_streamer(request: Request, parts_payload: list, token: s
         streamer=streamer, client_index=index, request=request, meta=meta,
         stream_id=stream_id, parallelism=parallelism, prefetch_count=prefetch_count,
     )
-
-    return StreamingResponse(body_gen, headers=common_headers, status_code=status, media_type=mime_type, )
+    return StreamingResponse(body_gen, headers=common_headers, status_code=status, media_type=mime_type)
 
 
 _userbot_streamer: ByteStreamer = None
 
 
+#----- Lazily build and cache the ByteStreamer for the Userbot (None if unconfigured)
 def _get_userbot_streamer() -> ByteStreamer:
-    """Lazily build (and cache) the ByteStreamer wrapping the Userbot
-    client. Returns None if no Userbot is configured."""
     global _userbot_streamer
     if Userbot is None:
         return None
@@ -338,11 +322,8 @@ def _get_userbot_streamer() -> ByteStreamer:
     return _userbot_streamer
 
 
-async def global_media_streamer(request: Request, chat_id: int, msg_id: int, token: str, token_data: dict = None, stream_id_hash: str = None,):
-    """Streams a single file found via Global Search, played back through
-    the Userbot session directly — these channels aren't part of the Auth
-    Channel/MultiToken infrastructure, so the regular client pool can't
-    (and shouldn't) be used here."""
+#----- Stream a Global Search file through the Userbot session directly
+async def global_media_streamer(request: Request, chat_id: int, msg_id: int, token: str, token_data: dict = None, stream_id_hash: str = None):
     streamer = _get_userbot_streamer()
     if streamer is None:
         raise HTTPException(status_code=503, detail="Global Search streaming is unavailable (no Userbot configured)")
@@ -375,25 +356,8 @@ async def global_media_streamer(request: Request, chat_id: int, msg_id: int, tok
 
     asyncio.create_task(track_usage(stream_id, token, token_data))
 
-    file_name = file_id.file_name or f"{secrets.token_hex(4)}.bin"
-    mime_type = file_id.mime_type or mimetypes.guess_type(file_name)[0] or "application/octet-stream"
-    if "." not in file_name and "/" in mime_type:
-        file_name = f"{file_name}.{mime_type.split('/')[1]}"
-
-    headers = {
-        "Content-Type": mime_type,
-        "Content-Disposition": f'inline; filename="{file_name}"',
-        "Accept-Ranges": "bytes",
-        "Content-Length": str(req_length),
-        "Cache-Control": "public, max-age=3600",
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges",
-    }
-    if range_header:
-        headers["Content-Range"] = f"bytes {start}-{end}/{file_size}"
-        status = 206
-    else:
-        status = 200
+    file_name, mime_type = _resolve_filename_mime(file_id)
+    headers, status = _build_stream_headers(mime_type, file_name, req_length, range_header, start, end, file_size)
 
     if request.method == "HEAD":
         return PlainResponse(status_code=status, headers=headers)
@@ -414,9 +378,10 @@ async def global_media_streamer(request: Request, chat_id: int, msg_id: int, tok
         chat_id=chat_id,
         message_id=msg_id,
     )
+    return StreamingResponse(body_gen, headers=headers, status_code=status, media_type=mime_type)
 
-    return StreamingResponse(body_gen, headers=headers, status_code=status, media_type=mime_type, )
 
+#----- Live and recent stream telemetry, pruning stale active entries
 @router.get("/stream/stats")
 async def get_stream_stats():
     now = time.time()
@@ -436,7 +401,7 @@ async def get_stream_stats():
             if now - info["last_activity_ts"] > INACTIVE_TIMEOUT:
                 if status == "active":
                     info["status"] = "cancelled"
-                    info["end_ts"] = now            
+                    info["end_ts"] = now
         if info.get("status") in ("cancelled", "error", "finished", "inactive"):
             last_ts = info.get("end_ts", info.get("last_activity_ts", now))
             if now - last_ts > PRUNE_SECONDS:
@@ -444,51 +409,50 @@ async def get_stream_stats():
                     RECENT_STREAMS.appendleft(ACTIVE_STREAMS.pop(sid))
                 except KeyError:
                     pass
-    active = []
-    for sid, info in ACTIVE_STREAMS.items():
-        active.append(
-            {
-                "stream_id": sid,
-                "msg_id": info.get("msg_id"),
-                "chat_id": info.get("chat_id"),
-                "title": info.get("meta", {}).get("title"),
-                "client_index": info.get("client_index"),
-                "dc_id": info.get("dc_id"),
-                "status": info.get("status"),
-                "total_bytes": info.get("total_bytes"),
-                "instant_mbps": round(info.get("instant_mbps", 0.0), 3),
-                "avg_mbps": round(info.get("avg_mbps", 0.0), 3),
-                "peak_mbps": round(info.get("peak_mbps", 0.0), 3),
-                "start_ts": info.get("start_ts"),
-            }
-        )
-    recent = []
-    for info in RECENT_STREAMS:
-        recent.append(
-            {
-                "stream_id": info.get("stream_id"),
-                "msg_id": info.get("msg_id"),
-                "chat_id": info.get("chat_id"),
-                "title": info.get("meta", {}).get("title"),
-                "client_index": info.get("client_index"),
-                "dc_id": info.get("dc_id"),
-                "status": info.get("status"),
-                "total_bytes": info.get("total_bytes"),
-                "duration": info.get("duration"),
-                "avg_mbps": round(info.get("avg_mbps", 0.0), 3),
-                "start_ts": info.get("start_ts"),
-                "end_ts": info.get("end_ts"),
-            }
-        )
-    return JSONResponse(
-        {
-            "active_streams": active,
-            "recent_streams": recent,
-            "client_dc_map": client_dc_map,
-            "work_loads": work_loads,
-        }
-    )
 
+    active = [
+        {
+            "stream_id": sid,
+            "msg_id": info.get("msg_id"),
+            "chat_id": info.get("chat_id"),
+            "title": info.get("meta", {}).get("title"),
+            "client_index": info.get("client_index"),
+            "dc_id": info.get("dc_id"),
+            "status": info.get("status"),
+            "total_bytes": info.get("total_bytes"),
+            "instant_mbps": round(info.get("instant_mbps", 0.0), 3),
+            "avg_mbps": round(info.get("avg_mbps", 0.0), 3),
+            "peak_mbps": round(info.get("peak_mbps", 0.0), 3),
+            "start_ts": info.get("start_ts"),
+        }
+        for sid, info in ACTIVE_STREAMS.items()
+    ]
+    recent = [
+        {
+            "stream_id": info.get("stream_id"),
+            "msg_id": info.get("msg_id"),
+            "chat_id": info.get("chat_id"),
+            "title": info.get("meta", {}).get("title"),
+            "client_index": info.get("client_index"),
+            "dc_id": info.get("dc_id"),
+            "status": info.get("status"),
+            "total_bytes": info.get("total_bytes"),
+            "duration": info.get("duration"),
+            "avg_mbps": round(info.get("avg_mbps", 0.0), 3),
+            "start_ts": info.get("start_ts"),
+            "end_ts": info.get("end_ts"),
+        }
+        for info in RECENT_STREAMS
+    ]
+    return JSONResponse({
+        "active_streams": active,
+        "recent_streams": recent,
+        "client_dc_map": client_dc_map,
+        "work_loads": work_loads,
+    })
+
+
+#----- Detailed telemetry for a single stream id
 @router.get("/stream/stats/{stream_id}")
 async def get_stream_detail(stream_id: str):
     info = ACTIVE_STREAMS.get(stream_id)
