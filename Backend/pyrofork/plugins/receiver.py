@@ -20,6 +20,7 @@ file_queue = Queue()
 db_lock = Lock()
 
 
+#----- True when the message carries a streamable video or a split-archive part
 def _is_supported_media(message: Message) -> bool:
     if message.video:
         return True
@@ -33,6 +34,7 @@ def _is_supported_media(message: Message) -> bool:
     return False
 
 
+#----- Common message field extraction shared by the channel handlers
 def _extract_fields(message: Message):
     file = message.video or message.document
     title = message.caption or file.file_name
@@ -40,6 +42,7 @@ def _extract_fields(message: Message):
     return file, title, message.id, file.file_size, get_readable_file_size(file.file_size), channel
 
 
+#----- Strip URLs/part suffix from a title and ensure a video extension
 def _finalize_title(title: str, metadata_info: dict) -> str:
     title = remove_urls(title)
     if metadata_info.get('group_key'):
@@ -49,6 +52,7 @@ def _finalize_title(title: str, metadata_info: dict) -> str:
     return title
 
 
+#----- Serialize DB inserts from the queue and trigger catalog sync
 async def process_file():
     while True:
         metadata_info, channel, msg_id, size, raw_size, title = await file_queue.get()
@@ -70,6 +74,7 @@ async def process_file():
 create_task(process_file())
 
 
+#----- Ingest new channel media into the queue after building metadata
 @Client.on_message(filters.channel & (filters.document | filters.video))
 async def file_receive_handler(client: Client, message: Message):
     if str(message.chat.id) not in SettingsManager.current().auth_channels:
@@ -104,6 +109,7 @@ async def file_receive_handler(client: Client, message: Message):
         )
 
 
+#----- Re-index an edited channel file only when it carries an override ID
 @Client.on_edited_message(filters.channel & (filters.document | filters.video))
 async def file_edited_handler(client: Client, message: Message):
     if str(message.chat.id) not in SettingsManager.current().auth_channels:
@@ -131,6 +137,7 @@ async def file_edited_handler(client: Client, message: Message):
         LOGGER.error(f"Error handling edited generic file {message.id}: {e}")
 
 
+#----- Purge database entries for messages deleted from auth channels
 @Client.on_deleted_messages(filters.channel)
 async def file_deleted_handler(client: Client, messages: list[Message]):
     try:

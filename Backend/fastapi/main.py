@@ -91,6 +91,7 @@ app = FastAPI(
     version=__version__
 )
 
+#----- Middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -110,10 +111,12 @@ async def _startup():
     asyncio.create_task(decay_client_failures())
 
 
+#----- Streaming and Stremio routers
 app.include_router(stream_router)
 app.include_router(stremio_router)
 
 
+#----- Public routes (no authentication)
 @app.get("/login", response_class=HTMLResponse)
 async def login_get(request: Request):
     return await login_page(request)
@@ -139,6 +142,7 @@ async def stremio_guide(request: Request):
     return await stremio_guide_page(request)
 
 
+#----- Protected routes (authentication required)
 @app.get("/", response_class=HTMLResponse)
 async def root(request: Request, _: bool = Depends(require_auth)):
     return await dashboard_page(request, _)
@@ -265,6 +269,7 @@ async def manage_subscriber(user_id: int, payload: dict, _: bool = Depends(requi
     return await manage_subscriber_api(user_id, payload)
 
 
+#----- Access management
 @app.get("/admin/access", response_class=HTMLResponse)
 async def admin_access(request: Request, _: bool = Depends(require_auth)):
     return await admin_access_page(request, _)
@@ -329,6 +334,7 @@ async def apply_media_rescan(
     return await apply_media_rescan_api(request, tmdb_id, db_index, media_type)
 
 
+#----- Custom catalog management
 @app.get("/api/custom-catalogs")
 async def list_custom_catalogs(
     tmdb_id: int | None = None,
@@ -404,6 +410,7 @@ async def remove_custom_catalog_item(
     return await remove_custom_catalog_item_api(catalog_id, tmdb_id, db_index, media_type)
 
 
+#----- Settings
 @app.get("/admin/settings", response_class=HTMLResponse)
 async def admin_settings(request: Request, _: bool = Depends(require_auth)):
     return await settings_page(request, _)
@@ -417,6 +424,7 @@ async def update_settings(payload: dict, _: bool = Depends(require_auth)):
     return await update_settings_api(payload)
 
 
+#----- Tools (WebUI replacement for /scan, /rescan, /dbcheck bot commands)
 @app.get("/admin/tools", response_class=HTMLResponse)
 async def admin_tools(request: Request, _: bool = Depends(require_auth)):
     return await tools_page(request, _)

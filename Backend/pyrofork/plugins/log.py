@@ -7,6 +7,7 @@ from Backend.helper.custom_filter import CustomFilters
 from Backend.logger import LOGGER
 
 
+#----- Owner-only /log: send the log file as a document
 @Client.on_message(filters.command('log') & filters.private & CustomFilters.owner, group=10)
 async def log(client: Client, message: Message):
     try:

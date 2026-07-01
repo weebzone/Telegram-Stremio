@@ -11,6 +11,7 @@ from Backend.pyrofork.bot import get_streambot_url
 _task: Optional[asyncio.Task] = None
 
 
+#----- Periodically kick expired subscribers and remind those expiring soon
 async def subscription_checker_loop(bot: Client):
     while True:
         try:
@@ -20,6 +21,7 @@ async def subscription_checker_loop(bot: Client):
 
             LOGGER.info("Running subscription checker...")
 
+            #----- Kick expired users (ban+unban) and notify them
             expired_users = await db.get_expired_users()
             for user in expired_users:
                 user_id = user["_id"]
@@ -37,6 +39,7 @@ async def subscription_checker_loop(bot: Client):
                 except Exception as e:
                     LOGGER.error(f"Failed to kick/notify expired user {user_id}: {e}")
 
+            #----- Remind users expiring within 24 hours
             expiring_users = await db.get_expiring_users(hours=24)
             for user in expiring_users:
                 user_id = user["_id"]
@@ -63,10 +66,12 @@ async def subscription_checker_loop(bot: Client):
             await asyncio.sleep(300)
 
 
+#----- Whether the checker task is currently running
 def is_running() -> bool:
     return _task is not None and not _task.done()
 
 
+#----- Start the subscription checker background task
 async def start(bot) -> bool:
     global _task
     if is_running():
@@ -76,6 +81,7 @@ async def start(bot) -> bool:
     return True
 
 
+#----- Cancel the subscription checker background task
 async def stop() -> bool:
     global _task
     if not is_running():
@@ -96,6 +102,7 @@ async def stop() -> bool:
     return True
 
 
+#----- Start the checker only when subscriptions are enabled
 async def sync(bot) -> None:
     if SettingsManager.current().subscription:
         await start(bot)

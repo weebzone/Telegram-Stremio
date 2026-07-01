@@ -6,6 +6,7 @@ from Backend.helper.custom_filter import CustomFilters
 from Backend.logger import LOGGER
 
 
+#----- Owner-only /set: set or clear the default IMDB/TMDB URL for uploads
 @Client.on_message(filters.command('set') & filters.private & CustomFilters.owner, group=10)
 async def manual(client: Client, message: Message):
     try:

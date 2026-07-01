@@ -52,6 +52,7 @@ class ScanManager:
         self._db_lock = asyncio.Lock()
         self.state: Dict[str, Any] = self._blank_state()
 
+    #----- ── State helpers ────────────────────────────────────────────────────────
     @staticmethod
     def _blank_state() -> Dict[str, Any]:
         return {
@@ -317,6 +318,7 @@ class ScanManager:
         batch_count = 0
 
         while not self._cancel and current < SCAN_MAX_ID_CAP:
+            #----- ── Stop condition ───────────────────────────────────────────────
             if use_probe:
                 if current > last_id:
                     break
@@ -487,6 +489,7 @@ class ScanManager:
             LOGGER.error(f"[ScanManager] DB insert error msg {msg_id}: {e}")
             s["counters"]["errors"] += 1
 
+    #----- ── Purge (rescan helper) ────────────────────────────────────────────────
     async def _purge_channel_entries(self, channel_int: int) -> int:
         db = self._db
         purged = 0
@@ -590,6 +593,7 @@ class DbCheckManager:
             "error": s["error"],
         }
 
+    #----- ── Control ───────────────────────────────────────────────────────────────
     async def start(self, client) -> Dict[str, Any]:
         async with self._lock:
             if self.state["status"] == "running":
@@ -607,6 +611,7 @@ class DbCheckManager:
         self._cancel = True
         return {"ok": True, "message": "Stop requested — finishing the current batch."}
 
+    #----- ── Single-message check ───────────────────────────────────────────────────
     async def _check_message(self, client, stream_hash: str):
         try:
             decoded = await decode_string(stream_hash)
@@ -667,6 +672,7 @@ class DbCheckManager:
         elapsed = max(1, int(_now() - s["started_at"]))
         s["speed"] = s["checked"] // elapsed
 
+    #----- ── Worker ──────────────────────────────────────────────────────────────────
     async def _run(self, client) -> None:
         db = self._db
         s = self.state
@@ -676,6 +682,7 @@ class DbCheckManager:
                 if storage is None:
                     continue
 
+                #----- Movies
                 last_id = None
                 while not self._cancel:
                     query = {"_id": {"$gt": last_id}} if last_id else {}
@@ -694,6 +701,7 @@ class DbCheckManager:
                             await self._record_results(batch, results)
                             await asyncio.sleep(DBCHECK_BATCH_DELAY)
 
+                #----- TV
                 last_id = None
                 while not self._cancel:
                     query = {"_id": {"$gt": last_id}} if last_id else {}
@@ -730,7 +738,9 @@ class DbCheckManager:
             s["finished_at"] = _now()
             LOGGER.error(f"[DbCheck] Error: {e}")
 
+    #----- ── Purge ────────────────────────────────────────────────────────────────────
     async def purge(self, stream_ids: Optional[List[str]] = None) -> Dict[str, Any]:
+        #----- Delete the given dead stream entries (defaults to the last check's); returns count purged
         db = self._db
         if stream_ids is None:
             stream_ids = [d["id"] for d in self.state.get("dead_entries", [])]
@@ -747,6 +757,7 @@ class DbCheckManager:
             )
             purged += sum(1 for r in results if r is True)
 
+        #----- Drop purged ids from the in-memory dead list
         purged_set = set(stream_ids)
         self.state["dead_entries"] = [
             d for d in self.state.get("dead_entries", []) if d["id"] not in purged_set
@@ -756,5 +767,6 @@ class DbCheckManager:
                 "purged": purged}
 
 
+#----- ── Singletons ──────────────────────────────────────────────────────────────
 scan_manager = ScanManager()
 dbcheck_manager = DbCheckManager()

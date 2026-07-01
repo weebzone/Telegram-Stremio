@@ -23,6 +23,7 @@ from Backend.pyrofork.clients import initialize_clients
 loop = asyncio.get_event_loop()
 
 
+#----- Boot every subsystem then idle the bot
 async def start_services():
     try:
         LOGGER.info(f"Initializing Telegram-Stremio v-{__version__}")
@@ -79,6 +80,7 @@ async def start_services():
         LOGGER.error("Error during startup:\n" + format_exc())
 
 
+#----- Cancel pending tasks and shut clients down
 async def stop_services():
     try:
         LOGGER.info("Stopping services...")

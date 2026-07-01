@@ -5,6 +5,7 @@ import pytz
 
 from Backend.helper.database import Database
 
+#----- Shared application state
 timezone = pytz.timezone("Asia/Kolkata")
 now = datetime.now(timezone)
 StartTime = time()

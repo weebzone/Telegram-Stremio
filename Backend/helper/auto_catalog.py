@@ -10,6 +10,7 @@ from Backend.logger import LOGGER
 AUTO_CATALOG_REGION = "IN"
 AUTO_SYNC_CONCURRENCY = 5
 
+#----- User can choose exactly which auto catalogs are enabled.
 AUTO_CATALOG_DEFINITIONS = [
     {"key": "bollywood", "name": "Bollywood", "group": "Language"},
     {"key": "hollywood", "name": "Hollywood", "group": "Language"},
@@ -422,6 +423,7 @@ async def sync_single_media(db, *, tmdb_id, media_type: str) -> dict:
 
 
 def start_single_media_catalog_sync(db, *, tmdb_id, media_type: str) -> None:
+    #----- Fire-and-forget launcher for instant per-item categorization
     async def runner():
         try:
             await sync_single_media(db, tmdb_id=tmdb_id, media_type=media_type)
@@ -431,6 +433,7 @@ def start_single_media_catalog_sync(db, *, tmdb_id, media_type: str) -> None:
     try:
         asyncio.create_task(runner())
     except RuntimeError:
+        #----- No running loop (shouldn't happen inside the bot); ignore.
         LOGGER.warning("Instant auto catalog index skipped: no running event loop.")
 
 

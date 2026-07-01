@@ -16,6 +16,7 @@ from Backend.pyrofork.bot import StreamBot, multi_clients, work_loads_summary
 templates = Jinja2Templates(directory="Backend/fastapi/templates")
 
 
+#----- Shared template context (request, theme metadata) for every page
 def _base_context(request: Request) -> dict:
     theme_name = request.session.get("theme", DEFAULT_THEME)
     return {
@@ -26,18 +27,21 @@ def _base_context(request: Request) -> dict:
     }
 
 
+#----- Admin dashboard shell
 async def admin_dashboard_page(request: Request, _: bool = Depends(require_auth)):
     ctx = _base_context(request)
     ctx["current_user"] = get_current_user(request)
     return templates.TemplateResponse("admin_dashboard.html", ctx)
 
 
+#----- Login form (redirects to home when already authenticated)
 async def login_page(request: Request):
     if is_authenticated(request):
         return RedirectResponse(url="/", status_code=302)
     return templates.TemplateResponse("login.html", _base_context(request))
 
 
+#----- Handle login submission
 async def login_post(request: Request, username: str = Form(...), password: str = Form(...)):
     if verify_credentials(username, password):
         request.session["authenticated"] = True
@@ -48,17 +52,20 @@ async def login_post(request: Request, username: str = Form(...), password: str 
     return templates.TemplateResponse("login.html", ctx)
 
 
+#----- Clear the session and return to login
 async def logout(request: Request):
     request.session.clear()
     return RedirectResponse(url="/login", status_code=302)
 
 
+#----- Persist the chosen theme and return to the referring page
 async def set_theme(request: Request, theme: str = Form(...)):
     if theme in get_all_themes():
         request.session["theme"] = theme
     return RedirectResponse(url=request.headers.get("referer", "/"), status_code=302)
 
 
+#----- Main dashboard: aggregate DB stats and live/recent stream telemetry
 async def dashboard_page(request: Request, _: bool = Depends(require_auth)):
     ctx = _base_context(request)
     ctx["current_user"] = get_current_user(request)
@@ -139,6 +146,7 @@ async def dashboard_page(request: Request, _: bool = Depends(require_auth)):
     return templates.TemplateResponse("dashboard.html", ctx)
 
 
+#----- Media management shell (movie/tv)
 async def media_management_page(request: Request, media_type: str = "movie", _: bool = Depends(require_auth)):
     ctx = _base_context(request)
     ctx["current_user"] = get_current_user(request)
@@ -146,6 +154,7 @@ async def media_management_page(request: Request, media_type: str = "movie", _: 
     return templates.TemplateResponse("media_management.html", ctx)
 
 
+#----- Media edit page for a single title
 async def edit_media_page(request: Request, tmdb_id: int, db_index: int, media_type: str, _: bool = Depends(require_auth)):
     try:
         media_details = await db.get_document(media_type, tmdb_id, db_index)
@@ -167,6 +176,7 @@ async def edit_media_page(request: Request, tmdb_id: int, db_index: int, media_t
     return templates.TemplateResponse("media_edit.html", ctx)
 
 
+#----- Public status page (no auth)
 async def public_status_page(request: Request):
     try:
         db_stats = await db.get_database_stats()
@@ -191,36 +201,42 @@ async def public_status_page(request: Request):
     return templates.TemplateResponse("public_status.html", ctx)
 
 
+#----- Stremio setup guide (no auth)
 async def stremio_guide_page(request: Request):
     ctx = _base_context(request)
     ctx["is_authenticated"] = is_authenticated(request)
     return templates.TemplateResponse("stremio_guide.html", ctx)
 
 
+#----- Subscription management shell
 async def admin_subscriptions_page(request: Request, _: bool = Depends(require_auth)):
     ctx = _base_context(request)
     ctx["current_user"] = get_current_user(request)
     return templates.TemplateResponse("subscriptions_manage.html", ctx)
 
 
+#----- Access management shell
 async def admin_access_page(request: Request, _: bool = Depends(require_auth)):
     ctx = _base_context(request)
     ctx["current_user"] = get_current_user(request)
     return templates.TemplateResponse("access_manage.html", ctx)
 
 
+#----- Custom catalogs shell
 async def custom_catalogs_page(request: Request, _: bool = Depends(require_auth)):
     ctx = _base_context(request)
     ctx["current_user"] = get_current_user(request)
     return templates.TemplateResponse("custom_catalogs.html", ctx)
 
 
+#----- Tools shell (WebUI replacement for scan/rescan/dbcheck commands)
 async def tools_page(request: Request, _: bool = Depends(require_auth)):
     ctx = _base_context(request)
     ctx["current_user"] = get_current_user(request)
     return templates.TemplateResponse("tools.html", ctx)
 
 
+#----- Settings page with current config and database list
 async def settings_page(request: Request, _: bool = Depends(require_auth)):
     settings = SettingsManager.current().to_dict()
     settings["admin_password"] = ""

@@ -2,6 +2,7 @@ from pyrogram import Client
 
 from Backend.config import Telegram
 
+#----- Primary bot client (loads plugins)
 StreamBot = Client(
     name='bot',
     api_id=Telegram.API_ID,
@@ -15,6 +16,7 @@ StreamBot = Client(
 
 USERBOT_CLIENT_INDEX = -1
 
+#----- Optional userbot client (only when a session string is configured)
 Userbot = None
 if Telegram.USER_SESSION_STRING:
     Userbot = Client(
@@ -28,6 +30,7 @@ if Telegram.USER_SESSION_STRING:
         no_updates=True,
     )
 
+#----- Shared multi-client registries
 multi_clients = {}
 work_loads = {}
 client_dc_map = {}
@@ -35,6 +38,7 @@ client_failures = {}
 client_avg_mbps = {}
 
 
+#----- Resolve the bot's public t.me URL from cached username/me
 def get_streambot_url() -> str:
     try:
         username = getattr(StreamBot, "username", None)
@@ -48,6 +52,7 @@ def get_streambot_url() -> str:
     return "https://t.me/"
 
 
+#----- Per-client workload map ({botN: load}), busiest first; {} when idle
 def work_loads_summary() -> dict:
     if not work_loads:
         return {}

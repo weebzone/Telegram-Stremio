@@ -7,6 +7,7 @@ from Backend.helper.custom_dl import ByteStreamer
 from Backend.logger import LOGGER
 
 
+#----- Fetch metadata for each split part and compute cumulative offsets -> (parts, total_size)
 async def resolve_virtual_parts(
     parts_payload: List[dict],
     streamer: ByteStreamer,
@@ -30,10 +31,12 @@ async def resolve_virtual_parts(
     return parts, cum
 
 
+#----- Parts intersecting the virtual byte range [start, end]
 def parts_overlapping_range(parts: List[Dict], start: int, end: int) -> List[Dict]:
     return [p for p in parts if not (p["cum_start"] + p["size"] - 1 < start or p["cum_start"] > end)]
 
 
+#----- Yield bytes across the virtual range [start, end], transparently spanning parts
 async def virtual_stream_generator(
     parts: List[Dict],
     start: int,
@@ -84,6 +87,7 @@ async def virtual_stream_generator(
         async for chunk in body_gen:
             yield chunk
 
+        #----- Stop fetching further parts if the client has disconnected
         if request is not None:
             try:
                 if await request.is_disconnected():
