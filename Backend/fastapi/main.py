@@ -82,7 +82,7 @@ from Backend.fastapi.routes.template_routes import (
     tools_page,
 )
 from Backend.fastapi.security.credentials import require_auth
-from Backend.pyrofork.bot import work_loads
+from Backend.pyrofork.bot import work_loads_summary
 
 templates = Jinja2Templates(directory="Backend/fastapi/templates")
 
@@ -202,12 +202,7 @@ async def delete_tv_season(tmdb_id: int, db_index: int, season: int, _: bool = D
 @app.get("/api/system/workloads")
 async def get_workloads(_: bool = Depends(require_auth)):
     try:
-        return {
-            "loads": {
-                f"bot{c + 1}": l
-                for c, (_, l) in enumerate(sorted(work_loads.items(), key=lambda x: x[1], reverse=True))
-            } if work_loads else {}
-        }
+        return {"loads": work_loads_summary()}
     except Exception:
         return {"loads": {}}
 

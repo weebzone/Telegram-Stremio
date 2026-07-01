@@ -42,12 +42,9 @@ async def send_start_message(client: Client, message: Message):
         user = await db.get_user(user_id)
         now = datetime.utcnow()
 
-        is_active = False
-        if user and user.get("subscription_status") == "active":
-            if user.get("subscription_expiry") and user.get("subscription_expiry") > now:
-                is_active = True
-            else:
-                await db.mark_user_expired(user_id)
+        is_active = db.is_subscription_active(user, now)
+        if not is_active and user and user.get("subscription_status") == "active":
+            await db.mark_user_expired(user_id)
 
         if not is_active:
             plans = await db.get_subscription_plans()

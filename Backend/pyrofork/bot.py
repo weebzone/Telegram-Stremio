@@ -52,6 +52,16 @@ def get_streambot_url() -> str:
     return "https://t.me/"
 
 
+#----- Per-client workload map ({botN: load}), busiest first; {} when idle
+def work_loads_summary() -> dict:
+    if not work_loads:
+        return {}
+    return {
+        f"bot{c + 1}": load
+        for c, (_, load) in enumerate(sorted(work_loads.items(), key=lambda x: x[1], reverse=True))
+    }
+
+
 if Userbot is not None:
     work_loads[USERBOT_CLIENT_INDEX] = 0
     client_failures[USERBOT_CLIENT_INDEX] = 0

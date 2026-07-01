@@ -11,7 +11,7 @@ from Backend.fastapi.themes import DEFAULT_THEME, get_all_themes, get_theme
 from Backend.helper.custom_dl import ACTIVE_STREAMS, RECENT_STREAMS
 from Backend.helper.pyro import get_readable_time
 from Backend.helper.settings_manager import SettingsManager
-from Backend.pyrofork.bot import StreamBot, multi_clients, work_loads
+from Backend.pyrofork.bot import StreamBot, multi_clients, work_loads_summary
 
 templates = Jinja2Templates(directory="Backend/fastapi/templates")
 
@@ -72,8 +72,7 @@ async def dashboard_page(request: Request, _: bool = Depends(require_auth)):
 
     try:
         db_stats = await db.get_database_stats()
-        total_movies = sum(stat.get("movie_count", 0) for stat in db_stats)
-        total_tv_shows = sum(stat.get("tv_count", 0) for stat in db_stats)
+        total_movies, total_tv_shows = db.content_totals(db_stats)
 
         now = time.time()
         PRUNE_SECONDS = 3
@@ -112,10 +111,7 @@ async def dashboard_page(request: Request, _: bool = Depends(require_auth)):
             "uptime": get_readable_time(now - StartTime),
             "telegram_bot": f"@{StreamBot.username}" if StreamBot and StreamBot.username else "@StreamBot",
             "connected_bots": len(multi_clients),
-            "loads": {
-                f"bot{c+1}": l
-                for c, (_, l) in enumerate(sorted(work_loads.items(), key=lambda x: x[1], reverse=True))
-            } if work_loads else {},
+            "loads": work_loads_summary(),
             "version": __version__,
             "movies": total_movies,
             "tv_shows": total_tv_shows,
@@ -184,8 +180,7 @@ async def edit_media_page(request: Request, tmdb_id: int, db_index: int, media_t
 async def public_status_page(request: Request):
     try:
         db_stats = await db.get_database_stats()
-        total_movies = sum(stat.get("movie_count", 0) for stat in db_stats)
-        total_tv_shows = sum(stat.get("tv_count", 0) for stat in db_stats)
+        total_movies, total_tv_shows = db.content_totals(db_stats)
         public_stats = {
             "status": "operational",
             "uptime": "99.9%",

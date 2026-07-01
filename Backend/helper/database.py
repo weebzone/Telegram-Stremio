@@ -191,6 +191,29 @@ class Database:
     async def get_user(self, user_id: int) -> Optional[dict]:
         return await self.dbs["tracking"]["users"].find_one({"_id": user_id})
 
+    #----- Whether a user doc represents a currently-active subscription
+    @staticmethod
+    def is_subscription_active(user: Optional[dict], now: datetime = None) -> bool:
+        if not user or user.get("subscription_status") != "active":
+            return False
+        expiry = user.get("subscription_expiry")
+        if not expiry:
+            return False
+        reference = now or datetime.utcnow()
+        try:
+            if expiry.tzinfo is not None:
+                reference = datetime.now(timezone.utc)
+        except AttributeError:
+            pass
+        return expiry > reference
+
+    #----- (movie_count, tv_count) totals summed across per-DB stats
+    @staticmethod
+    def content_totals(db_stats: List[dict]) -> Tuple[int, int]:
+        total_movies = sum(stat.get("movie_count", 0) for stat in db_stats)
+        total_tv = sum(stat.get("tv_count", 0) for stat in db_stats)
+        return total_movies, total_tv
+
     async def update_user_interaction(self, user_id: int, first_name: str, username: str):
         await self.dbs["tracking"]["users"].update_one(
             {"_id": user_id},

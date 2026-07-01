@@ -1,5 +1,3 @@
-from datetime import datetime
-
 from pyrogram import Client
 from pyrogram.enums import ChatMemberStatus
 from pyrogram.types import ChatMemberUpdated
@@ -23,13 +21,7 @@ async def on_user_join(client: Client, chat_member_updated: ChatMemberUpdated):
 
     user = chat_member_updated.new_chat_member.user
     db_user = await db.get_user(user.id)
-    is_active = bool(
-        db_user
-        and db_user.get("subscription_status") == "active"
-        and db_user.get("subscription_expiry")
-        and db_user.get("subscription_expiry") > datetime.utcnow()
-    )
-    if is_active:
+    if db.is_subscription_active(db_user):
         return
 
     try:

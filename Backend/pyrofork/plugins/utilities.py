@@ -5,33 +5,9 @@ from pyrogram.types import Message
 
 from Backend import StartTime, __version__, db
 from Backend.helper.custom_filter import CustomFilters
+from Backend.helper.pyro import get_readable_file_size, get_readable_time
 from Backend.helper.settings_manager import SettingsManager
 from Backend.logger import LOGGER
-
-
-#----- Human-readable uptime from a second count
-def _format_uptime(seconds: int) -> str:
-    d, seconds = divmod(seconds, 86400)
-    h, seconds = divmod(seconds, 3600)
-    m, s = divmod(seconds, 60)
-    parts = []
-    if d:
-        parts.append(f"{d}d")
-    if h:
-        parts.append(f"{h}h")
-    if m:
-        parts.append(f"{m}m")
-    parts.append(f"{s}s")
-    return " ".join(parts)
-
-
-#----- Human-readable byte size
-def _format_bytes(size_bytes: int) -> str:
-    for unit in ["B", "KB", "MB", "GB"]:
-        if size_bytes < 1024:
-            return f"{size_bytes:.1f} {unit}"
-        size_bytes /= 1024
-    return f"{size_bytes:.1f} TB"
 
 
 #----- Owner-only /stats: aggregate content and system metrics across DBs
@@ -75,8 +51,8 @@ async def stats_command(client: Client, message: Message):
             f"  🎞 Episodes: <code>{total_episodes}</code>\n"
             f"  📁 Total streams: <code>{total_streams}</code>\n\n"
             f"<b>System</b>\n"
-            f"  ⏱ Uptime: <code>{_format_uptime(uptime_sec)}</code>\n"
-            f"  💾 DB size: <code>{_format_bytes(total_db_size)}</code>\n"
+            f"  ⏱ Uptime: <code>{get_readable_time(uptime_sec)}</code>\n"
+            f"  💾 DB size: <code>{get_readable_file_size(total_db_size)}</code>\n"
             f"  🗄 Storage DBs: <code>{db.current_db_index}</code>\n"
             f"  📡 AUTH channels: <code>{channels_count}</code>\n"
         )
