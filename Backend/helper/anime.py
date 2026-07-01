@@ -1,8 +1,10 @@
 import asyncio
 import re
+from typing import List, Optional
+
 import httpx
-from typing import Optional, List
 from rapidfuzz import fuzz
+
 from Backend.logger import LOGGER
 
 ANILIST_URL = "https://graphql.anilist.co"

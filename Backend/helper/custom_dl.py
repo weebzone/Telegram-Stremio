@@ -1,28 +1,32 @@
 import asyncio
 import random
 import re
-import time
 import secrets
-from collections import deque
-from typing import Dict, List, Union, Optional, Tuple
+import time
 import traceback
+from collections import deque
+from typing import Dict, List, Optional, Tuple, Union
+
 from fastapi import Request
-from pyrogram import Client, raw, utils
+from pyrogram import Client, raw
 from pyrogram.errors import AuthBytesInvalid
-from pyrogram.file_id import FileId, FileType, ThumbnailSource
-from pyrogram.session import Session, Auth
-from Backend.logger import LOGGER
+from pyrogram.file_id import FileId
+from pyrogram.session import Auth, Session
+
+from Backend import db
 from Backend.helper.exceptions import FIleNotFound
 from Backend.helper.pyro import get_file_ids
-from Backend import db
-from Backend.pyrofork.bot import work_loads, multi_clients, client_dc_map, client_failures, client_avg_mbps
+from Backend.logger import LOGGER
+from Backend.pyrofork.bot import client_avg_mbps, client_dc_map, client_failures, multi_clients, work_loads
 
 ACTIVE_STREAMS: Dict[str, Dict] = {}
 RECENT_STREAMS = deque(maxlen=20)
 
+
+#----- Telegram file byte streamer with prefetch, multi-client parallelism, and telemetry
 class ByteStreamer:
-    CHUNK_SIZE = 1024 * 1024  # 1 MB
-    CLEAN_INTERVAL = 30 * 60  # 30 minutes
+    CHUNK_SIZE = 1024 * 1024
+    CLEAN_INTERVAL = 30 * 60
     _instances: Dict[int, "ByteStreamer"] = {}
 
     def __init__(self, client: Client, client_index: int = -1):
@@ -69,6 +73,7 @@ class ByteStreamer:
             except Exception:
                 continue
 
+    #----- Fetch (and cache) Telegram FileId properties for a message
     async def get_file_properties(self, chat_id: int, message_id: int) -> FileId:
         if message_id not in self._file_id_cache:
             file_id = await get_file_ids(self.client, int(chat_id), int(message_id))
@@ -78,6 +83,7 @@ class ByteStreamer:
             self._file_id_cache[message_id] = file_id
         return self._file_id_cache[message_id]
 
+    #----- Build a prefetching, range-aware streaming generator for a file
     async def prefetch_stream(
         self,
         file_id: FileId,
@@ -486,13 +492,11 @@ class ByteStreamer:
             LOGGER.debug("ByteStreamer: cleared file_id cache")
 
 
-# ---------------------------------------------------------------------------
-# Speed Test helper – runs independently, on-demand per file
-# ---------------------------------------------------------------------------
-
+#----- Speed test helper (runs independently, on-demand per file)
 TEST_CHUNK_SIZE = 100 * 1024 * 1024
 
 
+#----- Download a fixed slice from one client and measure throughput
 async def _speed_test_single_client(
     client: Client,
     client_index: int,
@@ -615,6 +619,7 @@ async def _speed_test_single_client(
     return result
 
 
+#----- Run the speed test across every connected client, fastest first
 async def run_speed_test(chat_id: int, message_id: int) -> List[dict]:
     if not multi_clients:
         return [{"error": "No bot clients connected"}]
