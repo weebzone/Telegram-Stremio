@@ -145,6 +145,8 @@
 
   .table-scroll {
     overflow-x: auto;
+    max-height: 62vh;
+    overflow-y: auto;
   }
 
   .table-ui {
@@ -161,8 +163,11 @@
     text-transform: uppercase;
     letter-spacing: .06em;
     padding: 1rem 1.25rem;
-    background: color-mix(in srgb, var(--bg) 40%, transparent);
+    background: color-mix(in srgb, var(--card) 92%, var(--bg));
     border-bottom: 1px solid color-mix(in srgb, var(--border) 92%, transparent);
+    position: sticky;
+    top: 0;
+    z-index: 2;
   }
 
   .table-ui tbody td {
@@ -218,6 +223,53 @@
 
   .mobile-kv .key {
     color: var(--text-sec);
+  }
+
+  .bot-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+  }
+
+  .bot-card {
+    background: color-mix(in srgb, var(--bg) 68%, transparent);
+    border: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
+    border-radius: 1.1rem;
+    padding: 0.85rem;
+  }
+
+  .bot-stat-num {
+    font-size: 1.15rem;
+    font-weight: 900;
+    line-height: 1.1;
+  }
+
+  .bot-stat-label {
+    font-size: 0.6rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--text-sec);
+    margin-top: .15rem;
+  }
+
+  .analytics-mobile-card {
+    padding: 0.75rem 0.85rem;
+    border-radius: 1rem;
+  }
+
+  .scroll-cap {
+    max-height: 62vh;
+    overflow-y: auto;
+    padding-right: 2px;
+  }
+
+  @media (min-width: 640px) {
+    .bot-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  }
+
+  @media (min-width: 1024px) {
+    .bot-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   }
 
   .loading-dot {
@@ -361,7 +413,7 @@
                 </div>
             </div>
 
-            <div id="analytics-mobile" class="mobile-list">
+            <div id="analytics-mobile" class="mobile-list scroll-cap">
                 <div class="empty-state">
                     <i class="fas fa-spinner fa-spin mr-2 text-primary"></i> Loading analytics...
                 </div>
@@ -402,7 +454,7 @@
                 </div>
             </div>
 
-            <div id="dead-links-mobile" class="mobile-list">
+            <div id="dead-links-mobile" class="mobile-list scroll-cap">
                 <div class="empty-state">
                     <i class="fas fa-spinner fa-spin mr-2 text-primary"></i> Loading dead links...
                 </div>
@@ -440,35 +492,27 @@
             const workloadsWrap = document.getElementById('stat-workloads');
 
             if (data.bot_workloads && data.bot_workloads.length > 0) {
-                let html = '<div class="grid grid-cols-1 xl:grid-cols-2 gap-4">';
+                let html = '<div class="bot-grid scroll-cap">';
                 data.bot_workloads.forEach(b => {
+                    const failCls = Number(b.failures ?? 0) > 0 ? 'text-red-400' : 'text-text';
                     html += `
-                        <div class="workload-row rounded-3xl p-4 sm:p-5">
-                            <div class="flex flex-col gap-4">
-                                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                                    <div class="min-w-0">
-                                        <div class="text-base sm:text-lg font-bold text-text">${escapeHtml(b.display_name)}</div>
-                                        <div class="muted text-xs sm:text-sm mt-1">Bot performance summary</div>
-                                    </div>
-                                    <span class="${getStatusBadge(b.status)}">${escapeHtml(b.status)}</span>
+                        <div class="bot-card">
+                            <div class="flex items-center justify-between gap-2 mb-3">
+                                <div class="font-bold text-text truncate">${escapeHtml(b.display_name)}</div>
+                                <span class="${getStatusBadge(b.status)}">${escapeHtml(b.status)}</span>
+                            </div>
+                            <div class="grid grid-cols-3 gap-2 text-center">
+                                <div>
+                                    <div class="bot-stat-num text-text">${b.current_load ?? 0}</div>
+                                    <div class="bot-stat-label">Streams</div>
                                 </div>
-
-                                <div class="grid grid-cols-3 sm:grid-cols-3 gap-3">
-                                    <div class="glass-card-soft rounded-2xl p-4">
-                                        <div class="muted text-xs uppercase tracking-wider font-bold">Active Streams</div>
-                                        <div class="text-2xl font-black mt-2 text-text">${b.current_load ?? 0}</div>
-                                    </div>
-
-                                    <div class="glass-card-soft rounded-2xl p-4">
-                                        <div class="muted text-xs uppercase tracking-wider font-bold">Avg Speed</div>
-                                        <div class="text-2xl font-black mt-2 text-text">${Number(b.avg_mbps ?? 0).toFixed(1)}</div>
-                                        <div class="muted text-xs mt-1">MB/s</div>
-                                    </div>
-
-                                    <div class="glass-card-soft rounded-2xl p-4">
-                                        <div class="muted text-xs uppercase tracking-wider font-bold">Recent Failures</div>
-                                        <div class="text-2xl font-black mt-2 ${Number(b.failures ?? 0) > 0 ? 'text-red-400' : 'text-text'}">${b.failures ?? 0}</div>
-                                    </div>
+                                <div>
+                                    <div class="bot-stat-num text-text">${Number(b.avg_mbps ?? 0).toFixed(1)}</div>
+                                    <div class="bot-stat-label">MB/s</div>
+                                </div>
+                                <div>
+                                    <div class="bot-stat-num ${failCls}">${b.failures ?? 0}</div>
+                                    <div class="bot-stat-label">Fails</div>
                                 </div>
                             </div>
                         </div>
@@ -531,21 +575,17 @@
                 `;
 
                 mobileHtml += `
-                    <div class="mobile-card">
-                        <div class="flex items-start justify-between gap-3 mb-3">
-                            <div class="min-w-0">
-                                <div class="font-bold text-text">${escapeHtml(titleStr)}</div>
-                                <div class="muted text-xs font-mono mt-1 break-all">${escapeHtml(s.stream_id)}</div>
-                            </div>
+                    <div class="mobile-card analytics-mobile-card">
+                        <div class="flex items-center justify-between gap-2">
+                            <div class="font-semibold text-text truncate">${escapeHtml(titleStr)}</div>
                             <span class="${getStatusBadge(status)}">${escapeHtml(status)}</span>
                         </div>
-
-                        <div class="mobile-kv">
-                            <div class="key">Bot</div><div>Bot ${Number(s.client_index ?? 0) + 1} (DC${escapeHtml(s.dc_id)})</div>
-                            <div class="key">Transferred</div><div>${bytesStr}</div>
-                            <div class="key">Avg / Peak</div><div>${avg.toFixed(1)} / ${peak.toFixed(1)} MB/s</div>
-                            <div class="key">Duration</div><div>${durationStr}</div>
-                            <div class="key">Time</div><div>${timeStr}</div>
+                        <div class="flex flex-wrap gap-x-3 gap-y-1 muted text-xs mt-2">
+                            <span>Bot ${Number(s.client_index ?? 0) + 1} · DC${escapeHtml(s.dc_id)}</span>
+                            <span class="font-semibold text-text">${bytesStr}</span>
+                            <span>${avg.toFixed(1)}/${peak.toFixed(1)} MB/s</span>
+                            <span>${durationStr}</span>
+                            <span>${timeStr}</span>
                         </div>
                     </div>
                 `;

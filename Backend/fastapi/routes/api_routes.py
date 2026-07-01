@@ -285,6 +285,21 @@ async def revoke_token_api(token: str):
 
 # --- Speed Test API ---
 
+async def _resolve_speed_test_target(quality_id: str):
+    """Decode a quality_id into (chat_id, msg_id). Split files decode to a
+    'parts' list with no top-level ids, so fall back to the first part, which
+    lives in the same channel/DC and is representative of throughput."""
+    from Backend.helper.encrypt import decode_string
+
+    decoded = await decode_string(quality_id)
+    target = decoded["parts"][0] if decoded.get("parts") else decoded
+    msg_id = target.get("msg_id")
+    raw_cid = target.get("chat_id")
+    if not msg_id or not raw_cid:
+        return None, None, decoded
+    return int(f"-100{raw_cid}"), int(msg_id), decoded
+
+
 async def speed_test_api(
     quality_id: str = Query(..., description="Encoded quality ID from DB"),
     tmdb_id: int = Query(...),
@@ -295,23 +310,15 @@ async def speed_test_api(
     Decode quality_id using the same decode_string logic as the stream handler,
     then run a parallel download speed test across all connected bot clients.
     """
-    from Backend.helper.encrypt import decode_string
-
     try:
-        decoded = await decode_string(quality_id)
-        msg_id  = decoded.get("msg_id")
-        raw_cid = decoded.get("chat_id")
-
-        if not msg_id or not raw_cid:
+        chat_id, msg_id, decoded = await _resolve_speed_test_target(quality_id)
+        if not chat_id or not msg_id:
             raise HTTPException(
                 status_code=422,
                 detail=f"Decoded quality data is missing msg_id or chat_id. Decoded: {decoded}"
             )
 
-        # Stream handler adds -100 prefix for channel IDs
-        chat_id = int(f"-100{raw_cid}")
-
-        results = await run_speed_test(int(chat_id), int(msg_id))
+        results = await run_speed_test(chat_id, msg_id)
         return {"results": results, "total_clients_tested": len(results)}
 
     except HTTPException:
@@ -332,19 +339,15 @@ async def speed_test_stream_api(
     SSE version of the speed test. Streams each per-client result as a
     'data:' event the moment that client finishes, so the UI can update live.
     """
-    from Backend.helper.encrypt import decode_string
 
     async def event_generator():
-        # Decode quality_id → chat_id + message_id
+        # Decode quality_id → chat_id + message_id (split files test part 1)
         try:
-            decoded = await decode_string(quality_id)
-            msg_id  = decoded.get("msg_id")
-            raw_cid = decoded.get("chat_id")
-            if not msg_id or not raw_cid:
+            chat_id, msg_id, decoded = await _resolve_speed_test_target(quality_id)
+            if not chat_id or not msg_id:
                 payload = json.dumps({"type": "error", "message": f"Cannot decode quality_id. Got: {decoded}"})
                 yield f"data: {payload}\n\n"
                 return
-            chat_id = int(f"-100{raw_cid}")
         except Exception as exc:
             payload = json.dumps({"type": "error", "message": str(exc)})
             yield f"data: {payload}\n\n"
