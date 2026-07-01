@@ -1,19 +1,17 @@
 import math
-import time
 from typing import Dict, List, Optional, Tuple
 
 from fastapi import Request
 
-from Backend.logger import LOGGER
 from Backend.helper.custom_dl import ByteStreamer
+from Backend.logger import LOGGER
 
 
+#----- Fetch metadata for each split part and compute cumulative offsets -> (parts, total_size)
 async def resolve_virtual_parts(
     parts_payload: List[dict],
     streamer: ByteStreamer,
 ) -> Tuple[List[Dict], int]:
-    """Fetch Telegram file metadata for every part (in order) and compute
-    cumulative virtual offsets. Returns (parts, total_size)."""
     parts: List[Dict] = []
     cum = 0
     for idx, p in enumerate(parts_payload):
@@ -33,10 +31,12 @@ async def resolve_virtual_parts(
     return parts, cum
 
 
+#----- Parts intersecting the virtual byte range [start, end]
 def parts_overlapping_range(parts: List[Dict], start: int, end: int) -> List[Dict]:
     return [p for p in parts if not (p["cum_start"] + p["size"] - 1 < start or p["cum_start"] > end)]
 
 
+#----- Yield bytes across the virtual range [start, end], transparently spanning parts
 async def virtual_stream_generator(
     parts: List[Dict],
     start: int,
@@ -50,9 +50,6 @@ async def virtual_stream_generator(
     parallelism: int,
     prefetch_count: int,
 ):
-    """Yields raw bytes covering the virtual range [start, end] (inclusive),
-    crossing as many underlying parts as needed, completely transparently
-    to the caller."""
     pos = start
     for part in parts:
         part_start = part["cum_start"]
@@ -90,9 +87,7 @@ async def virtual_stream_generator(
         async for chunk in body_gen:
             yield chunk
 
-        # If the client disconnected mid-part, ByteStreamer's own consumer
-        # already stopped yielding for us; don't waste bandwidth fetching
-        # the next part on a dead connection.
+        #----- Stop fetching further parts if the client has disconnected
         if request is not None:
             try:
                 if await request.is_disconnected():

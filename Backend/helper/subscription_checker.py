@@ -1,11 +1,14 @@
 import asyncio
-from pyrogram import Client
-from Backend.helper.settings_manager import SettingsManager
-from Backend.pyrofork.bot import get_streambot_url
-from Backend import db
-from datetime import datetime
-from Backend.logger import LOGGER
 
+from pyrogram import Client
+
+from Backend import db
+from Backend.helper.settings_manager import SettingsManager
+from Backend.logger import LOGGER
+from Backend.pyrofork.bot import get_streambot_url
+
+
+#----- Periodically kick expired subscribers and remind those expiring soon
 async def subscription_checker_loop(bot: Client):
     while True:
         try:
@@ -15,19 +18,14 @@ async def subscription_checker_loop(bot: Client):
 
             LOGGER.info("Running subscription checker...")
 
-            # 1. Fetch expired users & kick them
+            #----- Kick expired users (ban+unban) and notify them
             expired_users = await db.get_expired_users()
             for user in expired_users:
                 user_id = user["_id"]
                 try:
-
-                    # Ban then unban to kick the user without permanently banning them
                     await bot.ban_chat_member(SettingsManager.current().subscription_group_id, user_id)
                     await bot.unban_chat_member(SettingsManager.current().subscription_group_id, user_id)
-
                     await db.mark_user_expired(user_id)
-
-                    # Notify user
                     await bot.send_message(
                         user_id,
                         "❌ <b>Subscription Expired</b>\n\n"
@@ -38,7 +36,7 @@ async def subscription_checker_loop(bot: Client):
                 except Exception as e:
                     LOGGER.error(f"Failed to kick/notify expired user {user_id}: {e}")
 
-            # 2. Remind users expiring in 24 hours
+            #----- Remind users expiring within 24 hours
             expiring_users = await db.get_expiring_users(hours=24)
             for user in expiring_users:
                 user_id = user["_id"]

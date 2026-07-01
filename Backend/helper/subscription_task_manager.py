@@ -1,15 +1,19 @@
 import asyncio
 from typing import Optional
-from Backend.helper.subscription_checker import subscription_checker_loop
+
 from Backend.helper.settings_manager import SettingsManager
+from Backend.helper.subscription_checker import subscription_checker_loop
 from Backend.logger import LOGGER
 
 _task: Optional[asyncio.Task] = None
 
 
+#----- Whether the checker task is currently running
 def is_running() -> bool:
     return _task is not None and not _task.done()
 
+
+#----- Start the subscription checker background task
 async def start(bot) -> bool:
     global _task
     if is_running():
@@ -19,6 +23,7 @@ async def start(bot) -> bool:
     return True
 
 
+#----- Cancel the subscription checker background task
 async def stop() -> bool:
     global _task
     if not is_running():
@@ -39,6 +44,7 @@ async def stop() -> bool:
     return True
 
 
+#----- Start the checker only when subscriptions are enabled
 async def sync(bot) -> None:
     if SettingsManager.current().subscription:
         await start(bot)
