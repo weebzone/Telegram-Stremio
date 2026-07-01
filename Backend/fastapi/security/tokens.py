@@ -1,15 +1,16 @@
+from datetime import datetime, timezone
+
 from fastapi import HTTPException
-from datetime import datetime
+
 from Backend import db
 from Backend.helper.settings_manager import SettingsManager
-
-
 
 DAILY_LIMIT_VIDEO = "https://bit.ly/3YZFKT5"
 MONTHLY_LIMIT_VIDEO = "https://bit.ly/4rfjtgd"
 SUBSCRIPTION_EXPIRED_VIDEO = "https://bit.ly/4rfjtgd"
 
 
+#----- Validate an API token and annotate it with subscription/limit status
 async def verify_token(token: str):
     token_data = await db.get_api_token(token)
     if not token_data:
@@ -22,11 +23,10 @@ async def verify_token(token: str):
     token_data["limit_video"] = None
     token_data["subscription_expired"] = False
 
-    # --- Subscription expiry check (only when SUBSCRIPTION feature is enabled) ---
+    #----- Subscription expiry check (only when the SUBSCRIPTION feature is enabled)
     if SettingsManager.current().subscription:
         user_id = token_data.get("user_id")
         if not user_id:
-            # Token has no linked user — treat as expired (unverified token)
             token_data["subscription_expired"] = True
             return token_data
 
@@ -40,11 +40,10 @@ async def verify_token(token: str):
             token_data["subscription_expired"] = True
             return token_data
 
-        # Compare correctly regardless of timezone awareness
+        #----- Compare correctly regardless of timezone awareness
         now = datetime.utcnow()
         try:
             if expiry.tzinfo is not None:
-                from datetime import timezone
                 now = datetime.now(timezone.utc)
         except AttributeError:
             pass

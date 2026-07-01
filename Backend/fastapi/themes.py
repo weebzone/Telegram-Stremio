@@ -138,8 +138,11 @@ THEMES = {
     }
 }
 
+#----- Resolve a theme by name, falling back to the default
 def get_theme(theme_name: str = DEFAULT_THEME):
     return THEMES.get(theme_name, THEMES[DEFAULT_THEME])
 
+
+#----- Return the full theme registry
 def get_all_themes():
     return THEMES
