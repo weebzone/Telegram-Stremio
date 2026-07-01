@@ -477,7 +477,7 @@ class Database:
     async def add_item_to_custom_catalog(
         self, catalog_id: str, tmdb_id: int, db_index: int, media_type: str
     ) -> bool:
-        media_type = "tv" if media_type in ["tv", "series"] else "movie"
+        media_type = self._collection_for(media_type)
         item = {
             "tmdb_id": int(tmdb_id),
             "db_index": int(db_index),
@@ -510,7 +510,7 @@ class Database:
     async def remove_item_from_custom_catalog(
         self, catalog_id: str, tmdb_id: int, db_index: int, media_type: str
     ) -> bool:
-        media_type = "tv" if media_type in ["tv", "series"] else "movie"
+        media_type = self._collection_for(media_type)
         try:
             result = await self.dbs["tracking"]["custom_catalogs"].update_one(
                 {"_id": ObjectId(catalog_id)},
@@ -531,7 +531,7 @@ class Database:
 
     async def find_media_doc(self, media_type: str, tmdb_id: int) -> Optional[Tuple[dict, int]]:
         #----- Locate a media doc by tmdb_id across storage DBs -> (doc, db_index) or None
-        collection_name = "tv" if str(media_type).lower() in ["tv", "series"] else "movie"
+        collection_name = self._collection_for(media_type)
         try:
             tmdb_id = int(tmdb_id)
         except (TypeError, ValueError):
@@ -556,7 +556,7 @@ class Database:
         except (TypeError, ValueError):
             return 0
 
-        media_type = "tv" if str(media_type).lower() in ["tv", "series"] else "movie"
+        media_type = self._collection_for(media_type)
         collection = self.dbs["tracking"]["custom_catalogs"]
         now = datetime.utcnow()
         try:
@@ -599,7 +599,7 @@ class Database:
     async def custom_catalog_contains_item(
         self, catalog_id: str, tmdb_id: int, db_index: int, media_type: str
     ) -> bool:
-        media_type = "tv" if media_type in ["tv", "series"] else "movie"
+        media_type = self._collection_for(media_type)
         try:
             catalog = await self.dbs["tracking"]["custom_catalogs"].find_one({
                 "_id": ObjectId(catalog_id),
@@ -624,7 +624,7 @@ class Database:
 
         db_media_type = None
         if media_type:
-            db_media_type = "tv" if media_type in ["tv", "series"] else "movie"
+            db_media_type = self._collection_for(media_type)
 
         raw_items = catalog.get("items", []) or []
         if db_media_type:
@@ -743,6 +743,41 @@ class Database:
         await self.update_current_db_index()
         LOGGER.info(f"Switched to storage_{self.current_db_index}")
         return await func(*args)
+
+    #----- Map any media_type spelling to its collection name
+    @staticmethod
+    def _collection_for(media_type: str) -> str:
+        return "tv" if str(media_type).lower() in ("tv", "series") else "movie"
+
+    #----- Load a doc by tmdb_id, apply an async mutator, and save only if it changed
+    async def _edit_media_doc(self, collection_name: str, tmdb_id: int, db_index: int, mutate) -> bool:
+        db_key = f"storage_{db_index}"
+        doc = await self.dbs[db_key][collection_name].find_one({"tmdb_id": tmdb_id})
+        if not doc:
+            return False
+        if not await mutate(doc):
+            return False
+        doc["updated_on"] = datetime.utcnow()
+        result = await self.dbs[db_key][collection_name].replace_one({"tmdb_id": tmdb_id}, doc)
+        return result.modified_count > 0
+
+    #----- Locate an existing doc across storage DBs by imdb_id, then tmdb_id, then title+year
+    async def _find_existing_media(
+        self, collection_name: str, imdb_id, tmdb_id, title, release_year, total_storage_dbs: int
+    ) -> Tuple[Optional[dict], Optional[str], Optional[int]]:
+        for db_index in range(1, total_storage_dbs + 1):
+            col = self.dbs[f"storage_{db_index}"][collection_name]
+            doc = None
+            if imdb_id:
+                doc = await col.find_one({"imdb_id": imdb_id})
+            if not doc and tmdb_id:
+                doc = await col.find_one({"tmdb_id": tmdb_id})
+            if not doc and title and release_year:
+                doc = await col.find_one({"title": title, "release_year": release_year})
+            if doc:
+                return doc, f"storage_{db_index}", db_index
+        return None, None, None
+
 
     #-----
     #----- Multi Database Method for insert/update/delete/list
@@ -962,24 +997,6 @@ class Database:
             result.append(quality_to_update)
         return result
 
-    async def _delete_quality_media(self, quality: dict) -> None:
-        parts = quality.get("parts")
-        if parts:
-            for part in parts:
-                await self._delete_split_part(part)
-            return
-
-        old_id = quality.get("id")
-        if not old_id:
-            return
-        try:
-            decoded = await decode_string(old_id)
-            chat_id = int(f"-100{decoded['chat_id']}")
-            msg_id = int(decoded["msg_id"])
-            create_task(delete_message(chat_id, msg_id))
-        except Exception as e:
-            LOGGER.error(f"Failed to delete old quality message: {e}")
-
     async def _apply_quality_update(
         self, existing_qualities: List[dict], quality_to_update: dict
     ) -> List[dict]:
@@ -996,7 +1013,7 @@ class Database:
                     and q.get("group_key") != incoming_group_key
                 ]
                 for q in stale:
-                    await self._delete_quality_media(q)
+                    await self._queue_quality_deletion(q)
                 existing_qualities = [
                     q for q in existing_qualities
                     if not (
@@ -1010,7 +1027,7 @@ class Database:
         if replace_mode:
             stale = [q for q in existing_qualities if q.get("quality") == target_quality]
             for q in stale:
-                await self._delete_quality_media(q)
+                await self._queue_quality_deletion(q)
             existing_qualities = [
                 q for q in existing_qualities if q.get("quality") != target_quality
             ]
@@ -1038,29 +1055,9 @@ class Database:
         current_db_key = f"storage_{self.current_db_index}"
         total_storage_dbs = len(self.dbs) - 1
 
-        existing_movie = None
-        existing_db_key = None
-        existing_db_index = None
-
-        for db_index in range(1, total_storage_dbs + 1):
-            db_key = f"storage_{db_index}"
-            movie = None
-
-            if imdb_id:
-                movie = await self.dbs[db_key]["movie"].find_one({"imdb_id": imdb_id})
-            if not movie and tmdb_id:
-                movie = await self.dbs[db_key]["movie"].find_one({"tmdb_id": tmdb_id})
-            if not movie and title and release_year:
-                movie = await self.dbs[db_key]["movie"].find_one({
-                    "title": title,
-                    "release_year": release_year
-                })
-
-            if movie:
-                existing_movie = movie
-                existing_db_key = db_key
-                existing_db_index = db_index
-                break
+        existing_movie, existing_db_key, existing_db_index = await self._find_existing_media(
+            "movie", imdb_id, tmdb_id, title, release_year, total_storage_dbs
+        )
 
         #----- INSERT NEW MOVIE ----------------
         if not existing_movie:
@@ -1123,29 +1120,9 @@ class Database:
         current_db_key = f"storage_{self.current_db_index}"
         total_storage_dbs = len(self.dbs) - 1
 
-        existing_tv = None
-        existing_db_key = None
-        existing_db_index = None
-
-        for db_index in range(1, total_storage_dbs + 1):
-            db_key = f"storage_{db_index}"
-            tv = None
-
-            if imdb_id:
-                tv = await self.dbs[db_key]["tv"].find_one({"imdb_id": imdb_id})
-            if not tv and tmdb_id:
-                tv = await self.dbs[db_key]["tv"].find_one({"tmdb_id": tmdb_id})
-            if not tv and title and release_year:
-                tv = await self.dbs[db_key]["tv"].find_one({
-                    "title": title,
-                    "release_year": release_year
-                })
-
-            if tv:
-                existing_tv = tv
-                existing_db_key = db_key
-                existing_db_index = db_index
-                break
+        existing_tv, existing_db_key, existing_db_index = await self._find_existing_media(
+            "tv", imdb_id, tmdb_id, title, release_year, total_storage_dbs
+        )
 
         #----- INSERT NEW TV ----------------
         if not existing_tv:
@@ -1403,10 +1380,7 @@ class Database:
 
     async def get_document(self, media_type: str, tmdb_id: int, db_index: int) -> Optional[Dict[str, Any]]:
         db_key = f"storage_{db_index}"
-        if media_type.lower() in ["tv", "series"]:
-            collection_name = "tv"
-        else:
-            collection_name = "movie"
+        collection_name = self._collection_for(media_type)
         document = await self.dbs[db_key][collection_name].find_one({"tmdb_id": int(tmdb_id)})
         return convert_objectid_to_str(document) if document else None
 
@@ -1415,10 +1389,7 @@ class Database:
     ):
         update_data.pop('_id', None)
         db_key = f"storage_{db_index}"
-        if media_type.lower() in ["tv", "series"]:
-            collection_name = "tv"
-        else:
-            collection_name = "movie"
+        collection_name = self._collection_for(media_type)
         collection = self.dbs[db_key][collection_name]
 
         try:
@@ -1463,54 +1434,47 @@ class Database:
                     return False
             raise
 
+    #----- Queue deletion of the Telegram message(s) backing a quality (split or single)
     async def _queue_quality_deletion(self, quality: dict) -> None:
+        parts = quality.get("parts")
+        if parts:
+            for part in parts:
+                await self._delete_split_part(part)
+            return
+
+        old_id = quality.get("id")
+        if not old_id:
+            return
         try:
-            old_id = quality.get("id")
-            if not old_id:
+            decoded = await decode_string(old_id)
+            if isinstance(decoded, dict) and decoded.get("parts"):
+                for part in decoded["parts"]:
+                    await self._delete_split_part(part)
                 return
-
-            decoded_data = await decode_string(old_id)
-
-            #----- Split-file: a list of parts, each its own Telegram message.
-            if isinstance(decoded_data, dict) and decoded_data.get("parts"):
-                for part in decoded_data["parts"]:
-                    try:
-                        chat_id = int(f"-100{part['chat_id']}")
-                        msg_id = int(part["msg_id"])
-                        create_task(delete_message(chat_id, msg_id))
-                    except Exception as e:
-                        LOGGER.error(f"Failed to queue split-file part for deletion: {e}")
-                return
-
-            
-            chat_id = int(f"-100{decoded_data['chat_id']}")
-            msg_id = int(decoded_data["msg_id"])
+            chat_id = int(f"-100{decoded['chat_id']}")
+            msg_id = int(decoded["msg_id"])
             create_task(delete_message(chat_id, msg_id))
         except Exception as e:
             LOGGER.error(f"Failed to queue file for deletion: {e}")
 
     async def delete_document(self, media_type: str, tmdb_id: int, db_index: int) -> bool:
         db_key = f"storage_{db_index}"
+        collection_name = self._collection_for(media_type)
 
-        if media_type == "Movie":
-            doc = await self.dbs[db_key]["movie"].find_one({"tmdb_id": tmdb_id})
-            if doc and "telegram" in doc:
-                for quality in doc["telegram"]:
+        doc = await self.dbs[db_key][collection_name].find_one({"tmdb_id": tmdb_id})
+        if doc:
+            if collection_name == "movie":
+                for quality in doc.get("telegram", []):
                     await self._queue_quality_deletion(quality)
-            
-            result = await self.dbs[db_key]["movie"].delete_one({"tmdb_id": tmdb_id})
-        else:
-            doc = await self.dbs[db_key]["tv"].find_one({"tmdb_id": tmdb_id})
-            if doc and "seasons" in doc:
-                for season in doc["seasons"]:
+            else:
+                for season in doc.get("seasons", []):
                     for episode in season.get("episodes", []):
                         for quality in episode.get("telegram", []):
                             await self._queue_quality_deletion(quality)
-            
-            result = await self.dbs[db_key]["tv"].delete_one({"tmdb_id": tmdb_id})
-        
+
+        result = await self.dbs[db_key][collection_name].delete_one({"tmdb_id": tmdb_id})
         if result.deleted_count > 0:
-            await self.purge_media_from_catalogs(tmdb_id, "tv" if media_type != "Movie" else "movie")
+            await self.purge_media_from_catalogs(tmdb_id, collection_name)
             LOGGER.info(f"{media_type} with tmdb_id {tmdb_id} deleted successfully.")
             return True
         LOGGER.info(f"No document found with tmdb_id {tmdb_id}.")
@@ -1579,106 +1543,64 @@ class Database:
         return False
 
     async def delete_movie_quality(self, tmdb_id: int, db_index: int, id: str) -> bool:
-        db_key = f"storage_{db_index}"
-        movie = await self.dbs[db_key]["movie"].find_one({"tmdb_id": tmdb_id})
-        
-        if not movie or "telegram" not in movie:
-            return False
-
-        for q in movie["telegram"]:
-            if q.get("id") == id:
-                await self._queue_quality_deletion(q)
-                break
-        
-        original_len = len(movie["telegram"])
-        movie["telegram"] = [q for q in movie["telegram"] if q.get("id") != id]
-        
-        if len(movie["telegram"]) == original_len:
-            return False
-        
-        movie['updated_on'] = datetime.utcnow()
-        result = await self.dbs[db_key]["movie"].replace_one({"tmdb_id": tmdb_id}, movie)
-        return result.modified_count > 0
-
-    async def delete_tv_episode(self, tmdb_id: int, db_index: int, season_number: int, episode_number: int) -> bool:
-        db_key = f"storage_{db_index}"
-        tv = await self.dbs[db_key]["tv"].find_one({"tmdb_id": tmdb_id})
-        
-        if not tv or "seasons" not in tv:
-            return False
-        
-        found = False
-        for season in tv["seasons"]:
-            if season.get("season_number") == season_number:
-                for ep in season["episodes"]:
-                    if ep.get("episode_number") == episode_number:
-                        for quality in ep.get("telegram", []):
-                            await self._queue_quality_deletion(quality)
-                        break
-                
-                original_len = len(season["episodes"])
-                season["episodes"] = [ep for ep in season["episodes"] if ep.get("episode_number") != episode_number]
-                found = original_len > len(season["episodes"])
-                break
-        
-        if not found:
-            return False
-        
-        tv['updated_on'] = datetime.utcnow()
-        result = await self.dbs[db_key]["tv"].replace_one({"tmdb_id": tmdb_id}, tv)
-        return result.modified_count > 0
-
-    async def delete_tv_season(self, tmdb_id: int, db_index: int, season_number: int) -> bool:
-        db_key = f"storage_{db_index}"
-        tv = await self.dbs[db_key]["tv"].find_one({"tmdb_id": tmdb_id})
-        
-        if not tv or "seasons" not in tv:
-            return False
-        
-        for season in tv["seasons"]:
-            if season.get("season_number") == season_number:
-                for episode in season.get("episodes", []):
-                    for quality in episode.get("telegram", []):
-                        await self._queue_quality_deletion(quality)
-                break
-        
-        original_len = len(tv["seasons"])
-        tv["seasons"] = [s for s in tv["seasons"] if s.get("season_number") != season_number]
-        
-        if len(tv["seasons"]) == original_len:
-            return False
-        
-        tv['updated_on'] = datetime.utcnow()
-        result = await self.dbs[db_key]["tv"].replace_one({"tmdb_id": tmdb_id}, tv)
-        return result.modified_count > 0
+        async def mutate(movie):
+            qualities = movie.get("telegram") or []
+            for q in qualities:
+                if q.get("id") == id:
+                    await self._queue_quality_deletion(q)
+                    break
+            original_len = len(qualities)
+            movie["telegram"] = [q for q in qualities if q.get("id") != id]
+            return len(movie["telegram"]) != original_len
+        return await self._edit_media_doc("movie", tmdb_id, db_index, mutate)
 
     async def delete_tv_quality(self, tmdb_id: int, db_index: int, season_number: int, episode_number: int, id: str) -> bool:
-        db_key = f"storage_{db_index}"
-        tv = await self.dbs[db_key]["tv"].find_one({"tmdb_id": tmdb_id})
-        
-        if not tv or "seasons" not in tv:
-            return False
-        
-        found = False
-        for season in tv["seasons"]:
-            if season.get("season_number") == season_number:
-                for episode in season["episodes"]:
+        async def mutate(tv):
+            for season in tv.get("seasons", []):
+                if season.get("season_number") != season_number:
+                    continue
+                for episode in season.get("episodes", []):
                     if episode.get("episode_number") == episode_number and "telegram" in episode:
                         for q in episode["telegram"]:
                             if q.get("id") == id:
                                 await self._queue_quality_deletion(q)
                                 break
-                        
                         original_len = len(episode["telegram"])
                         episode["telegram"] = [q for q in episode["telegram"] if q.get("id") != id]
-                        found = original_len > len(episode["telegram"])
-                        break
-        
-        if not found:
+                        return original_len > len(episode["telegram"])
             return False
-        tv['updated_on'] = datetime.utcnow()
-        result = await self.dbs[db_key]["tv"].replace_one({"tmdb_id": tmdb_id}, tv)
-        return result.modified_count > 0
+        return await self._edit_media_doc("tv", tmdb_id, db_index, mutate)
+
+    async def delete_tv_episode(self, tmdb_id: int, db_index: int, season_number: int, episode_number: int) -> bool:
+        async def mutate(tv):
+            for season in tv.get("seasons", []):
+                if season.get("season_number") != season_number:
+                    continue
+                episodes = season.get("episodes", [])
+                for ep in episodes:
+                    if ep.get("episode_number") == episode_number:
+                        for quality in ep.get("telegram", []):
+                            await self._queue_quality_deletion(quality)
+                        break
+                original_len = len(episodes)
+                season["episodes"] = [ep for ep in episodes if ep.get("episode_number") != episode_number]
+                return original_len > len(season["episodes"])
+            return False
+        return await self._edit_media_doc("tv", tmdb_id, db_index, mutate)
+
+    async def delete_tv_season(self, tmdb_id: int, db_index: int, season_number: int) -> bool:
+        async def mutate(tv):
+            seasons = tv.get("seasons", [])
+            for season in seasons:
+                if season.get("season_number") == season_number:
+                    for episode in season.get("episodes", []):
+                        for quality in episode.get("telegram", []):
+                            await self._queue_quality_deletion(quality)
+                    break
+            original_len = len(seasons)
+            tv["seasons"] = [s for s in seasons if s.get("season_number") != season_number]
+            return len(tv["seasons"]) != original_len
+        return await self._edit_media_doc("tv", tmdb_id, db_index, mutate)
 
 
     #----- Get per-DB statistics (movies, tv shows, used size, etc.)
@@ -2035,7 +1957,7 @@ class Database:
         metadata: Dict[str, Any]
     ) -> Optional[dict]:
         db_key = f"storage_{db_index}"
-        collection_name = "tv" if media_type.lower() in ["tv", "series"] else "movie"
+        collection_name = self._collection_for(media_type)
         collection = self.dbs[db_key][collection_name]
 
         current_doc = await collection.find_one({"tmdb_id": int(tmdb_id)})
