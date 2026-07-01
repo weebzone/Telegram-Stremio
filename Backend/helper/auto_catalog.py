@@ -1,14 +1,17 @@
 import asyncio
-import httpx
 from datetime import datetime
 from typing import Dict, List, Optional, Set, Tuple
+
+import httpx
+
 from Backend.config import Telegram
+from Backend.helper.settings_manager import SettingsManager
 from Backend.logger import LOGGER
 
 AUTO_CATALOG_REGION = "IN"
 AUTO_SYNC_CONCURRENCY = 5
 
-# User can choose exactly which auto catalogs are enabled.
+#----- User can choose exactly which auto catalogs are enabled.
 AUTO_CATALOG_DEFINITIONS = [
     {"key": "bollywood", "name": "Bollywood", "group": "Language"},
     {"key": "hollywood", "name": "Hollywood", "group": "Language"},
@@ -86,7 +89,6 @@ _instant_sync_semaphore = asyncio.Semaphore(INSTANT_SYNC_CONCURRENCY)
 
 def _tmdb_api_key() -> str:
     try:
-        from Backend.helper.settings_manager import SettingsManager
         key = SettingsManager.current().tmdb_api
         if key:
             return key
@@ -432,7 +434,7 @@ async def sync_single_media(db, *, tmdb_id, media_type: str) -> dict:
 
 
 def start_single_media_catalog_sync(db, *, tmdb_id, media_type: str) -> None:
-    """Fire-and-forget launcher for instant per-item categorization."""
+    #----- Fire-and-forget launcher for instant per-item categorization
     async def runner():
         try:
             await sync_single_media(db, tmdb_id=tmdb_id, media_type=media_type)
@@ -442,7 +444,7 @@ def start_single_media_catalog_sync(db, *, tmdb_id, media_type: str) -> None:
     try:
         asyncio.create_task(runner())
     except RuntimeError:
-        # No running loop (shouldn't happen inside the bot); ignore.
+        #----- No running loop (shouldn't happen inside the bot); ignore.
         LOGGER.warning("Instant auto catalog index skipped: no running event loop.")
 
 
