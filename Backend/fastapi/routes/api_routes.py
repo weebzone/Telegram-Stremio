@@ -37,7 +37,6 @@ from Backend.pyrofork.bot import (
 )
 
 
-#----- System stats
 async def get_system_stats_api():
     try:
         db_stats = await db.get_database_stats()
@@ -65,7 +64,6 @@ async def get_system_stats_api():
         }
 
 
-#----- Media management
 async def list_media_api(
     media_type: str = Query("movie", regex="^(movie|tv)$"),
     page: int = Query(1, ge=1),
@@ -227,8 +225,6 @@ async def delete_tv_season_api(tmdb_id: int, db_index: int, season: int):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-#----- Token management
-#----- Parse a GB-limit value into a positive float, or None
 def _parse_limit(val):
     try:
         v = float(val)
@@ -271,8 +267,6 @@ async def update_token_limits_api(token: str, payload: dict):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-#----- Speed test
-#----- Decode a quality_id into (chat_id, msg_id); split files use the first part
 async def _resolve_speed_test_target(quality_id: str):
     decoded = await decode_string(quality_id)
     target = decoded["parts"][0] if decoded.get("parts") else decoded
@@ -283,7 +277,6 @@ async def _resolve_speed_test_target(quality_id: str):
     return int(f"-100{raw_cid}"), int(msg_id), decoded
 
 
-#----- Run a parallel download speed test across all connected clients
 async def speed_test_api(
     quality_id: str = Query(..., description="Encoded quality ID from DB"),
     tmdb_id: int = Query(...),
@@ -307,7 +300,6 @@ async def speed_test_api(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-#----- SSE speed test streaming per-client results as they finish
 async def speed_test_stream_api(
     quality_id: str,
     tmdb_id: int,
@@ -333,7 +325,6 @@ async def speed_test_stream_api(
             yield f"data: {payload}\n\n"
             return
 
-        #----- Resolve the FileId to report the target DC
         target_dc = "?"
         try:
             primary_client = multi_clients.get(0) or next(iter(multi_clients.values()))
@@ -343,10 +334,8 @@ async def speed_test_stream_api(
         except Exception:
             pass
 
-        #----- Initial start event so the frontend can build its table
         yield f"data: {json.dumps({'type': 'start', 'total': total, 'target_dc': target_dc})}\n\n"
 
-        #----- Run all clients in parallel, feeding results into a queue
         queue: asyncio.Queue = asyncio.Queue()
 
         async def run_one(client, idx):
@@ -394,7 +383,6 @@ async def speed_test_stream_api(
     )
 
 
-#----- Admin stats
 async def get_admin_stats_api() -> dict:
     cache_size = sum(len(s._file_id_cache) for s in _streamer_by_client.values())
 
@@ -426,7 +414,6 @@ async def get_admin_stats_api() -> dict:
     }
 
 
-#----- Clear the FileId cache across all active streamers
 async def clear_cache_api() -> dict:
     total_cleared = sum(len(s._file_id_cache) for s in _streamer_by_client.values())
     for streamer in _streamer_by_client.values():
@@ -436,7 +423,6 @@ async def clear_cache_api() -> dict:
     return {"status": "success", "message": f"{total_cleared} cached items cleared."}
 
 
-#----- List dead links recorded in the DB
 async def get_dead_links_api() -> dict:
     try:
         dead_links = await db.get_all_dead_links()
@@ -445,7 +431,6 @@ async def get_dead_links_api() -> dict:
         return {"status": "error", "message": str(e)}
 
 
-#----- Recent stream analytics
 async def get_stream_analytics_api() -> dict:
     try:
         data = await db.get_stream_analytics(limit=200)
@@ -455,7 +440,6 @@ async def get_stream_analytics_api() -> dict:
         return {"status": "error", "message": str(e)}
 
 
-#----- Purge all stream analytics records
 async def clear_stream_analytics_api() -> dict:
     try:
         result = await db.dbs["tracking"]["stream_analytics"].delete_many({})
@@ -468,7 +452,6 @@ async def clear_stream_analytics_api() -> dict:
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
-#----- Admin subscription management
 async def get_subscription_plans_api() -> dict:
     try:
         plans = await db.get_subscription_plans()
@@ -539,7 +522,6 @@ async def manage_subscriber_api(user_id: int, payload: dict) -> dict:
             
         success = await db.manage_subscriber(user_id, action, days)
 
-        #----- On revoke, kick the user from the group immediately (ban+unban)
         if success and action == "delete" and SettingsManager.current().subscription:
             group_id = SettingsManager.current().subscription_group_id
             if group_id:
@@ -549,7 +531,6 @@ async def manage_subscriber_api(user_id: int, payload: dict) -> dict:
                 except Exception as exc:
                     LOGGER.warning(f"Revoke: could not remove user {user_id} from group: {exc}")
 
-        #----- Reflect the change immediately in the stremio membership cache
         if success:
             try:
                 invalidate_membership_cache(user_id)
@@ -567,14 +548,12 @@ async def manage_subscriber_api(user_id: int, payload: dict) -> dict:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-#----- Access management
 async def get_all_tokens_api() -> dict:
     try:
         tokens = await db.get_all_api_tokens()
         now = datetime.utcnow()
         result = []
 
-        #----- Pre-load subscribers keyed by user_id for O(1) lookup
         subscriber_map = {}
         if SettingsManager.current().subscription:
             try:
@@ -584,7 +563,6 @@ async def get_all_tokens_api() -> dict:
             except Exception:
                 pass
 
-        #----- Non-empty display name for a user
         def display_name(user, user_id, token_name=None):
             if user:
                 n = user.get("first_name") or user.get("username")
@@ -594,7 +572,6 @@ async def get_all_tokens_api() -> dict:
                 return token_name
             return f"User {user_id}" if user_id else "Telegram User"
 
-        #----- Unified access entry from optional user + token records
         def build_entry(user_id, user, token_doc):
             expiry = None
             sub_status = None
@@ -642,7 +619,6 @@ async def get_all_tokens_api() -> dict:
 
         seen_user_ids = set()
 
-        #----- 1. Process all existing tokens
         for t in tokens:
             token_user_id = t.get("user_id")
 
@@ -659,13 +635,11 @@ async def get_all_tokens_api() -> dict:
 
             result.append(build_entry(token_user_id, user, t))
 
-        #----- 2. Add subscribers who have no token
         for uid_str, u in subscriber_map.items():
             if uid_str in seen_user_ids:
                 continue
             result.append(build_entry(u.get("_id"), u, None))
 
-        #----- Sort: active-with-token first, active-no-token next, expired last
         result.sort(key=lambda x: (x["is_expired"], not x["has_token"]))
         return {"tokens": result}
     except Exception as e:
@@ -684,7 +658,6 @@ async def revoke_token_api(token: str) -> dict:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-#----- Assign or extend a subscription for any user_id
 async def assign_plan_api(user_id: int, days: int) -> dict:
     try:
         if days < 1:
@@ -697,7 +670,6 @@ async def assign_plan_api(user_id: int, days: int) -> dict:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-#----- Link an orphan token to a Telegram user_id
 async def link_token_user_api(token: str, user_id: int) -> dict:
     try:
         success = await db.link_token_user(token, user_id)
@@ -710,7 +682,6 @@ async def link_token_user_api(token: str, user_id: int) -> dict:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-#----- Rescan: search TMDB candidates for a title
 async def search_media_rescan_api(media_type: str, query: str, year: int | None = None):
     query = (query or "").strip()
     if not query:
@@ -767,7 +738,6 @@ async def apply_media_rescan_api(request: Request, tmdb_id: int, db_index: int, 
 }
 
 
-#----- Custom catalog APIs
 def _normalize_media_type(media_type: str) -> str:
     return "tv" if media_type in ["tv", "series"] else "movie"
 
@@ -935,18 +905,13 @@ async def update_auto_catalog_settings_api(payload: dict):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Settings API
-# ─────────────────────────────────────────────────────────────────────────────
-
 async def get_settings_api() -> dict:
 
     data = SettingsManager.current().to_dict()
-    #----- Never expose the raw password; only whether one is set
     data["admin_password_set"] = bool(data.get("admin_password"))
     data["admin_password"] = ""
+    data["session_secret_set"] = bool(data.get("session_secret"))
+    data["session_secret"] = ""
 
     try:
         data["database_list"] = db.get_database_list()
@@ -959,11 +924,11 @@ async def get_settings_api() -> dict:
 
 async def update_settings_api(payload: dict) -> dict:
 
-    #----- Empty password string means leave it unchanged
     if "admin_password" in payload and not str(payload["admin_password"]).strip():
         del payload["admin_password"]
+    if "session_secret" in payload and not str(payload["session_secret"]).strip():
+        del payload["session_secret"]
 
-    #----- Type coercion and validation
     bool_keys = {"replace_mode", "hide_catalog", "subscription", "show_proxy_and_non_proxy_both"}
     for key in bool_keys:
         if key in payload:
@@ -1027,14 +992,12 @@ async def update_settings_api(payload: dict) -> dict:
             cleaned.append(channel)
         payload["anime_channels"] = cleaned
 
-    #----- Strip whitespace from string fields
     for key in ("tmdb_api", "base_url", "upstream_repo", "upstream_branch",
-                "admin_username", "admin_password", "http_proxy_url",
+                "admin_username", "admin_password", "session_secret", "http_proxy_url",
                 "payment_instructions", "payment_qr_url"):
         if key in payload and isinstance(payload[key], str):
             payload[key] = payload[key].strip()
 
-    #----- Hash a newly provided admin password before persisting
     if payload.get("admin_password"):
         payload["admin_password"] = hash_password(payload["admin_password"])
 
@@ -1050,11 +1013,6 @@ async def update_settings_api(payload: dict) -> dict:
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Tools — WebUI replacement for /scan, /rescan, /scanstatus, /cancelscan, /dbcheck
-# ─────────────────────────────────────────────────────────────────────────────
-
-#----- Pick a Telegram client capable of fetching channel messages
 def _scan_client():
     if StreamBot is not None:
         return StreamBot
@@ -1063,7 +1021,6 @@ def _scan_client():
     return None
 
 
-#----- Configured AUTH channels with friendly names for the picker
 async def get_tools_channels_api() -> dict:
     channels = list(SettingsManager.current().auth_channels)
     client = _scan_client()
@@ -1080,7 +1037,6 @@ async def get_tools_channels_api() -> dict:
     return {"status": "success", "data": result}
 
 
-#----- Start a scan or rescan job over the given channels
 async def start_scan_api(payload: dict) -> dict:
     client = _scan_client()
     if client is None:
@@ -1127,7 +1083,6 @@ async def dbcheck_status_api() -> dict:
     return {"status": "success", "data": dbcheck_manager.get_status()}
 
 
-#----- Purge dead links (from last dbcheck, flagged in DB, or a specific set)
 async def purge_dead_links_api(payload: dict | None = None) -> dict:
     payload = payload or {}
     source = str(payload.get("source", "dbcheck")).lower()

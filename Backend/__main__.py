@@ -1,8 +1,10 @@
 import asyncio
 import logging
+import secrets
 from traceback import format_exc
 
 from pyrogram import idle
+from starlette.middleware.sessions import SessionMiddleware
 
 from Backend import __version__, db
 from Backend.fastapi import server
@@ -21,7 +23,6 @@ from Backend.pyrofork.clients import initialize_clients
 loop = asyncio.get_event_loop()
 
 
-#----- Boot every subsystem then idle the bot
 async def start_services():
     try:
         LOGGER.info(f"Initializing Telegram-Stremio v-{__version__}")
@@ -31,6 +32,7 @@ async def start_services():
         await asyncio.sleep(1.2)
 
         await SettingsManager.initialize(db)
+        app.add_middleware(SessionMiddleware, secret_key=SettingsManager.current().session_secret or secrets.token_hex(32))
         await asyncio.sleep(0.5)
 
         await scan_manager.load(db)
@@ -77,7 +79,6 @@ async def start_services():
         LOGGER.error("Error during startup:\n" + format_exc())
 
 
-#----- Cancel pending tasks and shut clients down
 async def stop_services():
     try:
         LOGGER.info("Stopping services...")

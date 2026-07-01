@@ -23,7 +23,6 @@ ACTIVE_STREAMS: Dict[str, Dict] = {}
 RECENT_STREAMS = deque(maxlen=20)
 
 
-#----- Telegram file byte streamer with prefetch, multi-client parallelism, and telemetry
 class ByteStreamer:
     CHUNK_SIZE = 1024 * 1024
     CLEAN_INTERVAL = 30 * 60
@@ -73,7 +72,6 @@ class ByteStreamer:
             except Exception:
                 continue
 
-    #----- Fetch (and cache) Telegram FileId properties for a message
     async def get_file_properties(self, chat_id: int, message_id: int) -> FileId:
         if message_id not in self._file_id_cache:
             file_id = await get_file_ids(self.client, int(chat_id), int(message_id))
@@ -83,7 +81,6 @@ class ByteStreamer:
             self._file_id_cache[message_id] = file_id
         return self._file_id_cache[message_id]
 
-    #----- Build a prefetching, range-aware streaming generator for a file
     async def prefetch_stream(
         self,
         file_id: FileId,
@@ -492,11 +489,9 @@ class ByteStreamer:
             LOGGER.debug("ByteStreamer: cleared file_id cache")
 
 
-#----- Speed test helper (runs independently, on-demand per file)
 TEST_CHUNK_SIZE = 100 * 1024 * 1024
 
 
-#----- Download a fixed slice from one client and measure throughput
 async def _speed_test_single_client(
     client: Client,
     client_index: int,
@@ -619,7 +614,6 @@ async def _speed_test_single_client(
     return result
 
 
-#----- Run the speed test across every connected client, fastest first
 async def run_speed_test(chat_id: int, message_id: int) -> List[dict]:
     if not multi_clients:
         return [{"error": "No bot clients connected"}]

@@ -3,7 +3,6 @@ from pyrogram.filters import create
 from Backend.config import Telegram
 
 
-#----- Pyrogram filters restricting handlers to the configured owner
 class CustomFilters:
 
     @staticmethod

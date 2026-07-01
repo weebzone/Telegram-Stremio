@@ -11,7 +11,6 @@ from Backend.pyrofork.bot import StreamBot, client_dc_map, multi_clients, work_l
 client_tokens: dict[int, str] = {}
 
 
-#----- Read the configured multi-client tokens from settings
 class TokenParser:
     @staticmethod
     def parse_from_settings() -> dict[int, str]:
@@ -19,7 +18,6 @@ class TokenParser:
         return {i + 1: tok.strip() for i, tok in enumerate(tokens) if tok and tok.strip()}
 
 
-#----- Start a single bot client and register its DC/workload
 async def start_client(client_id: int, token: str):
     try:
         LOGGER.info(f"Starting - Bot Client {client_id}")
@@ -48,7 +46,6 @@ async def start_client(client_id: int, token: str):
         return None
 
 
-#----- Stop a client and purge all of its registry entries
 async def stop_client(client_id: int) -> None:
     client = multi_clients.pop(client_id, None)
     work_loads.pop(client_id, None)
@@ -64,7 +61,6 @@ async def stop_client(client_id: int) -> None:
             LOGGER.warning(f"Error stopping Client {client_id}: {e}")
 
 
-#----- Bring up the main client plus every configured extra client
 async def initialize_clients() -> None:
     multi_clients[0], work_loads[0] = StreamBot, 0
 
@@ -96,7 +92,6 @@ async def initialize_clients() -> None:
         LOGGER.info("No additional clients were initialized, using default client")
 
 
-#----- Reconcile running clients with the current token settings
 async def reload_multi_token_clients() -> dict:
     new_tokens = TokenParser.parse_from_settings()
 

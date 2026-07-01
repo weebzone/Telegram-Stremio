@@ -9,7 +9,6 @@ from Backend.helper.settings_manager import SettingsManager
 from Backend.logger import LOGGER
 
 
-#----- /start: hand out the Stremio addon link, gated by subscription state
 @Client.on_message(filters.command('start') & filters.private, group=10)
 async def send_start_message(client: Client, message: Message):
     try:
@@ -17,7 +16,6 @@ async def send_start_message(client: Client, message: Message):
         base_url = SettingsManager.current().base_url
         addon_url = f"{base_url}/stremio/manifest.json"
 
-        #----- No subscription mode: owner-only, single personal token
         if not SettingsManager.current().subscription:
             if user_id != Telegram.OWNER_ID:
                 return
@@ -39,7 +37,6 @@ async def send_start_message(client: Client, message: Message):
             )
             return
 
-        #----- Subscription mode: verify active subscription, else offer plans
         user = await db.get_user(user_id)
         now = datetime.utcnow()
 
@@ -70,7 +67,6 @@ async def send_start_message(client: Client, message: Message):
                 parse_mode=enums.ParseMode.HTML
             )
 
-        #----- Active subscriber: return their existing token link
         all_tokens = await db.get_all_api_tokens()
         token_doc = next((t for t in all_tokens if t.get("user_id") == user_id), None)
         if token_doc and "token" in token_doc:

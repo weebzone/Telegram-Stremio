@@ -18,7 +18,6 @@ from Backend.helper.task_manager import delete_message
 from Backend.logger import LOGGER
 
 
-
 def convert_objectid_to_str(document: Dict[str, Any]) -> Dict[str, Any]:
     for key, value in document.items():
         if isinstance(value, ObjectId):
@@ -104,7 +103,6 @@ class Database:
             return False
 
 
-
     async def connect_storage_db(self, uri: str, index: int) -> bool:
         try:
             client = motor.motor_asyncio.AsyncIOMotorClient(uri)
@@ -185,13 +183,9 @@ class Database:
         LOGGER.info(f"reload_extra_databases: {message}")
         return {"added": added, "removed": removed, "message": message}
 
-    #-----
-    #----- User Subscription Management
-    #-----
     async def get_user(self, user_id: int) -> Optional[dict]:
         return await self.dbs["tracking"]["users"].find_one({"_id": user_id})
 
-    #----- Whether a user doc represents a currently-active subscription
     @staticmethod
     def is_subscription_active(user: Optional[dict], now: datetime = None) -> bool:
         if not user or user.get("subscription_status") != "active":
@@ -207,7 +201,6 @@ class Database:
             pass
         return expiry > reference
 
-    #----- (movie_count, tv_count) totals summed across per-DB stats
     @staticmethod
     def content_totals(db_stats: List[dict]) -> Tuple[int, int]:
         total_movies = sum(stat.get("movie_count", 0) for stat in db_stats)
@@ -245,7 +238,6 @@ class Database:
 
         duration = user["pending_payment"]["duration"]
         
-        #----- Calculate new expiry
         current_expiry = user.get("subscription_expiry")
         now = datetime.utcnow()
         if current_expiry and current_expiry > now:
@@ -298,9 +290,6 @@ class Database:
             {"$set": {"reminder_sent": True}}
         )
 
-    #-----
-    #----- Admin Subscription Management
-    #-----
     async def get_subscription_plans(self) -> List[dict]:
         cursor = self.dbs["tracking"]["sub_plans"].find().sort("days", ASCENDING)
         plans = await cursor.to_list(None)
@@ -382,7 +371,6 @@ class Database:
         return False
 
     async def assign_subscription(self, user_id: int, days: int) -> dict:
-        #----- Upsert a subscription for any user_id, creating a record if it doesn't exist
         now = datetime.utcnow()
 
         user = await self.get_user(user_id)
@@ -418,9 +406,6 @@ class Database:
             "days_assigned": days,
         }
 
-    #-----
-    #----- Custom Catalog Management
-    #-----
     async def create_custom_catalog(self, name: str, visible: bool = True) -> Optional[str]:
         name = (name or "").strip()
         if not name:
@@ -530,7 +515,6 @@ class Database:
             return False
 
     async def find_media_doc(self, media_type: str, tmdb_id: int) -> Optional[Tuple[dict, int]]:
-        #----- Locate a media doc by tmdb_id across storage DBs -> (doc, db_index) or None
         collection_name = self._collection_for(media_type)
         try:
             tmdb_id = int(tmdb_id)
@@ -548,7 +532,6 @@ class Database:
         return None
 
     async def purge_media_from_catalogs(self, tmdb_id: int, media_type: str) -> int:
-        #----- Remove a media item from every catalog (auto + manual) by tmdb_id + media_type
         if tmdb_id in (None, "", 0):
             return 0
         try:
@@ -654,9 +637,6 @@ class Database:
         }
 
 
-    #-----
-    #----- Helper Methods for Repeated Logic
-    #-----
     def _get_sort_dict(self, sort_params: List[Tuple[str, str]]) -> Dict[str, int]:
         if sort_params:
             sort_field, sort_direction = sort_params[0]
@@ -744,12 +724,10 @@ class Database:
         LOGGER.info(f"Switched to storage_{self.current_db_index}")
         return await func(*args)
 
-    #----- Map any media_type spelling to its collection name
     @staticmethod
     def _collection_for(media_type: str) -> str:
         return "tv" if str(media_type).lower() in ("tv", "series") else "movie"
 
-    #----- Load a doc by tmdb_id, apply an async mutator, and save only if it changed
     async def _edit_media_doc(self, collection_name: str, tmdb_id: int, db_index: int, mutate) -> bool:
         db_key = f"storage_{db_index}"
         doc = await self.dbs[db_key][collection_name].find_one({"tmdb_id": tmdb_id})
@@ -761,7 +739,6 @@ class Database:
         result = await self.dbs[db_key][collection_name].replace_one({"tmdb_id": tmdb_id}, doc)
         return result.modified_count > 0
 
-    #----- Locate an existing doc across storage DBs by imdb_id, then tmdb_id, then title+year
     async def _find_existing_media(
         self, collection_name: str, imdb_id, tmdb_id, title, release_year, total_storage_dbs: int
     ) -> Tuple[Optional[dict], Optional[str], Optional[int]]:
@@ -778,10 +755,6 @@ class Database:
                 return doc, f"storage_{db_index}", db_index
         return None, None, None
 
-
-    #-----
-    #----- Multi Database Method for insert/update/delete/list
-    #-----
 
     async def _build_part_id_and_size(self, parts: List[dict]) -> Tuple[str, str]:
         sorted_parts = sorted(parts, key=lambda p: p.get("part_number", 0))
@@ -813,7 +786,7 @@ class Database:
                     if parts and any(p.get("chat_id") == channel and p.get("msg_id") == msg_id for p in parts):
                         remaining = [p for p in parts if not (p.get("chat_id") == channel and p.get("msg_id") == msg_id)]
                         if not remaining:
-                            continue  #----- last part removed: drop the whole quality entry
+                            continue
                         new_id, new_size = await self._build_part_id_and_size(remaining)
                         q["parts"] = remaining
                         q["id"] = new_id
@@ -1005,7 +978,6 @@ class Database:
         replace_mode = SettingsManager.current().replace_mode
 
         if incoming_group_key:
-            #----- Incoming is a split part.
             if replace_mode:
                 stale = [
                     q for q in existing_qualities
@@ -1023,7 +995,6 @@ class Database:
                 ]
             return await self._merge_split_part(existing_qualities, quality_to_update)
 
-        #----- Incoming is a normal (non-split) file.
         if replace_mode:
             stale = [q for q in existing_qualities if q.get("quality") == target_quality]
             for q in stale:
@@ -1034,7 +1005,6 @@ class Database:
             existing_qualities.append(quality_to_update)
             return existing_qualities
 
-        #----- REPLACE_MODE off: allow duplicate qualities.
         existing_qualities.append(quality_to_update)
         return existing_qualities
 
@@ -1059,7 +1029,6 @@ class Database:
             "movie", imdb_id, tmdb_id, title, release_year, total_storage_dbs
         )
 
-        #----- INSERT NEW MOVIE ----------------
         if not existing_movie:
             try:
                 movie_dict["db_index"] = self.current_db_index
@@ -1071,7 +1040,6 @@ class Database:
                     return await self._handle_storage_error(self.update_movie, movie_data, total_storage_dbs=total_storage_dbs)
                 return None
 
-        #----- UPDATE MOVIE ----------------
         movie_id = existing_movie["_id"]
 
         if imdb_id and not existing_movie.get("imdb_id"):
@@ -1124,7 +1092,6 @@ class Database:
             "tv", imdb_id, tmdb_id, title, release_year, total_storage_dbs
         )
 
-        #----- INSERT NEW TV ----------------
         if not existing_tv:
             try:
                 tv_show_dict["db_index"] = self.current_db_index
@@ -1136,7 +1103,6 @@ class Database:
                     return await self._handle_storage_error(self.update_tv_show, tv_show_data, total_storage_dbs=total_storage_dbs)
                 return None
 
-        #----- UPDATE TV ----------------
         tv_id = existing_tv["_id"]
 
         if imdb_id and not existing_tv.get("imdb_id"):
@@ -1177,7 +1143,6 @@ class Database:
 
         existing_tv["updated_on"] = datetime.utcnow()
 
-        #----- MOVE DB IF NEEDED ----------------
         if existing_db_index != self.current_db_index:
             try:
                 if await self._move_document("tv", existing_tv, existing_db_index):
@@ -1374,9 +1339,6 @@ class Database:
         
         return None
 
-    #-----
-    #----- DB Method for Edit Post
-    #-----
 
     async def get_document(self, media_type: str, tmdb_id: int, db_index: int) -> Optional[Dict[str, Any]]:
         db_key = f"storage_{db_index}"
@@ -1434,7 +1396,6 @@ class Database:
                     return False
             raise
 
-    #----- Queue deletion of the Telegram message(s) backing a quality (split or single)
     async def _queue_quality_deletion(self, quality: dict) -> None:
         parts = quality.get("parts")
         if parts:
@@ -1484,14 +1445,12 @@ class Database:
         for i in range(1, self.current_db_index + 1):
             db = self.dbs[f"storage_{i}"]
             
-            #----- Check Movies
             movie = await db["movie"].find_one({"telegram.id": stream_id_hash})
             if movie and "telegram" in movie:
                 for t in movie["telegram"]:
                     if t.get("id") == stream_id_hash:
                         return movie.get("title")
 
-            #----- Check TV Shows
             tv = await db["tv"].find_one({"seasons.episodes.telegram.id": stream_id_hash})
             if tv and "seasons" in tv:
                 title = tv.get("title", "Unknown Series")
@@ -1509,7 +1468,6 @@ class Database:
         for i in range(1, self.current_db_index + 1):
             db = self.dbs[f"storage_{i}"]
             
-            #----- Check Movies
             movie = await db["movie"].find_one({"telegram.id": stream_id_hash})
             if movie:
                 movie["telegram"] = [q for q in movie.get("telegram", []) if q.get("id") != stream_id_hash]
@@ -1521,7 +1479,6 @@ class Database:
                     await db["movie"].replace_one({"_id": movie["_id"]}, movie)
                 return True
 
-            #----- Check TV Shows
             tv = await db["tv"].find_one({"seasons.episodes.telegram.id": stream_id_hash})
             if tv:
                 for season in tv.get("seasons", []):
@@ -1603,7 +1560,6 @@ class Database:
         return await self._edit_media_doc("tv", tmdb_id, db_index, mutate)
 
 
-    #----- Get per-DB statistics (movies, tv shows, used size, etc.)
     async def get_database_stats(self):
         stats = []
         for key in self.dbs.keys():
@@ -1622,13 +1578,7 @@ class Database:
         return stats
 
 
-
-    #-----
-    #----- API Token Methods
-    #-----
-
     async def add_api_token(self, name: str, daily_limit_gb: float = None, monthly_limit_gb: float = None, user_id: int = None) -> dict:
-        #----- If a user_id is provided, return existing token if already created
         if user_id:
             existing = await self.dbs["tracking"]["api_tokens"].find_one({"user_id": user_id})
             if existing:
@@ -1670,7 +1620,6 @@ class Database:
         return result.deleted_count > 0
 
     async def link_token_user(self, token: str, user_id: int) -> bool:
-        #----- Link an existing token to a Telegram user_id
         result = await self.dbs["tracking"]["api_tokens"].update_one(
             {"token": token},
             {"$set": {"user_id": user_id}}
@@ -1722,15 +1671,10 @@ class Database:
         )
         return result.modified_count > 0
 
-    #-----
-    #----- Admin / Link Checker Methods
-    #-----
     async def flag_dead_link(self, media_type: str, tmdb_id: int, db_index: int, quality_id: str) -> bool:
-        #----- Flag a specific telegram quality entry as is_dead=True
         db_key = f"storage_{db_index}"
         
         if media_type == "movie":
-            #----- Direct update in the telegram array for movies
             result = await self.dbs[db_key]["movie"].update_one(
                 {"tmdb_id": tmdb_id, "telegram.id": quality_id},
                 {"$set": {"telegram.$.is_dead": True, "updated_on": datetime.utcnow()}}
@@ -1738,8 +1682,6 @@ class Database:
             return result.modified_count > 0
             
         elif media_type == "tv":
-            #----- Nested update for TV (arrayFilters needed since we don't know the exact indices)
-            #----- Find the TV show docs
             tv = await self.dbs[db_key]["tv"].find_one({"tmdb_id": tmdb_id})
             if not tv or "seasons" not in tv:
                 return False
@@ -1763,15 +1705,12 @@ class Database:
         return False
 
     async def get_all_dead_links(self) -> List[dict]:
-        #----- Flattened list of all dead links across storage DBs for the Admin UI
         dead_links = []
         
         for i in range(1, self.current_db_index + 1):
             db_key = f"storage_{i}"
             db = self.dbs[db_key]
             
-            #----- Scan Movies ---
-            #----- Match any movie where at least one telegram entry has is_dead=True
             movie_cursor = db["movie"].find({"telegram.is_dead": True})
             async for movie in movie_cursor:
                 for quality in movie.get("telegram", []):
@@ -1789,8 +1728,6 @@ class Database:
                             "date_added": quality.get("date_added")
                         })
                         
-            #----- Scan TV Shows ---
-            #----- Match any TV where seasons.episodes.telegram.is_dead=True
             tv_cursor = db["tv"].find({"seasons.episodes.telegram.is_dead": True})
             async for tv in tv_cursor:
                 title = tv.get("title")
@@ -1819,19 +1756,15 @@ class Database:
                                 
         return dead_links
 
-    #-----
-    #----- Stream Analytics
-    #-----
 
     async def log_stream_stats(self, stats: dict) -> None:
-        #----- Persist a finished-stream record to the tracking DB for analytics
         try:
             record = {
                 "stream_id":   stats.get("stream_id"),
                 "msg_id":      stats.get("msg_id"),
                 "chat_id":     stats.get("chat_id"),
                 "dc_id":       stats.get("dc_id"),
-                "title":       stats.get("meta", {}).get("title"),  #----- Added title
+                "title":       stats.get("meta", {}).get("title"),
                 "client_index": stats.get("client_index"),
                 "total_bytes": stats.get("total_bytes", 0),
                 "duration_sec": round(stats.get("duration", 0.0), 2),
@@ -1847,11 +1780,9 @@ class Database:
             LOGGER.warning(f"Stream analytics log failed: {e}")
 
     async def get_stream_analytics(self, limit: int = 200) -> dict:
-        #----- Return summary stats + recent stream records from the tracking DB
         try:
             col = self.dbs["tracking"]["stream_analytics"]
 
-            #----- Aggregate totals
             pipeline = [
                 {"$group": {
                     "_id": None,
@@ -1866,7 +1797,6 @@ class Database:
             summary = agg[0] if agg else {}
             summary.pop("_id", None)
 
-            #----- Per-client breakdown
             per_client_pipeline = [
                 {"$group": {
                     "_id":          "$client_index",
@@ -1883,7 +1813,6 @@ class Database:
                 row["avg_mbps"]     = round(row.get("avg_mbps", 0), 3)
                 row["peak_mbps"]    = round(row.get("peak_mbps", 0), 3)
 
-            #----- Recent records (newest first)
             recent_cursor = col.find(
                 {},
                 {"_id": 0, "stream_id": 1, "client_index": 1, "dc_id": 1,
@@ -1903,7 +1832,6 @@ class Database:
         except Exception as e:
             LOGGER.error(f"get_stream_analytics error: {e}")
             return {"summary": {}, "per_client": [], "recent": []}
-
 
 
     @staticmethod

@@ -5,7 +5,6 @@ from dotenv import load_dotenv
 load_dotenv(path.join(path.dirname(path.dirname(__file__)), "config.env"))
 
 
-#----- Parse an int env var, falling back to default on empty/invalid values
 def _int_env(key: str, default: int = 0) -> int:
     try:
         return int((getenv(key) or "").strip())
@@ -13,25 +12,17 @@ def _int_env(key: str, default: int = 0) -> int:
         return default
 
 
-#----- Environment-backed configuration
 class Telegram:
-    #----- Required: Telegram clients
     API_ID              = _int_env("API_ID")
     API_HASH            = getenv("API_HASH", "")
     BOT_TOKEN           = getenv("BOT_TOKEN", "")
     USER_SESSION_STRING = getenv("USER_SESSION_STRING", "")
 
-    #----- Required: Database URIs
     DATABASE = [db.strip() for db in (getenv("DATABASE") or "").split(",") if db.strip()]
 
-    #----- Required: Server
     PORT     = _int_env("PORT", 8000)
     OWNER_ID = _int_env("OWNER_ID")
 
-    #----- Web session signing key (random per-boot if unset — set to persist logins across restarts)
-    SESSION_SECRET = getenv("SESSION_SECRET", "")
-
-    #----- Read/Write via SettingsManager
     REPLACE_MODE                  = getenv("REPLACE_MODE", "true").lower() == "true"
     HIDE_CATALOG                  = getenv("HIDE_CATALOG", "false").lower() == "true"
     AUTH_CHANNEL                  = [c.strip() for c in (getenv("AUTH_CHANNEL") or "").split(",") if c.strip()]

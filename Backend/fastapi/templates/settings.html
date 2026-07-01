@@ -184,6 +184,18 @@
             </div>
         </div>
 
+        <div style="margin-top:1rem">
+            <label class="s-label" for="session_secret">Session Secret</label>
+            <input type="password" id="session_secret" class="s-input"
+                placeholder="Leave blank to keep current secret" autocomplete="new-password">
+            <p style="font-size:0.75rem;color:var(--text-sec);margin-top:0.3rem">
+                Signs admin login sessions. Changing it logs out all admins after the next restart.
+                {% if settings.session_secret_set is defined and settings.session_secret_set %}
+                    <i class="fa-solid fa-circle-check" style="color:#22c55e"></i> Secret is set
+                {% endif %}
+            </p>
+        </div>
+
         <hr class="divider">
 
         <!-- Auth Channels -->
@@ -653,6 +665,7 @@ async function saveSettings() {
         hide_catalog:                  document.getElementById('hide_catalog').checked,
         admin_username:                document.getElementById('admin_username').value.trim(),
         admin_password:                document.getElementById('admin_password').value,  // blank = keep
+        session_secret:                document.getElementById('session_secret').value,  // blank = keep
         tmdb_api:                      document.getElementById('tmdb_api').value.trim(),
         base_url:                      document.getElementById('base_url').value.trim(),
         upstream_repo:                 document.getElementById('upstream_repo').value.trim(),

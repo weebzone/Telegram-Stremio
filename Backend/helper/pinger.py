@@ -7,7 +7,6 @@ from Backend.helper.settings_manager import SettingsManager
 from Backend.logger import LOGGER
 
 
-#----- Periodically self-ping the stats endpoint to keep the instance awake
 async def ping():
     sleep_time = 1200
     manifest_url = f"{SettingsManager.current().base_url}/api/system/stats"

@@ -4,7 +4,6 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 
 
-#----- Quality detail schema
 class QualityPart(BaseModel):
     part_number: int
     chat_id: int
@@ -21,7 +20,6 @@ class QualityDetail(BaseModel):
     parts: Optional[List[QualityPart]] = None
 
 
-#----- Episode schema
 class Episode(BaseModel):
     episode_number: int
     title: str
@@ -31,13 +29,11 @@ class Episode(BaseModel):
     telegram: Optional[List[QualityDetail]]
 
 
-#----- Season schema
 class Season(BaseModel):
     season_number: int
     episodes: List[Episode] = Field(default_factory=list)
 
 
-#----- TV show schema
 class TVShowSchema(BaseModel):
     tmdb_id: Optional[int] = None
     imdb_id: Optional[str] = None
@@ -64,7 +60,6 @@ class TVShowSchema(BaseModel):
     auto_catalog: Optional[dict] = None
 
 
-#----- Movie schema
 class MovieSchema(BaseModel):
     tmdb_id: Optional[int] = None
     imdb_id: Optional[str] = None

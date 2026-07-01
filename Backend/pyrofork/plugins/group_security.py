@@ -7,7 +7,6 @@ from Backend.helper.settings_manager import SettingsManager
 from Backend.logger import LOGGER
 
 
-#----- Kick joiners of the subscription group who lack an active subscription
 @Client.on_chat_member_updated()
 async def on_user_join(client: Client, chat_member_updated: ChatMemberUpdated):
     if not SettingsManager.current().subscription:

@@ -10,7 +10,6 @@ MONTHLY_LIMIT_VIDEO = "https://bit.ly/4rfjtgd"
 SUBSCRIPTION_EXPIRED_VIDEO = "https://bit.ly/4rfjtgd"
 
 
-#----- Validate an API token and annotate it with subscription/limit status
 async def verify_token(token: str):
     token_data = await db.get_api_token(token)
     if not token_data:
@@ -23,7 +22,6 @@ async def verify_token(token: str):
     token_data["limit_video"] = None
     token_data["subscription_expired"] = False
 
-    #----- Subscription expiry check (only when the SUBSCRIPTION feature is enabled)
     if SettingsManager.current().subscription:
         user_id = token_data.get("user_id")
         if not user_id:
@@ -40,7 +38,6 @@ async def verify_token(token: str):
             token_data["subscription_expired"] = True
             return token_data
 
-        #----- Compare correctly regardless of timezone awareness
         now = datetime.utcnow()
         try:
             if expiry.tzinfo is not None:

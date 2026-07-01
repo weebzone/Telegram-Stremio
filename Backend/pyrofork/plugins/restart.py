@@ -10,7 +10,6 @@ from Backend.helper.custom_filter import CustomFilters
 from Backend.logger import LOGGER
 
 
-#----- Owner-only /restart: run updater then re-exec the app via uv
 @Client.on_message(filters.command('restart') & filters.private & CustomFilters.owner, group=10)
 async def restart(client: Client, message: Message):
     try:

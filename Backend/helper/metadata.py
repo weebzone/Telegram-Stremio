@@ -18,7 +18,6 @@ from rapidfuzz import fuzz
 from guessit import guessit as _guessit
 from difflib import SequenceMatcher
 
-#----- ── Config & caches ────────────────────────────────────────────────────────
 _CINEMETA_THRESHOLD = 0.60
 _TMDB_THRESHOLD = 0.55
 _STRONG_MATCH = 0.92
@@ -50,7 +49,7 @@ async def _cached_call(store: dict, key, ns: str, producer):
         _INFLIGHT.pop(flight_key, None)
         if not fut.done():
             fut.set_exception(e)
-            fut.exception()  #----- mark retrieved to silence asyncio warning when no waiters
+            fut.exception()
         raise
     store[key] = result
     _INFLIGHT.pop(flight_key, None)
@@ -60,8 +59,6 @@ async def _cached_call(store: dict, key, ns: str, producer):
 
 _MULTIPART_RE = re.compile(r"(?:part|cd|disc|disk)[s._-]*\d+(?=\.\w+$)", re.IGNORECASE)
 
-#----- Combined files share one "Season N Combined" entry per real season, filed in
-#----- the Specials folder (season 0).
 COMBINED_SEASON = 0
 COMBINED_EPISODE_BASE = 1000
 
@@ -69,8 +66,6 @@ _tmdb_client: aioTMDb | None = None
 _tmdb_client_key: str | None = None
 
 
-#----- ── TMDb client & image helpers ─────────────────────────────────────────────
-#----- Single source of truth for the TMDB API key (settings, then env fallback)
 def tmdb_api_key() -> str:
     try:
         key = SettingsManager.current().tmdb_api
@@ -117,7 +112,6 @@ def format_imdb_images(imdb_id: str) -> dict:
     }
 
 
-#----- ── ID & title helpers ──────────────────────────────────────────────────────
 def extract_default_id(text: str) -> str | None:
     if not text:
         return None
@@ -233,7 +227,6 @@ def _first(value):
     return value[0] if isinstance(value, list) else value
 
 
-#----- ── Filename parsing ────────────────────────────────────────────────────────
 def parse_media_name(name: str) -> dict:
     try:
         ptn = PTN.parse(name) or {}
@@ -275,7 +268,6 @@ def _apply_combined_override(payload: dict, combined: dict) -> None:
         payload["episode_backdrop"] = payload.get("backdrop") or payload.get("poster") or ""
 
 
-#----- ── Search (Cinemeta / TMDb) ────────────────────────────────────────────────
 async def safe_imdb_search(title: str, type_: str, year: Optional[int] = None) -> str | None:
     cache_key = f"imdb::{type_}::{title}::{year}"
 
@@ -411,7 +403,6 @@ async def _tmdb_alternative_titles(media_type: str, tmdb_id) -> list[str]:
     return await _cached_call(ALT_TITLES_CACHE, cache_key, "alt_titles", _produce)
 
 
-#----- ── Detail fetchers ─────────────────────────────────────────────────────────
 async def _tmdb_details(media_type: str, item_id):
     cache_key = (media_type, item_id)
 
@@ -470,7 +461,6 @@ async def _tmdb_external_imdb_id(media_type: str, tmdb_id) -> str | None:
         return None
 
 
-#----- ── Payload builders ────────────────────────────────────────────────────────
 def _extract_cast(details) -> list:
     credits = getattr(details, "credits", None) or {}
     cast = getattr(credits, "cast", []) or []
@@ -596,7 +586,6 @@ def _build_imdb_tv_payload(imdb, ep, imdb_id, title, season, episode, quality, e
     }
 
 
-#----- ── Anime helpers ───────────────────────────────────────────────────────────
 def _is_anime_channel(channel) -> bool:
     anime_channels = SettingsManager.current().anime_channels
     if not anime_channels:
@@ -639,14 +628,11 @@ async def _fetch_anime_movie(title, encoded_string, year, quality) -> dict | Non
     return result
 
 
-#----- ── TV & movie resolution ───────────────────────────────────────────────────
 async def fetch_tv_metadata(title, season, episode, encoded_string, year=None, quality=None, default_id=None) -> dict | None:
     imdb_id, tmdb_id, explicit_imdb_id, use_tmdb = _split_default_id(default_id)
     imdb_tv = None
     imdb_ep = None
 
-    #----- Year is intentionally ignored for TV: a series' seasons can air in different
-    #----- years, so keying the search/cache on year would split one show into many.
     if not imdb_id and not tmdb_id:
         imdb_id = await safe_imdb_search(title, "tvSeries", None)
         use_tmdb = not bool(imdb_id)
@@ -660,7 +646,6 @@ async def fetch_tv_metadata(title, season, episode, encoded_string, year=None, q
             imdb_tv = imdb_ep = None
             use_tmdb = True
 
-    #----- Reject a wrong Cinemeta hit (skipped for user-supplied ids).
     if imdb_tv and not use_tmdb and not explicit_imdb_id:
         sim = _title_similarity(title, imdb_tv.get("title", ""))
         if sim < _CINEMETA_THRESHOLD:
@@ -703,7 +688,6 @@ async def fetch_movie_metadata(title, encoded_string, year=None, quality=None, d
             imdb_details = None
             use_tmdb = True
 
-    #----- Reject a wrong Cinemeta hit (skipped for user-supplied ids).
     if imdb_details and not use_tmdb and not explicit_imdb_id:
         sim = _title_similarity(title, imdb_details.get("title", ""))
         if sim < _CINEMETA_THRESHOLD:
@@ -729,15 +713,11 @@ async def fetch_movie_metadata(title, encoded_string, year=None, quality=None, d
     return _build_imdb_movie_payload(imdb_details, imdb_id, title, quality, encoded_string)
 
 
-#----- ── Main entry point ────────────────────────────────────────────────────────
 async def metadata(filename: str, channel: int, msg_id, override_id: str = None) -> dict | None:
     if _MULTIPART_RE.search(filename):
         LOGGER.info(f"Skipping {filename}: split video file not meant to be combined in Stremio")
         return None
 
-    #----- Detect split parts (.001/.002) on the RAW name, then parse from the
-    #----- part-stripped name so the numeric suffix isn't misread as an episode.
-    #----- A file can be both split and a combined/whole-season file.
     split_info = parse_split_info(filename)
     part_number = split_info[1] if split_info else None
     parse_target = strip_part_suffix(filename) if split_info else filename
@@ -767,7 +747,6 @@ async def metadata(filename: str, channel: int, msg_id, override_id: str = None)
         LOGGER.warning(f"Invalid season/episode format for {filename}: {parsed}")
         return None
     elif season and not episode:
-        #----- Season pack with no episode number -> whole-season combined.
         combined = {"season": season, "start": None, "end": None}
         episode = 1
     if not quality:
@@ -828,7 +807,6 @@ def _resolve_default_id(override_id, filename) -> str | None:
     return None
 
 
-#----- ── Candidate search (/set command UI) ──────────────────────────────────────
 def _candidate_entry(source, title, year, imdb_id, tmdb_id, poster, backdrop, subtitle) -> dict:
     return {
         "source": source,
@@ -892,7 +870,6 @@ async def search_tv_candidates(query: str, limit: int = 8) -> list[dict]:
     return await _search_candidates(query, "tv", None, limit)
 
 
-#----- ── Manual /set helpers ─────────────────────────────────────────────────────
 def _to_selection_payload(data: dict, media_type: str) -> dict:
     return {
         "tmdb_id": data.get("tmdb_id"),

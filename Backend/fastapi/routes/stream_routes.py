@@ -37,7 +37,6 @@ _title_cache: Dict[str, tuple] = {}
 _TITLE_CACHE_TTL = 300
 
 
-#----- Recursively convert non-JSON-native containers to serializable forms
 def make_json_safe(obj):
     if isinstance(obj, deque):
         return list(obj)
@@ -52,7 +51,6 @@ def make_json_safe(obj):
     return obj
 
 
-#----- Parse an HTTP Range header into (start, end) bounds
 def parse_range_header(range_header: str, file_size: int):
     if not range_header:
         return 0, file_size - 1
@@ -80,7 +78,6 @@ def parse_range_header(range_header: str, file_size: int):
     return start, end
 
 
-#----- Pick the least-loaded client, preferring the target DC, round-robin on ties
 def select_best_client(target_dc: int) -> int:
     global _rr_counter
 
@@ -102,7 +99,6 @@ def select_best_client(target_dc: int) -> int:
     return selected
 
 
-#----- Periodically decay recorded client failure counters
 async def decay_client_failures() -> None:
     while True:
         await asyncio.sleep(300)
@@ -111,20 +107,17 @@ async def decay_client_failures() -> None:
                 client_failures[k] = max(0, client_failures[k] - 1)
 
 
-#----- Parallelism/prefetch factor scaled by the number of clients
 def get_parallel_prefetch(client_count: int) -> tuple[int, int]:
     value = min(max(math.ceil(client_count / 5), 1), 5)
     return value, value
 
 
-#----- Reuse (or lazily create) the cached ByteStreamer for a client index
 def _get_streamer(tg_client, index: int) -> ByteStreamer:
     if tg_client not in _streamer_by_client:
         _streamer_by_client[tg_client] = ByteStreamer(tg_client, index)
     return _streamer_by_client[tg_client]
 
 
-#----- Resolve a stream title from the TTL cache, DB, or the decoded URL name
 async def _lookup_title(stream_id_hash: str, decoded_name: str):
     if not stream_id_hash:
         return decoded_name
@@ -137,7 +130,6 @@ async def _lookup_title(stream_id_hash: str, decoded_name: str):
     return db_title or decoded_name
 
 
-#----- Derive a display file name and mime type from file properties
 def _resolve_filename_mime(file_id):
     file_name = file_id.file_name or f"{secrets.token_hex(4)}.bin"
     mime_type = file_id.mime_type or mimetypes.guess_type(file_name)[0] or "application/octet-stream"
@@ -146,7 +138,6 @@ def _resolve_filename_mime(file_id):
     return file_name, mime_type
 
 
-#----- Build the shared streaming response headers and status code
 def _build_stream_headers(mime_type, file_name, req_length, range_header, start, end, file_size):
     headers = {
         "Content-Type": mime_type,
@@ -164,7 +155,6 @@ def _build_stream_headers(mime_type, file_name, req_length, range_header, start,
     return headers, status
 
 
-#----- Entry point: decode the id and dispatch to the matching streamer
 @router.get("/dl/{token}/{id}/{name}")
 @router.head("/dl/{token}/{id}/{name}")
 async def stream_handler(request: Request, token: str, id: str, name: str, token_data: dict = Depends(verify_token)):
@@ -192,7 +182,6 @@ async def stream_handler(request: Request, token: str, id: str, name: str, token
     )
 
 
-#----- Stream a single Telegram file, with optional multi-client parallelism
 async def media_streamer(request: Request, chat_id: int, msg_id: int, token: str, token_data: dict = None, stream_id_hash: str = None):
     index = select_best_client(0)
     tg_client = multi_clients[index]
@@ -264,7 +253,6 @@ async def media_streamer(request: Request, chat_id: int, msg_id: int, token: str
     return StreamingResponse(body_gen, headers=headers, status_code=status, media_type=mime_type)
 
 
-#----- Stream media reconstructed from multiple split parts
 async def virtual_media_streamer(request: Request, parts_payload: list, token: str, token_data: dict = None, stream_id_hash: str = None):
     index = select_best_client(0)
     tg_client = multi_clients[index]
@@ -312,7 +300,6 @@ async def virtual_media_streamer(request: Request, parts_payload: list, token: s
 _userbot_streamer: ByteStreamer = None
 
 
-#----- Lazily build and cache the ByteStreamer for the Userbot (None if unconfigured)
 def _get_userbot_streamer() -> ByteStreamer:
     global _userbot_streamer
     if Userbot is None:
@@ -322,7 +309,6 @@ def _get_userbot_streamer() -> ByteStreamer:
     return _userbot_streamer
 
 
-#----- Stream a Global Search file through the Userbot session directly
 async def global_media_streamer(request: Request, chat_id: int, msg_id: int, token: str, token_data: dict = None, stream_id_hash: str = None):
     streamer = _get_userbot_streamer()
     if streamer is None:
@@ -381,7 +367,6 @@ async def global_media_streamer(request: Request, chat_id: int, msg_id: int, tok
     return StreamingResponse(body_gen, headers=headers, status_code=status, media_type=mime_type)
 
 
-#----- Live and recent stream telemetry, pruning stale active entries
 @router.get("/stream/stats")
 async def get_stream_stats():
     now = time.time()
@@ -452,7 +437,6 @@ async def get_stream_stats():
     })
 
 
-#----- Detailed telemetry for a single stream id
 @router.get("/stream/stats/{stream_id}")
 async def get_stream_detail(stream_id: str):
     info = ACTIVE_STREAMS.get(stream_id)

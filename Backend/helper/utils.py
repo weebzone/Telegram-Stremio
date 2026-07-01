@@ -5,7 +5,6 @@ from Backend.helper.custom_dl import ACTIVE_STREAMS, RECENT_STREAMS
 from Backend.logger import LOGGER
 
 
-#----- Fold the peak byte count across a stream and its split parts; report if still active
 def _collect_stream_bytes(stream_id: str, seen: dict) -> bool:
     prefix = f"{stream_id}-p"
 
@@ -24,7 +23,6 @@ def _collect_stream_bytes(stream_id: str, seen: dict) -> bool:
     return active
 
 
-#----- Periodically accrue a token's bandwidth usage until the stream goes quiet
 async def track_usage(stream_id: str, token: str, token_data: dict):
     await asyncio.sleep(2)
     limits = token_data.get("limits", {}) if token_data else {}
@@ -68,7 +66,6 @@ async def track_usage(stream_id: str, token: str, token_data: dict):
                 started = True
                 idle_polls = 0
             else:
-                #----- Exit once a started stream goes quiet, or never appears in the grace window
                 idle_polls += 1
                 if (started and idle_polls >= 2) or (not started and idle_polls >= 6):
                     return

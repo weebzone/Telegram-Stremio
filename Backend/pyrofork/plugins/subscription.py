@@ -15,12 +15,10 @@ from Backend.helper.settings_manager import SettingsManager
 from Backend.logger import LOGGER
 
 
-#----- Configured approvers, falling back to the owner
 def _approver_ids() -> list:
     return SettingsManager.current().approver_ids or [Telegram.OWNER_ID]
 
 
-#----- Resolve a target user's mention and username string for admin captions
 async def _resolve_target_info(client: Client, target_user_id: int):
     try:
         target_user = await client.get_users(target_user_id)
@@ -29,7 +27,6 @@ async def _resolve_target_info(client: Client, target_user_id: int):
         return f"User {target_user_id}", "N/A"
 
 
-#----- Formatted plan/user block shared by approve and reject captions
 def _plan_info_text(mention: str, username_str: str, user_id: int, duration, price) -> str:
     return (
         f"👤 <b>User:</b> {mention}\n"
@@ -39,7 +36,6 @@ def _plan_info_text(mention: str, username_str: str, user_id: int, duration, pri
     )
 
 
-#----- Update the acting admin's caption plus every other admin's copy
 async def _apply_admin_captions(client: Client, callback_query: CallbackQuery, admin_messages: list, status_caption: str):
     await callback_query.message.edit_caption(status_caption)
     acting_msg_id = callback_query.message.id
@@ -52,7 +48,6 @@ async def _apply_admin_captions(client: Client, callback_query: CallbackQuery, a
             pass
 
 
-#----- Plan button pressed: compute expiry, DM payment instructions, set pending state
 @Client.on_callback_query(filters.regex(r"^plan_([a-fA-F0-9]{24})$"))
 async def plan_selection(client: Client, callback_query: CallbackQuery):
     if not SettingsManager.current().subscription:
@@ -100,7 +95,6 @@ async def plan_selection(client: Client, callback_query: CallbackQuery):
 
     await db.set_pending_payment(user_id, int(duration), 0, price=plan.get("price", 0))
 
-    #----- Prefer DMing the user so the private screenshot handler can pick it up
     dm_sent = False
     try:
         if payment_qr_url:
@@ -124,7 +118,6 @@ async def plan_selection(client: Client, callback_query: CallbackQuery):
         await callback_query.answer()
 
 
-#----- Forward a user's payment screenshot to all approvers for review
 @Client.on_message(filters.photo & filters.private)
 async def handle_payment_screenshot(client: Client, message: Message):
     if not SettingsManager.current().subscription:
@@ -202,7 +195,6 @@ async def handle_payment_screenshot(client: Client, message: Message):
         )
 
 
-#----- Approver taps Approve/Reject: update subscription and all admin captions
 @Client.on_callback_query(filters.regex(r"^(approve|reject)_(\d+)$"))
 async def admin_review(client: Client, callback_query: CallbackQuery):
     if callback_query.from_user.id not in _approver_ids():
@@ -213,7 +205,6 @@ async def admin_review(client: Client, callback_query: CallbackQuery):
     acting_admin = callback_query.from_user
     admin_name = acting_admin.first_name or acting_admin.username or f"Admin {acting_admin.id}"
 
-    #----- Read admin_messages before any DB write (approve/reject clears pending_payment)
     user_pre = await db.get_user(target_user_id)
     if not user_pre or "pending_payment" not in user_pre:
         return await callback_query.answer("This request has already been processed.", show_alert=True)
@@ -276,7 +267,6 @@ async def admin_review(client: Client, callback_query: CallbackQuery):
         await _apply_admin_captions(client, callback_query, admin_messages, f"❌ <b>Rejected by {admin_name}</b>\n\n{info_text}")
 
 
-#----- /status: report the caller's active subscription and time remaining
 @Client.on_message(filters.command("status"))
 async def check_status(client: Client, message: Message):
     if not SettingsManager.current().subscription:

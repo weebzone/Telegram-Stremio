@@ -10,7 +10,6 @@ from Backend.helper.settings_manager import SettingsManager
 from Backend.logger import LOGGER
 
 
-#----- Owner-only /stats: aggregate content and system metrics across DBs
 @Client.on_message(filters.command('stats') & filters.private & CustomFilters.owner, group=10)
 async def stats_command(client: Client, message: Message):
     status_msg = await message.reply_text("📊 Gathering stats…", quote=True)

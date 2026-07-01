@@ -35,7 +35,6 @@ def _userbot_usable() -> bool:
     return Userbot is not None and not _userbot_session_dead
 
 
-#----- Edit a message caption via StreamBot, falling back to the Userbot
 async def edit_message(chat_id: int, msg_id: int, new_caption: str):
     try:
         await StreamBot.edit_message_caption(chat_id=chat_id, message_id=msg_id, caption=new_caption)
@@ -82,7 +81,6 @@ async def delete_message(chat_id: int, msg_id: int):
     await delete_messages_batch(chat_id, [msg_id])
 
 
-#----- Delete messages in batches, using the Userbot fallback for leftovers
 async def delete_messages_batch(chat_id: int, msg_ids: List[int]):
     if not msg_ids:
         return
