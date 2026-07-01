@@ -4,6 +4,7 @@ from pyrogram import Client, filters
 from pyrogram.types import Message
 
 from Backend.helper.custom_filter import CustomFilters
+from Backend.logger import LOGGER
 
 
 #----- Owner-only /log: send the log file as a document
@@ -17,4 +18,4 @@ async def log(client: Client, message: Message):
         await message.reply_document(document=path, quote=True, disable_notification=True)
     except Exception as e:
         await message.reply_text(f"⚠️ Error: {e}")
-        print(f"Error in /log: {e}")
+        LOGGER.error(f"Error in /log: {e}")

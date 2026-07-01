@@ -5,10 +5,18 @@ from dotenv import load_dotenv
 load_dotenv(path.join(path.dirname(path.dirname(__file__)), "config.env"))
 
 
+#----- Parse an int env var, falling back to default on empty/invalid values
+def _int_env(key: str, default: int = 0) -> int:
+    try:
+        return int((getenv(key) or "").strip())
+    except ValueError:
+        return default
+
+
 #----- Environment-backed configuration
 class Telegram:
     #----- Required: Telegram clients
-    API_ID              = int(getenv("API_ID", "0"))
+    API_ID              = _int_env("API_ID")
     API_HASH            = getenv("API_HASH", "")
     BOT_TOKEN           = getenv("BOT_TOKEN", "")
     USER_SESSION_STRING = getenv("USER_SESSION_STRING", "")
@@ -17,8 +25,11 @@ class Telegram:
     DATABASE = [db.strip() for db in (getenv("DATABASE") or "").split(",") if db.strip()]
 
     #----- Required: Server
-    PORT     = int(getenv("PORT", "8000"))
-    OWNER_ID = int(getenv("OWNER_ID", "0"))
+    PORT     = _int_env("PORT", 8000)
+    OWNER_ID = _int_env("OWNER_ID")
+
+    #----- Web session signing key (random per-boot if unset — set to persist logins across restarts)
+    SESSION_SECRET = getenv("SESSION_SECRET", "")
 
     #----- Read/Write via SettingsManager
     REPLACE_MODE                  = getenv("REPLACE_MODE", "true").lower() == "true"
@@ -31,7 +42,7 @@ class Telegram:
     ADMIN_USERNAME                = getenv("ADMIN_USERNAME", "admin")
     ADMIN_PASSWORD                = getenv("ADMIN_PASSWORD", "admin")
     SUBSCRIPTION                  = getenv("SUBSCRIPTION", "false").lower() == "true"
-    SUBSCRIPTION_GROUP_ID         = int(getenv("SUBSCRIPTION_GROUP_ID", "0"))
+    SUBSCRIPTION_GROUP_ID         = _int_env("SUBSCRIPTION_GROUP_ID")
     APPROVER_IDS                  = [int(x.strip()) for x in (getenv("APPROVER_IDS") or "").split(",") if x.strip().isdigit()]
     HTTP_PROXY_URL                = getenv("HTTP_Proxy_URL", "")
     SHOW_PROXY_AND_NON_PROXY_BOTH = getenv("SHOW_ProxyAndNonProxyBoth", "false").lower() == "true"

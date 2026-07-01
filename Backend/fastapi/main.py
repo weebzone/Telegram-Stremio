@@ -1,4 +1,5 @@
 import asyncio
+import secrets
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,6 +9,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
 from Backend import __version__
+from Backend.config import Telegram
 from Backend.fastapi.routes.api_routes import (
     add_custom_catalog_item_api,
     add_subscription_plan_api,
@@ -93,7 +95,7 @@ app = FastAPI(
 )
 
 #----- Middleware
-app.add_middleware(SessionMiddleware, secret_key="f6d2e3b9a0f43d9a2e6a56b2d3175cd9c05bbfe31d95ed2a7306b57cb1a8b6f0")
+app.add_middleware(SessionMiddleware, secret_key=Telegram.SESSION_SECRET or secrets.token_hex(32))
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],

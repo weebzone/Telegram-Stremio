@@ -6,6 +6,7 @@ from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 from Backend import db
 from Backend.config import Telegram
 from Backend.helper.settings_manager import SettingsManager
+from Backend.logger import LOGGER
 
 
 #----- /start: hand out the Stremio addon link, gated by subscription state
@@ -25,7 +26,7 @@ async def send_start_message(client: Client, message: Message):
                 token_doc = await db.add_api_token(name=user_name, user_id=user_id)
                 addon_url = f"{base_url}/stremio/{token_doc.get('token')}/manifest.json"
             except Exception as e:
-                print(f"DEBUG: Error ensuring token for free user: {e}")
+                LOGGER.error(f"Error ensuring token for free user: {e}")
 
             await message.reply_text(
                 '🎉 <b>Welcome to the Telegram Stremio Media Server!</b>\n\n'
@@ -87,4 +88,4 @@ async def send_start_message(client: Client, message: Message):
 
     except Exception as e:
         await message.reply_text(f"⚠️ Error: {e}")
-        print(f"Error in /start handler: {e}")
+        LOGGER.error(f"Error in /start handler: {e}")

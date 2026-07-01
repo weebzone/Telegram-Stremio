@@ -3,7 +3,7 @@ from typing import Optional
 from Backend.logger import LOGGER
 from Backend import __version__, now, timezone
 from Backend.helper.settings_manager import SettingsManager
-from Backend.helper.exceptions import FIleNotFound
+from Backend.helper.exceptions import FileNotFound
 from aiofiles import open as aiopen
 from aiofiles.os import path as aiopath, remove as aioremove
 from pyrogram import Client
@@ -63,7 +63,7 @@ async def get_file_ids(client: Client, chat_id: int, message_id: int) -> Optiona
     try:
         message = await client.get_messages(chat_id, message_id)
         if message.empty:
-            raise FIleNotFound("Message not found or empty")
+            raise FileNotFound("Message not found or empty")
 
         if media := is_media(message):
             file_id_obj = FileId.decode(media.file_id)
@@ -76,7 +76,7 @@ async def get_file_ids(client: Client, chat_id: int, message_id: int) -> Optiona
 
             return file_id_obj
         else:
-            raise FIleNotFound("No supported media found in message")
+            raise FileNotFound("No supported media found in message")
     except Exception as e:
         LOGGER.error(f"Error getting file IDs: {e}")
         raise

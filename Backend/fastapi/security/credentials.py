@@ -1,13 +1,14 @@
 from fastapi import HTTPException, Request
 from starlette.status import HTTP_401_UNAUTHORIZED
 
+from Backend.helper.passwords import verify_password
 from Backend.helper.settings_manager import SettingsManager
 
 
 #----- Match a username/password pair against the stored admin credentials
 def verify_credentials(username: str, password: str) -> bool:
     s = SettingsManager.current()
-    return username == s.admin_username and password == s.admin_password
+    return username == s.admin_username and verify_password(password, s.admin_password)
 
 
 #----- Whether the session carries a valid authentication flag

@@ -23,6 +23,7 @@ from Backend.helper.metadata import (
     search_movie_candidates,
     search_tv_candidates,
 )
+from Backend.helper.passwords import hash_password
 from Backend.helper.pyro import get_readable_time
 from Backend.helper.scan_manager import dbcheck_manager, scan_manager
 from Backend.helper.settings_manager import SettingsManager
@@ -1032,6 +1033,10 @@ async def update_settings_api(payload: dict) -> dict:
                 "payment_instructions", "payment_qr_url"):
         if key in payload and isinstance(payload[key], str):
             payload[key] = payload[key].strip()
+
+    #----- Hash a newly provided admin password before persisting
+    if payload.get("admin_password"):
+        payload["admin_password"] = hash_password(payload["admin_password"])
 
     try:
         reinit_results = await SettingsManager.update(db, payload)

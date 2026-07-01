@@ -14,7 +14,7 @@ from pyrogram.file_id import FileId
 from pyrogram.session import Auth, Session
 
 from Backend import db
-from Backend.helper.exceptions import FIleNotFound
+from Backend.helper.exceptions import FileNotFound
 from Backend.helper.pyro import get_file_ids
 from Backend.logger import LOGGER
 from Backend.pyrofork.bot import client_avg_mbps, client_dc_map, client_failures, multi_clients, work_loads
@@ -79,7 +79,7 @@ class ByteStreamer:
             file_id = await get_file_ids(self.client, int(chat_id), int(message_id))
             if not file_id:
                 LOGGER.warning("Message %s not found", message_id)
-                raise FIleNotFound
+                raise FileNotFound
             self._file_id_cache[message_id] = file_id
         return self._file_id_cache[message_id]
 

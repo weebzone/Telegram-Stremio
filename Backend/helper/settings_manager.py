@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 from Backend.config import Telegram
+from Backend.helper.passwords import hash_password
 from Backend.logger import LOGGER
 
 #----- Default values (used when nothing exists in the DB yet)
@@ -43,7 +44,7 @@ def _seed_from_env() -> Dict[str, Any]:
         "upstream_repo":                Telegram.UPSTREAM_REPO,
         "upstream_branch":              Telegram.UPSTREAM_BRANCH,
         "admin_username":               Telegram.ADMIN_USERNAME,
-        "admin_password":               Telegram.ADMIN_PASSWORD,
+        "admin_password":               hash_password(Telegram.ADMIN_PASSWORD),
         "subscription":                 Telegram.SUBSCRIPTION,
         "subscription_group_id":        Telegram.SUBSCRIPTION_GROUP_ID,
         "approver_ids":                 list(Telegram.APPROVER_IDS),

@@ -4,8 +4,7 @@ from typing import Dict, List, Optional, Set, Tuple
 
 import httpx
 
-from Backend.config import Telegram
-from Backend.helper.settings_manager import SettingsManager
+from Backend.helper.metadata import tmdb_api_key
 from Backend.logger import LOGGER
 
 AUTO_CATALOG_REGION = "IN"
@@ -85,16 +84,6 @@ _auto_sync_task: Optional[asyncio.Task] = None
 
 INSTANT_SYNC_CONCURRENCY = 3
 _instant_sync_semaphore = asyncio.Semaphore(INSTANT_SYNC_CONCURRENCY)
-
-
-def _tmdb_api_key() -> str:
-    try:
-        key = SettingsManager.current().tmdb_api
-        if key:
-            return key
-    except Exception:
-        pass
-    return getattr(Telegram, "TMDB_API", "") or ""
 
 
 def _media_type(doc: dict) -> str:
@@ -295,7 +284,7 @@ def classify_media_from_tmdb(doc: dict, details: dict, watch_data: dict, enabled
 
 
 async def _fetch_tmdb_data(client: httpx.AsyncClient, doc: dict) -> tuple[dict, dict]:
-    api_key = _tmdb_api_key()
+    api_key = tmdb_api_key()
     if not api_key:
         return {}, {}
 
@@ -595,7 +584,7 @@ async def run_auto_catalog_sync(db, *, force: bool = False, full_rebuild: bool =
             LOGGER.info(f"Auto catalog sync skipped: {summary}")
             return summary
 
-        if not _tmdb_api_key():
+        if not tmdb_api_key():
             LOGGER.warning(
                 "Auto catalog: no TMDB API key configured — only 'Top Rated' and "
                 "'Recently Added' will populate; language & OTT catalogs need a TMDB key."

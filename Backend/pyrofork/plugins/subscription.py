@@ -12,6 +12,7 @@ from pyrogram.types import (
 from Backend import db
 from Backend.config import Telegram
 from Backend.helper.settings_manager import SettingsManager
+from Backend.logger import LOGGER
 
 
 #----- Configured approvers, falling back to the owner
@@ -106,11 +107,11 @@ async def plan_selection(client: Client, callback_query: CallbackQuery):
             try:
                 await client.send_photo(chat_id=user_id, photo=payment_qr_url, caption=f"📷 Scan to pay ₹{plan['price']}")
             except Exception as qe:
-                print(f"Could not send payment QR to {user_id}: {qe}")
+                LOGGER.warning(f"Could not send payment QR to {user_id}: {qe}")
         await client.send_message(chat_id=user_id, text=text, reply_markup=ForceReply(selective=True))
         dm_sent = True
     except Exception as e:
-        print(f"Could not DM user {user_id}: {e}")
+        LOGGER.warning(f"Could not DM user {user_id}: {e}")
 
     if dm_sent:
         await callback_query.answer("✅ Check your DM for payment instructions!", show_alert=True)
@@ -134,11 +135,11 @@ async def handle_payment_screenshot(client: Client, message: Message):
         or message.chat.id
 
     try:
-        print(f"DEBUG: handle_payment_screenshot triggered by {sender_id}")
+        LOGGER.debug(f"handle_payment_screenshot triggered by {sender_id}")
         user = await db.get_user(sender_id)
-        print(f"DEBUG: user from DB = {user}")
+        LOGGER.debug(f"user from DB = {user}")
         if not user or "pending_payment" not in user:
-            print(f"DEBUG: No pending_payment found for {sender_id}")
+            LOGGER.debug(f"No pending_payment found for {sender_id}")
             await message.reply_text(
                 "ℹ️ We received your photo, but you don't have an active payment request.\n\n"
                 "Please use /start to select a subscription plan first, then send your payment screenshot.",
@@ -175,7 +176,7 @@ async def handle_payment_screenshot(client: Client, message: Message):
                 sent = await message.copy(approver_id, caption=admin_text, reply_markup=keyboard)
                 admin_messages.append({"chat_id": approver_id, "message_id": sent.id})
             except Exception as e:
-                print(f"Failed to forward screenshot to approver {approver_id}: {e}")
+                LOGGER.error(f"Failed to forward screenshot to approver {approver_id}: {e}")
 
         await db.set_pending_payment(sender_id, duration, message.id, price=price, admin_messages=admin_messages)
 
@@ -194,7 +195,7 @@ async def handle_payment_screenshot(client: Client, message: Message):
             )
 
     except Exception as e:
-        print(f"Error in handle_payment_screenshot: {e}")
+        LOGGER.error(f"Error in handle_payment_screenshot: {e}")
         await message.reply_text(
             f"⚠️ Something went wrong while processing your screenshot. Please try again or contact the admin.\n\nError: {e}",
             quote=True

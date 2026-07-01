@@ -6,6 +6,7 @@ from typing import Optional, List, Dict
 import PTN
 
 import Backend
+from Backend.config import Telegram
 from Backend.logger import LOGGER
 from Backend.helper.imdb import get_detail, get_season, search_title, search_title_multi
 from Backend.helper.settings_manager import SettingsManager
@@ -69,9 +70,20 @@ _tmdb_client_key: str | None = None
 
 
 #----- ── TMDb client & image helpers ─────────────────────────────────────────────
+#----- Single source of truth for the TMDB API key (settings, then env fallback)
+def tmdb_api_key() -> str:
+    try:
+        key = SettingsManager.current().tmdb_api
+        if key:
+            return key
+    except Exception:
+        pass
+    return getattr(Telegram, "TMDB_API", "") or ""
+
+
 def get_tmdb_client() -> aioTMDb:
     global _tmdb_client, _tmdb_client_key
-    current_key = SettingsManager.current().tmdb_api
+    current_key = tmdb_api_key()
     if _tmdb_client is None or _tmdb_client_key != current_key:
         _tmdb_client = aioTMDb(key=current_key, language="en-US", region="US")
         _tmdb_client_key = current_key
