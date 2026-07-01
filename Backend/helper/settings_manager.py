@@ -181,6 +181,16 @@ class SettingsManager:
             cls._current = Settings(seed)
         else:
             cls._current = Settings(raw)
+
+        #----- Backfill & persist a session secret for installs that predate this setting,
+        #----- otherwise a new random key would be generated every restart (logging admins out)
+        if not cls._current.session_secret:
+            data = cls._current.to_dict()
+            data["session_secret"] = secrets.token_hex(32)
+            await db.save_settings(data)
+            cls._current = Settings(data)
+            LOGGER.info("SettingsManager: generated and stored a new persistent session secret.")
+
         LOGGER.info("SettingsManager: settings loaded successfully.")
 
     #----- Reload settings from DB (call after an external change)
