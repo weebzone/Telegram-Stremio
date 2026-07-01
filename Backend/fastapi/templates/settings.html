@@ -186,8 +186,16 @@
 
         <div style="margin-top:1rem">
             <label class="s-label" for="session_secret">Session Secret</label>
-            <input type="password" id="session_secret" class="s-input"
-                placeholder="Leave blank to keep current secret" autocomplete="new-password">
+            <div style="position:relative">
+                <input type="password" id="session_secret" class="s-input"
+                    placeholder="Leave blank to keep current secret"
+                    style="padding-right:2.5rem" autocomplete="new-password">
+                <button type="button" onclick="generateSessionSecret()" title="Generate a random secret"
+                    style="position:absolute;right:0.75rem;top:50%;transform:translateY(-50%);
+                           background:none;border:none;color:var(--text-sec);cursor:pointer">
+                    <i class="fa-solid fa-dice"></i>
+                </button>
+            </div>
             <p style="font-size:0.75rem;color:var(--text-sec);margin-top:0.3rem">
                 Signs admin login sessions. Changing it logs out all admins after the next restart.
                 {% if settings.session_secret_set is defined and settings.session_secret_set %}
@@ -575,6 +583,15 @@ function togglePwdVisibility() {
         input.type = 'password';
         icon.className = 'fa-solid fa-eye';
     }
+}
+
+/* ── Session secret generator ─────────────────────────────────────────── */
+function generateSessionSecret() {
+    const bytes = new Uint8Array(32);
+    crypto.getRandomValues(bytes);
+    const input = document.getElementById('session_secret');
+    input.value = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+    input.type = 'text';
 }
 
 /* ── Multi-value list helpers ─────────────────────────────────────────── */
