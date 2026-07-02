@@ -48,13 +48,16 @@ class DeadLinkChecker:
         for i in range(1, self.db.current_db_index + 1):
             active_db = self.db.dbs[f"storage_{i}"]
 
-            #----- Movies
+            #----- Movies (snapshot ids first so no cursor stays open during the slow Telegram checks)
             try:
-                movie_cursor = active_db["movie"].find({
-                    "telegram": {"$exists": True, "$not": {"$size": 0}},
-                    "telegram.is_dead": {"$ne": True}
-                })
-                async for movie in movie_cursor:
+                movie_ids = [d["_id"] for d in await active_db["movie"].find(
+                    {"telegram": {"$exists": True, "$not": {"$size": 0}}, "telegram.is_dead": {"$ne": True}},
+                    {"_id": 1},
+                ).to_list(None)]
+                for movie_id in movie_ids:
+                    movie = await active_db["movie"].find_one({"_id": movie_id})
+                    if not movie:
+                        continue
                     tmdb_id = movie.get("tmdb_id")
                     for quality in movie.get("telegram", []):
                         if quality.get("is_dead"):
@@ -67,13 +70,16 @@ class DeadLinkChecker:
             except Exception as e:
                 LOGGER.error(f"Error scanning movies in DB {i}: {e}")
 
-            #----- TV Shows
+            #----- TV Shows (snapshot ids first, then re-read each doc with a short query)
             try:
-                tv_cursor = active_db["tv"].find({
-                    "seasons.episodes.telegram": {"$exists": True, "$not": {"$size": 0}},
-                    "seasons.episodes.telegram.is_dead": {"$ne": True}
-                })
-                async for tv in tv_cursor:
+                tv_ids = [d["_id"] for d in await active_db["tv"].find(
+                    {"seasons.episodes.telegram": {"$exists": True, "$not": {"$size": 0}}, "seasons.episodes.telegram.is_dead": {"$ne": True}},
+                    {"_id": 1},
+                ).to_list(None)]
+                for tv_id in tv_ids:
+                    tv = await active_db["tv"].find_one({"_id": tv_id})
+                    if not tv:
+                        continue
                     tmdb_id = tv.get("tmdb_id")
                     for season in tv.get("seasons", []):
                         for ep in season.get("episodes", []):
