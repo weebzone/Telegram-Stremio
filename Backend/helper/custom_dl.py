@@ -327,8 +327,17 @@ class ByteStreamer:
                     if off is None and chunk is None:
                         break
 
+                    if part_count == 1:
+                        out_chunk = chunk[first_part_cut:last_part_cut]
+                    elif current_part_idx == 1:
+                        out_chunk = chunk[first_part_cut:]
+                    elif current_part_idx == part_count:
+                        out_chunk = chunk[:last_part_cut]
+                    else:
+                        out_chunk = chunk
+
                     try:
-                        chunk_len = len(chunk)
+                        chunk_len = len(out_chunk)
                     except Exception:
                         chunk_len = 0
 
@@ -360,14 +369,7 @@ class ByteStreamer:
                     if instant_mbps > ACTIVE_STREAMS[stream_id]["peak_mbps"]:
                         ACTIVE_STREAMS[stream_id]["peak_mbps"] = instant_mbps
 
-                    if part_count == 1:
-                        yield chunk[first_part_cut:last_part_cut]
-                    elif current_part_idx == 1:
-                        yield chunk[first_part_cut:]
-                    elif current_part_idx == part_count:
-                        yield chunk[:last_part_cut]
-                    else:
-                        yield chunk
+                    yield out_chunk
 
                     current_part_idx += 1
 
