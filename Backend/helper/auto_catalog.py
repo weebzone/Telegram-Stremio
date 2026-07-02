@@ -283,6 +283,37 @@ def classify_media_from_tmdb(doc: dict, details: dict, watch_data: dict, enabled
     }
 
 
+_TMDB_FIND_CACHE: dict = {}
+_TMDB_DETAILS_CACHE: dict = {}
+_TMDB_PROVIDERS_CACHE: dict = {}
+_TMDB_INFLIGHT: Dict[tuple, asyncio.Future] = {}
+
+
+#----- Cache TMDB responses and de-duplicate concurrent identical requests (mirrors metadata.py)
+async def _cached_call(store: dict, key, ns: str, producer):
+    if key in store:
+        return store[key]
+    flight_key = (ns, key)
+    fut = _TMDB_INFLIGHT.get(flight_key)
+    if fut is not None:
+        return await fut
+    fut = asyncio.get_running_loop().create_future()
+    _TMDB_INFLIGHT[flight_key] = fut
+    try:
+        result = await producer()
+    except Exception as e:
+        _TMDB_INFLIGHT.pop(flight_key, None)
+        if not fut.done():
+            fut.set_exception(e)
+            fut.exception()
+        raise
+    store[key] = result
+    _TMDB_INFLIGHT.pop(flight_key, None)
+    if not fut.done():
+        fut.set_result(result)
+    return result
+
+
 async def _fetch_tmdb_data(client: httpx.AsyncClient, doc: dict) -> tuple[dict, dict]:
     api_key = tmdb_api_key()
     if not api_key:
@@ -291,36 +322,48 @@ async def _fetch_tmdb_data(client: httpx.AsyncClient, doc: dict) -> tuple[dict, 
     media_type = _media_type(doc)
     tmdb_id = doc.get("tmdb_id")
 
+    #----- Resolve tmdb_id from imdb_id when missing (cached by media_type + imdb_id)
     if not tmdb_id and doc.get("imdb_id"):
-        find_url = f"https://api.themoviedb.org/3/find/{doc.get('imdb_id')}"
-        params = {"api_key": api_key, "external_source": "imdb_id"}
-        resp = await client.get(find_url, params=params)
-        if resp.status_code == 200:
-            data = resp.json()
+        imdb_id = doc.get("imdb_id")
+
+        async def _find():
+            resp = await client.get(
+                f"https://api.themoviedb.org/3/find/{imdb_id}",
+                params={"api_key": api_key, "external_source": "imdb_id"},
+            )
+            if resp.status_code != 200:
+                return None
             result_key = "tv_results" if media_type == "tv" else "movie_results"
-            results = data.get(result_key) or []
-            if results:
-                tmdb_id = results[0].get("id")
+            results = resp.json().get(result_key) or []
+            return results[0].get("id") if results else None
+
+        tmdb_id = await _cached_call(_TMDB_FIND_CACHE, (media_type, imdb_id), "find", _find)
 
     if not tmdb_id:
         return {}, {}
 
-    detail_url = f"https://api.themoviedb.org/3/{media_type}/{tmdb_id}"
-    detail_params = {
-        "api_key": api_key,
-        "language": "en-US",
-        "append_to_response": "keywords",
-    }
-    provider_url = f"https://api.themoviedb.org/3/{media_type}/{tmdb_id}/watch/providers"
+    #----- Details (+keywords) and watch providers, each cached by media_type + tmdb_id
+    async def _details():
+        resp = await client.get(
+            f"https://api.themoviedb.org/3/{media_type}/{tmdb_id}",
+            params={"api_key": api_key, "language": "en-US", "append_to_response": "keywords"},
+        )
+        return resp.json() if resp.status_code == 200 else {}
 
-    detail_resp, provider_resp = await asyncio.gather(
-        client.get(detail_url, params=detail_params),
-        client.get(provider_url, params={"api_key": api_key}),
+    async def _providers():
+        resp = await client.get(
+            f"https://api.themoviedb.org/3/{media_type}/{tmdb_id}/watch/providers",
+            params={"api_key": api_key},
+        )
+        return resp.json() if resp.status_code == 200 else {}
+
+    details, providers = await asyncio.gather(
+        _cached_call(_TMDB_DETAILS_CACHE, (media_type, tmdb_id), "details", _details),
+        _cached_call(_TMDB_PROVIDERS_CACHE, (media_type, tmdb_id), "providers", _providers),
         return_exceptions=True,
     )
-
-    details = detail_resp.json() if not isinstance(detail_resp, Exception) and detail_resp.status_code == 200 else {}
-    providers = provider_resp.json() if not isinstance(provider_resp, Exception) and provider_resp.status_code == 200 else {}
+    details = details if not isinstance(details, Exception) else {}
+    providers = providers if not isinstance(providers, Exception) else {}
     return details, providers
 
 
