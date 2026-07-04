@@ -1,3 +1,4 @@
+import re
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -116,6 +117,17 @@ def format_stream_details(filename: str, quality: str, size: str, is_split: bool
 
     stream_title = "\n".join(stream_title_parts)
     return (stream_name, stream_title)
+
+
+def parse_size_to_bytes(size_str: str) -> int:
+    if not size_str:
+        return 0
+    match = re.match(r"([\d.]+)\s*([A-Za-z]+)", size_str.strip())
+    if not match:
+        return 0
+    value, unit = float(match.group(1)), match.group(2).upper()
+    multipliers = {"B": 1, "KB": 1024, "MB": 1024**2, "GB": 1024**3, "TB": 1024**4}
+    return int(value * multipliers.get(unit, 1))
 
 
 def get_resolution_priority(stream_name: str) -> int:
@@ -427,7 +439,8 @@ async def _global_streams_for(token: str, imdb_id: str, media_type: str, season_
         stream_name = f"🌐 GLOBAL {r['quality']}"
         stream_title = f"{stream_title}\n📡 {r['source_chat']}"
         url = f"{SettingsManager.current().base_url}/dl/{token}/{r['token']}/{quote(r['title'])}"
-        streams.append({"name": stream_name, "title": stream_title, "url": url})
+        size_bytes = parse_size_to_bytes(r.get("size", ""))
+        streams.append({"name": stream_name, "title": stream_title, "url": url, "size_bytes": size_bytes})
     return streams
 
 
@@ -537,6 +550,7 @@ async def get_streams(
                 filename = quality.get("name", "")
                 quality_str = quality.get("quality", "HD")
                 size = quality.get("size", "")
+                size_bytes = parse_size_to_bytes(size)
 
                 stream_name, stream_title = format_stream_details(
                     filename, quality_str, size, is_split=bool(quality.get("group_key"))
@@ -549,24 +563,28 @@ async def get_streams(
                     streams.append({
                         "name": f"{stream_name} (Proxy)",
                         "title": stream_title,
-                        "url": proxy_url
+                        "url": proxy_url,
+                        "size_bytes": size_bytes
                     })
                     streams.append({
                         "name": f"{stream_name} (Direct)",
                         "title": stream_title,
-                        "url": original_url
+                        "url": original_url,
+                        "size_bytes": size_bytes
                     })
                 elif proxy_url:
                     streams.append({
                         "name": stream_name,
                         "title": stream_title,
-                        "url": proxy_url
+                        "url": proxy_url,
+                        "size_bytes": size_bytes
                     })
                 else:
                     streams.append({
                         "name": stream_name,
                         "title": stream_title,
-                        "url": original_url
+                        "url": original_url,
+                        "size_bytes": size_bytes
                     })
     elif is_global_search_enabled():
         try:
@@ -580,7 +598,7 @@ async def get_streams(
         return {"streams": []}
 
     streams.sort(
-        key=lambda s: get_resolution_priority(s.get("name", "")),
+        key=lambda s: (get_resolution_priority(s.get("name", "")), s.get("size_bytes", 0)),
         reverse=True
     )
     name_count: dict = {}
