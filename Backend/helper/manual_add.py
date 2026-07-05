@@ -21,6 +21,17 @@ def parse_telegram_link(url: str) -> Tuple[Optional[object], Optional[int]]:
     return None, None
 
 
+#----- Map a video pixel height to a standard quality label
+def quality_from_height(height: int) -> str:
+    if not height:
+        return ""
+    for threshold, label in ((1800, "2160p"), (1200, "1440p"), (900, "1080p"),
+                             (620, "720p"), (400, "480p"), (260, "360p")):
+        if height >= threshold:
+            return label
+    return "240p"
+
+
 #----- Fetch a message and return the stream fields the manual-add flow needs.
 async def resolve_telegram_message(client, url: str = None, chat_id=None, msg_id=None) -> dict:
     if url:
@@ -47,13 +58,20 @@ async def resolve_telegram_message(client, url: str = None, chat_id=None, msg_id
     raw_size = getattr(media, "file_size", 0) or 0
     parsed = parse_media_name(clean_filename(file_name))
 
+    #----- Real video dimensions beat the filename; documents fall back to the name
+    height = getattr(media, "height", 0) or 0
+    quality = quality_from_height(height) or parsed.get("quality") or ""
+
     return {
         "chat_id": str(message.chat.id).replace("-100", ""),
         "msg_id": message.id,
         "name": file_name,
         "raw_size": raw_size,
         "size": get_readable_file_size(raw_size),
-        "quality": parsed.get("quality") or "",
+        "quality": quality,
         "season": parsed.get("season"),
         "episode": parsed.get("episode"),
+        "width": getattr(media, "width", 0) or 0,
+        "height": height,
+        "has_thumb": bool(getattr(media, "thumbs", None)),
     }

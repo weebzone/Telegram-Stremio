@@ -704,12 +704,13 @@
                 {% endif %}
 
                 <div>
-                    <label class="as-label">Telegram message link *</label>
-                    <div class="flex flex-col sm:flex-row gap-2">
-                        <input id="as-url" class="as-input" placeholder="https://t.me/c/123456/789">
-                        <button type="button" onclick="addStreamResolve()" class="as-btn as-btn-ghost w-full sm:w-auto">Resolve</button>
+                    <div class="flex items-center justify-between gap-2">
+                        <label class="as-label" style="margin-bottom:0">Telegram message link(s) *</label>
+                        <button type="button" onclick="addStreamPart()" class="text-xs font-bold text-primary shrink-0"><i class="fa-solid fa-plus"></i> Add split part</button>
                     </div>
-                    <p id="as-resolve-state" class="text-xs text-text-secondary mt-2 hidden"></p>
+                    <div id="as-parts" class="space-y-2 mt-2"></div>
+                    <p class="text-xs text-text-secondary mt-2">Add more parts only for a split file (they join into one stream, in order).</p>
+                    <p id="as-resolve-state" class="text-xs text-text-secondary mt-1 hidden"></p>
                 </div>
 
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -1522,11 +1523,34 @@
         if (e.key === 'Escape') { closeSpeedTest(); closeAddStream(); }
     });
 
+    function addStreamResetParts() {
+        document.getElementById('as-parts').innerHTML =
+            `<div class="flex flex-col sm:flex-row gap-2" data-part>
+                <input class="as-input as-part-url" placeholder="https://t.me/c/123456/789">
+                <button type="button" onclick="addStreamResolve()" class="as-btn as-btn-ghost w-full sm:w-auto">Resolve</button>
+             </div>`;
+    }
+
+    function addStreamPart() {
+        const div = document.createElement('div');
+        div.className = 'flex flex-col sm:flex-row gap-2';
+        div.setAttribute('data-part', '');
+        div.innerHTML = `<input class="as-input as-part-url" placeholder="Split part link (in order)">
+            <button type="button" onclick="this.closest('[data-part]').remove()" class="as-btn as-btn-ghost w-full sm:w-auto">Remove</button>`;
+        document.getElementById('as-parts').appendChild(div);
+    }
+
+    function addStreamCollectParts() {
+        return [...document.querySelectorAll('#as-parts .as-part-url')]
+            .map(i => i.value.trim()).filter(Boolean).map(url => ({ url }));
+    }
+
     function openAddStream() {
-        ['as-url', 'as-name', 'as-season', 'as-episode', 'as-episode-title', 'as-quality-custom'].forEach(id => {
+        ['as-name', 'as-season', 'as-episode', 'as-episode-title', 'as-quality-custom'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.value = '';
         });
+        addStreamResetParts();
         const q = document.getElementById('as-quality');
         if (q) q.value = '1080p';
         document.getElementById('as-quality-custom')?.classList.add('hidden');
@@ -1547,7 +1571,8 @@
     }
 
     async function addStreamResolve() {
-        const url = document.getElementById('as-url').value.trim();
+        const first = document.querySelector('#as-parts .as-part-url');
+        const url = first ? first.value.trim() : '';
         const state = document.getElementById('as-resolve-state');
         if (!url) { showErrorMessage('Paste a Telegram message link first.'); return; }
         state.textContent = 'Resolving...';
@@ -1579,16 +1604,16 @@
 
     async function submitAddStream() {
         const btn = document.getElementById('as-submit');
-        const url = document.getElementById('as-url').value.trim();
+        const parts = addStreamCollectParts();
         const quality = addStreamQuality();
-        if (!url) { showErrorMessage('Paste the Telegram message link.'); return; }
+        if (!parts.length) { showErrorMessage('Paste at least one Telegram message link.'); return; }
         if (!quality) { showErrorMessage('Select a quality.'); return; }
 
         const payload = {
             media_type: mediaType,
             tmdb_id: tmdbId,
             db_index: dbIndex,
-            stream: { url, quality, name: document.getElementById('as-name').value.trim() || undefined }
+            stream: { quality, name: document.getElementById('as-name').value.trim() || undefined, parts }
         };
 
         if (mediaType === 'tv') {

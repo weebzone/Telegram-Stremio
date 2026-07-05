@@ -574,11 +574,12 @@
 
                 <!-- Stream -->
                 <div class="space-y-3">
-                    <label class="ma-label">Stream — paste the Telegram file's message link</label>
-                    <div class="flex flex-col sm:flex-row gap-2">
-                        <input id="ma-tg-url" class="ma-input" placeholder="https://t.me/c/123456/789">
-                        <button type="button" onclick="maResolve()" class="px-4 py-2.5 rounded-xl glass-panel border border-hairline text-text font-bold text-sm shrink-0">Resolve</button>
+                    <div class="flex items-center justify-between gap-2">
+                        <label class="ma-label" style="margin-bottom:0">Stream link(s)</label>
+                        <button type="button" onclick="maAddPart()" class="text-xs font-bold text-primary shrink-0"><i class="fa-solid fa-plus"></i> Add split part</button>
                     </div>
+                    <div id="ma-parts" class="space-y-2"></div>
+                    <p class="text-xs text-text-secondary">Add more parts only for a split file (they join into one stream, in order).</p>
                     <p id="ma-resolve-state" class="text-xs text-text-secondary hidden"></p>
                     <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <div>
@@ -609,9 +610,32 @@
 <script>
     let maType = mediaType;
 
+    function maResetParts() {
+        document.getElementById('ma-parts').innerHTML =
+            `<div class="flex flex-col sm:flex-row gap-2" data-part>
+                <input class="ma-input ma-part-url" placeholder="https://t.me/c/123456/789">
+                <button type="button" onclick="maResolve()" class="px-4 py-2.5 rounded-xl glass-panel border border-hairline text-text font-bold text-sm shrink-0">Resolve</button>
+             </div>`;
+    }
+
+    function maAddPart() {
+        const div = document.createElement('div');
+        div.className = 'flex flex-col sm:flex-row gap-2';
+        div.setAttribute('data-part', '');
+        div.innerHTML = `<input class="ma-input ma-part-url" placeholder="Split part link (in order)">
+            <button type="button" onclick="this.closest('[data-part]').remove()" class="px-4 py-2.5 rounded-xl border border-hairline text-red-300 font-bold text-sm shrink-0">Remove</button>`;
+        document.getElementById('ma-parts').appendChild(div);
+    }
+
+    function maCollectParts() {
+        return [...document.querySelectorAll('#ma-parts .ma-part-url')]
+            .map(i => i.value.trim()).filter(Boolean).map(url => ({ url }));
+    }
+
     function openManualAdd() {
         maSetType(mediaType);
-        ['ma-tg-url','ma-name','ma-season','ma-episode','ma-episode-title','ma-m-title','ma-m-year','ma-m-rating','ma-m-genres','ma-m-description','ma-quality-custom'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+        ['ma-name','ma-season','ma-episode','ma-episode-title','ma-m-title','ma-m-year','ma-m-rating','ma-m-genres','ma-m-description','ma-quality-custom'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+        maResetParts();
         document.getElementById('ma-quality').value = '1080p';
         document.getElementById('ma-quality-custom').classList.add('hidden');
         document.getElementById('ma-resolve-state').classList.add('hidden');
@@ -631,7 +655,8 @@
     }
 
     async function maResolve() {
-        const url = document.getElementById('ma-tg-url').value.trim();
+        const first = document.querySelector('#ma-parts .ma-part-url');
+        const url = first ? first.value.trim() : '';
         const state = document.getElementById('ma-resolve-state');
         if (!url) { showToast('Paste a Telegram message link first.', 'error', 'Error'); return; }
         state.textContent = 'Resolving...';
@@ -669,16 +694,16 @@
 
     async function submitManualAdd() {
         const btn = document.getElementById('ma-submit');
-        const url = document.getElementById('ma-tg-url').value.trim();
+        const parts = maCollectParts();
         const quality = maQuality();
         const title = document.getElementById('ma-m-title').value.trim();
         if (!title) { showToast('Enter a title.', 'error', 'Error'); return; }
-        if (!url) { showToast('Paste the Telegram message link.', 'error', 'Error'); return; }
+        if (!parts.length) { showToast('Paste at least one Telegram message link.', 'error', 'Error'); return; }
         if (!quality) { showToast('Select a quality.', 'error', 'Error'); return; }
 
         const payload = {
             media_type: maType,
-            stream: { url, quality, name: document.getElementById('ma-name').value.trim() || undefined },
+            stream: { quality, name: document.getElementById('ma-name').value.trim() || undefined, parts },
             manual_metadata: {
                 title,
                 year: document.getElementById('ma-m-year').value.trim(),

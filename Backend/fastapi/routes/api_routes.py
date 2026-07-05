@@ -32,6 +32,7 @@ from Backend.helper.passwords import hash_password
 from Backend.helper.pyro import get_readable_time
 from Backend.helper.scan_manager import dbcheck_manager, scan_manager
 from Backend.helper.settings_manager import SettingsManager
+from Backend.helper.split_files import strip_part_suffix
 from Backend.logger import LOGGER
 from Backend.pyrofork.bot import (
     StreamBot,
@@ -860,24 +861,33 @@ async def manual_add_media_api(payload: dict) -> dict:
     if not quality:
         raise HTTPException(status_code=400, detail="A quality label (e.g. 1080p) is required.")
 
+    #----- One source = single file, multiple sources = split file parts (in order)
+    part_sources = stream.get("parts")
+    if not isinstance(part_sources, list) or not part_sources:
+        part_sources = [{"url": stream.get("url"), "chat_id": stream.get("chat_id"), "msg_id": stream.get("msg_id")}]
+    part_sources = [p for p in part_sources if p and (p.get("url") or (p.get("chat_id") and p.get("msg_id")))]
+    if not part_sources:
+        raise HTTPException(status_code=400, detail="Provide at least one Telegram message link.")
+
     client = _scan_client()
     if client is None:
         raise HTTPException(status_code=503, detail="No Telegram client is connected yet.")
-    try:
-        resolved = await resolve_telegram_message(
-            client, url=stream.get("url"),
-            chat_id=stream.get("chat_id"), msg_id=stream.get("msg_id"),
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Could not read that message: {exc}")
 
-    channel = int(resolved["chat_id"])
-    msg_id = int(resolved["msg_id"])
-    name = (stream.get("name") or resolved["name"]).strip()
-    size = stream.get("size") or resolved["size"]
-    raw_size = int(resolved.get("raw_size") or 0)
+    resolved_parts = []
+    for src in part_sources:
+        try:
+            resolved_parts.append(await resolve_telegram_message(
+                client, url=src.get("url"), chat_id=src.get("chat_id"), msg_id=src.get("msg_id"),
+            ))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Could not read that message: {exc}")
+
+    primary = resolved_parts[0]
+    is_split = len(resolved_parts) > 1
+    raw_name = (stream.get("name") or primary["name"]).strip()
+    name = strip_part_suffix(raw_name) if is_split else raw_name
 
     #----- Resolve the title-level metadata: existing doc, TMDB/IMDb pick, or manual entry
     tmdb_id = payload.get("tmdb_id")
@@ -910,39 +920,54 @@ async def manual_add_media_api(payload: dict) -> dict:
         base["imdb_id"] = f"tg{abs(int(base['tmdb_id']))}"
     _fill_placeholder_metadata(base)
 
-    encoded = await encode_string({"chat_id": channel, "msg_id": msg_id})
-    metadata_info = dict(base)
-    metadata_info.update({
-        "media_type": media_type,
-        "quality": quality,
-        "encoded_string": encoded,
-        "group_key": None,
-        "part_number": None,
-        "is_anime": False,
-    })
+    #----- Use the file's own thumbnail as artwork when available
+    base_url = SettingsManager.current().base_url
+    thumb_url = ""
+    if primary.get("has_thumb") and base_url:
+        thumb_enc = await encode_string({"chat_id": int(primary["chat_id"]), "msg_id": int(primary["msg_id"])})
+        thumb_url = f"{base_url}/thumb/{thumb_enc}"
 
+    #----- Split parts share one quality entry via a common group key
+    group_key = f"manual:{primary['chat_id']}:{quality}:{secrets.token_hex(6)}" if is_split else None
+
+    tv_extra = {}
     if media_type == "tv":
         try:
             season_number = int(payload.get("season_number"))
             episode_number = int(payload.get("episode_number"))
         except (TypeError, ValueError):
             raise HTTPException(status_code=400, detail="Season and episode numbers are required for TV.")
-        metadata_info.update({
+        tv_extra = {
             "season_number": season_number,
             "episode_number": episode_number,
             "episode_title": (payload.get("episode_title") or "").strip() or f"S{season_number:02d}E{episode_number:02d}",
-            "episode_backdrop": payload.get("episode_backdrop") or base.get("backdrop") or "",
+            "episode_backdrop": payload.get("episode_backdrop") or thumb_url or base.get("backdrop") or "",
             "episode_overview": payload.get("episode_overview") or "",
             "episode_released": payload.get("episode_released") or "",
+        }
+
+    for index, part in enumerate(resolved_parts, start=1):
+        p_channel = int(part["chat_id"])
+        p_msg = int(part["msg_id"])
+        encoded = await encode_string({"chat_id": p_channel, "msg_id": p_msg})
+        metadata_info = dict(base)
+        metadata_info.update({
+            "media_type": media_type,
+            "quality": quality,
+            "encoded_string": encoded,
+            "group_key": group_key,
+            "part_number": index if is_split else None,
+            "is_anime": False,
         })
+        metadata_info.update(tv_extra)
+        updated_id = await db.insert_media(
+            metadata_info, channel=p_channel, msg_id=p_msg,
+            size=part["size"], name=name, raw_size=int(part.get("raw_size") or 0),
+        )
+        if not updated_id:
+            raise HTTPException(status_code=500, detail="Failed to add media (validation error).")
 
-    updated_id = await db.insert_media(
-        metadata_info, channel=channel, msg_id=msg_id, size=size, name=name, raw_size=raw_size,
-    )
-    if not updated_id:
-        raise HTTPException(status_code=500, detail="Failed to add media (validation error).")
-
-    result_tmdb_id = metadata_info["tmdb_id"]
+    result_tmdb_id = base["tmdb_id"]
     location = await db.find_media_doc(media_type, result_tmdb_id)
     result_db_index = location[1] if location else db.current_db_index
 
@@ -952,9 +977,10 @@ async def manual_add_media_api(payload: dict) -> dict:
         except Exception:
             pass
 
+    message = f"Split stream added ({len(resolved_parts)} parts)." if is_split else "Stream added successfully."
     return {
         "status": "success",
-        "message": "Stream added successfully.",
+        "message": message,
         "tmdb_id": result_tmdb_id,
         "db_index": result_db_index,
         "media_type": media_type,
