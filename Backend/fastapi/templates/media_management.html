@@ -509,9 +509,6 @@
     .ma-label { display:block; font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-secondary,var(--text-sec)); margin-bottom:0.35rem; }
     .ma-tab { flex:1; padding:0.55rem; border-radius:0.75rem; font-weight:700; font-size:0.85rem; border:1px solid var(--border); background:transparent; color:var(--text); cursor:pointer; }
     .ma-tab.active { background:var(--primary); color:#fff; border-color:var(--primary); }
-    .ma-cand { display:flex; gap:0.75rem; padding:0.6rem; border:1px solid var(--border); border-radius:0.9rem; cursor:pointer; text-align:left; width:100%; }
-    .ma-cand:hover { border-color:color-mix(in srgb,var(--primary) 40%,transparent); }
-    .ma-cand.active { border-color:var(--primary); box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 18%,transparent); }
 </style>
 
 <!-- Manual Add modal -->
@@ -534,49 +531,30 @@
                     </div>
                 </div>
 
-                <!-- Title source -->
-                <div>
-                    <label class="ma-label">Title</label>
-                    <div class="flex gap-2 mb-3">
-                        <button type="button" class="ma-tab active" data-ma-src="search" onclick="maSetSource('search')">Search TMDB/IMDb</button>
-                        <button type="button" class="ma-tab" data-ma-src="manual" onclick="maSetSource('manual')">Enter manually</button>
+                <!-- Title details -->
+                <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                    <div class="sm:col-span-2">
+                        <label class="ma-label">Title *</label>
+                        <input id="ma-m-title" class="ma-input" placeholder="Custom title">
                     </div>
-
-                    <div id="ma-src-search">
-                        <div class="flex gap-2">
-                            <input id="ma-search-input" class="ma-input" placeholder="Search title..."
-                                   onkeydown="if(event.key==='Enter'){event.preventDefault();maSearch();}">
-                            <button type="button" onclick="maSearch()" class="px-4 rounded-2xl bg-primary text-white font-bold text-sm shrink-0"><i class="fa-solid fa-magnifying-glass"></i></button>
-                        </div>
-                        <p id="ma-search-state" class="text-xs text-text-secondary mt-2 hidden"></p>
-                        <div id="ma-candidates" class="grid grid-cols-1 gap-2 mt-3"></div>
+                    <div>
+                        <label class="ma-label">Year</label>
+                        <input id="ma-m-year" type="number" class="ma-input" placeholder="2024">
                     </div>
-
-                    <div id="ma-src-manual" class="hidden space-y-3">
-                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                            <div class="sm:col-span-2">
-                                <label class="ma-label">Title *</label>
-                                <input id="ma-m-title" class="ma-input" placeholder="Custom title">
-                            </div>
-                            <div>
-                                <label class="ma-label">Year</label>
-                                <input id="ma-m-year" type="number" class="ma-input" placeholder="2024">
-                            </div>
-                        </div>
-                        <div>
-                            <label class="ma-label">Poster URL</label>
-                            <input id="ma-m-poster" type="url" class="ma-input" placeholder="https://...">
-                        </div>
-                        <div>
-                            <label class="ma-label">Genres (comma-separated)</label>
-                            <input id="ma-m-genres" class="ma-input" placeholder="Action, Drama">
-                        </div>
-                        <div>
-                            <label class="ma-label">Description</label>
-                            <textarea id="ma-m-description" rows="2" class="ma-input" placeholder="Short overview"></textarea>
-                        </div>
+                    <div>
+                        <label class="ma-label">Rating</label>
+                        <input id="ma-m-rating" type="number" step="0.1" min="0" max="10" class="ma-input" placeholder="Random">
                     </div>
                 </div>
+                <div>
+                    <label class="ma-label">Genres (comma-separated)</label>
+                    <input id="ma-m-genres" class="ma-input" placeholder="Left empty = random">
+                </div>
+                <div>
+                    <label class="ma-label">Description</label>
+                    <textarea id="ma-m-description" rows="2" class="ma-input" placeholder="Left empty = random"></textarea>
+                </div>
+                <p class="text-xs text-text-secondary -mt-2">Empty fields are auto-filled. Poster &amp; backdrop are generated from the title.</p>
 
                 <!-- TV episode fields -->
                 <div id="ma-tv-fields" class="hidden grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -597,9 +575,9 @@
                 <!-- Stream -->
                 <div class="space-y-3">
                     <label class="ma-label">Stream — paste the Telegram file's message link</label>
-                    <div class="flex gap-2">
+                    <div class="flex flex-col sm:flex-row gap-2">
                         <input id="ma-tg-url" class="ma-input" placeholder="https://t.me/c/123456/789">
-                        <button type="button" onclick="maResolve()" class="px-4 rounded-2xl glass-panel border border-hairline text-text font-bold text-sm shrink-0">Resolve</button>
+                        <button type="button" onclick="maResolve()" class="px-4 py-2.5 rounded-xl glass-panel border border-hairline text-text font-bold text-sm shrink-0">Resolve</button>
                     </div>
                     <p id="ma-resolve-state" class="text-xs text-text-secondary hidden"></p>
                     <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -630,19 +608,10 @@
 
 <script>
     let maType = mediaType;
-    let maSource = 'search';
-    let maSelected = null;
 
     function openManualAdd() {
-        maType = mediaType;
-        maSource = 'search';
-        maSelected = null;
         maSetType(mediaType);
-        maSetSource('search');
-        document.getElementById('ma-candidates').innerHTML = '';
-        document.getElementById('ma-search-input').value = '';
-        document.getElementById('ma-search-state').classList.add('hidden');
-        ['ma-tg-url','ma-name','ma-season','ma-episode','ma-episode-title','ma-m-title','ma-m-year','ma-m-poster','ma-m-genres','ma-m-description','ma-quality-custom'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+        ['ma-tg-url','ma-name','ma-season','ma-episode','ma-episode-title','ma-m-title','ma-m-year','ma-m-rating','ma-m-genres','ma-m-description','ma-quality-custom'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
         document.getElementById('ma-quality').value = '1080p';
         document.getElementById('ma-quality-custom').classList.add('hidden');
         document.getElementById('ma-resolve-state').classList.add('hidden');
@@ -657,53 +626,8 @@
 
     function maSetType(type) {
         maType = type;
-        maSelected = null;
         document.querySelectorAll('[data-ma-type]').forEach(b => b.classList.toggle('active', b.dataset.maType === type));
         document.getElementById('ma-tv-fields').classList.toggle('hidden', type !== 'tv');
-        document.getElementById('ma-candidates').innerHTML = '';
-    }
-
-    function maSetSource(src) {
-        maSource = src;
-        document.querySelectorAll('[data-ma-src]').forEach(b => b.classList.toggle('active', b.dataset.maSrc === src));
-        document.getElementById('ma-src-search').classList.toggle('hidden', src !== 'search');
-        document.getElementById('ma-src-manual').classList.toggle('hidden', src !== 'manual');
-    }
-
-    async function maSearch() {
-        const query = document.getElementById('ma-search-input').value.trim();
-        const state = document.getElementById('ma-search-state');
-        const list = document.getElementById('ma-candidates');
-        if (!query) return;
-        maSelected = null;
-        list.innerHTML = '';
-        state.textContent = 'Searching...';
-        state.classList.remove('hidden');
-        try {
-            const res = await fetch(`/api/media/rescan/search?media_type=${maType}&query=${encodeURIComponent(query)}`);
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) throw new Error(data.detail || 'Search failed');
-            const results = data.results || [];
-            if (!results.length) { state.textContent = 'No matches found.'; return; }
-            state.textContent = `Found ${results.length} match(es). Pick one.`;
-            list.innerHTML = results.map((r, i) => `
-                <button type="button" class="ma-cand" data-i="${i}" onclick="maPick(${i})">
-                    <img src="${r.poster || 'https://via.placeholder.com/60x90?text=%20'}" class="w-12 h-[4.5rem] object-cover rounded-lg shrink-0" onerror="this.style.visibility='hidden'">
-                    <div class="min-w-0">
-                        <p class="font-bold text-text text-sm">${(r.title||'Untitled').replace(/</g,'&lt;')} <span class="text-text-secondary font-normal">${r.year||''}</span></p>
-                        <p class="text-xs text-text-secondary mt-1">${r.subtitle||''}</p>
-                        <p class="text-xs text-text-secondary mt-1">IMDb: ${r.imdb_id||'N/A'} · TMDb: ${r.tmdb_id||'N/A'}</p>
-                    </div>
-                </button>`).join('');
-            window._maResults = results;
-        } catch (e) {
-            state.textContent = e.message || 'Search failed.';
-        }
-    }
-
-    function maPick(i) {
-        maSelected = (window._maResults || [])[i] || null;
-        document.querySelectorAll('#ma-candidates .ma-cand').forEach(c => c.classList.toggle('active', Number(c.dataset.i) === i));
     }
 
     async function maResolve() {
@@ -747,29 +671,22 @@
         const btn = document.getElementById('ma-submit');
         const url = document.getElementById('ma-tg-url').value.trim();
         const quality = maQuality();
+        const title = document.getElementById('ma-m-title').value.trim();
+        if (!title) { showToast('Enter a title.', 'error', 'Error'); return; }
         if (!url) { showToast('Paste the Telegram message link.', 'error', 'Error'); return; }
         if (!quality) { showToast('Select a quality.', 'error', 'Error'); return; }
 
         const payload = {
             media_type: maType,
-            stream: { url, quality, name: document.getElementById('ma-name').value.trim() || undefined }
-        };
-
-        if (maSource === 'search') {
-            if (!maSelected) { showToast('Search and pick a title, or switch to manual entry.', 'error', 'Error'); return; }
-            payload.selected_id = String(maSelected.tmdb_id || maSelected.imdb_id || '');
-            if (!payload.selected_id) { showToast('Selected title has no TMDb/IMDb id.', 'error', 'Error'); return; }
-        } else {
-            const title = document.getElementById('ma-m-title').value.trim();
-            if (!title) { showToast('Enter a title.', 'error', 'Error'); return; }
-            payload.manual_metadata = {
+            stream: { url, quality, name: document.getElementById('ma-name').value.trim() || undefined },
+            manual_metadata: {
                 title,
                 year: document.getElementById('ma-m-year').value.trim(),
-                poster: document.getElementById('ma-m-poster').value.trim(),
+                rate: document.getElementById('ma-m-rating').value.trim(),
                 genres: document.getElementById('ma-m-genres').value.trim(),
                 description: document.getElementById('ma-m-description').value.trim(),
-            };
-        }
+            }
+        };
 
         if (maType === 'tv') {
             const s = document.getElementById('ma-season').value.trim();

@@ -660,63 +660,78 @@
     </div>
 </div>
 
+<style>
+    #add-stream-modal .as-input {
+        width: 100%; border-radius: 0.85rem;
+        border: 1px solid color-mix(in srgb, var(--border) 95%, transparent);
+        background: color-mix(in srgb, var(--bg) 78%, transparent);
+        color: var(--text); padding: 0.7rem 0.9rem; font-size: 0.9rem; outline: none;
+    }
+    #add-stream-modal .as-input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 16%, transparent); }
+    #add-stream-modal .as-label { display:block; font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-sec); margin-bottom:0.35rem; }
+    #add-stream-modal .as-btn { display:inline-flex; align-items:center; justify-content:center; gap:0.4rem; border-radius:0.85rem; padding:0.7rem 1.1rem; font-weight:700; font-size:0.88rem; border:1px solid transparent; cursor:pointer; white-space:nowrap; transition:filter .15s ease; }
+    #add-stream-modal .as-btn:hover { filter: brightness(1.06); }
+    #add-stream-modal .as-btn-ghost { background: color-mix(in srgb, var(--bg) 74%, transparent); color: var(--text); border-color: color-mix(in srgb, var(--border) 95%, transparent); }
+    #add-stream-modal .as-btn-success { background: rgb(16 185 129); color:#fff; }
+</style>
+
 <div id="add-stream-modal" class="fixed inset-0 z-50 hidden" aria-modal="true" role="dialog">
     <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="closeAddStream()"></div>
-    <div class="absolute inset-0 flex items-start sm:items-center justify-center p-2 sm:p-4 overflow-y-auto">
-        <div class="glass-card rounded-3xl w-full max-w-xl my-4">
-            <div class="flex items-center justify-between gap-3 px-5 sm:px-6 py-4 border-b border-hairline bg-surface">
-                <h2 class="text-lg sm:text-xl font-black text-white">➕ Add Stream</h2>
-                <button onclick="closeAddStream()" class="text-text-secondary hover:text-white text-3xl leading-none">&times;</button>
+    <div class="absolute inset-0 flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div class="glass-card w-full sm:max-w-xl rounded-t-3xl sm:rounded-3xl max-h-[92dvh] sm:max-h-[90dvh] flex flex-col">
+            <div class="flex items-center justify-between gap-3 px-4 sm:px-6 py-4 border-b border-hairline">
+                <h2 class="text-base sm:text-xl font-black text-text">➕ Add Stream</h2>
+                <button onclick="closeAddStream()" class="text-text-secondary hover:text-text text-3xl leading-none">&times;</button>
             </div>
 
-            <div class="px-5 sm:px-6 py-5 space-y-4 max-h-[75vh] overflow-y-auto">
+            <div class="px-4 sm:px-6 py-5 space-y-4 overflow-y-auto flex-1 min-h-0">
                 {% if media_type == 'tv' %}
-                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div class="grid grid-cols-2 gap-3">
                     <div>
-                        <label class="field-label">Season *</label>
-                        <input id="as-season" type="number" min="0" class="field-input" placeholder="1">
+                        <label class="as-label">Season *</label>
+                        <input id="as-season" type="number" min="0" class="as-input" placeholder="1">
                     </div>
                     <div>
-                        <label class="field-label">Episode *</label>
-                        <input id="as-episode" type="number" min="0" class="field-input" placeholder="1">
+                        <label class="as-label">Episode *</label>
+                        <input id="as-episode" type="number" min="0" class="as-input" placeholder="1">
                     </div>
                     <div class="col-span-2">
-                        <label class="field-label">Episode Title</label>
-                        <input id="as-episode-title" class="field-input" placeholder="Optional">
+                        <label class="as-label">Episode Title</label>
+                        <input id="as-episode-title" class="as-input" placeholder="Optional">
                     </div>
                 </div>
-                <p class="muted text-xs">New season or episode numbers create them automatically; existing ones just get the new stream.</p>
+                <p class="text-xs text-text-secondary">New season/episode numbers are created automatically; existing ones just get the new stream.</p>
                 {% endif %}
 
                 <div>
-                    <label class="field-label">Telegram message link *</label>
-                    <div class="flex gap-2">
-                        <input id="as-url" class="field-input" placeholder="https://t.me/c/123456/789">
-                        <button type="button" onclick="addStreamResolve()" class="btn-ui btn-ghost shrink-0">Resolve</button>
+                    <label class="as-label">Telegram message link *</label>
+                    <div class="flex flex-col sm:flex-row gap-2">
+                        <input id="as-url" class="as-input" placeholder="https://t.me/c/123456/789">
+                        <button type="button" onclick="addStreamResolve()" class="as-btn as-btn-ghost w-full sm:w-auto">Resolve</button>
                     </div>
-                    <p id="as-resolve-state" class="muted text-xs mt-2 hidden"></p>
+                    <p id="as-resolve-state" class="text-xs text-text-secondary mt-2 hidden"></p>
                 </div>
 
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
-                        <label class="field-label">Quality *</label>
-                        <select id="as-quality" class="field-input">
+                        <label class="as-label">Quality *</label>
+                        <select id="as-quality" class="as-input">
                             <option value="">Select</option>
                             <option>480p</option><option>720p</option><option selected>1080p</option>
                             <option>2160p</option><option value="__custom">Custom…</option>
                         </select>
                     </div>
                     <div class="sm:col-span-2">
-                        <label class="field-label">File name</label>
-                        <input id="as-name" class="field-input" placeholder="Auto-detected on resolve">
+                        <label class="as-label">File name</label>
+                        <input id="as-name" class="as-input" placeholder="Auto-detected on resolve">
                     </div>
                 </div>
-                <input id="as-quality-custom" class="field-input hidden" placeholder="Custom quality label (e.g. 4K HDR)">
+                <input id="as-quality-custom" class="as-input hidden" placeholder="Custom quality label (e.g. 4K HDR)">
             </div>
 
-            <div class="flex flex-col sm:flex-row justify-end gap-3 px-5 sm:px-6 py-4 border-t border-hairline bg-surface">
-                <button onclick="closeAddStream()" class="btn-ui btn-ghost">Cancel</button>
-                <button id="as-submit" onclick="submitAddStream()" class="btn-ui btn-success">Add Stream</button>
+            <div class="flex flex-col sm:flex-row sm:justify-end gap-2 sm:gap-3 px-4 sm:px-6 py-4 border-t border-hairline">
+                <button onclick="closeAddStream()" class="as-btn as-btn-ghost w-full sm:w-auto">Cancel</button>
+                <button id="as-submit" onclick="submitAddStream()" class="as-btn as-btn-success w-full sm:w-auto">Add Stream</button>
             </div>
         </div>
     </div>

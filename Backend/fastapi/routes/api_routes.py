@@ -1,8 +1,10 @@
 import asyncio
 import json
+import random
 import secrets
 from datetime import datetime
 from time import time
+from urllib.parse import quote
 
 from fastapi import HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
@@ -814,6 +816,39 @@ def _metadata_base(source: dict, from_doc: bool = False) -> dict:
     }
 
 
+_PLACEHOLDER_GENRES = ["Action", "Adventure", "Comedy", "Drama", "Fantasy",
+                       "Thriller", "Mystery", "Sci-Fi", "Romance", "Family"]
+_PLACEHOLDER_DESCRIPTIONS = [
+    "A gripping story full of unexpected twists and turns.",
+    "An unforgettable journey that keeps you on the edge of your seat.",
+    "A captivating tale of drama, courage and emotion.",
+    "An entertaining experience packed with memorable moments.",
+    "A thrilling adventure blending heart, action and wonder.",
+]
+
+
+#----- Gradient placeholder cover for titles without artwork
+def _gradient_cover(title: str, portrait: bool = False) -> str:
+    text = quote((title or "Media").strip() or "Media")
+    url = f"https://gradient-cover-api.vercel.app/api/image?text={text}&badge="
+    return f"{url}&orientation=portrait" if portrait else url
+
+
+#----- Fill empty optional metadata with random values and gradient artwork
+def _fill_placeholder_metadata(meta: dict) -> None:
+    title = meta.get("title") or "Media"
+    if not meta.get("poster"):
+        meta["poster"] = _gradient_cover(title, portrait=True)
+    if not meta.get("backdrop"):
+        meta["backdrop"] = _gradient_cover(title)
+    if not meta.get("genres"):
+        meta["genres"] = random.sample(_PLACEHOLDER_GENRES, random.randint(1, 3))
+    if not meta.get("rate"):
+        meta["rate"] = round(random.uniform(6.0, 8.9), 1)
+    if not meta.get("description"):
+        meta["description"] = random.choice(_PLACEHOLDER_DESCRIPTIONS)
+
+
 #----- Manual add: create/append a movie, tv show, season, episode or stream by hand
 async def manual_add_media_api(payload: dict) -> dict:
     media_type = payload.get("media_type")
@@ -870,6 +905,10 @@ async def manual_add_media_api(payload: dict) -> dict:
     #----- Brand-new hand-made titles get a negative synthetic id (never collides with TMDB)
     if not base.get("tmdb_id"):
         base["tmdb_id"] = -(secrets.randbelow(2_000_000_000) + 1)
+    #----- A synthetic "tg" imdb id is required so Stremio can request meta/streams
+    if not base.get("imdb_id"):
+        base["imdb_id"] = f"tg{abs(int(base['tmdb_id']))}"
+    _fill_placeholder_metadata(base)
 
     encoded = await encode_string({"chat_id": channel, "msg_id": msg_id})
     metadata_info = dict(base)

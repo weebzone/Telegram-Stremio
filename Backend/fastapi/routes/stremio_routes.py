@@ -263,7 +263,7 @@ async def get_manifest(token: str, token_data: dict = Depends(verify_token)):
         "types": ["movie", "series"],
         "resources": resources,
         "catalogs": catalogs,
-        "idPrefixes": ["tt"],
+        "idPrefixes": ["tt", "tg"],
         "behaviorHints": {
             "configurable": True,
             "configurationRequired": False

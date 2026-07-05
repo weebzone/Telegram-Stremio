@@ -41,7 +41,9 @@ async def resolve_telegram_message(client, url: str = None, chat_id=None, msg_id
     if not media:
         raise ValueError("That message has no downloadable file.")
 
-    file_name = getattr(media, "file_name", None) or (message.caption or "video")
+    #----- Prefer the caption over the raw file name for the display/parse name
+    caption = (getattr(message, "caption", None) or "").strip()
+    file_name = caption or getattr(media, "file_name", None) or "video"
     raw_size = getattr(media, "file_size", 0) or 0
     parsed = parse_media_name(clean_filename(file_name))
 
