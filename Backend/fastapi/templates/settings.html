@@ -270,6 +270,34 @@
         </div>
     </div>
 
+    <!-- ── Manual Add Channels ─────────────────────────────────────────── -->
+    <div class="settings-card">
+        <h2><i class="fa-solid fa-hand-pointer"></i> Manual Add Channels</h2>
+        <label class="s-label">MANUAL_CHANNELS
+            <span style="font-weight:400;text-transform:none;letter-spacing:0">
+                — files sent here are <strong>not</strong> auto-indexed with TMDb/IMDb.
+                Add them by hand from Media Management by pasting a message link.
+                Listing a channel here also cleans up its streams when a file is deleted.</span>
+        </label>
+        <div class="multi-list-items" id="manual_channels_items">
+            {% for ch in settings.manual_channels %}
+            <div class="multi-item">
+                <input type="text" class="s-input" value="{{ ch }}" data-list="manual_channels"
+                    placeholder="-100xxxxxxxxxx">
+                <button class="remove-btn" onclick="removeItem(this)" title="Remove">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            {% endfor %}
+        </div>
+        <div class="add-row">
+            <input type="text" id="manual_channels_new" class="s-input"
+                placeholder="Channel username or -100xxxxx ID"
+                onkeydown="if(event.key==='Enter'){event.preventDefault();addItem('manual_channels')}">
+            <button class="add-btn" onclick="addItem('manual_channels')">+ Add Channel</button>
+        </div>
+    </div>
+
     <!-- ── Subscription ────────────────────────────────────────────────── -->
     <div class="settings-card">
         <h2><i class="fa-solid fa-credit-card"></i> Subscription</h2>
@@ -700,6 +728,7 @@ async function saveSettings() {
         extra_databases:               collectList('extra_databases'),
         global_search:                 document.getElementById('global_search').checked,
         global_search_channels:        collectList('global_search_channels'),
+        manual_channels:               collectList('manual_channels'),
     };
 
     try {
@@ -787,6 +816,7 @@ function renderSettings(s) {
     rebuildSimpleList('approver_ids_items', s.approver_ids, 'number');
     rebuildSimpleList('multi_tokens_items', s.multi_tokens, 'text');
     rebuildSimpleList('global_search_channels_items', s.global_search_channels, 'text');
+    rebuildSimpleList('manual_channels_items', s.manual_channels, 'text');
 
     // Databases — needs the live connection-status dot per entry
     rebuildDatabaseList(s.database_list || []);

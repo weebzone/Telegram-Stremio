@@ -43,8 +43,10 @@ from Backend.fastapi.routes.api_routes import (
     list_custom_catalogs_api,
     list_media_api,
     manage_subscriber_api,
+    manual_add_media_api,
     purge_dead_links_api,
     remove_custom_catalog_item_api,
+    resolve_telegram_api,
     revoke_token_api,
     scan_status_api,
     search_catalog_media_api,
@@ -332,6 +334,16 @@ async def apply_media_rescan(
     _: bool = Depends(require_auth)
 ):
     return await apply_media_rescan_api(request, tmdb_id, db_index, media_type)
+
+
+#----- Manual add (custom movie/tv/season/episode/stream)
+@app.post("/api/media/resolve-telegram")
+async def resolve_telegram(payload: dict, _: bool = Depends(require_auth)):
+    return await resolve_telegram_api(payload)
+
+@app.post("/api/media/manual-add")
+async def manual_add_media(payload: dict, _: bool = Depends(require_auth)):
+    return await manual_add_media_api(payload)
 
 
 #----- Custom catalog management

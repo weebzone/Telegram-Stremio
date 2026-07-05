@@ -1,5 +1,6 @@
 import asyncio
 import json
+import secrets
 from datetime import datetime
 from time import time
 
@@ -13,10 +14,12 @@ from Backend.helper.auto_catalog import (
     get_auto_catalog_settings,
     get_auto_catalog_sync_status,
     start_auto_catalog_sync_background,
+    start_single_media_catalog_sync,
     update_auto_catalog_settings,
 )
 from Backend.helper.custom_dl import ByteStreamer, _speed_test_single_client, run_speed_test
-from Backend.helper.encrypt import decode_string
+from Backend.helper.encrypt import decode_string, encode_string
+from Backend.helper.manual_add import resolve_telegram_message
 from Backend.helper.metadata import (
     fetch_selected_movie_metadata,
     fetch_selected_tv_metadata,
@@ -767,6 +770,158 @@ async def apply_media_rescan_api(request: Request, tmdb_id: int, db_index: int, 
 }
 
 
+#----- Manual add: resolve a Telegram post link into a streamable file
+async def resolve_telegram_api(payload: dict) -> dict:
+    client = _scan_client()
+    if client is None:
+        raise HTTPException(status_code=503, detail="No Telegram client is connected yet.")
+    try:
+        data = await resolve_telegram_message(
+            client,
+            url=payload.get("url"),
+            chat_id=payload.get("chat_id"),
+            msg_id=payload.get("msg_id"),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Could not read that message: {exc}")
+    return {"status": "success", "data": data}
+
+
+#----- Build a metadata base (title-level fields) from various sources
+def _metadata_base(source: dict, from_doc: bool = False) -> dict:
+    genres = source.get("genres")
+    if isinstance(genres, str):
+        genres = [g.strip() for g in genres.split(",") if g.strip()]
+    year = source.get("release_year") if from_doc else source.get("year")
+    rate = source.get("rating") if from_doc else source.get("rate")
+    return {
+        "tmdb_id": source.get("tmdb_id"),
+        "imdb_id": source.get("imdb_id") or None,
+        "title": (source.get("title") or "").strip(),
+        "year": int(year) if str(year or "").strip().lstrip("-").isdigit() else 0,
+        "rate": float(rate) if str(rate or "").replace(".", "", 1).isdigit() else 0,
+        "description": source.get("description") or "",
+        "poster": source.get("poster") or "",
+        "backdrop": source.get("backdrop") or "",
+        "logo": source.get("logo") or "",
+        "genres": genres or [],
+        "cast": source.get("cast") or [],
+        "runtime": str(source.get("runtime") or ""),
+        "original_language": source.get("original_language"),
+        "origin_country": source.get("origin_country") or [],
+    }
+
+
+#----- Manual add: create/append a movie, tv show, season, episode or stream by hand
+async def manual_add_media_api(payload: dict) -> dict:
+    media_type = payload.get("media_type")
+    if media_type not in ("movie", "tv"):
+        raise HTTPException(status_code=400, detail="media_type must be 'movie' or 'tv'.")
+
+    stream = payload.get("stream") or {}
+    quality = str(stream.get("quality") or "").strip()
+    if not quality:
+        raise HTTPException(status_code=400, detail="A quality label (e.g. 1080p) is required.")
+
+    client = _scan_client()
+    if client is None:
+        raise HTTPException(status_code=503, detail="No Telegram client is connected yet.")
+    try:
+        resolved = await resolve_telegram_message(
+            client, url=stream.get("url"),
+            chat_id=stream.get("chat_id"), msg_id=stream.get("msg_id"),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Could not read that message: {exc}")
+
+    channel = int(resolved["chat_id"])
+    msg_id = int(resolved["msg_id"])
+    name = (stream.get("name") or resolved["name"]).strip()
+    size = stream.get("size") or resolved["size"]
+    raw_size = int(resolved.get("raw_size") or 0)
+
+    #----- Resolve the title-level metadata: existing doc, TMDB/IMDb pick, or manual entry
+    tmdb_id = payload.get("tmdb_id")
+    db_index = payload.get("db_index")
+    selected_id = str(payload.get("selected_id") or "").strip()
+
+    base = None
+    if tmdb_id and db_index:
+        doc = await db.get_document(media_type, int(tmdb_id), int(db_index))
+        if doc:
+            base = _metadata_base(doc, from_doc=True)
+    if base is None and selected_id:
+        selection = await (
+            fetch_selected_movie_metadata(selected_id) if media_type == "movie"
+            else fetch_selected_tv_metadata(selected_id)
+        )
+        if not selection:
+            raise HTTPException(status_code=404, detail="Could not fetch metadata for the selected title.")
+        base = _metadata_base(selection, from_doc=True)
+    if base is None:
+        base = _metadata_base(payload.get("manual_metadata") or {})
+        if not base["title"]:
+            raise HTTPException(status_code=400, detail="A title is required for manual entry.")
+
+    #----- Brand-new hand-made titles get a negative synthetic id (never collides with TMDB)
+    if not base.get("tmdb_id"):
+        base["tmdb_id"] = -(secrets.randbelow(2_000_000_000) + 1)
+
+    encoded = await encode_string({"chat_id": channel, "msg_id": msg_id})
+    metadata_info = dict(base)
+    metadata_info.update({
+        "media_type": media_type,
+        "quality": quality,
+        "encoded_string": encoded,
+        "group_key": None,
+        "part_number": None,
+        "is_anime": False,
+    })
+
+    if media_type == "tv":
+        try:
+            season_number = int(payload.get("season_number"))
+            episode_number = int(payload.get("episode_number"))
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="Season and episode numbers are required for TV.")
+        metadata_info.update({
+            "season_number": season_number,
+            "episode_number": episode_number,
+            "episode_title": (payload.get("episode_title") or "").strip() or f"S{season_number:02d}E{episode_number:02d}",
+            "episode_backdrop": payload.get("episode_backdrop") or base.get("backdrop") or "",
+            "episode_overview": payload.get("episode_overview") or "",
+            "episode_released": payload.get("episode_released") or "",
+        })
+
+    updated_id = await db.insert_media(
+        metadata_info, channel=channel, msg_id=msg_id, size=size, name=name, raw_size=raw_size,
+    )
+    if not updated_id:
+        raise HTTPException(status_code=500, detail="Failed to add media (validation error).")
+
+    result_tmdb_id = metadata_info["tmdb_id"]
+    location = await db.find_media_doc(media_type, result_tmdb_id)
+    result_db_index = location[1] if location else db.current_db_index
+
+    if result_tmdb_id and result_tmdb_id > 0:
+        try:
+            start_single_media_catalog_sync(db, tmdb_id=result_tmdb_id, media_type=media_type)
+        except Exception:
+            pass
+
+    return {
+        "status": "success",
+        "message": "Stream added successfully.",
+        "tmdb_id": result_tmdb_id,
+        "db_index": result_db_index,
+        "media_type": media_type,
+    }
+
+
 #----- Custom catalog APIs
 def _normalize_media_type(media_type: str) -> str:
     return "tv" if media_type in ["tv", "series"] else "movie"
@@ -973,7 +1128,7 @@ async def update_settings_api(payload: dict) -> dict:
         if key in payload:
             payload[key] = bool(payload[key])
 
-    list_str_keys = {"auth_channels", "multi_tokens", "extra_databases", "global_search_channels", "anime_channels"}
+    list_str_keys = {"auth_channels", "multi_tokens", "extra_databases", "global_search_channels", "anime_channels", "manual_channels"}
     for key in list_str_keys:
         if key in payload:
             if not isinstance(payload[key], list):
@@ -1030,6 +1185,21 @@ async def update_settings_api(payload: dict) -> dict:
                     )
             cleaned.append(channel)
         payload["anime_channels"] = cleaned
+
+    if "manual_channels" in payload:
+        cleaned = []
+        for channel in payload["manual_channels"]:
+            channel = str(channel).strip()
+            if not channel:
+                continue
+            try:
+                int(channel.replace("-100", ""))
+            except ValueError:
+                raise HTTPException(status_code=400,
+                    detail=f"Invalid manual channel id: {channel}"
+                    )
+            cleaned.append(channel)
+        payload["manual_channels"] = cleaned
 
     #----- Strip whitespace from string fields
     for key in ("tmdb_api", "base_url", "upstream_repo", "upstream_branch",

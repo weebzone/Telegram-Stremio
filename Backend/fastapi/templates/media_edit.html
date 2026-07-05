@@ -465,7 +465,11 @@
     <div class="glass-card rounded-3xl p-5 sm:p-6 lg:p-8">
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5 sm:mb-6">
             <h3 class="section-title text-xl sm:text-2xl">Available Content</h3>
-            <span class="pill">Manage streams, episodes, and seasons</span>
+            <div class="flex items-center gap-2">
+                <button type="button" onclick="openAddStream()" class="btn-ui btn-success">
+                    ➕ {{ 'Add Season / Episode / Stream' if media_type == 'tv' else 'Add Stream' }}
+                </button>
+            </div>
         </div>
 
         {% if media_type == 'movie' and media_details.telegram %}
@@ -651,6 +655,68 @@
                 <button onclick="closeSpeedTest()" class="btn-ui btn-ghost">
                     Close
                 </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="add-stream-modal" class="fixed inset-0 z-50 hidden" aria-modal="true" role="dialog">
+    <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="closeAddStream()"></div>
+    <div class="absolute inset-0 flex items-start sm:items-center justify-center p-2 sm:p-4 overflow-y-auto">
+        <div class="glass-card rounded-3xl w-full max-w-xl my-4">
+            <div class="flex items-center justify-between gap-3 px-5 sm:px-6 py-4 border-b border-hairline bg-surface">
+                <h2 class="text-lg sm:text-xl font-black text-white">➕ Add Stream</h2>
+                <button onclick="closeAddStream()" class="text-text-secondary hover:text-white text-3xl leading-none">&times;</button>
+            </div>
+
+            <div class="px-5 sm:px-6 py-5 space-y-4 max-h-[75vh] overflow-y-auto">
+                {% if media_type == 'tv' %}
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div>
+                        <label class="field-label">Season *</label>
+                        <input id="as-season" type="number" min="0" class="field-input" placeholder="1">
+                    </div>
+                    <div>
+                        <label class="field-label">Episode *</label>
+                        <input id="as-episode" type="number" min="0" class="field-input" placeholder="1">
+                    </div>
+                    <div class="col-span-2">
+                        <label class="field-label">Episode Title</label>
+                        <input id="as-episode-title" class="field-input" placeholder="Optional">
+                    </div>
+                </div>
+                <p class="muted text-xs">New season or episode numbers create them automatically; existing ones just get the new stream.</p>
+                {% endif %}
+
+                <div>
+                    <label class="field-label">Telegram message link *</label>
+                    <div class="flex gap-2">
+                        <input id="as-url" class="field-input" placeholder="https://t.me/c/123456/789">
+                        <button type="button" onclick="addStreamResolve()" class="btn-ui btn-ghost shrink-0">Resolve</button>
+                    </div>
+                    <p id="as-resolve-state" class="muted text-xs mt-2 hidden"></p>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                        <label class="field-label">Quality *</label>
+                        <select id="as-quality" class="field-input">
+                            <option value="">Select</option>
+                            <option>480p</option><option>720p</option><option selected>1080p</option>
+                            <option>2160p</option><option value="__custom">Custom…</option>
+                        </select>
+                    </div>
+                    <div class="sm:col-span-2">
+                        <label class="field-label">File name</label>
+                        <input id="as-name" class="field-input" placeholder="Auto-detected on resolve">
+                    </div>
+                </div>
+                <input id="as-quality-custom" class="field-input hidden" placeholder="Custom quality label (e.g. 4K HDR)">
+            </div>
+
+            <div class="flex flex-col sm:flex-row justify-end gap-3 px-5 sm:px-6 py-4 border-t border-hairline bg-surface">
+                <button onclick="closeAddStream()" class="btn-ui btn-ghost">Cancel</button>
+                <button id="as-submit" onclick="submitAddStream()" class="btn-ui btn-success">Add Stream</button>
             </div>
         </div>
     </div>
@@ -1438,7 +1504,107 @@
     }
 
     document.addEventListener('keydown', e => {
-        if (e.key === 'Escape') closeSpeedTest();
+        if (e.key === 'Escape') { closeSpeedTest(); closeAddStream(); }
     });
+
+    function openAddStream() {
+        ['as-url', 'as-name', 'as-season', 'as-episode', 'as-episode-title', 'as-quality-custom'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.value = '';
+        });
+        const q = document.getElementById('as-quality');
+        if (q) q.value = '1080p';
+        document.getElementById('as-quality-custom')?.classList.add('hidden');
+        document.getElementById('as-resolve-state')?.classList.add('hidden');
+        document.getElementById('add-stream-modal').classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeAddStream() {
+        document.getElementById('add-stream-modal')?.classList.add('hidden');
+        document.body.style.overflow = '';
+    }
+
+    function addStreamQuality() {
+        const sel = document.getElementById('as-quality');
+        if (sel.value === '__custom') return document.getElementById('as-quality-custom').value.trim();
+        return sel.value;
+    }
+
+    async function addStreamResolve() {
+        const url = document.getElementById('as-url').value.trim();
+        const state = document.getElementById('as-resolve-state');
+        if (!url) { showErrorMessage('Paste a Telegram message link first.'); return; }
+        state.textContent = 'Resolving...';
+        state.classList.remove('hidden');
+        try {
+            const res = await fetch('/api/media/resolve-telegram', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.detail || 'Could not resolve link');
+            const d = data.data || {};
+            document.getElementById('as-name').value = d.name || '';
+            if (d.quality) {
+                const sel = document.getElementById('as-quality');
+                const opt = [...sel.options].find(o => o.value.toLowerCase() === String(d.quality).toLowerCase());
+                if (opt) sel.value = opt.value;
+            }
+            if (mediaType === 'tv') {
+                if (d.season != null && !document.getElementById('as-season').value) document.getElementById('as-season').value = d.season;
+                if (d.episode != null && !document.getElementById('as-episode').value) document.getElementById('as-episode').value = d.episode;
+            }
+            state.textContent = `Found: ${d.name || 'file'} (${d.size || '—'})`;
+        } catch (e) {
+            state.textContent = e.message || 'Could not resolve link.';
+            showErrorMessage(e.message || 'Could not resolve link.');
+        }
+    }
+
+    async function submitAddStream() {
+        const btn = document.getElementById('as-submit');
+        const url = document.getElementById('as-url').value.trim();
+        const quality = addStreamQuality();
+        if (!url) { showErrorMessage('Paste the Telegram message link.'); return; }
+        if (!quality) { showErrorMessage('Select a quality.'); return; }
+
+        const payload = {
+            media_type: mediaType,
+            tmdb_id: tmdbId,
+            db_index: dbIndex,
+            stream: { url, quality, name: document.getElementById('as-name').value.trim() || undefined }
+        };
+
+        if (mediaType === 'tv') {
+            const s = document.getElementById('as-season').value.trim();
+            const ep = document.getElementById('as-episode').value.trim();
+            if (s === '' || ep === '') { showErrorMessage('Season and episode are required.'); return; }
+            payload.season_number = Number(s);
+            payload.episode_number = Number(ep);
+            payload.episode_title = document.getElementById('as-episode-title').value.trim() || undefined;
+        }
+
+        btn.disabled = true;
+        try {
+            const res = await fetch('/api/media/manual-add', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.detail || 'Failed to add stream');
+            showSuccessMessage(data.message || 'Stream added successfully.');
+            closeAddStream();
+            const goTmdb = data.tmdb_id || tmdbId;
+            const goDb = data.db_index || dbIndex;
+            setTimeout(() => {
+                window.location.href = `/media/edit?tmdb_id=${goTmdb}&db_index=${goDb}&media_type=${mediaType}`;
+            }, 700);
+        } catch (e) {
+            showErrorMessage(e.message || 'Failed to add stream.');
+        } finally {
+            btn.disabled = false;
+        }
+    }
 </script>
 {% endblock %}

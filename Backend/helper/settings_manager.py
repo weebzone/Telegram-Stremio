@@ -31,6 +31,7 @@ _DEFAULTS: Dict[str, Any] = {
     "global_search": False,
     "global_search_channels": [],
     "anime_channels": [],
+    "manual_channels": [],
 }
 
 
@@ -97,6 +98,10 @@ class Settings:
     @property
     def anime_channels(self) -> List[str]:
         return list(self._d.get("anime_channels") or [])
+
+    @property
+    def manual_channels(self) -> List[str]:
+        return list(self._d.get("manual_channels") or [])
 
     #----- Strings
     @property
