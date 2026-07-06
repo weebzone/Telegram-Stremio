@@ -4,6 +4,7 @@ from Backend.logger import LOGGER
 from Backend import __version__, now, timezone
 from Backend.helper.settings_manager import SettingsManager
 from Backend.helper.exceptions import FileNotFound
+from Backend.helper.split_files import strip_part_suffix
 from aiofiles import open as aiopen
 from aiofiles.os import path as aiopath, remove as aioremove
 from pyrogram import Client
@@ -161,6 +162,18 @@ def remove_urls(text):
     cleaned_text = re.sub(r'\s+', ' ', text_without_urls).strip()
 
     return cleaned_text
+
+
+#----- Build the display filename stored for a media entry: drop URLs, emoji and
+#----- decorative symbols, strip the split-part suffix (.001), and force a video extension.
+def finalize_media_name(title: str, is_split: bool = False) -> str:
+    title = _DECORATION_PATTERN.sub(" ", _EMOJI_PATTERN.sub(" ", remove_urls(title)))
+    title = re.sub(r"\s+", " ", title).strip().replace(" .", ".")
+    if is_split:
+        title = strip_part_suffix(title)
+    if not title.endswith((".mkv", ".mp4")):
+        title += ".mkv"
+    return title
 
 
 async def restart_notification():

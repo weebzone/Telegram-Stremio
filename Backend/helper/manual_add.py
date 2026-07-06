@@ -2,7 +2,8 @@ import re
 from typing import Optional, Tuple
 
 from Backend.helper.metadata import parse_media_name
-from Backend.helper.pyro import clean_filename, get_readable_file_size, is_media
+from Backend.helper.pyro import clean_filename, finalize_media_name, get_readable_file_size, is_media
+from Backend.helper.split_files import parse_split_info, strip_part_suffix
 
 _PRIVATE_LINK = re.compile(r"t\.me/c/(\d+)(?:/\d+)*/(\d+)")
 _PUBLIC_LINK = re.compile(r"t\.me/([A-Za-z][\w]{3,})/(?:\d+/)?(\d+)")
@@ -52,11 +53,15 @@ async def resolve_telegram_message(client, url: str = None, chat_id=None, msg_id
     if not media:
         raise ValueError("That message has no downloadable file.")
 
-    #----- Prefer the caption over the raw file name for the display/parse name
+    #----- Prefer the caption over the raw file name, then normalise it to the exact
+    #----- filename receiver.py stores (clean, split-suffix stripped, video extension).
     caption = (getattr(message, "caption", None) or "").strip()
-    file_name = caption or getattr(media, "file_name", None) or "video"
+    raw_name = caption or getattr(media, "file_name", None) or "video"
+    cleaned = clean_filename(raw_name)
+    split_info = parse_split_info(cleaned)
     raw_size = getattr(media, "file_size", 0) or 0
-    parsed = parse_media_name(clean_filename(file_name))
+    parsed = parse_media_name(strip_part_suffix(cleaned) if split_info else cleaned)
+    file_name = finalize_media_name(raw_name, bool(split_info))
 
     #----- Real video dimensions beat the filename; documents fall back to the name
     height = getattr(media, "height", 0) or 0
