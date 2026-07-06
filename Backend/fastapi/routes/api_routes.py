@@ -1015,13 +1015,26 @@ async def list_custom_catalogs_api(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+_VISIBILITY_MODES = ("public", "tokens", "owner")
+
+
+#----- Parse a (visibility, allowed_tokens) pair from a request payload
+def _clean_visibility(payload: dict):
+    visibility = payload.get("visibility")
+    if visibility not in _VISIBILITY_MODES:
+        visibility = None
+    tokens = payload.get("allowed_tokens")
+    tokens = [str(t).strip() for t in tokens if str(t).strip()] if isinstance(tokens, list) else []
+    return visibility, tokens
+
+
 async def create_custom_catalog_api(payload: dict):
     name = (payload.get("name") or "").strip()
-    visible = bool(payload.get("visible", True))
     if not name:
         raise HTTPException(status_code=400, detail="Catalog name is required.")
 
-    catalog_id = await db.create_custom_catalog(name=name, visible=visible)
+    visibility, tokens = _clean_visibility(payload)
+    catalog_id = await db.create_custom_catalog(name=name, visibility=visibility or "public", allowed_tokens=tokens)
     if not catalog_id:
         raise HTTPException(status_code=500, detail="Failed to create catalog.")
 
@@ -1031,13 +1044,42 @@ async def create_custom_catalog_api(payload: dict):
 
 async def update_custom_catalog_api(catalog_id: str, payload: dict):
     name = payload.get("name")
-    visible = payload.get("visible") if "visible" in payload else None
-    result = await db.update_custom_catalog(catalog_id, name=name, visible=visible)
+    visibility, tokens = _clean_visibility(payload)
+    result = await db.update_custom_catalog(catalog_id, name=name, visibility=visibility, allowed_tokens=tokens)
     if not result:
         catalog = await db.get_custom_catalog(catalog_id)
         if not catalog:
             raise HTTPException(status_code=404, detail="Catalog not found.")
     return {"message": "Catalog updated successfully.", "catalog": await db.get_custom_catalog(catalog_id)}
+
+
+#----- Set a title's visibility across every catalog it belongs to (used by media edit)
+async def set_media_visibility_api(payload: dict):
+    tmdb_id = payload.get("tmdb_id")
+    db_index = payload.get("db_index")
+    media_type = payload.get("media_type")
+    if not tmdb_id or not db_index or media_type not in ("movie", "tv", "series"):
+        raise HTTPException(status_code=400, detail="tmdb_id, db_index and media_type are required.")
+
+    visibility, tokens = _clean_visibility(payload)
+    if not visibility:
+        raise HTTPException(status_code=400, detail="A valid visibility is required.")
+
+    count = await db.set_media_visibility(
+        int(tmdb_id), int(db_index), _normalize_media_type(media_type), visibility, tokens
+    )
+    return {
+        "status": "success",
+        "updated_catalogs": count,
+        "message": (f"Visibility updated in {count} catalog(s)." if count
+                    else "This title is not in any custom catalog yet."),
+    }
+
+
+#----- Current effective visibility of a title (from the catalogs it belongs to)
+async def get_media_visibility_api(tmdb_id: int, db_index: int, media_type: str):
+    data = await db.get_media_visibility(int(tmdb_id), int(db_index), _normalize_media_type(media_type))
+    return {"visibility": data or {}}
 
 
 async def delete_custom_catalog_api(catalog_id: str):

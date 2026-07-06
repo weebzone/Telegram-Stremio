@@ -34,6 +34,7 @@ from Backend.fastapi.routes.api_routes import (
     get_auto_catalog_settings_api,
     get_custom_catalog_items_api,
     get_dead_links_api,
+    get_media_visibility_api,
     get_stream_analytics_api,
     get_subscription_plans_api,
     get_settings_api,
@@ -50,6 +51,7 @@ from Backend.fastapi.routes.api_routes import (
     revoke_token_api,
     scan_status_api,
     search_catalog_media_api,
+    set_media_visibility_api,
     search_media_rescan_api,
     speed_test_api,
     speed_test_stream_api,
@@ -367,6 +369,19 @@ async def update_custom_catalog(catalog_id: str, payload: dict, _: bool = Depend
 @app.delete("/api/custom-catalogs/{catalog_id}")
 async def delete_custom_catalog(catalog_id: str, _: bool = Depends(require_auth)):
     return await delete_custom_catalog_api(catalog_id)
+
+@app.post("/api/custom-catalogs/media-visibility")
+async def set_media_visibility(payload: dict, _: bool = Depends(require_auth)):
+    return await set_media_visibility_api(payload)
+
+@app.get("/api/custom-catalogs/media-visibility")
+async def get_media_visibility(
+    tmdb_id: int,
+    db_index: int,
+    media_type: str = Query("movie", regex="^(movie|tv|series)$"),
+    _: bool = Depends(require_auth)
+):
+    return await get_media_visibility_api(tmdb_id, db_index, media_type)
 
 @app.get("/api/custom-catalogs/search-media")
 async def search_catalog_media(

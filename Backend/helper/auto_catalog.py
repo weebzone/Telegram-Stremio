@@ -492,6 +492,8 @@ async def _flush_quick_items(db, catalog_items: Dict[str, List[dict]]) -> None:
                 "$setOnInsert": {
                     "name": name,
                     "visible": True,
+                    "visibility": "public",
+                    "allowed_tokens": [],
                     "auto": True,
                     "auto_key": auto_key,
                     "items": [],
@@ -555,7 +557,7 @@ async def _rebuild_auto_catalogs(db, catalog_items: Dict[str, List[dict]], enabl
                     "updated_at": now,
                     "last_auto_sync": now,
                 },
-                "$setOnInsert": {"created_at": now},
+                "$setOnInsert": {"created_at": now, "visibility": "public", "allowed_tokens": []},
             },
             upsert=True,
         )

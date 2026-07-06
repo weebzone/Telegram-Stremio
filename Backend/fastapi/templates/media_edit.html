@@ -386,9 +386,33 @@
                 Remove
             </button>
         </div>
-        <p id="custom-catalog-status" class="muted text-sm mt-3">Only visible catalogs appear in Stremio. Hidden catalogs remain manageable in web panel.</p>
+        <p id="custom-catalog-status" class="muted text-sm mt-3">Add this title to a catalog, then choose exactly who can see it below.</p>
+
+        <div class="mt-5 pt-5" style="border-top:1px solid color-mix(in srgb, var(--border) 85%, transparent)">
+            <label class="field-label">Who can see this title</label>
+            <div class="flex flex-col sm:flex-row sm:items-center gap-3">
+                <select id="media-visibility" class="field-input" onchange="onMediaVisibilityChange()">
+                    <option value="public">Everyone</option>
+                    <option value="tokens">Specific users</option>
+                    <option value="owner">Owner only (hidden)</option>
+                </select>
+                <button type="button" onclick="applyMediaVisibility()" class="btn-ui btn-primary sm:w-auto shrink-0">Apply</button>
+            </div>
+            <div id="media-token-picker-wrap" class="hidden mt-3">
+                <label class="field-label">Allowed users</label>
+                <div id="media-token-picker" class="me-token-picker"></div>
+            </div>
+            <p class="muted text-xs mt-3">This overrides the title's visibility in every custom catalog it belongs to.</p>
+        </div>
     </div>
     {% endif %}
+
+    <style>
+        .me-token-picker { max-height: 12rem; overflow-y: auto; border: 1px solid color-mix(in srgb, var(--border) 95%, transparent); border-radius: 0.9rem; padding: .5rem; display: flex; flex-direction: column; gap: .35rem; background: color-mix(in srgb, var(--bg) 74%, transparent); }
+        .me-token-row { display: flex; align-items: center; gap: .6rem; padding: .5rem .65rem; border-radius: .7rem; cursor: pointer; }
+        .me-token-row:hover { background: color-mix(in srgb, var(--primary) 10%, transparent); }
+        .me-token-row input { width: 1.05rem; height: 1.05rem; accent-color: var(--primary); cursor: pointer; flex-shrink: 0; }
+    </style>
 
     <div class="glass-card rounded-3xl p-5 sm:p-6 lg:p-8 mb-6 sm:mb-8">
         <div class="flex items-center justify-between gap-3 mb-5 sm:mb-6">
@@ -1135,6 +1159,102 @@
     const CURRENT_DB_INDEX = Number("{{ db_index }}");
     const CURRENT_MEDIA_TYPE = "{{ media_type }}";
 
+    let meSubscriptionOn = false;
+    let meTokens = [];
+
+    function mePublicLabel() { return meSubscriptionOn ? 'Active subscribers' : 'Everyone'; }
+
+    async function loadMediaVisibilityDeps() {
+        try {
+            const [sRes, tRes] = await Promise.all([
+                fetch('/api/admin/settings'),
+                fetch('/api/admin/access/tokens')
+            ]);
+            const sData = await sRes.json().catch(() => ({}));
+            const tData = await tRes.json().catch(() => ({}));
+            meSubscriptionOn = !!(sData.settings && sData.settings.subscription);
+            meTokens = (tData.tokens || []).filter(t => t.token);
+        } catch (e) {}
+        const opt = document.querySelector('#media-visibility option[value="public"]');
+        if (opt) opt.textContent = mePublicLabel();
+        await loadMediaVisibility();
+    }
+
+    function renderMediaTokenPicker(selected) {
+        const box = document.getElementById('media-token-picker');
+        if (!box) return;
+        const sel = new Set(selected || []);
+        if (!meTokens.length) {
+            box.innerHTML = '<p class="muted text-xs p-2">No users/tokens found. Create access tokens on the Access page first.</p>';
+            return;
+        }
+        box.innerHTML = meTokens.map(t => `
+            <label class="me-token-row">
+                <input type="checkbox" value="${escapeHtml(t.token)}" ${sel.has(t.token) ? 'checked' : ''}>
+                <span class="min-w-0">
+                    <span class="font-bold text-sm block truncate text-white">${escapeHtml(t.user_name || 'User')}</span>
+                    <span class="muted text-xs block truncate">${escapeHtml((t.token || '').slice(0, 12))}…${t.user_id ? ' · ' + escapeHtml(t.user_id) : ''}</span>
+                </span>
+            </label>`).join('');
+    }
+
+    function getMediaPickedTokens() {
+        return Array.from(document.querySelectorAll('#media-token-picker input:checked')).map(i => i.value);
+    }
+
+    function onMediaVisibilityChange(selected) {
+        const mode = document.getElementById('media-visibility').value;
+        const wrap = document.getElementById('media-token-picker-wrap');
+        if (wrap) wrap.classList.toggle('hidden', mode !== 'tokens');
+        if (mode === 'tokens') renderMediaTokenPicker(selected || []);
+    }
+
+    async function loadMediaVisibility() {
+        try {
+            const params = new URLSearchParams({
+                tmdb_id: String(CURRENT_TMDB_ID),
+                db_index: String(CURRENT_DB_INDEX),
+                media_type: CURRENT_MEDIA_TYPE
+            });
+            const res = await fetch(`/api/custom-catalogs/media-visibility?${params}`);
+            const data = await res.json().catch(() => ({}));
+            const vis = data.visibility || {};
+            const mode = vis.visibility || 'public';
+            const sel = document.getElementById('media-visibility');
+            if (sel) sel.value = mode;
+            onMediaVisibilityChange(vis.allowed_tokens || []);
+        } catch (e) {
+            onMediaVisibilityChange([]);
+        }
+    }
+
+    async function applyMediaVisibility() {
+        const visibility = document.getElementById('media-visibility').value;
+        const allowed_tokens = visibility === 'tokens' ? getMediaPickedTokens() : [];
+        if (visibility === 'tokens' && !allowed_tokens.length) {
+            showErrorMessage('Select at least one user.');
+            return;
+        }
+        try {
+            const res = await fetch('/api/custom-catalogs/media-visibility', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    tmdb_id: CURRENT_TMDB_ID,
+                    db_index: CURRENT_DB_INDEX,
+                    media_type: CURRENT_MEDIA_TYPE,
+                    visibility,
+                    allowed_tokens
+                })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.detail || 'Failed to update visibility');
+            showSuccessMessage(data.message || 'Visibility updated.');
+        } catch (e) {
+            showErrorMessage(e.message || 'Failed to update visibility.');
+        }
+    }
+
     function setCatalogStatus(message, type = 'info') {
         const status = document.getElementById('custom-catalog-status');
         if (!status) return;
@@ -1268,6 +1388,7 @@
         const select = document.getElementById('custom-catalog-select');
         if (select) select.addEventListener('change', updateCatalogDropdownStatus);
         loadMediaCatalogDropdown();
+        loadMediaVisibilityDeps();
         document.querySelectorAll('.season-content').forEach((content, index) => {
             if (index > 0) {
                 content.classList.add('season-collapsed');

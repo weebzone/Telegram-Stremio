@@ -421,15 +421,29 @@ class Database:
     #-----
     #----- Custom Catalog Management
     #-----
-    async def create_custom_catalog(self, name: str, visible: bool = True) -> Optional[str]:
+    #----- Backfill the visibility model on catalogs that predate it
+    @staticmethod
+    def _normalize_catalog(catalog: Optional[dict]) -> Optional[dict]:
+        if not catalog:
+            return catalog
+        if catalog.get("visibility") not in ("public", "tokens", "owner"):
+            catalog["visibility"] = "public" if catalog.get("visible", True) else "owner"
+        catalog.setdefault("allowed_tokens", [])
+        return catalog
+
+    async def create_custom_catalog(self, name: str, visibility: str = "public", allowed_tokens: Optional[List[str]] = None) -> Optional[str]:
         name = (name or "").strip()
         if not name:
             return None
 
+        if visibility not in ("public", "tokens", "owner"):
+            visibility = "public"
         now = datetime.utcnow()
         result = await self.dbs["tracking"]["custom_catalogs"].insert_one({
             "name": name,
-            "visible": bool(visible),
+            "visibility": visibility,
+            "allowed_tokens": list(allowed_tokens or []),
+            "visible": visibility != "owner",
             "items": [],
             "created_at": now,
             "updated_at": now,
@@ -440,23 +454,36 @@ class Database:
         query = {"visible": True} if visible_only else {}
         cursor = self.dbs["tracking"]["custom_catalogs"].find(query).sort("updated_at", DESCENDING)
         catalogs = await cursor.to_list(None)
-        return [convert_objectid_to_str(catalog) for catalog in catalogs]
+        return [self._normalize_catalog(convert_objectid_to_str(catalog)) for catalog in catalogs]
 
     async def get_custom_catalog(self, catalog_id: str) -> Optional[dict]:
         try:
             catalog = await self.dbs["tracking"]["custom_catalogs"].find_one({"_id": ObjectId(catalog_id)})
-            return convert_objectid_to_str(catalog) if catalog else None
+            return self._normalize_catalog(convert_objectid_to_str(catalog)) if catalog else None
         except Exception:
             return None
 
-    async def update_custom_catalog(self, catalog_id: str, name: Optional[str] = None, visible: Optional[bool] = None) -> bool:
+    async def update_custom_catalog(
+        self,
+        catalog_id: str,
+        name: Optional[str] = None,
+        visibility: Optional[str] = None,
+        allowed_tokens: Optional[List[str]] = None,
+    ) -> bool:
         update_data = {"updated_at": datetime.utcnow()}
         if name is not None:
             clean_name = name.strip()
             if clean_name:
                 update_data["name"] = clean_name
-        if visible is not None:
-            update_data["visible"] = bool(visible)
+
+        #----- Setting catalog visibility cascades to every title in the catalog
+        if visibility in ("public", "tokens", "owner"):
+            tokens = list(allowed_tokens or [])
+            update_data["visibility"] = visibility
+            update_data["visible"] = visibility != "owner"
+            update_data["allowed_tokens"] = tokens
+            update_data["items.$[].visibility"] = visibility
+            update_data["items.$[].allowed_tokens"] = tokens
 
         try:
             result = await self.dbs["tracking"]["custom_catalogs"].update_one(
@@ -466,6 +493,70 @@ class Database:
             return result.modified_count > 0
         except Exception:
             return False
+
+    #----- Override one title's visibility inside a single catalog
+    async def set_catalog_item_visibility(
+        self, catalog_id: str, tmdb_id: int, db_index: int, media_type: str,
+        visibility: str, allowed_tokens: Optional[List[str]] = None,
+    ) -> bool:
+        if visibility not in ("public", "tokens", "owner"):
+            return False
+        media_type = self._collection_for(media_type)
+        try:
+            result = await self.dbs["tracking"]["custom_catalogs"].update_one(
+                {"_id": ObjectId(catalog_id),
+                 "items": {"$elemMatch": {"tmdb_id": int(tmdb_id), "db_index": int(db_index), "media_type": media_type}}},
+                {"$set": {
+                    "items.$.visibility": visibility,
+                    "items.$.allowed_tokens": list(allowed_tokens or []),
+                    "updated_at": datetime.utcnow(),
+                }},
+            )
+            return result.modified_count > 0
+        except Exception:
+            return False
+
+    #----- Override a title's visibility across every catalog it belongs to
+    async def set_media_visibility(
+        self, tmdb_id: int, db_index: int, media_type: str,
+        visibility: str, allowed_tokens: Optional[List[str]] = None,
+    ) -> int:
+        if visibility not in ("public", "tokens", "owner"):
+            return 0
+        media_type = self._collection_for(media_type)
+        try:
+            result = await self.dbs["tracking"]["custom_catalogs"].update_many(
+                {"items": {"$elemMatch": {"tmdb_id": int(tmdb_id), "db_index": int(db_index), "media_type": media_type}}},
+                {"$set": {
+                    "items.$.visibility": visibility,
+                    "items.$.allowed_tokens": list(allowed_tokens or []),
+                    "updated_at": datetime.utcnow(),
+                }},
+            )
+            return result.modified_count
+        except Exception:
+            return 0
+
+    #----- The effective visibility of a title in a catalog it belongs to
+    async def get_media_visibility(self, tmdb_id: int, db_index: int, media_type: str) -> Optional[dict]:
+        media_type = self._collection_for(media_type)
+        try:
+            catalog = await self.dbs["tracking"]["custom_catalogs"].find_one(
+                {"items": {"$elemMatch": {"tmdb_id": int(tmdb_id), "db_index": int(db_index), "media_type": media_type}}}
+            )
+        except Exception:
+            return None
+        if not catalog:
+            return None
+        catalog = self._normalize_catalog(catalog)
+        for item in catalog.get("items", []):
+            if (item.get("tmdb_id") == int(tmdb_id) and item.get("db_index") == int(db_index)
+                    and item.get("media_type") == media_type):
+                return {
+                    "visibility": item.get("visibility") or catalog.get("visibility", "public"),
+                    "allowed_tokens": item.get("allowed_tokens") if item.get("visibility") else catalog.get("allowed_tokens", []),
+                }
+        return None
 
     async def delete_custom_catalog(self, catalog_id: str) -> bool:
         try:
