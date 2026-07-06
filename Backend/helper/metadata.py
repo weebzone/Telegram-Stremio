@@ -183,12 +183,17 @@ def _score_candidate(
     result_title: str,
     result_year: int,
     year_reliable: bool = True,
+    year_lower_bound: bool = False,
 ) -> float:
     score = _title_similarity(query_title, result_title)
     if score < 0.5:
         return score
 
     if query_year and result_year:
+        if year_lower_bound:
+            if int(query_year) >= result_year and score >= 0.80:
+                score = min(1.0, score + 0.10)
+            return score
         diff = abs(int(query_year) - result_year)
         if year_reliable:
             if diff > 2:
@@ -276,14 +281,16 @@ def _apply_combined_override(payload: dict, combined: dict) -> None:
 
 #----- ── Search (Cinemeta / TMDb) ────────────────────────────────────────────────
 async def safe_imdb_search(title: str, type_: str, year: Optional[int] = None) -> str | None:
-    cache_key = f"imdb::{type_}::{title}::{year}"
+    is_tv = type_ != "movie"
+    search_year = None if is_tv else year
+    cache_key = f"imdb::{type_}::{title}::{search_year}"
 
     async def _produce():
-        query_variants = _build_query_variants(title, year)
+        query_variants = _build_query_variants(title, search_year)
         best_id: str | None = None
         best_score = 0.0
         best_title = ""
-        year_reliable = type_ == "movie"
+        year_reliable = not is_tv
 
         for query in query_variants:
             try:
@@ -292,7 +299,7 @@ async def safe_imdb_search(title: str, type_: str, year: Optional[int] = None) -
                 for r in results:
                     score = _score_candidate(
                         title, year, r.get("title", ""), _year_from_str(r.get("year", "")),
-                        year_reliable=year_reliable,
+                        year_reliable=year_reliable, year_lower_bound=is_tv,
                     )
                     if score > best_score:
                         best_score, best_id, best_title = score, r.get("id"), r.get("title", "")
@@ -331,11 +338,13 @@ async def _tmdb_raw_search(title: str, media_type: str, year: Optional[int]):
 
 
 async def safe_tmdb_search(title: str, type_: str, year: Optional[int] = None):
-    cache_key = f"tmdb_search::{type_}::{title}::{year}"
+    is_tv = type_ != "movie"
+    search_year = None if is_tv else year
+    cache_key = f"tmdb_search::{type_}::{title}::{search_year}"
 
     async def _produce():
         try:
-            results = await _tmdb_raw_search(title, type_, year)
+            results = await _tmdb_raw_search(title, type_, search_year)
             best = await _pick_best_tmdb_result(results, title, year, type_)
             if best is None and results:
                 top = results[0]
@@ -362,11 +371,12 @@ async def _pick_best_tmdb_result(results, query_title: str, query_year: Optional
         return None
 
     year_reliable = media_type == "movie"
+    year_lower_bound = not year_reliable
     scored = []
     best_item, best_score = None, 0.0
     for item in results:
         r_title, r_year = _tmdb_title_year(item, media_type)
-        score = _score_candidate(query_title, query_year, r_title, r_year, year_reliable=year_reliable)
+        score = _score_candidate(query_title, query_year, r_title, r_year, year_reliable=year_reliable, year_lower_bound=year_lower_bound)
         scored.append((score, item, r_year))
         if score > best_score:
             best_score, best_item = score, item
@@ -378,7 +388,7 @@ async def _pick_best_tmdb_result(results, query_title: str, query_year: Optional
     for _, item, r_year in scored[:_ALT_TITLE_LOOKUPS]:
         alt_titles = await _tmdb_alternative_titles(media_type, getattr(item, "id", None))
         for alt in alt_titles:
-            alt_score = _score_candidate(query_title, query_year, alt, r_year, year_reliable=year_reliable)
+            alt_score = _score_candidate(query_title, query_year, alt, r_year, year_reliable=year_reliable, year_lower_bound=year_lower_bound)
             if alt_score > best_score:
                 best_score, best_item = alt_score, item
                 if best_score >= _STRONG_MATCH:
@@ -644,10 +654,8 @@ async def fetch_tv_metadata(title, season, episode, encoded_string, year=None, q
     imdb_tv = None
     imdb_ep = None
 
-    #----- Year is intentionally ignored for TV: a series' seasons can air in different
-    #----- years, so keying the search/cache on year would split one show into many.
     if not imdb_id and not tmdb_id:
-        imdb_id = await safe_imdb_search(title, "tvSeries", None)
+        imdb_id = await safe_imdb_search(title, "tvSeries", year)
         use_tmdb = not bool(imdb_id)
 
     if imdb_id and not use_tmdb:
@@ -670,7 +678,7 @@ async def fetch_tv_metadata(title, season, episode, encoded_string, year=None, q
     if use_tmdb or not imdb_tv:
         LOGGER.info(f"No valid Cinemeta TV data for '{title}' S{season:02d}E{episode:02d} -> using TMDb")
         if not tmdb_id:
-            tmdb_search = await safe_tmdb_search(title, "tv", None)
+            tmdb_search = await safe_tmdb_search(title, "tv", year)
             if not tmdb_search:
                 LOGGER.info(f"No TMDb TV result for '{title}' S{season:02d}E{episode:02d} (year={year})")
                 return None
