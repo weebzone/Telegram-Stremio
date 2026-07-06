@@ -386,7 +386,8 @@
                 Remove
             </button>
         </div>
-        <p id="custom-catalog-status" class="muted text-sm mt-3">Add this title to a catalog, then choose exactly who can see it below.</p>
+        <div id="media-in-catalogs" class="flex flex-wrap gap-2 mt-3"></div>
+        <p id="custom-catalog-status" class="muted text-sm mt-3">Add this title to a catalog, then choose who can see it below.</p>
 
         <div class="mt-5 pt-5" style="border-top:1px solid color-mix(in srgb, var(--border) 85%, transparent)">
             <label class="field-label">Who can see this title</label>
@@ -412,6 +413,11 @@
         .me-token-row { display: flex; align-items: center; gap: .6rem; padding: .5rem .65rem; border-radius: .7rem; cursor: pointer; }
         .me-token-row:hover { background: color-mix(in srgb, var(--primary) 10%, transparent); }
         .me-token-row input { width: 1.05rem; height: 1.05rem; accent-color: var(--primary); cursor: pointer; flex-shrink: 0; }
+        .me-chip { display: inline-flex; align-items: center; gap: .35rem; padding: .3rem .7rem; border-radius: 9999px; font-size: .75rem; font-weight: 800; border: 1px solid var(--border); max-width: 100%; }
+        .me-chip-hidden { color: rgb(248 113 113); background: color-mix(in srgb, rgb(239 68 68) 14%, transparent); border-color: color-mix(in srgb, rgb(239 68 68) 30%, transparent); }
+        .me-chip-custom { color: rgb(96 165 250); background: color-mix(in srgb, rgb(59 130 246) 14%, transparent); border-color: color-mix(in srgb, rgb(59 130 246) 30%, transparent); }
+        .me-chip-auto { color: rgb(52 211 153); background: color-mix(in srgb, rgb(16 185 129) 14%, transparent); border-color: color-mix(in srgb, rgb(16 185 129) 30%, transparent); }
+        .me-chip-empty { color: var(--text-sec); background: color-mix(in srgb, var(--bg) 70%, transparent); }
     </style>
 
     <div class="glass-card rounded-3xl p-5 sm:p-6 lg:p-8 mb-6 sm:mb-8">
@@ -1265,6 +1271,34 @@
         if (type === 'warn') status.classList.add('text-amber-300');
     }
 
+    //----- Rank a catalog for default selection: hidden (3) > custom (2) > auto (1)
+    function catalogRank(c) {
+        const hidden = (c.visibility === 'owner') || (c.visible === false);
+        if (hidden) return 3;
+        if (!c.auto) return 2;
+        return 1;
+    }
+
+    //----- Show which catalogs this title currently belongs to
+    function renderMediaInCatalogs(catalogs) {
+        const box = document.getElementById('media-in-catalogs');
+        if (!box) return;
+        const inList = (catalogs || []).filter(c => c.contains_current);
+        if (!inList.length) {
+            box.innerHTML = '<span class="me-chip me-chip-empty">Not in any catalog yet</span>';
+            return;
+        }
+        inList.sort((a, b) => catalogRank(b) - catalogRank(a));
+        box.innerHTML = inList.map(c => {
+            const hidden = (c.visibility === 'owner') || (c.visible === false);
+            const kind = c.auto ? 'auto' : (hidden ? 'hidden' : 'custom');
+            const icon = c.auto ? '✨' : (hidden ? '🔒' : '🎯');
+            const label = c.auto ? 'Auto' : (hidden ? 'Hidden' : 'Custom');
+            const excl = c.exclusive ? ' · 🔐' : '';
+            return `<span class="me-chip me-chip-${kind}" title="${escapeHtml(label)} catalog">${icon} ${escapeHtml(c.name)}${excl}</span>`;
+        }).join('');
+    }
+
     async function loadMediaCatalogDropdown(selectedCatalogId = '') {
         const select = document.getElementById('custom-catalog-select');
         if (!select) return;
@@ -1299,8 +1333,15 @@
                 return `<option value="${escapeHtml(catalog._id)}" data-visible="${catalog.visible ? '1' : '0'}" data-added="${catalog.contains_current ? '1' : '0'}">${escapeHtml(catalog.name)} (${visibility}${added})</option>`;
             }).join('');
 
+            renderMediaInCatalogs(catalogs);
+
+            //----- Pre-select the catalog this title lives in: hidden > custom > auto
+            const containing = catalogs.filter(c => c.contains_current);
+            const priority = [...containing].sort((a, b) => catalogRank(b) - catalogRank(a))[0];
             if (selectedCatalogId && catalogs.some(c => c._id === selectedCatalogId)) {
                 select.value = selectedCatalogId;
+            } else if (priority) {
+                select.value = priority._id;
             }
 
             select.disabled = false;
@@ -1350,7 +1391,14 @@
             const data = await res.json().catch(() => ({}));
             if (!res.ok) throw new Error(data.detail || 'Failed to add title to catalog');
 
-            showToast(data.message || 'Added to catalog.', 'success', 'Success');
+            let msg = data.message || 'Added to catalog.';
+            if (data.visibility_synced) {
+                await loadMediaVisibility();
+                msg += data.visibility_synced === 'owner'
+                    ? ' Title is now Owner only.'
+                    : ' Title is now limited to specific users.';
+            }
+            showToast(msg, 'success', 'Success');
             await loadMediaCatalogDropdown(catalogId);
         } catch (error) {
             showToast(error.message || 'Failed to add title to catalog', 'error', 'Error');

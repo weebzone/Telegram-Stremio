@@ -179,6 +179,20 @@
     cursor: pointer;
     transition: .2s ease;
     border: 1px solid var(--line);
+    flex-shrink: 0;
+  }
+
+  /* Toggle row (visibility exclusive / search) */
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+    border-radius: 1rem;
+    padding: .75rem .85rem;
+    background: color-mix(in srgb, var(--bg) 64%, transparent);
+    border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+    cursor: pointer;
   }
 
   .switch::after {
@@ -346,11 +360,10 @@
         <div>
           <div class="flex flex-wrap items-center gap-2 mb-3">
             <span class="pill">Custom Stremio sections</span>
-            <span class="pill">No Stremio search/filter</span>
           </div>
-          <h1 class="section-title text-3xl sm:text-4xl lg:text-5xl">Custom Catalogs</h1>
+          <h1 class="section-title text-2xl sm:text-4xl lg:text-5xl">Custom Catalogs</h1>
           <p class="muted mt-3 max-w-2xl text-sm sm:text-base leading-7">
-            Build dynamic curated rows like Bollywood, Anime, Kids, 4K, Watch Later, or hidden private lists from your existing Telegram media.
+            Curate your own Stremio rows — Anime, 4K, or private lists — from your Telegram media.
           </p>
         </div>
       </div>
@@ -381,9 +394,9 @@
           <span class="pill">✨ Auto catalogs</span>
           <span id="auto-sync-status" class="pill">Checking status...</span>
         </div>
-        <h2 class="section-title text-2xl sm:text-3xl">Auto-create by selected language & OTT</h2>
+        <h2 class="section-title text-xl sm:text-3xl">Auto Catalogs</h2>
         <p class="muted text-sm sm:text-base mt-2 leading-7 max-w-3xl">
-          On app startup this scans your movie and series library, fetches TMDb original language + watch providers, then creates only the auto catalogs you select below. Genre auto catalogs are removed.
+          Auto-build rows by language & OTT provider. Enable the ones you want, then sync.
         </p>
       </div>
       <div class="flex flex-col sm:flex-row gap-3">
@@ -396,7 +409,7 @@
       <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
         <div>
           <h3 class="section-title text-xl">Choose Auto Catalogs</h3>
-          <p class="muted text-sm mt-1">Disable anything you do not want to auto-create. Save, then run Full Rebuild once to apply removed catalogs.</p>
+          <p class="muted text-sm mt-1">Save your selection, then run Full Rebuild once to apply.</p>
         </div>
         <button id="save-auto-settings-btn" onclick="saveAutoCatalogSettings()" class="btn-ui btn-ghost md:w-auto">💾 Save Selection</button>
       </div>
@@ -414,7 +427,7 @@
         <div class="flex items-start justify-between gap-3 mb-5">
           <div>
             <h2 class="section-title text-2xl">Create Catalog</h2>
-            <p class="muted text-sm mt-1">Every catalog can appear in Stremio. Its visibility decides who actually sees it.</p>
+            <p class="muted text-sm mt-1">Visibility decides who sees it in Stremio.</p>
           </div>
           <span class="pill">New</span>
         </div>
@@ -500,19 +513,19 @@
           </div>
 
           <div id="ws-exclusive-wrap" class="hidden mt-3 space-y-2">
-            <label class="flex items-center justify-between gap-3 rounded-2xl p-3 cursor-pointer" style="background: color-mix(in srgb, var(--bg) 64%, transparent); border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);">
+            <label class="toggle-row">
               <span class="min-w-0">
                 <span class="font-bold text-sm block">🔒 Only visible in this catalog</span>
-                <span class="muted text-xs block">Locks these titles here — removed from Default, Auto and every other catalog.</span>
+                <span class="muted text-xs block">Removed from Default, Auto and other catalogs.</span>
               </span>
               <input type="checkbox" id="ws-exclusive" class="switch-input hidden" onchange="onExclusiveChange()">
               <span class="switch"></span>
             </label>
             <div id="ws-search-wrap" class="hidden">
-              <label class="flex items-center justify-between gap-3 rounded-2xl p-3 cursor-pointer" style="background: color-mix(in srgb, var(--bg) 64%, transparent); border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);">
+              <label class="toggle-row">
                 <span class="min-w-0">
                   <span class="font-bold text-sm block">🔎 Allow search</span>
-                  <span class="muted text-xs block">Let allowed users still find these titles via Stremio search.</span>
+                  <span class="muted text-xs block">Let allowed users find these titles via search.</span>
                 </span>
                 <input type="checkbox" id="ws-searchable" class="switch-input hidden">
                 <span class="switch"></span>
@@ -520,7 +533,7 @@
             </div>
           </div>
 
-          <p class="muted text-xs mt-3">This overrides the visibility of every title in the catalog. You can still fine-tune a single title from its <b>Edit</b> page.</p>
+          <p class="muted text-xs mt-3">Applies to every title in this catalog. Fine-tune a single title from its <b>Edit</b> page.</p>
         </div>
 
         <div class="catalog-card p-4 sm:p-5">

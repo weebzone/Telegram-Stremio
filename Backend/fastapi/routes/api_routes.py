@@ -1147,10 +1147,19 @@ async def add_custom_catalog_item_api(catalog_id: str, payload: dict):
         raise HTTPException(status_code=404, detail="Catalog not found.")
 
     added = await db.add_item_to_custom_catalog(catalog_id, int(tmdb_id), int(db_index), media_type)
-    if added and catalog.get("exclusive"):
-        await db.mark_item_exclusive(catalog_id, int(tmdb_id), int(db_index), media_type, catalog.get("searchable", False))
+    visibility_synced = None
+    if added:
+        #----- Adding to a hidden/restricted catalog adopts that visibility onto the title
+        cat_vis = catalog.get("visibility")
+        if cat_vis in ("owner", "tokens"):
+            await db.set_media_visibility(
+                int(tmdb_id), int(db_index), media_type, cat_vis, catalog.get("allowed_tokens") or []
+            )
+            visibility_synced = cat_vis
+        if catalog.get("exclusive"):
+            await db.mark_item_exclusive(catalog_id, int(tmdb_id), int(db_index), media_type, catalog.get("searchable", False))
     message = "Added to catalog." if added else "Already exists in this catalog."
-    return {"message": message, "added": added}
+    return {"message": message, "added": added, "visibility_synced": visibility_synced}
 
 
 async def remove_custom_catalog_item_api(
