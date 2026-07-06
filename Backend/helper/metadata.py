@@ -192,7 +192,7 @@ def _score_candidate(
     if query_year and result_year:
         if year_lower_bound:
             if int(query_year) >= result_year and score >= 0.80:
-                score = min(1.0, score + 0.10)
+                score += 0.15 / (1 + (int(query_year) - result_year) * 0.1)
             return score
         diff = abs(int(query_year) - result_year)
         if year_reliable:
@@ -283,7 +283,7 @@ def _apply_combined_override(payload: dict, combined: dict) -> None:
 async def safe_imdb_search(title: str, type_: str, year: Optional[int] = None) -> str | None:
     is_tv = type_ != "movie"
     search_year = None if is_tv else year
-    cache_key = f"imdb::{type_}::{title}::{search_year}"
+    cache_key = f"imdb::{type_}::{title}::{year}"
 
     async def _produce():
         query_variants = _build_query_variants(title, search_year)
@@ -303,11 +303,11 @@ async def safe_imdb_search(title: str, type_: str, year: Optional[int] = None) -
                     )
                     if score > best_score:
                         best_score, best_id, best_title = score, r.get("id"), r.get("title", "")
-                    if best_score >= _STRONG_MATCH:
+                    if not is_tv and best_score >= _STRONG_MATCH:
                         break
             except Exception as e:
                 LOGGER.warning(f"Cinemeta search variant '{query}' [{type_}] failed: {e}")
-            if best_score >= _STRONG_MATCH:
+            if not is_tv and best_score >= _STRONG_MATCH:
                 break
 
         if best_score >= _CINEMETA_THRESHOLD and best_id:
@@ -340,7 +340,7 @@ async def _tmdb_raw_search(title: str, media_type: str, year: Optional[int]):
 async def safe_tmdb_search(title: str, type_: str, year: Optional[int] = None):
     is_tv = type_ != "movie"
     search_year = None if is_tv else year
-    cache_key = f"tmdb_search::{type_}::{title}::{search_year}"
+    cache_key = f"tmdb_search::{type_}::{title}::{year}"
 
     async def _produce():
         try:
