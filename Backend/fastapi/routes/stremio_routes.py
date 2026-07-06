@@ -64,6 +64,29 @@ def _token_can_view(mode: str, allowed_tokens: list, token_data: dict) -> bool:
     return True
 
 
+#----- Mongo filter that hides owner-only / restricted titles from a token
+def _visibility_query(token_data: dict) -> dict:
+    user_id = token_data.get("user_id")
+    try:
+        if user_id is not None and int(user_id) == int(Telegram.OWNER_ID):
+            return {}
+    except (TypeError, ValueError):
+        pass
+    return {"$or": [
+        {"visibility": {"$exists": False}},
+        {"visibility": "public"},
+        {"visibility": "tokens", "allowed_tokens": token_data.get("token")},
+    ]}
+
+
+#----- Whether a title (by imdb id) may be seen by this token, honouring its own visibility
+async def _title_allowed(imdb_id: str, token_data: dict) -> bool:
+    doc = await db.get_media_details(imdb_id=imdb_id)
+    if not doc:
+        return True
+    return _token_can_view(doc.get("visibility") or "public", doc.get("allowed_tokens") or [], token_data)
+
+
 #----- Available catalog genres
 GENRES = [
     "Action", "Adventure", "Animation", "Biography", "Comedy",
@@ -355,7 +378,10 @@ async def get_catalog(token: str, media_type: str, id: str, extra: Optional[str]
                 if doc:
                     items.append(doc)
         elif search_query:
-            search_results = await db.search_documents(query=search_query, page=page, page_size=PAGE_SIZE)
+            search_results = await db.search_documents(
+                query=search_query, page=page, page_size=PAGE_SIZE,
+                extra_filter=_visibility_query(token_data),
+            )
             all_items = search_results.get("results", [])
             db_media_type = "tv" if media_type == "series" else "movie"
             items = [item for item in all_items if item.get("media_type") == db_media_type]
@@ -367,11 +393,12 @@ async def get_catalog(token: str, media_type: str, id: str, extra: Optional[str]
             else:
                 sort_params = [("updated_on", "desc")]
 
+            vis_filter = _visibility_query(token_data)
             if media_type == "movie":
-                data = await db.sort_movies(sort_params, page, PAGE_SIZE, genre_filter=genre_filter)
+                data = await db.sort_movies(sort_params, page, PAGE_SIZE, genre_filter=genre_filter, extra_filter=vis_filter)
                 items = data.get("movies", [])
             else:
-                data = await db.sort_tv_shows(sort_params, page, PAGE_SIZE, genre_filter=genre_filter)
+                data = await db.sort_tv_shows(sort_params, page, PAGE_SIZE, genre_filter=genre_filter, extra_filter=vis_filter)
                 items = data.get("tv_shows", [])
     except Exception:
         return {"metas": []}
@@ -390,6 +417,9 @@ async def get_meta(token: str, media_type: str, id: str, token_data: dict = Depe
 
     media = await db.get_media_details(imdb_id=imdb_id)
     if not media:
+        return {"meta": {}}
+
+    if not _token_can_view(media.get("visibility") or "public", media.get("allowed_tokens") or [], token_data):
         return {"meta": {}}
 
     meta_obj = {
@@ -566,6 +596,9 @@ async def get_streams(
         episode_num = int(parts[2]) if len(parts) > 2 else None
     except (ValueError, IndexError):
         raise HTTPException(status_code=400, detail="Invalid Stremio ID format")
+
+    if not await _title_allowed(imdb_id, token_data):
+        return {"streams": []}
 
     media_details = await db.get_media_details(
         imdb_id=imdb_id,

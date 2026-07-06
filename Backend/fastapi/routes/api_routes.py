@@ -1071,8 +1071,7 @@ async def set_media_visibility_api(payload: dict):
     return {
         "status": "success",
         "updated_catalogs": count,
-        "message": (f"Visibility updated in {count} catalog(s)." if count
-                    else "This title is not in any custom catalog yet."),
+        "message": "Visibility updated — applies to default catalogs and every catalog this title is in.",
     }
 
 

@@ -477,7 +477,8 @@ class Database:
                 update_data["name"] = clean_name
 
         #----- Setting catalog visibility cascades to every title in the catalog
-        if visibility in ("public", "tokens", "owner"):
+        cascade = visibility in ("public", "tokens", "owner")
+        if cascade:
             tokens = list(allowed_tokens or [])
             update_data["visibility"] = visibility
             update_data["visible"] = visibility != "owner"
@@ -490,9 +491,39 @@ class Database:
                 {"_id": ObjectId(catalog_id)},
                 {"$set": update_data}
             )
-            return result.modified_count > 0
         except Exception:
             return False
+
+        #----- Also stamp the visibility onto the underlying media documents so the
+        #----- default Latest/Popular catalogs and search honour it too
+        if cascade:
+            catalog = await self.dbs["tracking"]["custom_catalogs"].find_one({"_id": ObjectId(catalog_id)})
+            if catalog:
+                await self._apply_visibility_to_docs(catalog.get("items", []), visibility, list(allowed_tokens or []))
+        return result.modified_count > 0
+
+    #----- Stamp visibility onto media documents referenced by the given catalog items
+    async def _apply_visibility_to_docs(self, items: List[dict], visibility: str, allowed_tokens: List[str]) -> None:
+        groups: Dict[Tuple[int, str], List[int]] = {}
+        for it in items or []:
+            try:
+                db_index = int(it.get("db_index", 1))
+                collection = self._collection_for(it.get("media_type", "movie"))
+                groups.setdefault((db_index, collection), []).append(int(it.get("tmdb_id")))
+            except (TypeError, ValueError):
+                continue
+        now = datetime.utcnow()
+        for (db_index, collection), ids in groups.items():
+            db_key = f"storage_{db_index}"
+            if db_key not in self.dbs:
+                continue
+            try:
+                await self.dbs[db_key][collection].update_many(
+                    {"tmdb_id": {"$in": ids}},
+                    {"$set": {"visibility": visibility, "allowed_tokens": allowed_tokens, "updated_on": now}},
+                )
+            except Exception as e:
+                LOGGER.error(f"_apply_visibility_to_docs failed for {db_key}.{collection}: {e}")
 
     #----- Override one title's visibility inside a single catalog
     async def set_catalog_item_visibility(
@@ -516,47 +547,50 @@ class Database:
         except Exception:
             return False
 
-    #----- Override a title's visibility across every catalog it belongs to
+    #----- Set a title's own visibility (source of truth for default + custom catalogs)
     async def set_media_visibility(
         self, tmdb_id: int, db_index: int, media_type: str,
         visibility: str, allowed_tokens: Optional[List[str]] = None,
     ) -> int:
         if visibility not in ("public", "tokens", "owner"):
             return 0
-        media_type = self._collection_for(media_type)
+        tokens = list(allowed_tokens or [])
+        collection = self._collection_for(media_type)
+        now = datetime.utcnow()
+
+        db_key = f"storage_{int(db_index)}"
+        if db_key in self.dbs:
+            try:
+                await self.dbs[db_key][collection].update_one(
+                    {"tmdb_id": int(tmdb_id)},
+                    {"$set": {"visibility": visibility, "allowed_tokens": tokens, "updated_on": now}},
+                )
+            except Exception as e:
+                LOGGER.error(f"set_media_visibility doc update failed: {e}")
+
+        #----- Keep any catalog items in sync so custom-catalog filtering matches
         try:
             result = await self.dbs["tracking"]["custom_catalogs"].update_many(
-                {"items": {"$elemMatch": {"tmdb_id": int(tmdb_id), "db_index": int(db_index), "media_type": media_type}}},
+                {"items": {"$elemMatch": {"tmdb_id": int(tmdb_id), "db_index": int(db_index), "media_type": collection}}},
                 {"$set": {
                     "items.$.visibility": visibility,
-                    "items.$.allowed_tokens": list(allowed_tokens or []),
-                    "updated_at": datetime.utcnow(),
+                    "items.$.allowed_tokens": tokens,
+                    "updated_at": now,
                 }},
             )
             return result.modified_count
         except Exception:
             return 0
 
-    #----- The effective visibility of a title in a catalog it belongs to
+    #----- A title's own visibility (from its media document)
     async def get_media_visibility(self, tmdb_id: int, db_index: int, media_type: str) -> Optional[dict]:
-        media_type = self._collection_for(media_type)
-        try:
-            catalog = await self.dbs["tracking"]["custom_catalogs"].find_one(
-                {"items": {"$elemMatch": {"tmdb_id": int(tmdb_id), "db_index": int(db_index), "media_type": media_type}}}
-            )
-        except Exception:
+        doc = await self.get_document(media_type, int(tmdb_id), int(db_index))
+        if not doc:
             return None
-        if not catalog:
-            return None
-        catalog = self._normalize_catalog(catalog)
-        for item in catalog.get("items", []):
-            if (item.get("tmdb_id") == int(tmdb_id) and item.get("db_index") == int(db_index)
-                    and item.get("media_type") == media_type):
-                return {
-                    "visibility": item.get("visibility") or catalog.get("visibility", "public"),
-                    "allowed_tokens": item.get("allowed_tokens") if item.get("visibility") else catalog.get("allowed_tokens", []),
-                }
-        return None
+        return {
+            "visibility": doc.get("visibility") or "public",
+            "allowed_tokens": doc.get("allowed_tokens") or [],
+        }
 
     async def delete_custom_catalog(self, catalog_id: str) -> bool:
         try:
@@ -569,11 +603,14 @@ class Database:
         self, catalog_id: str, tmdb_id: int, db_index: int, media_type: str
     ) -> bool:
         media_type = self._collection_for(media_type)
+        doc = await self.get_document(media_type, int(tmdb_id), int(db_index))
         item = {
             "tmdb_id": int(tmdb_id),
             "db_index": int(db_index),
             "media_type": media_type,
             "added_at": datetime.utcnow(),
+            "visibility": (doc.get("visibility") if doc else None) or "public",
+            "allowed_tokens": (doc.get("allowed_tokens") if doc else None) or [],
         }
         try:
             result = await self.dbs["tracking"]["custom_catalogs"].update_one(
@@ -1287,9 +1324,11 @@ class Database:
             if any(keyword in str(e).lower() for keyword in ["storage", "quota"]):
                 return await self._handle_storage_error(self.update_tv_show, tv_show_data, total_storage_dbs=total_storage_dbs)
     
-    async def sort_movies(self, sort_params, page, page_size, genre_filter=None):
+    async def sort_movies(self, sort_params, page, page_size, genre_filter=None, extra_filter=None):
         sort_dict = self._get_sort_dict(sort_params)
         filter_dict = {"genres": {"$in": [genre_filter]}} if genre_filter else {}
+        if extra_filter:
+            filter_dict.update(extra_filter)
         results, dbs_checked, total_count = await self._paginate_collection(
             "movie", sort_dict, page, page_size, filter_dict=filter_dict
         )
@@ -1302,9 +1341,11 @@ class Database:
             "movies": [convert_objectid_to_str(result) for result in results],
         }
 
-    async def sort_tv_shows(self, sort_params, page, page_size, genre_filter=None):
+    async def sort_tv_shows(self, sort_params, page, page_size, genre_filter=None, extra_filter=None):
         sort_dict = self._get_sort_dict(sort_params)
         filter_dict = {"genres": {"$in": [genre_filter]}} if genre_filter else {}
+        if extra_filter:
+            filter_dict.update(extra_filter)
         results, dbs_checked, total_count = await self._paginate_collection(
             "tv", sort_dict, page, page_size, filter_dict=filter_dict
         )
@@ -1321,7 +1362,8 @@ class Database:
             self, 
             query: str, 
             page: int, 
-            page_size: int
+            page_size: int,
+            extra_filter: Optional[dict] = None
         ) -> dict:
 
             skip = (page - 1) * page_size
@@ -1331,12 +1373,21 @@ class Database:
                 '$regex': '.*' + '.*'.join(words) + '.*', 
                 '$options': 'i'
             }
-            
+
+            tv_match = {"$or": [
+                {"title": regex_query},
+                {"seasons.episodes.telegram.name": regex_query}
+            ]}
+            movie_match = {"$or": [
+                {"title": regex_query},
+                {"telegram.name": regex_query}
+            ]}
+            if extra_filter:
+                tv_match = {"$and": [tv_match, extra_filter]}
+                movie_match = {"$and": [movie_match, extra_filter]}
+
             tv_pipeline = [
-                {"$match": {"$or": [
-                    {"title": regex_query},
-                    {"seasons.episodes.telegram.name": regex_query}
-                ]}},
+                {"$match": tv_match},
                 {"$project": {
                     "_id": 1, "tmdb_id": 1, "title": 1, "genres": 1, "rating": 1, "imdb_id": 1,
                     "release_year": 1, "poster": 1, "backdrop": 1, "description": 1, "logo": 1,
@@ -1345,10 +1396,7 @@ class Database:
             ]
             
             movie_pipeline = [
-                {"$match": {"$or": [
-                    {"title": regex_query},
-                    {"telegram.name": regex_query}
-                ]}},
+                {"$match": movie_match},
                 {"$project": {
                     "_id": 1, "tmdb_id": 1, "title": 1, "genres": 1, "rating": 1,
                     "release_year": 1, "poster": 1, "backdrop": 1, "description": 1,
@@ -1384,18 +1432,8 @@ class Database:
             for db_index in dbs_checked:
                 key = f"storage_{db_index}"
                 db = self.dbs[key]
-                tv_count = await db["tv"].count_documents({
-                    "$or": [
-                        {"title": regex_query},
-                        {"seasons.episodes.telegram.name": regex_query}
-                    ]
-                })
-                movie_count = await db["movie"].count_documents({
-                    "$or": [
-                        {"title": regex_query},
-                        {"telegram.name": regex_query}
-                    ]
-                })
+                tv_count = await db["tv"].count_documents(tv_match)
+                movie_count = await db["movie"].count_documents(movie_match)
                 total_count += (tv_count + movie_count)
             
             paged_results = results[skip:skip + page_size]
