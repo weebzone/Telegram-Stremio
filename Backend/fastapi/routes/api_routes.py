@@ -4,7 +4,6 @@ import random
 import secrets
 from datetime import datetime
 from time import time
-from urllib.parse import quote
 
 from fastapi import HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
@@ -25,6 +24,8 @@ from Backend.helper.manual_add import resolve_telegram_message
 from Backend.helper.metadata import (
     fetch_selected_movie_metadata,
     fetch_selected_tv_metadata,
+    gradient_cover_path,
+    resolve_cover_url,
     search_movie_candidates,
     search_tv_candidates,
 )
@@ -71,6 +72,14 @@ async def get_system_stats_api():
         }
 
 
+#----- Expand stored gradient cover paths into full URLs for UI responses
+def _resolve_covers(items) -> None:
+    for item in items or []:
+        for key in ("poster", "backdrop"):
+            if item.get(key):
+                item[key] = resolve_cover_url(item[key])
+
+
 #----- Media management
 async def list_media_api(
     media_type: str = Query("movie", regex="^(movie|tv)$"),
@@ -79,25 +88,24 @@ async def list_media_api(
     search: str = Query("", max_length=100)
 ):
     try:
+        key = "movies" if media_type == "movie" else "tv_shows"
         if search:
             result = await db.search_documents(search, page, page_size)
             filtered_results = [item for item in result['results'] if item.get('media_type') == media_type]
             total_filtered = len(filtered_results)
             start_index = (page - 1) * page_size
-            end_index = start_index + page_size
-            paged_results = filtered_results[start_index:end_index]
-            
-            return {
+            resp = {
                 "total_count": total_filtered,
                 "current_page": page,
                 "total_pages": (total_filtered + page_size - 1) // page_size,
-                "movies" if media_type == "movie" else "tv_shows": paged_results
+                key: filtered_results[start_index:start_index + page_size],
             }
+        elif media_type == "movie":
+            resp = await db.sort_movies([], page, page_size)
         else:
-            if media_type == "movie":
-                return await db.sort_movies([], page, page_size)
-            else:
-                return await db.sort_tv_shows([], page, page_size)
+            resp = await db.sort_tv_shows([], page, page_size)
+        _resolve_covers(resp.get(key))
+        return resp
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -828,20 +836,13 @@ _PLACEHOLDER_DESCRIPTIONS = [
 ]
 
 
-#----- Gradient placeholder cover for titles without artwork
-def _gradient_cover(title: str, portrait: bool = False) -> str:
-    text = quote((title or "Media").strip() or "Media")
-    url = f"https://gradient-cover-api.vercel.app/api/image?text={text}&badge="
-    return f"{url}&orientation=portrait" if portrait else url
-
-
-#----- Fill empty optional metadata with random values and gradient artwork
+#----- Fill empty optional metadata with random values and a gradient cover path
 def _fill_placeholder_metadata(meta: dict) -> None:
     title = meta.get("title") or "Media"
     if not meta.get("poster"):
-        meta["poster"] = _gradient_cover(title, portrait=True)
+        meta["poster"] = gradient_cover_path(title, portrait=True)
     if not meta.get("backdrop"):
-        meta["backdrop"] = _gradient_cover(title)
+        meta["backdrop"] = gradient_cover_path(title)
     if not meta.get("genres"):
         meta["genres"] = random.sample(_PLACEHOLDER_GENRES, random.randint(1, 3))
     if not meta.get("rate"):
@@ -1104,6 +1105,7 @@ async def get_custom_catalog_items_api(
         data = await db.get_custom_catalog_items(catalog_id, media_type, page, page_size)
         if not data.get("catalog"):
             raise HTTPException(status_code=404, detail="Catalog not found.")
+        _resolve_covers(data.get("items"))
         return data
     except HTTPException:
         raise

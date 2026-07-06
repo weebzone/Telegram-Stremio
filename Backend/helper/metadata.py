@@ -2,6 +2,7 @@ import asyncio
 import re
 import traceback
 from typing import Optional, List, Dict
+from urllib.parse import quote
 
 import PTN
 
@@ -91,6 +92,23 @@ def get_tmdb_client() -> aioTMDb:
 
 def format_tmdb_image(path: str, size="w500") -> str:
     return f"https://image.tmdb.org/t/p/{size}{path}" if path else ""
+
+
+#----- Placeholder cover host. Only the path is stored, so this host can change any time.
+GRADIENT_COVER_BASE = "https://gradient-cover-api.vercel.app"
+
+
+#----- Relative gradient cover path persisted for titles without artwork
+def gradient_cover_path(title: str, portrait: bool = False) -> str:
+    path = f"/api/image?text={quote((title or 'Media').strip() or 'Media')}&badge="
+    return f"{path}&orientation=portrait" if portrait else path
+
+
+#----- Rebind a stored gradient cover (path or legacy full URL) to the current host
+def resolve_cover_url(value: str) -> str:
+    value = str(value or "")
+    idx = value.find("/api/image?")
+    return f"{GRADIENT_COVER_BASE}{value[idx:]}" if idx != -1 else value
 
 
 def get_tmdb_logo(images) -> str:

@@ -9,11 +9,13 @@ from Backend.config import Telegram
 from Backend.fastapi.security.credentials import get_current_user, is_authenticated, require_auth, verify_credentials
 from Backend.fastapi.themes import DEFAULT_THEME, get_all_themes, get_theme
 from Backend.helper.custom_dl import ACTIVE_STREAMS, RECENT_STREAMS
+from Backend.helper.metadata import resolve_cover_url
 from Backend.helper.pyro import get_readable_time
 from Backend.helper.settings_manager import SettingsManager
 from Backend.pyrofork.bot import StreamBot, multi_clients, work_loads_summary
 
 templates = Jinja2Templates(directory="Backend/fastapi/templates")
+templates.env.globals["cover_url"] = resolve_cover_url
 
 
 #----- Shared template context (request, theme metadata) for every page
