@@ -923,12 +923,11 @@ async def manual_add_media_api(payload: dict) -> dict:
         base["imdb_id"] = f"tg{abs(int(base['tmdb_id']))}"
     _fill_placeholder_metadata(base)
 
-    #----- Use the file's own thumbnail as artwork when available
-    base_url = SettingsManager.current().base_url
+    #----- Store the file thumbnail as a base-relative path so it survives base_url changes
     thumb_url = ""
-    if primary.get("has_thumb") and base_url:
+    if primary.get("has_thumb"):
         thumb_enc = await encode_string({"chat_id": int(primary["chat_id"]), "msg_id": int(primary["msg_id"])})
-        thumb_url = f"{base_url}/thumb/{thumb_enc}"
+        thumb_url = f"/thumb/{thumb_enc}"
 
     #----- Split parts share one quality entry via a common group key
     group_key = f"manual:{primary['chat_id']}:{quality}:{secrets.token_hex(6)}" if is_split else None
