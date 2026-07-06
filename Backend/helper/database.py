@@ -429,6 +429,8 @@ class Database:
         if catalog.get("visibility") not in ("public", "tokens", "owner"):
             catalog["visibility"] = "public" if catalog.get("visible", True) else "owner"
         catalog.setdefault("allowed_tokens", [])
+        catalog.setdefault("exclusive", False)
+        catalog.setdefault("searchable", False)
         return catalog
 
     async def create_custom_catalog(self, name: str, visibility: str = "public", allowed_tokens: Optional[List[str]] = None) -> Optional[str]:
@@ -444,6 +446,8 @@ class Database:
             "visibility": visibility,
             "allowed_tokens": list(allowed_tokens or []),
             "visible": visibility != "owner",
+            "exclusive": False,
+            "searchable": False,
             "items": [],
             "created_at": now,
             "updated_at": now,
@@ -469,7 +473,16 @@ class Database:
         name: Optional[str] = None,
         visibility: Optional[str] = None,
         allowed_tokens: Optional[List[str]] = None,
+        exclusive: Optional[bool] = None,
+        searchable: Optional[bool] = None,
     ) -> bool:
+        try:
+            existing = await self.dbs["tracking"]["custom_catalogs"].find_one({"_id": ObjectId(catalog_id)})
+        except Exception:
+            return False
+        if not existing:
+            return False
+
         update_data = {"updated_at": datetime.utcnow()}
         if name is not None:
             clean_name = name.strip()
@@ -478,13 +491,23 @@ class Database:
 
         #----- Setting catalog visibility cascades to every title in the catalog
         cascade = visibility in ("public", "tokens", "owner")
+        tokens = list(allowed_tokens or [])
+        final_visibility = visibility if cascade else existing.get("visibility", "public")
         if cascade:
-            tokens = list(allowed_tokens or [])
             update_data["visibility"] = visibility
             update_data["visible"] = visibility != "owner"
             update_data["allowed_tokens"] = tokens
             update_data["items.$[].visibility"] = visibility
             update_data["items.$[].allowed_tokens"] = tokens
+
+        #----- Exclusive locks every title to this catalog only (never on auto catalogs,
+        #----- and only meaningful for restricted visibility)
+        is_auto = bool(existing.get("auto"))
+        want_exclusive = None
+        if exclusive is not None and not is_auto:
+            want_exclusive = bool(exclusive) and final_visibility in ("tokens", "owner")
+            update_data["exclusive"] = want_exclusive
+            update_data["searchable"] = bool(searchable) if want_exclusive else False
 
         try:
             result = await self.dbs["tracking"]["custom_catalogs"].update_one(
@@ -494,12 +517,21 @@ class Database:
         except Exception:
             return False
 
-        #----- Also stamp the visibility onto the underlying media documents so the
-        #----- default Latest/Popular catalogs and search honour it too
+        catalog = await self.dbs["tracking"]["custom_catalogs"].find_one({"_id": ObjectId(catalog_id)})
+        items = catalog.get("items", []) if catalog else []
+
+        #----- Stamp visibility onto the underlying media documents so the default
+        #----- Latest/Popular catalogs and search honour it too
         if cascade:
-            catalog = await self.dbs["tracking"]["custom_catalogs"].find_one({"_id": ObjectId(catalog_id)})
-            if catalog:
-                await self._apply_visibility_to_docs(catalog.get("items", []), visibility, list(allowed_tokens or []))
+            await self._apply_visibility_to_docs(items, final_visibility, tokens)
+
+        #----- Apply/clear exclusivity on the documents and purge from every other catalog
+        if want_exclusive is True:
+            await self._apply_exclusivity_to_docs(items, catalog_id, bool(searchable))
+            await self.purge_items_from_other_catalogs(catalog_id, items)
+        elif want_exclusive is False:
+            await self._clear_exclusivity_from_docs(items)
+
         return result.modified_count > 0
 
     #----- Stamp visibility onto media documents referenced by the given catalog items
@@ -524,6 +556,84 @@ class Database:
                 )
             except Exception as e:
                 LOGGER.error(f"_apply_visibility_to_docs failed for {db_key}.{collection}: {e}")
+
+    #----- Group catalog items into {(db_index, collection): [tmdb_id, ...]}
+    def _group_items_by_storage(self, items: List[dict]) -> Dict[Tuple[int, str], List[int]]:
+        groups: Dict[Tuple[int, str], List[int]] = {}
+        for it in items or []:
+            try:
+                db_index = int(it.get("db_index", 1))
+                collection = self._collection_for(it.get("media_type", "movie"))
+                groups.setdefault((db_index, collection), []).append(int(it.get("tmdb_id")))
+            except (TypeError, ValueError):
+                continue
+        return groups
+
+    #----- Lock the given titles to a single catalog (source of truth on the docs)
+    async def _apply_exclusivity_to_docs(self, items: List[dict], catalog_id: str, searchable: bool) -> None:
+        now = datetime.utcnow()
+        for (db_index, collection), ids in self._group_items_by_storage(items).items():
+            db_key = f"storage_{db_index}"
+            if db_key not in self.dbs:
+                continue
+            try:
+                await self.dbs[db_key][collection].update_many(
+                    {"tmdb_id": {"$in": ids}},
+                    {"$set": {"exclusive_catalog_id": str(catalog_id), "exclusive_searchable": bool(searchable), "updated_on": now}},
+                )
+            except Exception as e:
+                LOGGER.error(f"_apply_exclusivity_to_docs failed for {db_key}.{collection}: {e}")
+
+    #----- Unlock the given titles so they return to default/auto/other catalogs
+    async def _clear_exclusivity_from_docs(self, items: List[dict]) -> None:
+        now = datetime.utcnow()
+        for (db_index, collection), ids in self._group_items_by_storage(items).items():
+            db_key = f"storage_{db_index}"
+            if db_key not in self.dbs:
+                continue
+            try:
+                await self.dbs[db_key][collection].update_many(
+                    {"tmdb_id": {"$in": ids}},
+                    {"$unset": {"exclusive_catalog_id": "", "exclusive_searchable": ""},
+                     "$set": {"auto_catalog.synced": False, "updated_on": now}},
+                )
+            except Exception as e:
+                LOGGER.error(f"_clear_exclusivity_from_docs failed for {db_key}.{collection}: {e}")
+
+    #----- Remove the given titles from every catalog except the one that owns them
+    async def purge_items_from_other_catalogs(self, catalog_id: str, items: List[dict]) -> None:
+        ids_by_type: Dict[str, set] = {}
+        for it in items or []:
+            try:
+                ids_by_type.setdefault(self._collection_for(it.get("media_type", "movie")), set()).add(int(it.get("tmdb_id")))
+            except (TypeError, ValueError):
+                continue
+        if not ids_by_type:
+            return
+        coll = self.dbs["tracking"]["custom_catalogs"]
+        now = datetime.utcnow()
+        for media_type, ids in ids_by_type.items():
+            id_list = list(ids)
+            try:
+                await coll.update_many(
+                    {"_id": {"$ne": ObjectId(catalog_id)},
+                     "items": {"$elemMatch": {"tmdb_id": {"$in": id_list}, "media_type": media_type}}},
+                    {"$pull": {"items": {"tmdb_id": {"$in": id_list}, "media_type": media_type}},
+                     "$set": {"updated_at": now}},
+                )
+            except Exception as e:
+                LOGGER.error(f"purge_items_from_other_catalogs failed: {e}")
+
+    #----- Mark a single freshly-added title exclusive to its catalog
+    async def mark_item_exclusive(self, catalog_id: str, tmdb_id: int, db_index: int, media_type: str, searchable: bool) -> None:
+        item = {"tmdb_id": int(tmdb_id), "db_index": int(db_index), "media_type": self._collection_for(media_type)}
+        await self._apply_exclusivity_to_docs([item], catalog_id, searchable)
+        await self.purge_items_from_other_catalogs(catalog_id, [item])
+
+    #----- Clear exclusivity for a single title (e.g. removed from its catalog)
+    async def clear_item_exclusive(self, tmdb_id: int, db_index: int, media_type: str) -> None:
+        item = {"tmdb_id": int(tmdb_id), "db_index": int(db_index), "media_type": self._collection_for(media_type)}
+        await self._clear_exclusivity_from_docs([item])
 
     #----- Override one title's visibility inside a single catalog
     async def set_catalog_item_visibility(

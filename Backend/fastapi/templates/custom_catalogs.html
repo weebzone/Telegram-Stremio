@@ -498,6 +498,28 @@
             <label class="field-label">Allowed users</label>
             <div id="ws-token-picker" class="token-picker"></div>
           </div>
+
+          <div id="ws-exclusive-wrap" class="hidden mt-3 space-y-2">
+            <label class="flex items-center justify-between gap-3 rounded-2xl p-3 cursor-pointer" style="background: color-mix(in srgb, var(--bg) 64%, transparent); border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);">
+              <span class="min-w-0">
+                <span class="font-bold text-sm block">🔒 Only visible in this catalog</span>
+                <span class="muted text-xs block">Locks these titles here — removed from Default, Auto and every other catalog.</span>
+              </span>
+              <input type="checkbox" id="ws-exclusive" class="switch-input hidden" onchange="onExclusiveChange()">
+              <span class="switch"></span>
+            </label>
+            <div id="ws-search-wrap" class="hidden">
+              <label class="flex items-center justify-between gap-3 rounded-2xl p-3 cursor-pointer" style="background: color-mix(in srgb, var(--bg) 64%, transparent); border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);">
+                <span class="min-w-0">
+                  <span class="font-bold text-sm block">🔎 Allow search</span>
+                  <span class="muted text-xs block">Let allowed users still find these titles via Stremio search.</span>
+                </span>
+                <input type="checkbox" id="ws-searchable" class="switch-input hidden">
+                <span class="switch"></span>
+              </label>
+            </div>
+          </div>
+
           <p class="muted text-xs mt-3">This overrides the visibility of every title in the catalog. You can still fine-tune a single title from its <b>Edit</b> page.</p>
         </div>
 
@@ -625,7 +647,25 @@ function onVisibilityModeChange(scope) {
   if (!isWs) {
     const hint = document.getElementById('catalog-visibility-hint');
     if (hint) hint.textContent = visibilityHint(mode);
+  } else {
+    //----- Exclusive lock is only offered for restricted, non-auto catalogs
+    const isAuto = !!(getSelectedCatalog()?.auto);
+    const canExclusive = !isAuto && mode !== 'public';
+    const exclWrap = document.getElementById('ws-exclusive-wrap');
+    if (exclWrap) exclWrap.classList.toggle('hidden', !canExclusive);
+    if (!canExclusive) {
+      const ex = document.getElementById('ws-exclusive');
+      if (ex) ex.checked = false;
+    }
+    onExclusiveChange();
   }
+}
+
+function onExclusiveChange() {
+  const on = !!document.getElementById('ws-exclusive')?.checked;
+  const wrapVisible = !document.getElementById('ws-exclusive-wrap')?.classList.contains('hidden');
+  const searchWrap = document.getElementById('ws-search-wrap');
+  if (searchWrap) searchWrap.classList.toggle('hidden', !(on && wrapVisible));
 }
 
 function posterOrFallback(item) {
@@ -722,6 +762,7 @@ function renderCatalogs() {
         </div>
         <div class="flex items-center gap-2 mt-2 flex-wrap">
           <span class="vis-chip ${meta.chip}">${meta.icon} ${escapeHtml(visibilityLabel(mode))}</span>
+          ${c.exclusive ? `<span class="vis-chip vis-owner">🔒 Exclusive${c.searchable ? ' · 🔎' : ''}</span>` : ''}
           <span class="muted text-xs">${count} title${count === 1 ? '' : 's'}</span>
         </div>
       </button>
@@ -776,6 +817,12 @@ function updateSelectedHeader() {
 
   const sel = document.getElementById('ws-visibility');
   if (sel) sel.value = mode;
+
+  const exToggle = document.getElementById('ws-exclusive');
+  const searchToggle = document.getElementById('ws-searchable');
+  if (exToggle) exToggle.checked = !!catalog.exclusive;
+  if (searchToggle) searchToggle.checked = !!catalog.searchable;
+
   onVisibilityModeChange('ws');
 }
 
@@ -806,12 +853,15 @@ async function applyCatalogVisibility() {
   const allowed_tokens = visibility === 'tokens' ? getPickedTokens('ws-token-picker') : [];
   if (visibility === 'tokens' && !allowed_tokens.length)
     return showToast('Select at least one user.', 'error', 'Error');
+  const canExclusive = !catalog.auto && visibility !== 'public';
+  const exclusive = canExclusive && !!document.getElementById('ws-exclusive')?.checked;
+  const searchable = exclusive && !!document.getElementById('ws-searchable')?.checked;
   const res = await fetch(`/api/custom-catalogs/${catalog._id}`, {
-    method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name: catalog.name, visibility, allowed_tokens})
+    method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name: catalog.name, visibility, allowed_tokens, exclusive, searchable})
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) return showToast(data.detail || 'Failed to update visibility', 'error', 'Error');
-  showToast('Visibility applied to all titles in this catalog', 'success', 'Success');
+  showToast(exclusive ? 'Exclusive lock applied — titles now show only here' : 'Visibility applied to all titles in this catalog', 'success', 'Success');
   await loadCatalogs();
 }
 

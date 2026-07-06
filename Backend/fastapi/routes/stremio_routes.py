@@ -79,6 +79,22 @@ def _visibility_query(token_data: dict) -> dict:
     ]}
 
 
+#----- Hide titles locked to a single catalog from default listings / search
+def _not_exclusive_clause(allow_searchable: bool = False) -> dict:
+    ors = [{"exclusive_catalog_id": {"$exists": False}}, {"exclusive_catalog_id": None}]
+    if allow_searchable:
+        ors.append({"exclusive_searchable": True})
+    return {"$or": ors}
+
+
+#----- Combine non-empty Mongo filters under a single $and
+def _merge_filters(*filters) -> dict:
+    parts = [f for f in filters if f]
+    if not parts:
+        return {}
+    return parts[0] if len(parts) == 1 else {"$and": parts}
+
+
 #----- Whether a title (by imdb id) may be seen by this token, honouring its own visibility
 async def _title_allowed(imdb_id: str, token_data: dict) -> bool:
     doc = await db.get_media_details(imdb_id=imdb_id)
@@ -380,7 +396,7 @@ async def get_catalog(token: str, media_type: str, id: str, extra: Optional[str]
         elif search_query:
             search_results = await db.search_documents(
                 query=search_query, page=page, page_size=PAGE_SIZE,
-                extra_filter=_visibility_query(token_data),
+                extra_filter=_merge_filters(_visibility_query(token_data), _not_exclusive_clause(allow_searchable=True)),
             )
             all_items = search_results.get("results", [])
             db_media_type = "tv" if media_type == "series" else "movie"
@@ -393,7 +409,7 @@ async def get_catalog(token: str, media_type: str, id: str, extra: Optional[str]
             else:
                 sort_params = [("updated_on", "desc")]
 
-            vis_filter = _visibility_query(token_data)
+            vis_filter = _merge_filters(_visibility_query(token_data), _not_exclusive_clause())
             if media_type == "movie":
                 data = await db.sort_movies(sort_params, page, PAGE_SIZE, genre_filter=genre_filter, extra_filter=vis_filter)
                 items = data.get("movies", [])

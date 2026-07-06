@@ -453,7 +453,9 @@ async def sync_single_media(db, *, tmdb_id, media_type: str) -> dict:
         async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
             media_doc, classification = await _classify_one(db, client, semaphore, doc, enabled_names)
 
-    tags = [tag for tag in (classification.get("auto_tags") or []) if tag in enabled_names]
+    tags = [] if media_doc.get("exclusive_catalog_id") else [
+        tag for tag in (classification.get("auto_tags") or []) if tag in enabled_names
+    ]
     if tags:
         item = _doc_item(media_doc)
         await _flush_quick_items(db, {tag: [item] for tag in tags})
@@ -642,6 +644,9 @@ async def run_auto_catalog_sync(db, *, force: bool = False, full_rebuild: bool =
 
             async def consume_result(media_doc: dict, classification: dict) -> None:
                 nonlocal tagged
+                #----- Titles locked to a single catalog never enter auto catalogs
+                if media_doc.get("exclusive_catalog_id"):
+                    return
                 tags = classification.get("auto_tags", []) or []
                 if tags:
                     tagged += 1
