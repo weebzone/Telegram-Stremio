@@ -544,15 +544,15 @@ class Database:
                 groups.setdefault((db_index, collection), []).append(int(it.get("tmdb_id")))
             except (TypeError, ValueError):
                 continue
-        now = datetime.utcnow()
         for (db_index, collection), ids in groups.items():
             db_key = f"storage_{db_index}"
             if db_key not in self.dbs:
                 continue
             try:
+                #----- Metadata-only change: never touch updated_on (keeps Latest order)
                 await self.dbs[db_key][collection].update_many(
                     {"tmdb_id": {"$in": ids}},
-                    {"$set": {"visibility": visibility, "allowed_tokens": allowed_tokens, "updated_on": now}},
+                    {"$set": {"visibility": visibility, "allowed_tokens": allowed_tokens}},
                 )
             except Exception as e:
                 LOGGER.error(f"_apply_visibility_to_docs failed for {db_key}.{collection}: {e}")
@@ -571,31 +571,32 @@ class Database:
 
     #----- Lock the given titles to a single catalog (source of truth on the docs)
     async def _apply_exclusivity_to_docs(self, items: List[dict], catalog_id: str, searchable: bool) -> None:
-        now = datetime.utcnow()
         for (db_index, collection), ids in self._group_items_by_storage(items).items():
             db_key = f"storage_{db_index}"
             if db_key not in self.dbs:
                 continue
             try:
+                #----- Metadata-only change: never touch updated_on (keeps Latest order)
                 await self.dbs[db_key][collection].update_many(
                     {"tmdb_id": {"$in": ids}},
-                    {"$set": {"exclusive_catalog_id": str(catalog_id), "exclusive_searchable": bool(searchable), "updated_on": now}},
+                    {"$set": {"exclusive_catalog_id": str(catalog_id), "exclusive_searchable": bool(searchable)}},
                 )
             except Exception as e:
                 LOGGER.error(f"_apply_exclusivity_to_docs failed for {db_key}.{collection}: {e}")
 
     #----- Unlock the given titles so they return to default/auto/other catalogs
     async def _clear_exclusivity_from_docs(self, items: List[dict]) -> None:
-        now = datetime.utcnow()
         for (db_index, collection), ids in self._group_items_by_storage(items).items():
             db_key = f"storage_{db_index}"
             if db_key not in self.dbs:
                 continue
             try:
+                #----- Unlocking is metadata-only: keep updated_on so titles slot back into
+                #----- their original place in Latest (auto.synced reset lets sync re-add)
                 await self.dbs[db_key][collection].update_many(
                     {"tmdb_id": {"$in": ids}},
                     {"$unset": {"exclusive_catalog_id": "", "exclusive_searchable": ""},
-                     "$set": {"auto_catalog.synced": False, "updated_on": now}},
+                     "$set": {"auto_catalog.synced": False}},
                 )
             except Exception as e:
                 LOGGER.error(f"_clear_exclusivity_from_docs failed for {db_key}.{collection}: {e}")
@@ -671,9 +672,10 @@ class Database:
         db_key = f"storage_{int(db_index)}"
         if db_key in self.dbs:
             try:
+                #----- Metadata-only change: never touch updated_on (keeps Latest order)
                 await self.dbs[db_key][collection].update_one(
                     {"tmdb_id": int(tmdb_id)},
-                    {"$set": {"visibility": visibility, "allowed_tokens": tokens, "updated_on": now}},
+                    {"$set": {"visibility": visibility, "allowed_tokens": tokens}},
                 )
             except Exception as e:
                 LOGGER.error(f"set_media_visibility doc update failed: {e}")
