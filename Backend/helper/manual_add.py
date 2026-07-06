@@ -62,6 +62,10 @@ async def resolve_telegram_message(client, url: str = None, chat_id=None, msg_id
     height = getattr(media, "height", 0) or 0
     quality = quality_from_height(height) or parsed.get("quality") or ""
 
+    #----- Original upload date (forward source if forwarded, else this message's date)
+    original_date = getattr(message, "forward_date", None) or getattr(message, "date", None)
+    upload_year = original_date.year if original_date else 0
+
     return {
         "chat_id": str(message.chat.id).replace("-100", ""),
         "msg_id": message.id,
@@ -74,4 +78,5 @@ async def resolve_telegram_message(client, url: str = None, chat_id=None, msg_id
         "width": getattr(media, "width", 0) or 0,
         "height": height,
         "has_thumb": bool(getattr(media, "thumbs", None)),
+        "upload_year": upload_year,
     }

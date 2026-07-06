@@ -538,23 +538,33 @@
                         <input id="ma-m-title" class="ma-input" placeholder="Custom title">
                     </div>
                     <div>
-                        <label class="ma-label">Year</label>
-                        <input id="ma-m-year" type="number" class="ma-input" placeholder="2024">
+                        <label class="ma-label">Year (optional)</label>
+                        <input id="ma-m-year" type="number" class="ma-input" placeholder="Telegram upload year">
                     </div>
                     <div>
-                        <label class="ma-label">Rating</label>
+                        <label class="ma-label">Rating (optional)</label>
                         <input id="ma-m-rating" type="number" step="0.1" min="0" max="10" class="ma-input" placeholder="Random">
                     </div>
                 </div>
                 <div>
-                    <label class="ma-label">Genres (comma-separated)</label>
+                    <label class="ma-label">Genres (optional, comma-separated)</label>
                     <input id="ma-m-genres" class="ma-input" placeholder="Left empty = random">
                 </div>
                 <div>
-                    <label class="ma-label">Description</label>
+                    <label class="ma-label">Description (optional)</label>
                     <textarea id="ma-m-description" rows="2" class="ma-input" placeholder="Left empty = random"></textarea>
                 </div>
-                <p class="text-xs text-text-secondary -mt-2">Empty fields are auto-filled. Poster &amp; backdrop are generated from the title.</p>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="ma-label">Poster URL (optional)</label>
+                        <input id="ma-m-poster" type="url" class="ma-input" placeholder="Left empty = generated from title">
+                    </div>
+                    <div>
+                        <label class="ma-label">Backdrop URL (optional)</label>
+                        <input id="ma-m-backdrop" type="url" class="ma-input" placeholder="Left empty = generated from title">
+                    </div>
+                </div>
+                <p class="text-xs text-text-secondary -mt-2">Only <span class="text-text font-semibold">Title *</span>, stream link and quality are required. Empty optional fields are auto-filled &mdash; poster &amp; backdrop become a random gradient cover with the title text.</p>
 
                 <!-- TV episode fields -->
                 <div id="ma-tv-fields" class="hidden grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -567,15 +577,15 @@
                         <input id="ma-episode" type="number" min="0" class="ma-input" placeholder="1">
                     </div>
                     <div class="col-span-2">
-                        <label class="ma-label">Episode Title</label>
-                        <input id="ma-episode-title" class="ma-input" placeholder="Optional">
+                        <label class="ma-label">Episode Title (optional)</label>
+                        <input id="ma-episode-title" class="ma-input" placeholder="Left empty = S01E01 style">
                     </div>
                 </div>
 
                 <!-- Stream -->
                 <div class="space-y-3">
                     <div class="flex items-center justify-between gap-2">
-                        <label class="ma-label" style="margin-bottom:0">Stream link(s)</label>
+                        <label class="ma-label" style="margin-bottom:0">Stream link(s) *</label>
                         <button type="button" onclick="maAddPart()" class="text-xs font-bold text-primary shrink-0"><i class="fa-solid fa-plus"></i> Add split part</button>
                     </div>
                     <div id="ma-parts" class="space-y-2"></div>
@@ -634,7 +644,7 @@
 
     function openManualAdd() {
         maSetType(mediaType);
-        ['ma-name','ma-season','ma-episode','ma-episode-title','ma-m-title','ma-m-year','ma-m-rating','ma-m-genres','ma-m-description','ma-quality-custom'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+        ['ma-name','ma-season','ma-episode','ma-episode-title','ma-m-title','ma-m-year','ma-m-rating','ma-m-genres','ma-m-description','ma-m-poster','ma-m-backdrop','ma-quality-custom'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
         maResetParts();
         document.getElementById('ma-quality').value = '1080p';
         document.getElementById('ma-quality-custom').classList.add('hidden');
@@ -672,8 +682,16 @@
             document.getElementById('ma-name').value = d.name || '';
             if (d.quality) {
                 const sel = document.getElementById('ma-quality');
+                const custom = document.getElementById('ma-quality-custom');
                 const opt = [...sel.options].find(o => o.value.toLowerCase() === String(d.quality).toLowerCase());
-                if (opt) sel.value = opt.value;
+                if (opt) {
+                    sel.value = opt.value;
+                    custom.classList.add('hidden');
+                } else {
+                    sel.value = '__custom';
+                    custom.value = d.quality;
+                    custom.classList.remove('hidden');
+                }
             }
             if (maType === 'tv') {
                 if (d.season != null && !document.getElementById('ma-season').value) document.getElementById('ma-season').value = d.season;
@@ -710,6 +728,8 @@
                 rate: document.getElementById('ma-m-rating').value.trim(),
                 genres: document.getElementById('ma-m-genres').value.trim(),
                 description: document.getElementById('ma-m-description').value.trim(),
+                poster: document.getElementById('ma-m-poster').value.trim(),
+                backdrop: document.getElementById('ma-m-backdrop').value.trim(),
             }
         };
 

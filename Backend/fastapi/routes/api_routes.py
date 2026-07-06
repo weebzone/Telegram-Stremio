@@ -911,6 +911,8 @@ async def manual_add_media_api(payload: dict) -> dict:
         base = _metadata_base(payload.get("manual_metadata") or {})
         if not base["title"]:
             raise HTTPException(status_code=400, detail="A title is required for manual entry.")
+        if not base["year"]:
+            base["year"] = int(primary.get("upload_year") or 0)
 
     #----- Brand-new hand-made titles get a negative synthetic id (never collides with TMDB)
     if not base.get("tmdb_id"):

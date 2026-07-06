@@ -716,7 +716,7 @@
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
                         <label class="as-label">Quality *</label>
-                        <select id="as-quality" class="as-input">
+                        <select id="as-quality" class="as-input" onchange="document.getElementById('as-quality-custom').classList.toggle('hidden', this.value !== '__custom')">
                             <option value="">Select</option>
                             <option>480p</option><option>720p</option><option selected>1080p</option>
                             <option>2160p</option><option value="__custom">Custom…</option>
@@ -1588,8 +1588,16 @@
             document.getElementById('as-name').value = d.name || '';
             if (d.quality) {
                 const sel = document.getElementById('as-quality');
+                const custom = document.getElementById('as-quality-custom');
                 const opt = [...sel.options].find(o => o.value.toLowerCase() === String(d.quality).toLowerCase());
-                if (opt) sel.value = opt.value;
+                if (opt) {
+                    sel.value = opt.value;
+                    custom.classList.add('hidden');
+                } else {
+                    sel.value = '__custom';
+                    custom.value = d.quality;
+                    custom.classList.remove('hidden');
+                }
             }
             if (mediaType === 'tv') {
                 if (d.season != null && !document.getElementById('as-season').value) document.getElementById('as-season').value = d.season;
