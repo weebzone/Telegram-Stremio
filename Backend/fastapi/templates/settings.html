@@ -137,6 +137,61 @@
 
 <div class="space-y-6" id="settings-root">
 
+    <!-- ── System & Maintenance ─────────────────────────────────────────── -->
+    <div class="settings-card">
+        <h2><i class="fa-solid fa-server"></i> System &amp; Maintenance</h2>
+
+        <!-- DB & system stats -->
+        <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <label class="s-label" style="margin-bottom:0">Database &amp; System Stats</label>
+            <button class="add-btn" type="button" onclick="loadDbStats(this)">
+                <i class="fa-solid fa-rotate"></i> Refresh
+            </button>
+        </div>
+        <div class="stat-grid" id="stats-grid">
+            <div class="hint" style="grid-column:1/-1"><i class="fa-solid fa-spinner fa-spin"></i> Loading stats…</div>
+        </div>
+
+        <hr class="divider">
+
+        <!-- Live logs -->
+        <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <label class="s-label" style="margin-bottom:0">Logs</label>
+            <div class="flex items-center gap-3 flex-wrap">
+                <label class="anime-check" title="Auto-refresh the log every 2s">
+                    <input type="checkbox" id="log-live-toggle" onchange="toggleLiveLogs()">
+                    <span>Live</span>
+                </label>
+                <button class="add-btn" type="button" onclick="loadLogs(this)">
+                    <i class="fa-solid fa-rotate"></i> Refresh
+                </button>
+                <button class="add-btn" type="button" onclick="window.open('/api/admin/logs/download','_blank')">
+                    <i class="fa-solid fa-download"></i> Download
+                </button>
+            </div>
+        </div>
+        <pre id="log-view" style="background:color-mix(in srgb,var(--bg) 80%,#000);border:1px solid var(--border);
+            border-radius:0.75rem;padding:1rem;font-family:'JetBrains Mono',monospace;font-size:0.75rem;
+            line-height:1.5;color:var(--text);max-height:340px;overflow:auto;white-space:pre-wrap;
+            word-break:break-word;margin:0">Loading logs…</pre>
+
+        <hr class="divider">
+
+        <!-- Restart -->
+        <label class="s-label">Restart App</label>
+        <p style="font-size:0.83rem;color:var(--text-sec);margin-bottom:1rem">
+            Pulls the latest code from the upstream repo/branch above and restarts the server.
+            The web app becomes unreachable for a few seconds — this page will reconnect
+            automatically once it's back online.
+        </p>
+        <button id="restart-btn" onclick="restartApp()"
+            class="flex items-center gap-2 px-6 py-2.5 rounded-full font-bold text-sm text-white shadow-lg transition-all"
+            style="background:#ef4444;box-shadow:0 0 18px rgba(239,68,68,0.4)">
+            <i class="fa-solid fa-power-off"></i>
+            <span>Restart Now</span>
+        </button>
+    </div>
+
     <!-- ── General ─────────────────────────────────────────────────────── -->
     <div class="settings-card">
         <h2><i class="fa-solid fa-sliders"></i> General</h2>
@@ -584,61 +639,6 @@
         </div>
     </div>
 
-    <!-- ── System & Maintenance ─────────────────────────────────────────── -->
-    <div class="settings-card">
-        <h2><i class="fa-solid fa-server"></i> System &amp; Maintenance</h2>
-
-        <!-- DB & system stats -->
-        <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
-            <label class="s-label" style="margin-bottom:0">Database &amp; System Stats</label>
-            <button class="add-btn" type="button" onclick="loadDbStats()">
-                <i class="fa-solid fa-rotate"></i> Refresh
-            </button>
-        </div>
-        <div class="stat-grid" id="stats-grid">
-            <div class="hint" style="grid-column:1/-1"><i class="fa-solid fa-spinner fa-spin"></i> Loading stats…</div>
-        </div>
-
-        <hr class="divider">
-
-        <!-- Live logs -->
-        <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
-            <label class="s-label" style="margin-bottom:0">Logs</label>
-            <div class="flex items-center gap-3 flex-wrap">
-                <label class="anime-check" title="Auto-refresh the log every 2s">
-                    <input type="checkbox" id="log-live-toggle" onchange="toggleLiveLogs()">
-                    <span>Live</span>
-                </label>
-                <button class="add-btn" type="button" onclick="loadLogs()">
-                    <i class="fa-solid fa-rotate"></i> Refresh
-                </button>
-                <button class="add-btn" type="button" onclick="window.open('/api/admin/logs/download','_blank')">
-                    <i class="fa-solid fa-download"></i> Download
-                </button>
-            </div>
-        </div>
-        <pre id="log-view" style="background:color-mix(in srgb,var(--bg) 80%,#000);border:1px solid var(--border);
-            border-radius:0.75rem;padding:1rem;font-family:'JetBrains Mono',monospace;font-size:0.75rem;
-            line-height:1.5;color:var(--text);max-height:340px;overflow:auto;white-space:pre-wrap;
-            word-break:break-word;margin:0">Loading logs…</pre>
-
-        <hr class="divider">
-
-        <!-- Restart -->
-        <label class="s-label">Restart App</label>
-        <p style="font-size:0.83rem;color:var(--text-sec);margin-bottom:1rem">
-            Pulls the latest code from the upstream repo/branch above and restarts the server.
-            The web app becomes unreachable for a few seconds — this page will reconnect
-            automatically once it's back online.
-        </p>
-        <button id="restart-btn" onclick="restartApp()"
-            class="flex items-center gap-2 px-6 py-2.5 rounded-full font-bold text-sm text-white shadow-lg transition-all"
-            style="background:#ef4444;box-shadow:0 0 18px rgba(239,68,68,0.4)">
-            <i class="fa-solid fa-power-off"></i>
-            <span>Restart Now</span>
-        </button>
-    </div>
-
 </div><!-- /settings-root -->
 
 <!-- ── Restart overlay ──────────────────────────────────────────────────── -->
@@ -959,13 +959,20 @@ function rebuildDatabaseList(dbList) {
 /* ── System & Maintenance ───────────────────────────────────────────────── */
 const STAT_FIELDS = [
     ['movies', 'Movies'], ['tv_shows', 'TV Shows'], ['episodes', 'Episodes'],
-    ['streams', 'Streams'], ['uptime', 'Uptime'], ['db_size', 'DB Size'],
-    ['storage_dbs', 'Storage DBs'], ['auth_channels', 'AUTH Channels'], ['version', 'Version'],
+    ['streams', 'Streams'], ['db_size', 'DB Size'],
+    ['auth_channels', 'AUTH Channels'], ['version', 'Version'],
 ];
 let logLiveTimer = null;
 
-async function loadDbStats() {
+/* Spin the clicked refresh button's icon while an async action runs */
+function spinIcon(btn, on) {
+    const icon = btn && btn.querySelector('i');
+    if (icon) icon.classList.toggle('fa-spin', on);
+}
+
+async function loadDbStats(btn) {
     const grid = document.getElementById('stats-grid');
+    spinIcon(btn, true);
     try {
         const res = await fetch('/api/admin/stats');
         const data = await res.json();
@@ -976,11 +983,14 @@ async function loadDbStats() {
         ).join('');
     } catch (e) {
         grid.innerHTML = `<div class="hint" style="grid-column:1/-1;color:#ef4444">Failed to load stats.</div>`;
+    } finally {
+        spinIcon(btn, false);
     }
 }
 
-async function loadLogs() {
+async function loadLogs(btn) {
     const view = document.getElementById('log-view');
+    spinIcon(btn, true);
     try {
         const res = await fetch('/api/admin/logs');
         const data = await res.json();
@@ -993,6 +1003,8 @@ async function loadLogs() {
         }
     } catch (e) {
         view.textContent = 'Network error while loading logs.';
+    } finally {
+        spinIcon(btn, false);
     }
 }
 
@@ -1020,6 +1032,7 @@ async function restartApp() {
     // Web app goes down during restart — poll health until start_time changes, then reload.
     if (logLiveTimer) { clearInterval(logLiveTimer); logLiveTimer = null; }
     document.getElementById('restart-overlay').style.display = 'flex';
+    document.body.style.overflow = 'hidden';   // lock background scroll while overlay is up
     const msg = document.getElementById('restart-overlay-msg');
     let wasDown = false;
 
@@ -1031,7 +1044,8 @@ async function restartApp() {
             if (wasDown || (before && d.start_time && d.start_time !== before)) {
                 clearInterval(poll);
                 msg.textContent = 'Back online! Reloading…';
-                showToast('Server is back online.', 'success', 'Restart');
+                // Persist a flag so the success notice survives the page reload below.
+                sessionStorage.setItem('restartSuccess', '1');
                 setTimeout(() => window.location.reload(), 900);
             }
         } catch (e) {
@@ -1039,6 +1053,12 @@ async function restartApp() {
             msg.textContent = 'Server offline — waiting for it to come back…';
         }
     }, 2000);
+}
+
+/* Show the post-restart success notice (survives reload) for ~8s */
+if (sessionStorage.getItem('restartSuccess')) {
+    sessionStorage.removeItem('restartSuccess');
+    showToast('The app restarted successfully and is back online.', 'success', 'Restart complete', 8000);
 }
 
 /* Initial load of stats + logs */

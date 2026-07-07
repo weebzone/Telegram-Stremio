@@ -525,7 +525,7 @@ function checkOverlay() {
     }
 }
 
-function showToast(message, type = 'info', title = '') {
+function showToast(message, type = 'info', title = '', duration = 2600) {
     const container = document.getElementById('toast-container');
     if (!container) return;
 
@@ -553,7 +553,7 @@ function showToast(message, type = 'info', title = '') {
         setTimeout(() => {
             if (toast.parentNode) toast.parentNode.removeChild(toast);
         }, 200);
-    }, 2600);
+    }, duration);
 }
 
 function escapeHtml(str) {
