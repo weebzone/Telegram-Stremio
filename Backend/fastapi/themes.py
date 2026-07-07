@@ -76,6 +76,66 @@ THEMES = {
         },
         "css_classes": "theme-slate-ocean"
     },
+    "charcoal_violet": {
+        "name": "Charcoal Violet",
+        "is_dark": True,
+        "colors": {
+            "primary": "#B6FF00",
+            "secondary": "#93CC00",
+            "accent": "#CBFF4D",
+            "background": "#160B1C",
+            "card": "#241130",
+            "border": "#3C1A47",
+            "text": "#F4EAF8",
+            "text_secondary": "#B79CC4"
+        },
+        "css_classes": "theme-charcoal-violet"
+    },
+    "fresh_canopy": {
+        "name": "Fresh Canopy",
+        "is_dark": True,
+        "colors": {
+            "primary": "#E4FD97",
+            "secondary": "#C3E86B",
+            "accent": "#EEFFB8",
+            "background": "#141B12",
+            "card": "#2D3E2C",
+            "border": "#3E5139",
+            "text": "#EFF6DD",
+            "text_secondary": "#A9BE9B"
+        },
+        "css_classes": "theme-fresh-canopy"
+    },
+    "tiffany_noir": {
+        "name": "Tiffany Noir",
+        "is_dark": True,
+        "colors": {
+            "primary": "#21F1A8",
+            "secondary": "#12C88A",
+            "accent": "#5FF7C1",
+            "background": "#0D0D0D",
+            "card": "#171717",
+            "border": "#282828",
+            "text": "#EFFFF9",
+            "text_secondary": "#8FA89E"
+        },
+        "css_classes": "theme-tiffany-noir"
+    },
+    "bridal_blush": {
+        "name": "Bridal Blush",
+        "is_dark": True,
+        "colors": {
+            "primary": "#FFC6A8",
+            "secondary": "#E8A98A",
+            "accent": "#FFD9C2",
+            "background": "#1B080F",
+            "card": "#38131E",
+            "border": "#741A2F",
+            "text": "#FFEDE3",
+            "text_secondary": "#D2A093"
+        },
+        "css_classes": "theme-bridal-blush"
+    },
     "rose_quartz": {
         "name": "Rose Quartz",
         "is_dark": False,
