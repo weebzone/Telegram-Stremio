@@ -212,13 +212,10 @@ async def restart_notification():
         LOGGER.error(f"Error in restart_notification: {e}")
 
 
-#----- Bot commands
+#----- Bot commands (stats, log and restart moved to the web app)
 commands = [
     BotCommand("start", "🚀 Start the bot"),
     BotCommand("set", "🎬 Manually add IMDb metadata"),
-    BotCommand("stats", "📊 DB and system stats"),
-    BotCommand("log", "📄 Send the log file"),
-    BotCommand("restart", "♻️ Restart the bot"),
 ]
 
 

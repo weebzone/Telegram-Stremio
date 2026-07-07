@@ -28,7 +28,9 @@ from Backend.fastapi.routes.api_routes import (
     delete_tv_episode_api,
     delete_tv_quality_api,
     delete_tv_season_api,
+    download_logs_api,
     get_admin_stats_api,
+    get_db_stats_api,
     get_all_subscribers_api,
     get_all_tokens_api,
     get_auto_catalog_settings_api,
@@ -38,8 +40,10 @@ from Backend.fastapi.routes.api_routes import (
     get_stream_analytics_api,
     get_subscription_plans_api,
     get_settings_api,
+    get_logs_api,
     get_system_stats_api,
     get_tools_channels_api,
+    health_api,
     link_token_user_api,
     list_custom_catalogs_api,
     list_media_api,
@@ -48,6 +52,7 @@ from Backend.fastapi.routes.api_routes import (
     purge_dead_links_api,
     remove_custom_catalog_item_api,
     resolve_telegram_api,
+    restart_app_api,
     revoke_token_api,
     scan_status_api,
     search_catalog_media_api,
@@ -449,6 +454,28 @@ async def get_settings(_: bool = Depends(require_auth)):
 @app.put("/api/admin/settings")
 async def update_settings(payload: dict, _: bool = Depends(require_auth)):
     return await update_settings_api(payload)
+
+
+#----- System & Maintenance (WebUI replacement for /stats, /log, /restart bot commands)
+@app.get("/api/admin/stats")
+async def admin_db_stats(_: bool = Depends(require_auth)):
+    return await get_db_stats_api()
+
+@app.get("/api/admin/health")
+async def admin_health(_: bool = Depends(require_auth)):
+    return await health_api()
+
+@app.get("/api/admin/logs")
+async def admin_logs(lines: int = Query(300, ge=1, le=2000), _: bool = Depends(require_auth)):
+    return await get_logs_api(lines)
+
+@app.get("/api/admin/logs/download")
+async def admin_logs_download(_: bool = Depends(require_auth)):
+    return await download_logs_api()
+
+@app.post("/api/admin/restart")
+async def admin_restart(_: bool = Depends(require_auth)):
+    return await restart_app_api()
 
 
 #----- Tools (WebUI replacement for /scan, /rescan, /dbcheck bot commands)
