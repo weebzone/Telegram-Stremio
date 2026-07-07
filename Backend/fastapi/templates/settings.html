@@ -1055,15 +1055,18 @@ async function restartApp() {
     }, 2000);
 }
 
-/* Show the post-restart success notice (survives reload) for ~8s */
-if (sessionStorage.getItem('restartSuccess')) {
-    sessionStorage.removeItem('restartSuccess');
-    showToast('The app restarted successfully and is back online.', 'success', 'Restart complete', 8000);
-}
-
-/* Initial load of stats + logs */
-loadDbStats();
-loadLogs();
+/* Run after DOMContentLoaded so base.html helpers (showToast) are defined —
+   the base script that defines showToast is parsed after this block, so calling
+   it at parse time would throw and abort the initial stats/log load. */
+window.addEventListener('DOMContentLoaded', () => {
+    // Post-restart success notice (survives the reload) for ~8s
+    if (sessionStorage.getItem('restartSuccess')) {
+        sessionStorage.removeItem('restartSuccess');
+        showToast('The app restarted successfully and is back online.', 'success', 'Restart complete', 8000);
+    }
+    loadDbStats();
+    loadLogs();
+});
 </script>
 
 {% endblock %}
