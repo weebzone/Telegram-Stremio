@@ -12,9 +12,8 @@ pinned: false
   <img src="https://iili.io/KhN0ztj.png" alt="Logo" width="400"/>
 </p>
 
-
 <p align="center">
-  A powerful, self-hosted <b>Telegram Stremio Media Server</b> built with <b>FastAPI</b>, <b>MongoDB</b>, and <b>PyroFork</b> — seamlessly integrated with <b>Stremio</b> for automated media streaming and discovery.
+  A powerful, self-hosted <b>Telegram Stremio Media Server</b> built with <b>FastAPI</b>, <b>MongoDB</b>, and <b>PyroFork</b> — stream your Telegram files directly inside <b>Stremio</b> / <b>Nuvio</b> with automatic metadata, catalogs, and permanent links.
 </p>
 
 <p align="center">
@@ -31,277 +30,300 @@ pinned: false
 
 ## 🧭 Quick Navigation
 
-* [🚀 Introduction](#-introduction)
+- [🚀 Introduction](#-introduction)
+- [✨ Features Explained](#-features-explained)
+  - [⚡ Instant Streaming & Permanent Links](#-instant-streaming--permanent-links)
+  - [🧩 Split File Support](#-split-file-support)
+  - [🎬 Combined / Multi-Episode File Support](#-combined--multi-episode-file-support)
+  - [📚 Catalog Support (Auto + Custom)](#-catalog-support-auto--custom)
+  - [🙋 Manual Upload — Personal Files & Lectures](#-manual-upload--personal-files--lectures)
+  - [🍥 Anime Channel Support](#-anime-channel-support)
+  - [🌐 Global File Support (Global Search)](#-global-file-support-global-search)
+  - [🏷️ Metadata & Manual Override](#️-metadata--manual-override)
+  - [💳 Subscription & Access Control](#-subscription--access-control)
+- [📤 Upload Guidelines (Caption Format)](#-upload-guidelines-caption-format)
+- [🤖 Bot Commands](#-bot-commands)
+- [🔧 Configuration & Variable Guide](#-configuration--variable-guide)
+  - [🪜 The 7 Startup Variables (config.env)](#-the-7-startup-variables-configenv)
+  - [🎛️ Web Settings (everything else)](#️-web-settings-everything-else)
+- [🚀 Deployment Guide](#-deployment-guide)
+- [📺 Setting Up Nuvio Properly](#-setting-up-nuvio-properly)
+- [🏅 Credits](#-credits)
 
-  * [✨ Key Features](#-key-features)
-  * [💳 Subscription Management](#-subscription-management)
-  * [📋 Subscription Plans](#-subscription-plans)
-  * [🤖 Bot Payment Flow](#-bot-payment-flow)
-  * [🗃️ Access Management](#️-access-management)
-  * [🎬 Stremio Addon Integration](#-stremio-addon-integration)
+---
 
-* [⚙️ How It Works](#️-how-it-works)
+## 🚀 Introduction
 
-  * [📖 Overview](#overview)
-  * [📤 Upload Guidelines](#upload-guidelines)
-  * [🔁 Quality Replacement Logic](#-quality-replacement-logic)
-  * [🎥 Updating CAMRip or Low-Quality Files](#-updating-camrip-or-low-quality-files)
-  * [⚙️ Behind the Scenes](#behind-the-scenes)
+This project turns your **Telegram channels into a streaming backend for Stremio / Nuvio**. Forward a movie or episode to your channel and the bot indexes it, fetches metadata (poster, title, cast, ratings), and generates a **permanent streaming link** — no third-party hosts, no expiring links, no re-uploads.
 
-* [🤖 Bot Commands](#-bot-commands)
+It is built for **speed, scale, and reliability**, and works equally well for a personal library or a large community server.
 
-  * [📜 Command List](#command-list)
-  * [⚙️ /set Command Usage](#set-command-usage)
+---
 
-* [🔧 Configuration Guide](#-configuration-guide)
+## ✨ Features Explained
 
-  * [🪜 Step 1: Create Your config.env File](#-step-1-create-your-configenv-file)
-  * [🔑 Step 2: How to Get Each Value](#-step-2-how-to-get-each-value)
-  * [📱 Step 3: Generate Your Telegram Session String](#-step-3-generate-your-telegram-session-string)
-  * [🧩 Step 4: Configure Everything Else (Web Settings Page)](#-step-4-configure-everything-else-web-settings-page)
+Below is a plain-English explanation of every major feature — **what it is, why it exists, and how to use it**.
 
-* [🚀 Deployment Guide](#-deployment-guide)
+### ⚡ Instant Streaming & Permanent Links
 
-  * [✅ Recommended Prerequisites](#-recommended-prerequisites)
-  * [🐙 Heroku Guide](#-heroku-guide)
-  * [🐳 VPS Guide (Recommended)](#-vps-guide-recommended)
-  * [🤗 Hugging Face Guide](#-hugging-face-guide)
+**What:** Every file you index gets a permanent URL that plays directly in Stremio/Nuvio.
 
-* [📺 Setting Up Your App (Nuvio Recommended)](#-setting-up-your-app-nuvio-recommended)
+**Why:** Telegram file links normally expire and other bots re-download files before serving them (slow, wasteful). This server streams the bytes **straight from Telegram on demand** through PyroFork + FastAPI, so playback starts fast and links never die.
 
-  * [📥 Install Nuvio](#-step-1-install-nuvio)
-  * [🌐 Add the Addon](#-step-2-add-the-addon)
+**How:** Forward a file to your **AUTH channel** → it appears in your catalog → press play. That's it. A **multi-token load balancer** (see [Web Settings](#️-web-settings-everything-else)) spreads heavy traffic across multiple bot tokens for smooth playback under load.
 
-* [🏅 Contributors](#-contributors)
+---
 
+### 🧩 Split File Support
 
-# 🚀 Introduction
+Large files are often uploaded to Telegram in **parts**. This server can stitch the supported kind back together into one seamless stream — with correct seeking (⏪ / ⏩) and metadata.
 
-This project is a **next-generation Telegram Stremio Media Server** that allows you to **stream your Telegram files directly through Stremio**, without any third-party dependencies or file expiration issues. It’s designed for **speed, scalability, and reliability**, making it ideal for both personal and community-based media hosting.
+#### ✅ Supported — `.001`, `.002`, `.003`, …
 
+These are byte-parts of **one single original file** (e.g. `Movie.2024.1080p.mkv.001`, `...mkv.002`). When joined they reconstruct the exact original MKV container, keeping the same metadata and timeline. The server streams them as **one continuous video**, so seeking works perfectly.
 
-## ✨ Key Features
+#### ❌ Not Supported — `part001.mkv`, `part002.mkv`, …
 
-- ⚙️ **Multiple MongoDB Database Support**
-- 📡 **Multiple Telegram Channel Support**
-- ⚡ **Ultra-Fast Streaming Experience**
-- 🔑 **Multi-Token Load Balancer**
-- 🎬 **IMDb & TMDb Metadata Integration**
-- 🧩 **Seamless Split File Streaming Support**
-- 🎞️ **Play Multi-Part Videos as a Single Stream**
-- ♾️ **Permanent Streaming Links (No Expiration)**
-- 🧠 **Powerful Admin Dashboard**
-- 💳 **Subscription & Premium Management**
-- 🔐 **Advanced Access Control System**
-- 📚 **Custom & Automatic Catalog Generation**
-- 🖥️ **Web-Based Configuration Panel**
-- 🌐 **Built-in Addon Proxy Support**
-- 🔍 **Global Search Across Selected Channels**
+Each of these is a **separate, independent MKV container** with its own metadata, timestamps, and timeline. Because they are individual videos, they cannot be merged into a single continuous playback timeline — so this naming style is not supported.
 
+#### 🤔 What about `.zip.001`, `.zip.002`?
 
+Technically these *could* be merged (they're parts of one ZIP archive), but support was **intentionally left out**. To stream from them the server would have to:
 
-## ⚙️ How It Works
+1. Download **all** ZIP parts
+2. Merge them into one archive
+3. Extract the video
+4. Only *then* start streaming
 
-This project acts as a **bridge between Telegram storage and Stremio streaming**, connecting **Telegram**, **FastAPI**, and **Stremio** to enable seamless movie and TV show streaming directly from Telegram files.
+That means ⏳ long startup delays, 💾 heavy temporary storage (ZIP **plus** the extracted video), and 📈 high CPU/disk usage that doesn't scale.
 
-### Overview
+The whole point of this project is **fast, on-demand streaming without downloading/extracting first** — so `.zip.001` support was deliberately skipped. 🚀
 
-When you **forward Telegram files** (movies or TV episodes) to your **AUTH CHANNEL**, the bot automatically:
+> **TL;DR:** Upload split files as `filename.mkv.001`, `filename.mkv.002`, … and they'll play as one video.
 
-1.  🗃️ **Stores** the `message_id` and `chat_id` in the database.
-2.  🧠 **Processes** file captions to extract key metadata (title, year, quality, etc.).
-3.  🌐 **Generates a streaming URL** through the **PyroFork** module — routed by **FastAPI**.
-4.  🎞️ **Provides Stremio Addon APIs**:
-    -   `/catalog` → Lists available media
-    -   `/meta` → Shows detailed information for each item
-    -   `/stream` → Streams the file directly via Telegram
+---
 
-### Upload Guidelines
+### 🎬 Combined / Multi-Episode File Support
 
-To ensure proper metadata extraction and seamless integration with **Stremio**, all uploaded Telegram media files **must include specific details** in their captions.
+**What:** Files that pack several episodes (or a whole season) into a single video — e.g. `Show S01 [E04-06]`, `Show S01E01-E10`, or a "combined" season file — are now indexed and playable directly.
 
-#### 🎥 For Movies
+**Why:** Uploaders frequently share episode batches in one file. Previously these had nowhere clean to live. Now they're grouped so they show up and play in Stremio/Nuvio.
 
-**Example Caption:**
+**How it appears:** Combined files are filed under a **special "Specials" section (Season 0)** with a clear label like **`Season 1 Combined`**, and the quality tag shows the range (e.g. `1080p E04-E06`, or `1080p Full` for a whole-season file). Just open the show and look under **Specials / Season 0**.
 
+**Steps:**
+1. Upload the combined file to your **AUTH channel** with a clear caption (see [Upload Guidelines](#-upload-guidelines-caption-format)).
+2. Open the series in Stremio/Nuvio → go to the **Specials (Season 0)** row → play.
+
+> ⚠️ **Limitation:** Combined files do **not** appear in [Global Search](#-global-file-support-global-search) yet.
+>
+> 💡 **Tip:** For combined files to show correct metadata reliably, keep the **Telegram Stremio addon above Cinemeta** — see [Setting Up Nuvio Properly](#-setting-up-nuvio-properly).
+
+---
+
+### 📚 Catalog Support (Auto + Custom)
+
+Catalogs are the **rows** you see in Stremio/Nuvio (e.g. "Bollywood", "Netflix", "My Lectures"). There are two kinds:
+
+#### 🤖 Auto Catalogs
+
+**What:** The server can automatically sort your library into ready-made rows.
+
+- **Language:** Bollywood, Hollywood, Anime, K-Drama, Bengali, South Indian, Tamil, Telugu, Malayalam, Kannada, Japanese, Korean
+- **Smart:** Top Rated, Recently Added
+- **OTT / Platform:** Netflix, Prime Video, Hotstar, Apple TV, Hulu, HBO, JioCinema, ZEE5, SonyLIV, MX Player, Crunchyroll
+
+**Why:** Zero manual work — your catalog organizes itself as you add files.
+
+**How:** Go to the auto-catalog settings, tick the rows you want, and save. New uploads are categorized instantly.
+
+> ℹ️ **Language & OTT** rows need a **TMDB API Key** to classify correctly. **Top Rated** and **Recently Added** work without one.
+
+#### ✍️ Custom Catalogs
+
+**What:** Rows **you** create and fill by hand (e.g. "4K Movies", "My Course", "Private").
+
+**Why:** Full control over grouping and, importantly, **who can see each row**.
+
+**How:** Create a catalog, choose its **visibility**, then add titles to it:
+
+| Visibility | Who sees it |
+| :--- | :--- |
+| **Everyone** (`public`) | All users who installed the addon |
+| **Specific users** (`tokens`) | Only the tokens/users you pick |
+| **Owner only** (`owner`) | Only you (hidden from others) |
+
+Two extra per-catalog toggles:
+
+- **🔒 Only visible in this catalog** — removes those titles from the Default, Auto, and every other catalog, so they appear **only** in this one.
+- **🔎 Allow search** — lets allowed users find those titles via search (off by default for private catalogs).
+
+---
+
+### 🙋 Manual Upload — Personal Files & Lectures
+
+**What:** Add your **own** files — lectures, personal videos, or any private media that isn't a public Movie/TV Show — without them being auto-indexed or exposed publicly.
+
+**Why:** A **Manual Channel** is treated differently from an AUTH channel: files sent there are **not** auto-scanned against TMDb/IMDb and won't leak into public catalogs. You add each entry by hand and control exactly who sees it. Perfect for 🎓 lectures, 🎥 personal videos, and 📁 any private media.
+
+#### 📋 Step-by-step
+
+1️⃣ **Add a Manual Channel**
+&nbsp;&nbsp;&nbsp;• Go to **Settings → Manual Add Channels** and add your channel.
+
+2️⃣ **Assign Telegram User IDs**
+&nbsp;&nbsp;&nbsp;• Go to **Access** and assign the TG User ID(s) to each token that should reach the files.
+
+3️⃣ **Create a Custom Catalog**
+&nbsp;&nbsp;&nbsp;• Create a new catalog (name it anything) and set **Visibility** to **👤 Owner only** or **👥 Specific users**.
+
+4️⃣ **Create a Manual Entry**
+&nbsp;&nbsp;&nbsp;• In **Media Management**, add your file as a **Manual Entry** (paste the Telegram message link). Fill in the correct title/metadata.
+
+5️⃣ **Add It to Your Catalog**
+&nbsp;&nbsp;&nbsp;• Add the manual entry to the custom catalog from Step 3.
+
+#### 🔒 Who can see it?
+
+Only the **Owner** or the **assigned token(s)** can access these personal files.
+
+#### 📂 Hide it from default catalogs
+
+By default a title can appear in both the **Default catalog** and **your Custom catalog**. To keep it **only** in yours:
+
+➡️ Open **Catalog Settings** → enable **🔒 Only visible in this catalog**. It's now hidden from all default/auto catalogs.
+
+#### 🔍 Make it searchable (optional)
+
+Personal files do **not** show in search by default. To allow it:
+
+➡️ Open **Catalog Settings** → enable **🔎 Allow search**. Your files now appear when searched in Nuvio.
+
+---
+
+### 🍥 Anime Channel Support
+
+**What:** Any AUTH channel can be flagged as an **Anime channel** so its files are matched against **AniList + api.ani.zip** instead of standard movie databases.
+
+**Why:** Anime seasons, episode numbering, and titles (romaji/english/synonyms) rarely match cleanly on TMDb/IMDb. AniList gives far more accurate anime metadata — correct titles, episode names, posters, and mappings.
+
+**How:** In **Settings → AUTH_CHANNELS**, tick the **Anime** checkbox next to the channel that holds your anime. Files uploaded there are indexed with anime-aware metadata automatically.
+
+---
+
+### 🌐 Global File Support (Global Search)
+
+**What:** Search **across other Telegram channels** you don't index locally, and stream matching results on the fly. Results that aren't in your local catalog are tagged **🌐 GLOBAL** in Stremio/Nuvio.
+
+**Why:** You can't (and shouldn't) permanently index every channel. Global Search lets you pull in a title on demand from selected source channels, using your own Telegram account (Userbot).
+
+**How to enable:**
+1. Set **`USER_SESSION_STRING`** in `config.env` (see the [Variable Guide](#-the-7-startup-variables-configenv)) and **restart once**.
+2. In **Settings → Global Search**, enable the toggle and add the **channel IDs** to search.
+
+#### ❓ Why don't all my auth-channel files show up in Global Search?
+
+Global Search is a **live title match**, not a dump of a channel. A file only surfaces when:
+- Its filename **matches the requested title** (and season/episode, if any) closely enough, **and**
+- It's a **normal single video** — [split files](#-split-file-support) and [combined files](#-combined--multi-episode-file-support) are **skipped** in Global Search on purpose.
+
+So a file already sitting in your AUTH channel appears through your **normal catalog** (where it's fully indexed), not necessarily through Global Search. Global Search is meant for reaching titles **outside** your indexed library.
+
+#### ❓ How do I get catalogs/metadata for movies & shows that aren't in my auth channel?
+
+Use the **Cinemeta** addon for discovery — **but keep it *below* Telegram Stremio** in your addon order. That way:
+- Metadata and browse rows come from Cinemeta for titles you don't host, **and**
+- Whenever *you* have the file, your Telegram Stremio stream takes priority.
+
+See [Setting Up Nuvio Properly](#-setting-up-nuvio-properly) for the exact ordering.
+
+---
+
+### 🏷️ Metadata & Manual Override
+
+If the addon identifies a title incorrectly or metadata is missing, fix it in one of two ways:
+
+**Method 1 — IMDb/TMDb URL in caption:** Edit the file's caption in your AUTH channel and paste the correct IMDb or TMDb URL anywhere in it. The bot removes the old entry, re-scans the URL, and saves the correct metadata.
+
+**Method 2 — Scan from the Web Panel:** Open the entry in Movies/TV Shows → **Edit** → **Scan Metadata** → search and pick the right title → apply.
+
+#### 🔁 Quality Replacement (Replace Mode)
+
+> Works only when **Replace Mode** is enabled.
+
+If a new file has the **same quality label** (`720p`, `1080p`, `4K`, …) as an existing one, it **replaces** the old entry — no duplicates. This is also how you upgrade a **CAMRip/low-quality** file: just forward the better version and it swaps in automatically. No commands, no manual deletion.
+
+---
+
+### 💳 Subscription & Access Control
+
+**What (optional):** Gate streaming behind a subscription. Each user gets a **unique addon token**; admins approve payments from the bot, and the addon manifest reflects each user's status/expiry.
+
+**Why:** Monetize or restrict access to a community server.
+
+**How:** Enable it in **Settings → Subscription**, set the **Subscription Group ID**, **Payment Instructions**, optional **QR image**, and **Approver IDs**. Manage users (assign/extend/reduce/revoke) from **Admin → Access Management**. Expired or not-joined users see a single actionable entry that opens **your bot** (its username is detected automatically — nothing to configure).
+
+---
+
+## 📤 Upload Guidelines (Caption Format)
+
+Accurate metadata depends on a clean caption (or filename). Include these fields:
+
+**🎥 Movies**
 ```
 Ghosted 2023 720p 10bit WEBRip [Org APTV Hindi AAC 2.0CH + English 6CH] x265 HEVC Msub ~ PSA.mkv
 ```
+- 🎞️ **Name** (e.g. `Ghosted`) · 📅 **Year** (e.g. `2023`) · 📺 **Quality** (e.g. `720p`)
 
-**Required Fields:**
-
--   🎞️ **Name** – Movie title (e.g., _Ghosted_)
--   📅 **Year** – Release year (e.g., _2023_)
--   📺 **Quality** – Resolution or quality (e.g., _720p_, _1080p_, _2160p_)
-
-✅ **Optional:** Include codec, audio format, or source (e.g., `WEBRip`, `x265`, `Dual Audio`).
-
-#### 📺 For TV Shows
-
-**Example Caption:**
-
+**📺 TV Shows**
 ```
 Harikatha.Sambhavami.Yuge.Yuge.S01E04.Dark.Hours.1080p.WEB-DL.DUAL.DDP5.1.Atmos.H.264-Spidey.mkv
-````
-
-**Required Fields:**
-
--   🎞️ **Name** – TV show title (e.g., _Harikatha Sambhavami Yuge Yuge_)
--   📆 **Season Number** – Use `S` followed by two digits (e.g., `S01`)
--   🎬 **Episode Number** – Use `E` followed by two digits (e.g., `E04`)
--   📺 **Quality** – Resolution or quality (e.g., _1080p_, _720p_)
-
-✅ **Optional:** Include episode title, codec, or audio details (e.g., `WEB-DL`, `DDP5.1`, `Dual Audio`).
-
-### 🔁 Quality Replacement Logic
-
-> Works only when **Replace Mode** is enabled.
-
-If a newly uploaded file has the same quality label (`720p`, `1080p`, `4K`, etc.) as an existing file, the bot automatically replaces the older entry with the new one.
-
-**Example:** Uploading a new `Ghosted (2023) 720p` file will replace the existing `720p` version in the catalog.
-
-This prevents duplicate quality entries and ensures only the latest version is available for streaming.
-
----
-
-### 🆙 Updating CAMRip or Low-Quality Files
-
-> Works only when **Replace Mode** is enabled.
-
-If you initially uploaded a **CAMRip or low-quality version**, you can easily replace it with a better one:
-
-1. Forward the **new, higher-quality file** (e.g., `1080p`, `WEB-DL`) to your **AUTH CHANNEL**.
-2. The bot will **automatically detect and replace** the old CAMRip file in the database.
-3. The Stremio addon will then **update automatically**, showing the new stream source.
-
-✅ No manual deletion or command is needed — forwarding the updated file is enough!
-
----
-
-### 🏷️ Fixing Incorrect Metadata (Manual Override)
-
-If the addon identifies a movie or TV show incorrectly, or if metadata is missing altogether, you can easily correct it using one of the following methods:
-
-#### Method 1: IMDb / TMDb URL Override
-
-1. Copy the correct **IMDb** or **TMDb** URL for the movie or TV show.
-2. Edit the message caption in your Telegram **AUTH CHANNEL** and paste the URL anywhere in the caption.
-3. The bot will automatically:
-
-   * Remove the existing metadata entry associated with that file.
-   * Re-scan the provided URL.
-   * Fetch and save the correct metadata.
-
-#### Method 2: Scan Metadata from the Web Panel
-
-1. Open the media entry from the Movies or TV Shows section.
-2. Click **Edit**.
-3. Select **Scan Metadata**.
-4. Search for the correct title and choose the matching result.
-5. Apply the changes.
-
-✅ The addon will update the metadata instantly and refresh the catalog entry.
-
----
-
-
-### Behind The Scenes
-
-Here's how each component interacts:
-
-| Component | Role |
-| :--- | :--- |
-| **Telegram Bot** | Handles uploads, forwards, and file tracking. |
-| **MongoDB** | Stores message IDs, chat IDs, and metadata. |
-| **PyroFork** | Generates Telegram-based streaming URLs. |
-| **FastAPI** | Hosts REST endpoints for streaming, catalog, and metadata. |
-| **Stremio Addon** | Consumes FastAPI endpoints for catalog display and playback. |
-
-📦 **Flow Summary:**
-
 ```
-Telegram ➜ MongoDB ➜ FastAPI ➜ Stremio ➜ User Stream
-```
+- 🎞️ **Name** · 📆 **Season** (`S01`) · 🎬 **Episode** (`E04`) · 📺 **Quality** (`1080p`)
 
+**📦 Combined files** — include the season and episode range, e.g. `Show.S01.E04-E06.1080p.mkv` or a "combined" keyword for whole-season files.
 
+✅ Optional extras (codec, audio, source) like `WEB-DL`, `x265`, `Dual Audio` are fine.
 
-# 🤖 Bot Commands
+---
 
-Below is the list of available bot commands and their usage within the Telegram bot.
-
-### Command List
+## 🤖 Bot Commands
 
 | Command | Description |
 | :--- | :--- |
-| **`/start`** | Returns your **Addon URL** for direct installation in **Stremio**. |
-| **`/log`** | Sends the latest **log file** for debugging or monitoring. |
-| **`/set`** | Used for **manual uploads** by linking IMDB URLs. |
-| **`/restart`** | Restarts the bot and pulls any **latest updates** from the upstream repository. |
+| **`/start`** | Returns your **Addon URL** for installing in Stremio/Nuvio. |
+| **`/log`** | Sends the latest **log file** for debugging. |
+| **`/set <imdb-url>`** | Manually upload a specific title by linking IMDb metadata. |
+| **`/restart`** | Restarts the bot and pulls the latest upstream updates. |
 
-### `/set` Command Usage
-
-The `/set` command is used to manually upload a specific Movie or TV show to your channel, linking it to its IMDB metadata.
-
-**Command:**
-
-```
-/set <imdb-url>
-```
-
-**Example:**
-
-```
-/set https://www.imdb.com/title/tt0468569/
-```
-
-**Steps:**
-
-1.  Send the `/set` command followed by the **IMDB URL** of the movie or show you want to upload.
-2.  **Forward the related movie or TV show files** to your channel.
-3.  Once all files are uploaded, **clear the default IMDB link** by simply sending the `/set` command without any URL.
-
-💡 **Tip:** Use `/log` if you encounter any upload or parsing issues.
-
-
-
-# 🔧 Configuration Guide
-
-> 😌 **Don’t worry — setup is easier than it looks.**
-> You only fill in **6 values once** inside a single file called `config.env`. Everything else (TMDB key, channels, admin login, subscriptions, proxy…) is configured later from a friendly **Web Settings page** — no code, no restarts.
-
-Think of configuration as **two simple layers**:
-
-| Layer | Where | When you set it | What goes here |
-| :--- | :--- | :--- | :--- |
-| 🧱 **Startup** | `config.env` file | Once, before first launch | The core credentials needed to boot |
-| 🎛️ **Runtime** | **Web Settings page** | Anytime, after launch | Everything else — saved to the database, applied live |
+**`/set` usage:** send `/set https://www.imdb.com/title/tt0468569/`, forward the related files, then send `/set` alone to clear the linked ID.
 
 ---
 
-## 🪜 Step 1: Create Your config.env File
+## 🔧 Configuration & Variable Guide
 
-After cloning the project, copy the sample file and open it for editing:
+Setup has **two layers**:
 
-```bash
-cp sample_config.env config.env
-nano config.env
-```
+| Layer | Where | When | What |
+| :--- | :--- | :--- | :--- |
+| 🧱 **Startup** | `config.env` | Once, before first launch | The core credentials to boot |
+| 🎛️ **Runtime** | **Web Settings page** | Anytime after launch | Everything else — saved to DB, applied live |
 
-Fill in these values:
+### 🪜 The 7 Startup Variables (config.env)
 
-| Variable | Required | What it is |
+Copy the sample and edit it: `cp sample_config.env config.env && nano config.env`
+
+| Variable | Required | What it is & why you need it |
 | :--- | :---: | :--- |
-| `API_ID` | ✅ | Telegram API ID (from my.telegram.org) |
-| `API_HASH` | ✅ | Telegram API Hash (from my.telegram.org) |
-| `BOT_TOKEN` | ✅ | Your bot token (from @BotFather) |
-| `OWNER_ID` | ✅ | Your numeric Telegram user ID |
-| `DATABASE` | ✅ | **Two** MongoDB URIs, separated by a comma |
-| `PORT` | ✅ | Web server port (keep `8000` unless it’s busy) |
-| `USER_SESSION_STRING` | ⬜ | Optional — only needed for **Global Search** |
+| `API_ID` | ✅ | Your Telegram **API ID** from [my.telegram.org](https://my.telegram.org). Identifies your Telegram app so the bot can connect. |
+| `API_HASH` | ✅ | Your Telegram **API Hash** from the same page. The secret paired with `API_ID`. |
+| `BOT_TOKEN` | ✅ | Bot token from [@BotFather](https://t.me/BotFather). This is the account that indexes files and serves streams — **make it an admin in every channel** you use. |
+| `OWNER_ID` | ✅ | Your numeric Telegram user ID (from [@userinfobot](https://t.me/userinfobot)). Grants you owner-level control. |
+| `DATABASE` | ✅ | **Two** MongoDB connection URIs, comma-separated. The **first** stores tracking/metadata, the **second** stores media references. Free **M0** Atlas tier is enough; you can reuse one cluster with two db names (e.g. `/tracking` and `/storage1`). More storage can be added later from Web Settings. |
+| `PORT` | ✅ | The web server port. Keep `8000` unless it's in use; your reverse proxy/domain points here. |
+| `USER_SESSION_STRING` | ⬜ | **Optional** — only needed for [Global Search](#-global-file-support-global-search). A "stay logged in" token for **your own** Telegram account (like Telegram Web). It lets the Userbot search other channels. Revoke anytime from Telegram → Settings → Devices. Leave empty if you don't use Global Search. |
 
-A completed file looks like this (these are just example values):
-
+**Example `config.env`:**
 ```env
 API_ID="1234567"
 API_HASH="abc123def456ghi789jkl012mno345pq"
@@ -312,562 +334,127 @@ DATABASE="mongodb+srv://user:pass@cluster0.xxxx.mongodb.net/tracking,mongodb+srv
 PORT="8000"
 ```
 
-> 💾 To save in nano: press `Ctrl + O`, then `Enter`, then `Ctrl + X`.
+> **Generate `USER_SESSION_STRING`** (only for Global Search): open [colab.new](https://colab.new), run a cell with `!pip install pyrogram tgcrypto`, then use Pyrogram's `export_session_string()` after logging in with your API ID/HASH + login code. Keep the result **private** — never commit it.
 
----
+### 🎛️ Web Settings (everything else)
 
-## 🔑 Step 2: How to Get Each Value
+Once running, open your site → log in at `/login` with the default `admin` / `admin` and **change the password immediately**. Then open **Settings** (`/admin/settings`). All values below save to the database and apply **instantly, no restart** (the only exception is `USER_SESSION_STRING`, which lives in `config.env`).
 
-Take it one line at a time — each value comes from a quick, free step.
-
-### 🆔 API_ID & API_HASH
-1. Go to **https://my.telegram.org** and log in with your phone number.
-2. Open **API development tools**.
-3. Create an app (any title works, e.g. `stremio`).
-4. Copy **App api_id** → `API_ID` and **App api_hash** → `API_HASH`.
-
-### 🤖 BOT_TOKEN
-1. Open **@BotFather** in Telegram.
-2. Send `/newbot` and follow the prompts (choose a name and a username).
-3. Copy the token it gives you → `BOT_TOKEN`.
-4. ⭐ Add this bot as an **admin** in every channel you’ll use for media.
-
-### 👤 OWNER_ID
-1. Open **@userinfobot** in Telegram (or send `/id` to **@MissRose_bot**).
-2. It replies with your numeric ID → `OWNER_ID`.
-
-### 🗄️ DATABASE (two MongoDB URIs)
-You need **two** free MongoDB databases — the first stores tracking/metadata, the second stores your media references.
-
-1. Create a free account at **https://www.mongodb.com/atlas** (the forever-free **M0** tier is enough to start).
-2. Create a cluster → in **Database Access**, add a database user and password.
-3. In **Network Access**, add `0.0.0.0/0` (allow access from anywhere).
-4. Click **Connect → Drivers** and copy the connection string, e.g.
-   `mongodb+srv://user:pass@cluster0.xxxx.mongodb.net/`
-5. Add a database name at the end of each (e.g. `/tracking` and `/storage1`).
-6. Put **both** strings on one line, separated by a comma:
-   ```
-   DATABASE="mongodb+srv://.../tracking,mongodb+srv://.../storage1"
-   ```
-
-> 💡 You can use the **same cluster** for both — just give them two different database names. Need more space later? Add extra storage databases from the Web Settings page (no restart required).
-
-### 🔢 PORT
-Leave it as `8000` unless that port is already in use. Your reverse proxy / domain will point here.
-
-### 📱 USER_SESSION_STRING (optional)
-Only needed if you want **Global Search**. It’s safe and quick to generate — see **Step 3** below. If you don’t need Global Search, leave it empty.
-
----
-
-## 📱 Step 3: Generate Your Telegram Session String
-
-> 😊 **No app installation required — and it’s safe.**
-> A session string is simply a “stay logged in” token for **your own** Telegram account, exactly like signing into Telegram Web. The bot never sees your password, and you can revoke access anytime from **Telegram → Settings → Devices**.
-
-> ⏭️ **Skip this step** entirely if you don’t plan to use Global Search.
-
-### 🌐 Easiest Method: Google Colab (works right in your phone’s browser)
-
-1️⃣ Open **https://colab.new** in your browser.
-
-2️⃣ Sign in with your Google account.
-
-3️⃣ Tap **“+ Code”** to add a new code cell.
-
-4️⃣ Paste the code below and press ▶ **Run**:
-
-```python
-!pip install pyrogram tgcrypto
-
-import asyncio
-from pyrogram import Client
-
-api_id = int(input("API ID: "))
-api_hash = input("API HASH: ")
-
-async def main():
-    async with Client("temp_session", api_id, api_hash) as app:
-        print("\nYour USER_SESSION_STRING is:\n")
-        print(await app.export_session_string())
-
-await main()
-```
-
-5️⃣ Enter your **API ID** and **API HASH** when prompted.
-
-6️⃣ Enter the **login code** Telegram sends you (and your 2-step password, if you have one).
-
-7️⃣ Your **USER_SESSION_STRING** is printed on screen — copy the whole string into `config.env`.
-
-> 🔒 **Keep it private.** Anyone who has this string can access your account, so never share it or commit it to a public repository. To invalidate it instantly, just remove the session from Telegram’s **Devices** list.
-
----
-
-## 🧩 Step 4: Configure Everything Else (Web Settings Page)
-
-Once the server is running, open it in your browser:
-
-| Setup | Open this URL |
+| Setting | What it does & why |
 | :--- | :--- |
-| **VPS with a domain** | `https://your-domain.com` |
-| **Local / direct IP** | `http://<your-vps-ip>:8000` |
+| **Replace Mode** | When a new file matches an existing quality, it replaces the old one. Keeps catalogs clean. Recommended **ON**. |
+| **Hide Catalog** | Hides the public catalog while direct streams still work. |
+| **Admin Username / Password** | Your web panel login. **Change the defaults right away.** |
+| **AUTH_CHANNELS** | The channel(s) the bot indexes and streams from. Add by `@username` or `-100…` ID; the bot must be **admin**. Tick **Anime** on a channel to use AniList metadata (see [Anime Support](#-anime-channel-support)). |
+| **Manual Add Channels** | Channels whose files are **not** auto-indexed — used for [manual/personal uploads](#-manual-upload--personal-files--lectures). |
+| **TMDB API Key** | Free TMDB **v3** key from themoviedb.org. Powers metadata matching and Language/OTT [auto catalogs](#-catalog-support-auto--custom). |
+| **Base URL** | Your public address (e.g. `https://your-domain.com`). Stremio uses this to reach your streams — **must be correct**. |
+| **Upstream Repo / Branch** | Optional — used by `/restart` to auto-update. |
+| **Subscription** | Optional monetization/access gating — see [Subscription](#-subscription--access-control). |
+| **Global Search** | Requires `USER_SESSION_STRING` + one restart. Enable the toggle and add channel IDs to search — see [Global File Support](#-global-file-support-global-search). |
+| **HTTP Proxy** | Optional proxy for outbound metadata/API requests; can show both proxied and direct links. |
+| **Extra Storage Databases** | Add more MongoDB URIs to expand capacity. The first two (from `config.env`) are locked. Remove only from the **end** of the list. |
+| **Multi-Token Clients** | Add extra **bot tokens** for faster parallel streaming under load. Add each bot as **admin** in your AUTH channels. |
 
-You’ll land on the **login page** (`/login`). Sign in with the default credentials:
-
-```
-Username: admin
-Password: admin
-```
-
-Then go to **Settings** (`/admin/settings`).
-
-> 🚨 **Do this first:** change the admin password in the **Admin Authentication** card, then click **Save Settings**.
-
-Everything below is stored in the database and applied **instantly — no restart needed** (the only exception is `USER_SESSION_STRING`, which lives in `config.env`).
-
-### ⚙️ General
-| Option | What it does |
-| :--- | :--- |
-| **Replace Mode** | When a new file has the same quality (`720p`, `1080p`…) as an existing one, it replaces the old entry. Recommended **ON**. |
-| **Hide Catalog** | Hides the public Stremio catalog (direct streams still work). |
-
-### 🛡️ Admin Authentication
-| Field | What to enter |
-| :--- | :--- |
-| **Admin Username / Password** | Your Web Panel login. Leave the password blank to keep the current one. **Change the defaults right away.** |
-| **AUTH_CHANNELS** | The channel(s) the bot indexes and streams from. Add each one by `@username` or `-100…` ID. Make sure your bot is an **admin** in each channel. |
-
-### 🎬 Media & Content
-| Field | What to enter |
-| :--- | :--- |
-| **TMDB API Key** | A free TMDB **v3** key from themoviedb.org → Settings → API. Powers automatic metadata matching. |
-| **Base URL** | Your public address, e.g. `https://your-domain.com`. **Important:** Stremio uses this to reach your streams. |
-| **Upstream Repo / Branch** | Optional — used by `/restart` to auto-update (e.g. repo `weebzone/Telegram-Stremio`, branch `master`). |
-
-### 💳 Subscription (optional)
-Turn this on to monetise access. Set the **Subscription Group ID**, **Payment Instructions** (your UPI / bank / PayPal text), an optional **Payment QR image URL**, and the **Approver IDs** (who can approve requests). Renewal and "join the channel" prompts shown in Stremio point users back to **your bot automatically** — no separate URL to configure. The full flow is described in [Subscription Management](#-subscription-management).
-
-### 🌐 Global Search (optional)
-Requires `USER_SESSION_STRING` in `config.env` plus one app restart to unlock. Then enable the toggle and add the **channel IDs** to search. Results that aren’t in your local catalog are tagged **🌐 GLOBAL** in Stremio.
-
-### 🌐 Proxy (optional)
-Set an **HTTP Proxy URL** for outbound metadata/API requests, and optionally **show both** proxied and direct stream links.
-
-### 🗄️ Extra Storage Databases
-Your first two databases (from `config.env`) are **locked** as *Tracking* and *Storage 1*. Add more MongoDB URIs here to expand storage capacity — 🟢 means connected. Remove entries only from the **end** of the list, since existing media reference databases by position.
-
-### 📨 Multi-Token Clients
-Add extra **bot tokens** for faster parallel streaming under heavy load. Create more bots with @BotFather, add them as **admins** in all your AUTH channels, then paste their tokens here. Changes apply immediately.
-
-> ✅ Click **Save Settings** when you’re done. That’s it — you’re live!
+> ✅ Click **Save Settings** and you're live.
 
 ---
 
-# 💳 Subscription Management
+## 🚀 Deployment Guide
 
-The Subscription Management system allows you to **monetise access** to your Telegram Stremio server. When enabled, users must have an active subscription to stream content.
+Before you start (for VPS): a server with a public IP (Ubuntu on DigitalOcean/AWS/Vultr/etc.) and a **domain name**.
 
-## 📋 Subscription Plans
+### 🐙 Heroku
 
-Admins can create and manage subscription plans from the **Admin Panel → Subscription Management** page.
-
-Each plan has:
-- **Name** (e.g. `Monthly`, `Quarterly`)
-- **Duration** in days
-- **Price** (for display)
-- **Description**
-
-Plans are stored in MongoDB and can be added, edited, or deleted at any time without restarting.
-
----
-
-## 🤖 Bot Payment Flow
-
-Users interact with the bot to subscribe:
-
-```
-User → /start → selects plan → sends payment screenshot
-      → Approver gets notification → Approve / Reject
-      → On Approve:
-          ✅ Subscription saved to DB
-          🔑 Stremio addon token auto-generated
-          📨 User receives Stremio install link + group invite
-```
-
-**Approver actions** (available to `APPROVER_IDS`):
-
-| Button | Action |
-| :--- | :--- |
-| ✅ Approve | Activates subscription, generates addon token, invites user to group |
-| ❌ Reject | Notifies user with rejection message |
-
----
-
-## 🗃️ Access Management
-
-The **Admin Panel → Access Management** page gives admins full control over all users and their addon tokens.
-
-### Columns Shown
-
-| Column | Description |
-| :--- | :--- |
-| Status | 🟢 Active / 🔴 Expired |
-| User | Display name or `User {id}` |
-| Addon Link | Stremio install URL + copy button |
-| Created | Token creation date |
-| Expires | Subscription expiry date |
-| Actions | Buttons for managing the user |
-
-### Action Buttons
-
-| Button | Description |
-| :--- | :--- |
-| 📅 **Assign** | Assign or extend a subscription plan (adds days) |
-| ➕ **Extend** | Add extra days to an active subscription |
-| ➖ **Reduce** | Subtract days from an active subscription |
-| 🚫 **Revoke** | Wipe subscription entirely (marks expired) |
-| 🗑️ **Del Token** | Delete the addon token only (user still subscribed) |
-| 🔗 **Link User ID** | Link an old/orphan token to a Telegram user ID to enable management |
-
-> 💡 Manually created (old) tokens that have no linked user ID show a **🔗 Link User ID** button. Once linked, all action buttons become available.
-
-### Search & Filtering
-
-- 🔍 Search by user name or ID
-- Filter by status: All / Active / Expired
-- Pagination with configurable page size
-
----
-
-## 🎬 Stremio Addon Integration
-
-### Per-User Addon Token
-
-Each user gets a **unique addon token** automatically generated on payment approval. Their Stremio addon URL is:
-
-```
-https://your-domain.com/stremio/{token}/manifest.json
-```
-
-### Dynamic Manifest
-
-The addon manifest updates dynamically per user:
-
-| Scenario | Addon Name | Description |
-| :--- | :--- | :--- |
-| Active, has expiry | `Telegram — Expires 28 Mar 2026` | 📅 Subscription active until 28 Mar 2026 |
-| Active, no expiry | `Telegram — Active` | ✅ Subscription active |
-| Default (no subscription mode) | `Telegram` | Standard description |
-
-The manifest `version` encodes the expiry date — when an admin extends or revokes a subscription, the version changes and Stremio detects an update.
-
-### Subscription Stream Gating
-
-When the subscription feature is enabled, the addon checks every stream request and shows a single actionable entry instead of the streams when the user isn't eligible. In both cases the stream link opens **your bot** (derived automatically from the bot's username — there is no URL to configure).
-
-**Plan expired** — the user's subscription has lapsed:
-
-```json
-{
-  "name": "🚫 Plan Expired",
-  "title": "Your plan is expired.\nRenew it from the bot to continue watching.",
-  "url": "https://t.me/your_bot"
-}
-```
-
-**Not joined** — the user is active but has left / never joined the subscription channel (the `Subscription Group ID`):
-
-```json
-{
-  "name": "📢 Join Required",
-  "title": "First join the channel to stream it.\nTap here to open the bot and join.",
-  "url": "https://t.me/your_bot"
-}
-```
-
-Clicking the stream name opens the bot directly so the user can renew or rejoin. The membership check fails open — if Telegram is briefly unreachable or the bot can't read the group, legitimate users are never blocked.
-
-### Configure & Reinstall Page
-
-Every addon has a **Configure page** at:
-
-```
-https://your-domain.com/stremio/{token}/configure
-```
-
-This page shows:
-- User name, subscription status, expiry date
-- **⚡ Install / Update in Stremio** button (Stremio Web install flow)
-- Manual install steps + **📋 Copy URL** button
-
-The ⚙️ gear icon in Stremio opens this page so users can reinstall after an admin updates their subscription.
-
----
-
-# 🚀 Deployment Guide
-
-This guide will help you deploy your **Telegram Stremio Media Server** using either Heroku or a VPS with Docker.
-
-## ✅ Recommended Prerequisites
-
-**Supported Servers:**
-
-  - 🟣 **Heroku**
-  - 🟢 **VPS** 
-
-Before you begin, ensure you have:
-
-1.  ✅ A **VPS** with a public IP (e.g., Ubuntu on DigitalOcean, AWS, Vultr, etc.)
-2.  ✅ A **Domain name**
-
-
-## 🐙 Heroku Guide
-
-Follow the instructions provided in the Google Colab Tool to deploy on Heroku.
+Follow the guided Colab tool:
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/weebzone/Colab-Tools/blob/main/telegram%20stremio.ipynb)
 
+### 🐳 VPS with Docker (Recommended)
 
-## 🐳 VPS Guide
-
-This section explains how to deploy your **Telegram Stremio Media Server** on a VPS using **Docker Compose (recommended)** or **Docker**.
-
-
-### 1️⃣ Step 1: Clone & Configure the Project
-
+**1. Clone & configure:**
 ```bash
 git clone https://github.com/weebzone/Telegram-Stremio
 cd Telegram-Stremio
 mv sample_config.env config.env
-nano config.env
+nano config.env   # fill in the 7 variables, then Ctrl+O, Enter, Ctrl+X
 ```
 
-* Fill in all required variables in `config.env`.
-* Press `Ctrl + O`, then `Enter`, then `Ctrl + X` to save and exit.
-
-## ⚙️ Step 2: Choose Your Deployment Method
-
-You can deploy the server using either **Docker Compose (recommended)** or **plain Docker**.
-
-
-
-### 🟢 **Option 1: Deploy with Docker Compose (Recommended)**
-
-Docker Compose provides an easier and more maintainable setup, environment mounting, and restart policies.
-
-#### 🚀 Start the Container
-
+**2. Start (Docker Compose — recommended):**
 ```bash
 docker compose up -d
 ```
+Server runs at `http://<your-vps-ip>:8000`. To apply `config.env` edits later: `docker compose restart` (no rebuild needed — the file is mounted).
 
-Your server will now be running at:
-➡️ `http://<your-vps-ip>:8000`
-
----
-
-#### 🛠️ Update `config.env` While Running
-
-If you need to modify environment values (like `BASE_URL`, `AUTH_CHANNEL`, etc.):
-
-1. **Edit the file:**
-
-   ```bash
-   nano config.env
-   ```
-2. **Save your changes:** (`Ctrl + O`, `Enter`, `Ctrl + X`)
-3. **Restart the container to apply updates:**
-
-   ```bash
-   docker compose restart
-   ```
-
-⚡ Since the config file is mounted, you **don’t need to rebuild** the image — changes apply automatically on restart.
-
-
-
-### 🔵 **Option 2: Deploy with Docker (Manual Method)**
-
-If you prefer not to use Docker Compose, you can manually build and run the container.
-
-#### 🧩 Build the Image
-
+**Or plain Docker:**
 ```bash
 docker build -t telegram-stremio .
-```
-
-#### 🚀 Run the Container
-
-```bash
 docker run -d -p 8000:8000 telegram-stremio
 ```
 
-Your server should now be running at:
-➡️ `http://<your-vps-ip>:8000`
+**3. Add a domain (HTTPS via Caddy):**
 
-
-
-### 🌐 Step 3: Add Domain (Required)
-
-#### 🅰️ Set Up DNS Records
-
-Go to your domain registrar and add an **A record** pointing to your VPS IP:
-
-| Type | Name | Value             |
-| ---- | ---- | ----------------- |
-| A    | @    | `195.xxx.xxx.xxx` |
-
-
-#### 🧱 Install Caddy (for HTTPS + Reverse Proxy)
-
+Point an **A record** for your domain at your VPS IP, then install Caddy:
 ```bash
 sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl
 curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
 curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
-chmod o+r /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-chmod o+r /etc/apt/sources.list.d/caddy-stable.list
-sudo apt update
-sudo apt install caddy
+sudo apt update && sudo apt install caddy
 ```
+Edit `/etc/caddy/Caddyfile`:
+```caddy
+your-domain.com {
+    reverse_proxy localhost:8000
+}
+```
+Then `sudo systemctl reload caddy`. Your server is now live at `https://your-domain.com`.
 
-#### ⚙️ Configure Caddy
+### 🤗 Hugging Face (free, always-online)
 
-1. **Edit the Caddyfile:**
+1. **Fork** this repo, then create a **Docker Space** (Blank template, **Public** visibility) at [huggingface.co/new-space](https://huggingface.co/new-space).
+2. In your Space → **Settings → Variables and secrets**, add the same values you'd put in `config.env` (`API_ID`, `API_HASH`, `BOT_TOKEN`, `OWNER_ID`, `DATABASE`, and optionally `USER_SESSION_STRING`). No `config.env` file is needed — they're read as environment variables.
+3. Wait for the Space to build and show **Running**.
+4. Open `https://<your-hf-username>-<your-space-name>.hf.space/login`, log in (`admin`/`admin`), **change the password**, then set your **Base URL** to that same `hf.space` address in Web Settings.
+5. Fill in **TMDB API** and **AUTH CHANNEL** in Settings, save, then send `/start` to your bot for the manifest URL.
 
-   ```bash
-   sudo nano /etc/caddy/Caddyfile
-   ```
+---
 
-2. **Replace contents with:**
+## 📺 Setting Up Nuvio Properly
 
-   ```caddy
-   your-domain.com {
-       reverse_proxy localhost:8000
-   }
-   ```
+Your server is a standard **Stremio-style addon**, so it works in Stremio too — but for the smoothest experience across devices we recommend **[Nuvio](https://play.google.com/store/apps/details?id=com.nuvio.app)** (free, open-source, for Android, Android TV, Fire TV, iOS, Windows, and TV). *(Content was rephrased for compliance with licensing restrictions.)*
 
-   * Replace `your-domain.com` with your actual domain name.
-   * Adjust the port if you changed it in `config.env`.
-
-3. **Save and reload Caddy:**
-
-   ```bash
-   sudo systemctl reload caddy
-   ```
-
-
-✅ Your API will now be available securely at:
-➡️ `https://your-domain.com`
-
-
-## 🤗 Hugging Face Guide
-
-Deploy a **free, always-online** instance — no VPS, no domain, and no Docker knowledge required. Hugging Face builds the Docker image **on its own servers**; you only tap a few buttons.
-
-> 💡 **How it works:** this repo ships a GitHub Action that automatically pushes your code to your Hugging Face Space on every change. The Space then builds the included `Dockerfile` and runs your server.
-
-### ⭐ Step 1: Star this Repository
-
-Open the repo and tap **⭐ Star** at the top right. It helps the project and keeps it on your radar.
-
-➡️ [github.com/weebzone/Telegram-Stremio](https://github.com/weebzone/Telegram-Stremio)
-
-### 🍴 Step 2: Fork the Repository
-
-Tap **Fork** (top right) → **Create fork**. This gives you your **own copy** so you can add private secrets and run the deploy workflow.
-
-### 🔑 Step 3: Create a Hugging Face Write Token
-
-1. Sign in (or sign up) at [huggingface.co](https://huggingface.co).
-2. Go to **Profile → Settings → Access Tokens**.
-3. Tap **Create new token**, choose the **Write** role, and copy the token.
-
-### 🚀 Step 4: Create a Docker Space
-
-1. Go to [huggingface.co/new-space](https://huggingface.co/new-space).
-2. Give it a name, select **Docker** as the SDK (pick the **Blank** template).
-3. Set visibility to **Public** (required so Stremio/Nuvio can reach your addon).
-4. Tap **Create Space**.
-
-Your Space ID is `<your-hf-username>/<your-space-name>` — note it down.
-
-### 🔐 Step 5: Add Deploy Credentials to Your GitHub Fork
-
-In **your forked repo** → **Settings → Secrets and variables → Actions**:
-
-| Type         | Name          | Value                                  |
-| ------------ | ------------- | -------------------------------------- |
-| **Secret**   | `HF_TOKEN`    | the Write token from Step 3            |
-| **Variable** | `HF_SPACE_ID` | `<your-hf-username>/<your-space-name>` |
-
-> Add the secret under the **Secrets** tab and the variable under the **Variables** tab.
-
-### 🤖 Step 6: Add Your Bot Secrets to the Space
-
-On your **Hugging Face Space → Settings → Variables and secrets**, add the same values you'd normally put in `config.env`:
-
-| Secret                | Required | Where to get it                        |
-| --------------------- | -------- | -------------------------------------- |
-| `API_ID`              | ✅        | [my.telegram.org](https://my.telegram.org) |
-| `API_HASH`            | ✅        | [my.telegram.org](https://my.telegram.org) |
-| `BOT_TOKEN`           | ✅        | [@BotFather](https://t.me/BotFather)   |
-| `OWNER_ID`            | ✅        | your numeric Telegram ID               |
-| `DATABASE`            | ✅        | two comma-separated MongoDB URIs       |
-| `USER_SESSION_STRING` | ⬜        | optional (Global Search)               |
-
-> ℹ️ You don't need a `config.env` file on Hugging Face — these secrets are read directly as environment variables. The included `Dockerfile` already listens on the right port (`app_port: 8000` is preset in this README).
-
-### ▶️ Step 7: Deploy
-
-In **your forked repo** → **Actions** tab → select **Deploy to Hugging Face Space** → **Run workflow**.
-
-After this first run, **every push to your fork auto-deploys**. Watch the build progress on your Hugging Face Space page — once it shows **Running**, you're live.
-
-### 🎬 Step 8: Use Your Addon
-
-1. Open `https://<your-hf-username>-<your-space-name>.hf.space/login`
-2. Log in (default `admin` / `admin`) and **immediately change the password**.
-3. Set your **Base URL** in the web Settings page to `https://<your-hf-username>-<your-space-name>.hf.space`.
-4. Now open bot and send /start command it give you the manifest url
-5. Add the manifest URL to Stremio/Nuvio and enjoy. 🎉
-
-### 🎬 Step 9: Setup the Additional value
-
-1. Go to Web settings page `https://<your-hf-username>-<your-space-name>.hf.space/admin/settings`.
-2. Fill up the TMDB API, AUTH CHANNEL.
-3. If you need to fill up other things check [Web Settings](#-step-4-configure-everything-else-web-settings-page)
-4. Save the settings and enjoy.
-
-# 📺 Setting Up Your App (Nuvio Recommended)
-
-Your media server works as a standard **Stremio-style addon**, so it plays in any compatible client. For the **best compatibility and smoothest experience across devices, we recommend the [Nuvio](https://play.google.com/store/apps/details?id=com.nuvio.app) app** — a free, open-source media hub for **Android, Android TV, Fire TV, iOS, Windows, and TV** that supports Stremio addon manifest URLs natively. *(Content was rephrased for compliance with licensing restrictions.)*
-
-> 💡 Already using **Stremio**? It works too — just install the same addon URL below. Nuvio simply tends to handle these Telegram streams more reliably across more devices.
-
-## 📥 Step 1: Install Nuvio
-
-Download Nuvio from an official source:
+### Step 1 — Install Nuvio
 
 | Platform | Source |
 | :--- | :--- |
-| **Android / Android TV / Fire TV** | [Google Play](https://play.google.com/store/apps/details?id=com.nuvio.app) |
-| **All platforms / latest builds** | [GitHub — tapframe/NuvioStreaming](https://github.com/tapframe/NuvioStreaming) |
+| Android / Android TV / Fire TV | [Google Play](https://play.google.com/store/apps/details?id=com.nuvio.app) |
+| All platforms / latest builds | [GitHub — tapframe/NuvioStreaming](https://github.com/tapframe/NuvioStreaming) |
 
-> 🔗 *(Optional)* Connect **Trakt** in the app to sync your watch history and progress across devices.
+### Step 2 — Add the addon
 
-## 🌐 Step 2: Add the Addon
+1. Send `/start` to your bot to get your **manifest URL**.
+2. In Nuvio (or Stremio), open the **Addons** section and install that manifest URL.
 
-1. Open **Nuvio** and go to the **Addons** section.
-2. Paste your addon **manifest URL** and install it:
+### Step 3 — Order it **above Cinemeta** ⭐ (important)
 
-3. Done! 🎉 Your Telegram library now appears in the catalog and streams directly.
+For combined files, global files, and correct stream priority to work well, the **Telegram Stremio addon must sit above Cinemeta**:
 
+1. Open the **Addons** section in Nuvio.
+2. **Move Telegram Stremio to the top** — it must always be **above** the Cinemeta addon.
+3. Keep **Cinemeta below it** so you still get browse rows/metadata for titles you don't host, while your own streams always take priority when you *do* have the file.
 
+> 📺 **On Stremio**, you can reorder addons with the community tool: <https://addon-manager.dontwanttos.top/>
 
-## 🏅 Contributors
+### Step 4 — Add & verify a manual entry
 
-|<img width="80" src="https://avatars.githubusercontent.com/u/113664541">|<img width="80" src="https://avatars.githubusercontent.com/u/13152917">|<img width="80" src="https://avatars.githubusercontent.com/u/14957082">|<img width="80" src="https://raw.githubusercontent.com/vflixa1prime/Readme/main/VFlixPRime.png">|
-|:---:|:---:|:---:|:---:|
-|[`Karan`](https://github.com/Weebzone)|[`Stremio`](https://github.com/Stremio)|[`ChatGPT`](https://github.com/OPENAI)|[`VFlix Prime`](https://t.me/vflixprime2)|
-|Author|Stremio SDK|Refactor|Community Support
+1. Add a **manual entry** on the web page (Media Management) and fill in its metadata.
+2. Open the title in Nuvio — with Telegram Stremio on top, it will now show the **correct metadata you filled in** and stream from your channel.
+
+---
+
+## 🏅 Credits
+
+| <img width="80" src="https://avatars.githubusercontent.com/u/113664541"> | <img width="80" src="https://avatars.githubusercontent.com/u/13152917"> | <img width="80" src="https://avatars.githubusercontent.com/u/14957082"> | <img width="80" src="https://raw.githubusercontent.com/vflixa1prime/Readme/main/VFlixPRime.png"> |
+| :---: | :---: | :---: | :---: |
+| [`Karan`](https://github.com/Weebzone) | [`Stremio`](https://github.com/Stremio) | [`ChatGPT`](https://github.com/OPENAI) | [`VFlix Prime`](https://t.me/vflixprime2) |
+| Author | Stremio SDK | Refactor | Community Support |
