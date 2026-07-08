@@ -184,23 +184,7 @@ async def update_auto_catalog_settings(db, enabled_keys: List[str]) -> dict:
         {"$set": {"enabled_keys": clean_keys, "updated_at": now}},
         upsert=True,
     )
-    await _invalidate_synced_flags(db)
     return await get_auto_catalog_settings(db)
-
-
-async def _invalidate_synced_flags(db) -> None:
-    for db_index in range(1, db.current_db_index + 1):
-        db_key = f"storage_{db_index}"
-        if db_key not in db.dbs:
-            continue
-        for collection_name in ["movie", "tv"]:
-            try:
-                await db.dbs[db_key][collection_name].update_many(
-                    {"auto_catalog.synced": True},
-                    {"$set": {"auto_catalog.synced": False}},
-                )
-            except Exception as e:
-                LOGGER.warning(f"Auto catalog: failed to reset synced flags in {db_key}.{collection_name}: {e}")
 
 
 async def _enabled_catalog_names(db) -> Set[str]:
@@ -271,8 +255,6 @@ def classify_media_from_tmdb(doc: dict, details: dict, watch_data: dict, enabled
 
     for bucket in providers:
         tags.add(bucket)
-
-    tags = {tag for tag in tags if tag in enabled_names}
 
     return {
         "original_language": original_language,
@@ -367,7 +349,7 @@ async def _fetch_tmdb_data(client: httpx.AsyncClient, doc: dict) -> tuple[dict, 
     return details, providers
 
 
-async def _iter_all_media(db, *, full_rebuild: bool = False):
+async def _iter_all_media(db, *, force_refresh: bool = False):
     for db_index in range(1, db.current_db_index + 1):
         db_key = f"storage_{db_index}"
         if db_key not in db.dbs:
@@ -378,7 +360,7 @@ async def _iter_all_media(db, *, full_rebuild: bool = False):
             async for doc in cursor:
                 doc["db_index"] = db_index
                 doc["media_type"] = "tv" if collection_name == "tv" else "movie"
-                if not full_rebuild and _is_already_synced(doc):
+                if not force_refresh and _is_already_synced(doc):
                     yield collection_name, db_index, doc, True
                 else:
                     yield collection_name, db_index, doc, False
@@ -417,7 +399,7 @@ async def _classify_one(db, client: httpx.AsyncClient, semaphore: asyncio.Semaph
             return doc, classification
         except Exception as e:
             LOGGER.warning(f"Auto catalog classification failed for {doc.get('title')} ({doc.get('tmdb_id')}): {e}")
-            return doc, {"auto_tags": [tag for tag in (doc.get("auto_tags", []) or []) if tag in enabled_names]}
+            return doc, {"auto_tags": doc.get("auto_tags", []) or []}
 
 
 async def sync_single_media(db, *, tmdb_id, media_type: str) -> dict:
@@ -580,7 +562,7 @@ async def _write_status(db, data: dict) -> None:
     )
 
 
-async def run_auto_catalog_sync(db, *, force: bool = False, full_rebuild: bool = False, delay_seconds: int = 0) -> dict:
+async def run_auto_catalog_sync(db, *, force: bool = False, force_refresh: bool = False, delay_seconds: int = 0) -> dict:
     if delay_seconds:
         await asyncio.sleep(delay_seconds)
 
@@ -591,7 +573,7 @@ async def run_auto_catalog_sync(db, *, force: bool = False, full_rebuild: bool =
         started_at = datetime.utcnow()
         await _write_status(db, {
             "running": True,
-            "mode": "full_rebuild" if full_rebuild else "quick_sync",
+            "mode": "sync",
             "message": "Auto catalog sync running...",
             "started_at": started_at,
             "finished_at": None,
@@ -607,7 +589,6 @@ async def run_auto_catalog_sync(db, *, force: bool = False, full_rebuild: bool =
         skipped = 0
         classified = 0
         tagged = 0
-        error_message = None
         settings_configured = await has_auto_catalog_settings(db)
         enabled_names = await _enabled_catalog_names(db)
 
@@ -615,7 +596,7 @@ async def run_auto_catalog_sync(db, *, force: bool = False, full_rebuild: bool =
             finished_at = datetime.utcnow()
             summary = {
                 "running": False,
-                "mode": "full_rebuild" if full_rebuild else "quick_sync",
+                "mode": "sync",
                 "message": "Auto catalog skipped. Save auto catalog selection first.",
                 "scanned": 0,
                 "skipped": 0,
@@ -637,31 +618,32 @@ async def run_auto_catalog_sync(db, *, force: bool = False, full_rebuild: bool =
                 "'Recently Added' will populate; language & OTT catalogs need a TMDB key."
             )
 
+        #----- Group a title's stored/fresh tags into the catalogs it belongs to
+        def collect(media_doc: dict, tags: List[str]) -> None:
+            nonlocal tagged
+            if media_doc.get("exclusive_catalog_id"):
+                return
+            active = [tag for tag in (tags or []) if tag in enabled_names]
+            if active:
+                tagged += 1
+            item = _doc_item(media_doc)
+            for tag in active:
+                catalog_items.setdefault(tag, []).append(item)
+
         try:
             timeout = httpx.Timeout(18.0, connect=10.0)
             limits = httpx.Limits(max_connections=AUTO_SYNC_CONCURRENCY * 2 + 4, max_keepalive_connections=AUTO_SYNC_CONCURRENCY)
             semaphore = asyncio.Semaphore(AUTO_SYNC_CONCURRENCY)
 
-            async def consume_result(media_doc: dict, classification: dict) -> None:
-                nonlocal tagged
-                #----- Titles locked to a single catalog never enter auto catalogs
-                if media_doc.get("exclusive_catalog_id"):
-                    return
-                tags = classification.get("auto_tags", []) or []
-                if tags:
-                    tagged += 1
-                item = _doc_item(media_doc)
-                for tag in tags:
-                    if tag in enabled_names:
-                        catalog_items.setdefault(tag, []).append(item)
-
             async with httpx.AsyncClient(timeout=timeout, limits=limits, follow_redirects=True) as client:
                 pending = []
-                async for _, _, doc, already_synced in _iter_all_media(db, full_rebuild=full_rebuild):
+                async for _, _, doc, already_synced in _iter_all_media(db, force_refresh=force_refresh):
                     scanned += 1
 
-                    if already_synced and not full_rebuild:
+                    #----- Already-tagged titles skip TMDB; reuse their stored tags
+                    if already_synced:
                         skipped += 1
+                        collect(doc, doc.get("auto_tags") or [])
                         continue
 
                     classified += 1
@@ -669,11 +651,11 @@ async def run_auto_catalog_sync(db, *, force: bool = False, full_rebuild: bool =
 
                     if len(pending) >= 40:
                         for media_doc, classification in await asyncio.gather(*pending):
-                            await consume_result(media_doc, classification)
+                            collect(media_doc, classification.get("auto_tags"))
                         pending = []
                         await _write_status(db, {
                             "running": True,
-                            "mode": "full_rebuild" if full_rebuild else "quick_sync",
+                            "mode": "sync",
                             "started_at": started_at,
                             "scanned": scanned,
                             "skipped": skipped,
@@ -684,17 +666,15 @@ async def run_auto_catalog_sync(db, *, force: bool = False, full_rebuild: bool =
 
                 if pending:
                     for media_doc, classification in await asyncio.gather(*pending):
-                        await consume_result(media_doc, classification)
+                        collect(media_doc, classification.get("auto_tags"))
 
-            if full_rebuild:
-                await _rebuild_auto_catalogs(db, catalog_items, enabled_names)
-            else:
-                await _flush_quick_items(db, catalog_items)
+            #----- Always rebuild fully so removed titles / disabled catalogs are pruned
+            await _rebuild_auto_catalogs(db, catalog_items, enabled_names)
 
             finished_at = datetime.utcnow()
             summary = {
                 "running": False,
-                "mode": "full_rebuild" if full_rebuild else "quick_sync",
+                "mode": "sync",
                 "scanned": scanned,
                 "skipped": skipped,
                 "classified": classified,
@@ -709,11 +689,10 @@ async def run_auto_catalog_sync(db, *, force: bool = False, full_rebuild: bool =
             LOGGER.info(f"Auto catalog sync complete: {summary}")
             return summary
         except Exception as exc:
-            error_message = str(exc)
             finished_at = datetime.utcnow()
             summary = {
                 "running": False,
-                "mode": "full_rebuild" if full_rebuild else "quick_sync",
+                "mode": "sync",
                 "scanned": scanned,
                 "skipped": skipped,
                 "classified": classified,
@@ -722,14 +701,14 @@ async def run_auto_catalog_sync(db, *, force: bool = False, full_rebuild: bool =
                 "enabled_catalogs": sorted(enabled_names),
                 "started_at": started_at,
                 "finished_at": finished_at,
-                "error": error_message,
+                "error": str(exc),
             }
             await _write_status(db, summary)
             LOGGER.error(f"Auto catalog sync failed: {summary}")
             raise
 
 
-async def start_auto_catalog_sync_background(db, *, full_rebuild: bool = False, force: bool = False, delay_seconds: int = 0) -> dict:
+async def start_auto_catalog_sync_background(db, *, force_refresh: bool = False, force: bool = False, delay_seconds: int = 0) -> dict:
     global _auto_sync_task
 
     if _auto_sync_lock.locked() or (_auto_sync_task and not _auto_sync_task.done()):
@@ -738,7 +717,7 @@ async def start_auto_catalog_sync_background(db, *, full_rebuild: bool = False, 
     started_at = datetime.utcnow()
     await _write_status(db, {
         "running": True,
-        "mode": "full_rebuild" if full_rebuild else "quick_sync",
+        "mode": "sync",
         "message": "Auto catalog sync queued...",
         "started_at": started_at,
         "finished_at": None,
@@ -751,15 +730,15 @@ async def start_auto_catalog_sync_background(db, *, full_rebuild: bool = False, 
 
     async def runner():
         try:
-            await run_auto_catalog_sync(db, force=force, full_rebuild=full_rebuild, delay_seconds=delay_seconds)
+            await run_auto_catalog_sync(db, force=force, force_refresh=force_refresh, delay_seconds=delay_seconds)
         except Exception:
             LOGGER.exception("Background auto catalog sync crashed")
 
     _auto_sync_task = asyncio.create_task(runner())
     return {
         "running": True,
-        "message": "Full rebuild started in background." if full_rebuild else "Quick sync started in background.",
-        "mode": "full_rebuild" if full_rebuild else "quick_sync",
+        "message": "Sync started in background.",
+        "mode": "sync",
         "started_at": started_at,
     }
 

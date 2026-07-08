@@ -1186,9 +1186,9 @@ async def remove_custom_catalog_item_api(
     return {"message": "Removed from catalog.", "removed": True}
 
 
-async def auto_sync_custom_catalogs_api(full_rebuild: bool = False):
+async def auto_sync_custom_catalogs_api(force_refresh: bool = False):
     try:
-        result = await start_auto_catalog_sync_background(db, force=True, full_rebuild=full_rebuild)
+        result = await start_auto_catalog_sync_background(db, force=True, force_refresh=force_refresh)
         return {"message": result.get("message", "Auto sync started."), "result": result}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

@@ -400,8 +400,7 @@
         </p>
       </div>
       <div class="flex flex-col sm:flex-row gap-3">
-        <button id="auto-sync-btn" onclick="runAutoSync(false)" class="btn-ui btn-primary lg:w-auto">⚡ Quick Sync</button>
-        <button id="auto-rebuild-btn" onclick="runAutoSync(true)" class="btn-ui btn-ghost lg:w-auto">♻️ Full Rebuild</button>
+        <button id="auto-sync-btn" onclick="runAutoSync()" class="btn-ui btn-primary lg:w-auto">⚡ Sync</button>
       </div>
     </div>
 
@@ -409,7 +408,7 @@
       <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
         <div>
           <h3 class="section-title text-xl">Choose Auto Catalogs</h3>
-          <p class="muted text-sm mt-1">Save your selection, then run Full Rebuild once to apply.</p>
+          <p class="muted text-sm mt-1">Save your selection, then press Sync to apply.</p>
         </div>
         <button id="save-auto-settings-btn" onclick="saveAutoCatalogSettings()" class="btn-ui btn-ghost md:w-auto">💾 Save Selection</button>
       </div>
@@ -1026,7 +1025,7 @@ async function saveAutoCatalogSettings() {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.detail || 'Failed to save settings');
-    showToast('Auto catalog selection saved. Run Full Rebuild once to remove disabled catalog items.', 'success', 'Saved');
+    showToast('Auto catalog selection saved. Press Sync to apply the changes.', 'success', 'Saved');
     await loadAutoCatalogSettings();
   } catch (error) {
     showToast(error.message || 'Failed to save settings', 'error', 'Error');
@@ -1040,31 +1039,27 @@ let autoSyncPollTimer = null;
 async function loadAutoSyncStatus() {
   const pill = document.getElementById('auto-sync-status');
   const syncBtn = document.getElementById('auto-sync-btn');
-  const rebuildBtn = document.getElementById('auto-rebuild-btn');
   if (!pill) return;
   try {
     const res = await fetch('/api/custom-catalogs/auto-sync/status');
     const data = await res.json().catch(() => ({}));
     const status = data.status || {};
-    const mode = status.mode === 'full_rebuild' ? 'Full rebuild' : 'Quick sync';
 
     if (status.running) {
-      pill.textContent = `${mode} running: ${status.scanned || 0} scanned · ${status.classified || 0} checked`;
+      pill.textContent = `Sync running: ${status.scanned || 0} scanned · ${status.classified || 0} checked`;
       if (syncBtn) syncBtn.disabled = true;
-      if (rebuildBtn) rebuildBtn.disabled = true;
       if (!autoSyncPollTimer) {
         autoSyncPollTimer = setInterval(loadAutoSyncStatus, 3000);
       }
     } else {
       if (status.finished_at) {
         pill.textContent = status.error
-          ? `${mode} failed`
-          : `${mode}: ${status.classified || 0} checked · ${status.skipped || 0} skipped`;
+          ? 'Sync failed'
+          : `Synced: ${status.classified || 0} checked · ${status.skipped || 0} reused`;
       } else {
-        pill.textContent = 'Quick sync runs on boot';
+        pill.textContent = 'Sync runs on boot';
       }
       if (syncBtn) syncBtn.disabled = false;
-      if (rebuildBtn) rebuildBtn.disabled = false;
       if (autoSyncPollTimer) {
         clearInterval(autoSyncPollTimer);
         autoSyncPollTimer = null;
@@ -1076,24 +1071,20 @@ async function loadAutoSyncStatus() {
   }
 }
 
-async function runAutoSync(fullRebuild = false) {
-  const btn = document.getElementById(fullRebuild ? 'auto-rebuild-btn' : 'auto-sync-btn');
-  const otherBtn = document.getElementById(fullRebuild ? 'auto-sync-btn' : 'auto-rebuild-btn');
+async function runAutoSync() {
+  const btn = document.getElementById('auto-sync-btn');
   const old = btn.textContent;
   btn.disabled = true;
-  if (otherBtn) otherBtn.disabled = true;
-  btn.textContent = fullRebuild ? '⏳ Rebuilding...' : '⏳ Syncing...';
+  btn.textContent = '⏳ Syncing...';
   try {
-    const url = `/api/custom-catalogs/auto-sync?full_rebuild=${fullRebuild ? 'true' : 'false'}`;
-    const res = await fetch(url, { method: 'POST' });
+    const res = await fetch('/api/custom-catalogs/auto-sync', { method: 'POST' });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.detail || 'Auto sync failed');
+    if (!res.ok) throw new Error(data.detail || 'Sync failed');
     const result = data.result || {};
-    const title = fullRebuild ? 'Full rebuild started' : 'Quick sync started';
-    showToast(result.message || data.message || 'Auto sync started in background.', 'info', title);
+    showToast(result.message || data.message || 'Sync started in background.', 'info', 'Sync started');
     await loadAutoSyncStatus();
   } catch (error) {
-    showToast(error.message || 'Auto sync failed', 'error', 'Error');
+    showToast(error.message || 'Sync failed', 'error', 'Error');
   } finally {
     btn.textContent = old;
     await loadAutoSyncStatus();

@@ -400,10 +400,10 @@ async def search_catalog_media(
 
 @app.post("/api/custom-catalogs/auto-sync")
 async def auto_sync_custom_catalogs(
-    full_rebuild: bool = Query(False),
+    force_refresh: bool = Query(False),
     _: bool = Depends(require_auth)
 ):
-    return await auto_sync_custom_catalogs_api(full_rebuild)
+    return await auto_sync_custom_catalogs_api(force_refresh)
 
 @app.get("/api/custom-catalogs/auto-sync/status")
 async def auto_catalog_sync_status(_: bool = Depends(require_auth)):
