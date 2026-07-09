@@ -673,6 +673,30 @@
         </div>
     </div>
 
+    <!-- ── Backup & Restore ───────────────────────────────────────────── -->
+    <div class="settings-card">
+        <h2><i class="fa-solid fa-box-archive"></i> Backup &amp; Restore</h2>
+        <p style="color:var(--text-sec);font-size:0.85rem;margin-bottom:1rem">
+            Export your settings, custom catalogs, subscription plans and access tokens as a JSON file,
+            or restore from one. Your admin password and session secret are never included — but the file
+            can still hold sensitive data (bot tokens, keys), so keep it safe.
+        </p>
+        <div style="display:flex;flex-wrap:wrap;gap:0.75rem;align-items:center">
+            <a href="/api/admin/backup/export" class="btn-ui btn-ghost" download>
+                <i class="fa-solid fa-download"></i> Download Backup
+            </a>
+            <input type="file" id="restore-file" accept="application/json,.json" style="display:none" onchange="restoreBackup(this)">
+            <button type="button" class="btn-ui btn-ghost" onclick="document.getElementById('restore-file').click()">
+                <i class="fa-solid fa-upload"></i> Restore Backup
+            </button>
+        </div>
+        <p style="color:var(--text-sec);font-size:0.78rem;margin-top:0.75rem">
+            <i class="fa-solid fa-triangle-exclamation" style="color:var(--warning,#f59e0b)"></i>
+            Restoring replaces catalogs, plans and tokens with the file's contents. Restart the app afterwards
+            to fully apply bot-token and database changes.
+        </p>
+    </div>
+
 </div><!-- /settings-root -->
 
 <!-- ── Restart overlay ──────────────────────────────────────────────────── -->
@@ -884,6 +908,28 @@ async function saveSettings() {
     } finally {
         btn.disabled  = false;
         label.textContent = 'Save Settings';
+    }
+}
+
+/* ── Backup & Restore ───────────────────────────────────────────────────── */
+async function restoreBackup(input) {
+    const file = input.files && input.files[0];
+    input.value = '';
+    if (!file) return;
+    if (!confirm('Restore this backup? It will replace your catalogs, plans and tokens.')) return;
+    try {
+        const payload = JSON.parse(await file.text());
+        const res = await fetch('/api/admin/backup/import', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Restore failed');
+        showToast(data.message || 'Backup restored.', 'success', 'Restored');
+        setTimeout(() => location.reload(), 1300);
+    } catch (err) {
+        showToast(err.message || 'Invalid backup file.', 'error', 'Error');
     }
 }
 

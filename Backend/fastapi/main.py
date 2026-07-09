@@ -26,6 +26,8 @@ from Backend.fastapi.routes.api_routes import (
     delete_movie_quality_api,
     delete_request_api,
     delete_subscription_plan_api,
+    export_config_api,
+    import_config_api,
     delete_tv_episode_api,
     delete_tv_quality_api,
     delete_tv_season_api,
@@ -524,6 +526,19 @@ async def admin_health_report(_: bool = Depends(require_auth)):
 @app.get("/api/admin/setup-status")
 async def admin_setup_status(_: bool = Depends(require_auth)):
     return await setup_status_api()
+
+@app.get("/api/admin/backup/export")
+async def admin_backup_export(_: bool = Depends(require_auth)):
+    from fastapi.responses import JSONResponse
+    data = await export_config_api()
+    return JSONResponse(
+        content=data,
+        headers={"Content-Disposition": 'attachment; filename="telegram-stremio-backup.json"'},
+    )
+
+@app.post("/api/admin/backup/import")
+async def admin_backup_import(payload: dict, _: bool = Depends(require_auth)):
+    return await import_config_api(payload)
 
 @app.get("/api/admin/logs")
 async def admin_logs(lines: int = Query(300, ge=1, le=2000), _: bool = Depends(require_auth)):

@@ -21,6 +21,7 @@ from Backend.helper.auto_catalog import (
     start_single_media_catalog_sync,
     update_auto_catalog_settings,
 )
+from Backend.helper.backup import export_config, import_config
 from Backend.helper.custom_dl import ByteStreamer, _speed_test_single_client, run_speed_test
 from Backend.helper.encrypt import decode_string, encode_string
 from Backend.helper.health import run_health_checks
@@ -1585,6 +1586,23 @@ async def setup_status_api() -> dict:
     return {"status": "success", "data": {
         "checks": checks, "done": done, "total": len(checks), "complete": done == len(checks),
     }}
+
+
+#----- Config backup export (settings minus secrets + catalogs, plans, tokens)
+async def export_config_api() -> dict:
+    return await export_config()
+
+
+#----- Config backup restore
+async def import_config_api(payload: dict) -> dict:
+    try:
+        result = await import_config(payload)
+        return {"status": "success", "result": result, "message": "Backup restored successfully."}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        LOGGER.error(f"Config import error: {e}")
+        return {"status": "error", "message": str(e)}
 
 
 #----- Lightweight liveness probe; start_time changes on every boot (restart detection)
