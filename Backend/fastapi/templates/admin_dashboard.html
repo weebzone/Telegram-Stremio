@@ -402,6 +402,13 @@
       .mini-dot { width: .55rem; height: .55rem; border-radius: 999px; display: inline-block; }
       .hz-usebar { height: 5px; border-radius: 999px; background: var(--hairline, rgba(255,255,255,0.12)); overflow: hidden; width: 90px; margin-top: 3px; margin-left: auto; }
       .hz-usebar > span { display: block; height: 100%; background: var(--primary); }
+      .bot-table-wrap { overflow-x: auto; }
+      .bot-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+      .bot-table th { text-align: center; font-size: 0.68rem; text-transform: uppercase; letter-spacing: .05em; color: var(--text-sec); padding: 0.55rem 0.75rem; border-bottom: 1px solid var(--hairline, rgba(255,255,255,0.12)); }
+      .bot-table th:first-child { text-align: left; }
+      .bot-table td { padding: 0.6rem 0.75rem; text-align: center; border-bottom: 1px solid var(--hairline, rgba(255,255,255,0.06)); }
+      .bot-table tr:last-child td { border-bottom: none; }
+      .bot-table .bt-name { text-align: left; font-weight: 700; display: flex; align-items: center; gap: 0.5rem; }
       .ins-stat { background: var(--surface, rgba(255,255,255,0.03)); border: 1px solid var(--hairline, rgba(255,255,255,0.08)); border-radius: 1rem; padding: 0.9rem 1rem; text-align: center; }
       .ins-v { font-size: 1.5rem; font-weight: 800; }
       .ins-l { font-size: 0.7rem; text-transform: uppercase; letter-spacing: .05em; color: var(--text-sec); margin-top: 0.2rem; }
@@ -551,36 +558,23 @@
             document.getElementById('stat-bot-count').textContent = data.total_bots ?? '-';
 
             const workloadsWrap = document.getElementById('stat-workloads');
-
-            if (data.bot_workloads && data.bot_workloads.length > 0) {
-                let html = '<div class="bot-grid scroll-cap">';
-                data.bot_workloads.forEach(b => {
-                    const failCls = Number(b.failures ?? 0) > 0 ? 'text-red-400' : 'text-text';
-                    html += `
-                        <div class="bot-card">
-                            <div class="flex items-center justify-between gap-2 mb-3">
-                                <div class="font-bold text-text truncate">${escapeHtml(b.display_name)}</div>
-                                <span class="${getStatusBadge(b.status)}">${escapeHtml(b.status)}</span>
-                            </div>
-                            <div class="grid grid-cols-3 gap-2 text-center">
-                                <div>
-                                    <div class="bot-stat-num text-text">${b.current_load ?? 0}</div>
-                                    <div class="bot-stat-label">Streams</div>
-                                </div>
-                                <div>
-                                    <div class="bot-stat-num text-text">${Number(b.avg_mbps ?? 0).toFixed(1)}</div>
-                                    <div class="bot-stat-label">MB/s</div>
-                                </div>
-                                <div>
-                                    <div class="bot-stat-num ${failCls}">${b.failures ?? 0}</div>
-                                    <div class="bot-stat-label">Fails</div>
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                });
-                html += '</div>';
-                workloadsWrap.innerHTML = html;
+            const bots = data.bot_workloads || [];
+            if (bots.length) {
+                const rows = bots.map(b => {
+                    const idx = Number(b.client_index);
+                    const name = idx < 0 ? 'Userbot' : ('Bot ' + (idx + 1));
+                    const dc = (b.dc ?? b.dc_id);
+                    const color = b.status === 'healthy' ? '#22c55e' : (b.status === 'degraded' ? '#f59e0b' : '#ef4444');
+                    return `<tr>
+                        <td class="bt-name"><span class="mini-dot" style="background:${color}"></span> ${escapeHtml(name)}</td>
+                        <td>${dc != null ? 'DC ' + escapeHtml(dc) : '—'}</td>
+                        <td>${escapeHtml(b.current_load ?? 0)}</td>
+                        <td>${Number(b.avg_mbps ?? 0).toFixed(1)}</td>
+                    </tr>`;
+                }).join('');
+                workloadsWrap.innerHTML = `<div class="bot-table-wrap"><table class="bot-table">
+                    <thead><tr><th>Client</th><th>DC</th><th>Load</th><th>Avg MB/s</th></tr></thead>
+                    <tbody>${rows}</tbody></table></div>`;
             } else {
                 workloadsWrap.innerHTML = '<div class="empty-state">No bot data available</div>';
             }

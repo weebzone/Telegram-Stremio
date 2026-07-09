@@ -51,6 +51,7 @@ from Backend.logger import LOGGER
 from Backend.pyrofork.bot import (
     StreamBot,
     client_avg_mbps,
+    client_dc_map,
     client_failures,
     multi_clients,
     work_loads,
@@ -439,7 +440,8 @@ async def get_admin_stats_api() -> dict:
 
         bot_stats.append({
             "client_index": client_index,
-            "display_name": f"Bot {client_index + 1}",
+            "display_name": "Userbot" if client_index < 0 else f"Bot {client_index + 1}",
+            "dc": client_dc_map.get(client_index),
             "current_load": load,
             "failures": failures,
             "avg_mbps": round(mbps, 2),

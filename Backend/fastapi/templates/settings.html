@@ -4,6 +4,25 @@
 {% block content %}
 
 <style>
+/* ── Backup & Restore ────────────────────────────────────────────────────── */
+.bk-desc { color: var(--text-sec); font-size: 0.85rem; margin-bottom: 1rem; }
+.bk-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+@media (max-width: 520px) { .bk-actions { grid-template-columns: 1fr; } }
+.bk-btn { display: flex; align-items: center; gap: 0.85rem; padding: 0.9rem 1.1rem; border-radius: 0.9rem; cursor: pointer;
+          text-decoration: none; text-align: left; transition: all .15s;
+          border: 1px solid var(--border); background: color-mix(in srgb, var(--card) 92%, var(--bg)); }
+.bk-btn:hover { transform: translateY(-1px); border-color: var(--primary); }
+.bk-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+.bk-ic { width: 2.5rem; height: 2.5rem; border-radius: 0.7rem; display: flex; align-items: center; justify-content: center; font-size: 1.05rem; flex-shrink: 0; }
+.bk-export .bk-ic { background: color-mix(in srgb, var(--primary) 18%, transparent); color: var(--primary); }
+.bk-import .bk-ic { background: #22c55e22; color: #22c55e; }
+.bk-txt { display: flex; flex-direction: column; line-height: 1.25; }
+.bk-txt b { font-size: 0.95rem; color: var(--text); }
+.bk-txt small { font-size: 0.75rem; color: var(--text-sec); }
+.bk-status { margin-top: 0.9rem; font-size: 0.85rem; color: var(--text-sec); display: flex; align-items: center; gap: 0.5rem; }
+.bk-warn { color: var(--text-sec); font-size: 0.78rem; margin-top: 0.85rem; }
+.bk-warn i { color: var(--warning, #f59e0b); }
+
 /* ── Toggle switch ───────────────────────────────────────────────────────── */
 .toggle-wrap { display: flex; align-items: center; gap: 0.75rem; cursor: pointer; }
 .toggle-input { position: absolute; opacity: 0; width: 0; height: 0; }
@@ -676,24 +695,30 @@
     <!-- ── Backup & Restore ───────────────────────────────────────────── -->
     <div class="settings-card">
         <h2><i class="fa-solid fa-box-archive"></i> Backup &amp; Restore</h2>
-        <p style="color:var(--text-sec);font-size:0.85rem;margin-bottom:1rem">
-            Export your settings, custom catalogs, subscription plans and access tokens as a JSON file,
-            or restore from one. Your admin password and session secret are never included — but the file
-            can still hold sensitive data (bot tokens, keys), so keep it safe.
+        <p class="bk-desc">
+            Export everything — settings, custom catalogs, subscription plans and access tokens — to a JSON file,
+            or restore from one. Passwords and the session secret are never exported, but the file can hold bot
+            tokens and database URIs, so keep it private.
         </p>
-        <div style="display:flex;flex-wrap:wrap;gap:0.75rem;align-items:center">
-            <a href="/api/admin/backup/export" class="btn-ui btn-ghost" download>
-                <i class="fa-solid fa-download"></i> Download Backup
+
+        <div class="bk-actions">
+            <a href="/api/admin/backup/export" class="bk-btn bk-export" download>
+                <span class="bk-ic"><i class="fa-solid fa-cloud-arrow-down"></i></span>
+                <span class="bk-txt"><b>Export</b><small>Download backup</small></span>
             </a>
             <input type="file" id="restore-file" accept="application/json,.json" style="display:none" onchange="restoreBackup(this)">
-            <button type="button" class="btn-ui btn-ghost" onclick="document.getElementById('restore-file').click()">
-                <i class="fa-solid fa-upload"></i> Restore Backup
+            <button type="button" id="restore-btn" class="bk-btn bk-import"
+                    onclick="document.getElementById('restore-file').click()">
+                <span class="bk-ic"><i class="fa-solid fa-cloud-arrow-up"></i></span>
+                <span class="bk-txt"><b>Import</b><small>Restore from file</small></span>
             </button>
         </div>
-        <p style="color:var(--text-sec);font-size:0.78rem;margin-top:0.75rem">
-            <i class="fa-solid fa-triangle-exclamation" style="color:var(--warning,#f59e0b)"></i>
-            Restoring replaces catalogs, plans and tokens with the file's contents. Restart the app afterwards
-            to fully apply bot-token and database changes.
+
+        <div id="restore-status" class="bk-status" style="display:none"></div>
+
+        <p class="bk-warn">
+            <i class="fa-solid fa-triangle-exclamation"></i>
+            Restoring replaces your catalogs, plans and tokens, and reconnects extra databases and bot tokens from the file.
         </p>
     </div>
 
@@ -916,7 +941,15 @@ async function restoreBackup(input) {
     const file = input.files && input.files[0];
     input.value = '';
     if (!file) return;
-    if (!confirm('Restore this backup? It will replace your catalogs, plans and tokens.')) return;
+    if (!confirm('Restore this backup? It will replace your catalogs, plans and tokens, and reconnect databases / bot tokens.')) return;
+
+    const btn = document.getElementById('restore-btn');
+    const status = document.getElementById('restore-status');
+    if (btn) btn.disabled = true;
+    if (status) {
+        status.style.display = 'flex';
+        status.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Importing — connecting databases and starting clients…';
+    }
     try {
         const payload = JSON.parse(await file.text());
         const res = await fetch('/api/admin/backup/import', {
@@ -926,10 +959,13 @@ async function restoreBackup(input) {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || 'Restore failed');
+        if (status) status.innerHTML = '<i class="fa-solid fa-circle-check" style="color:#22c55e"></i> Imported successfully — reloading…';
         showToast(data.message || 'Backup restored.', 'success', 'Restored');
-        setTimeout(() => location.reload(), 1300);
+        setTimeout(() => location.reload(), 1500);
     } catch (err) {
+        if (status) status.innerHTML = '<i class="fa-solid fa-circle-xmark" style="color:#ef4444"></i> ' + escapeHtmlAttr(err.message || 'Invalid backup file.');
         showToast(err.message || 'Invalid backup file.', 'error', 'Error');
+        if (btn) btn.disabled = false;
     }
 }
 

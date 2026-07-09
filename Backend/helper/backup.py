@@ -7,8 +7,9 @@ from Backend import __version__, db
 from Backend.helper.settings_manager import SettingsManager
 from Backend.logger import LOGGER
 
-#----- Never export/restore credentials or host-specific database topology
-_SETTINGS_EXCLUDE = {"admin_password", "session_secret", "extra_databases"}
+#----- Never export/restore credentials; everything else (incl. extra DBs and
+#----- bot tokens) is included so a backup can fully migrate a deployment.
+_SETTINGS_EXCLUDE = {"admin_password", "session_secret"}
 
 #----- backup section -> tracking collection
 _COLLECTIONS = {
@@ -73,14 +74,16 @@ async def import_config(payload: dict) -> dict:
 
     result = {}
 
-    #----- Settings: merge importable keys, preserve password/secret/host DBs
+    #----- Settings: apply via SettingsManager.update so extra databases connect
+    #----- and multi-token clients start (password/secret are preserved).
     settings = payload.get("settings")
     if isinstance(settings, dict):
         clean = {k: v for k, v in settings.items() if k not in _SETTINGS_EXCLUDE and k != "_id"}
         if clean:
-            await db.save_settings({**SettingsManager.current().to_dict(), **clean})
-            await SettingsManager.reload(db)
-        result["settings"] = f"{len(clean)} keys"
+            reinit = await SettingsManager.update(db, clean)
+            result["settings"] = f"{len(clean)} keys applied"
+            if reinit:
+                result["reinit"] = reinit
 
     #----- Collections: replace with the backup's contents
     for label, coll in _COLLECTIONS.items():
