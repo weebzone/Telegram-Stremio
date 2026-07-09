@@ -41,7 +41,7 @@ from Backend.helper.metadata import (
     search_movie_candidates,
     search_tv_candidates,
 )
-from Backend.helper.passwords import hash_password
+from Backend.helper.passwords import hash_password, verify_password
 from Backend.helper.pyro import get_readable_file_size, get_readable_time
 from Backend.helper.scan_manager import dbcheck_manager, scan_manager
 from Backend.helper.settings_manager import SettingsManager
@@ -1566,6 +1566,25 @@ async def get_db_stats_api() -> dict:
     except Exception as e:
         LOGGER.error(f"[Stats] Error: {e}")
         return {"status": "error", "message": str(e)}
+
+
+#----- First-run setup checklist: what's configured vs still missing
+async def setup_status_api() -> dict:
+    s = SettingsManager.current()
+    checks = [
+        {"key": "tmdb", "label": "TMDB API key", "done": bool(s.tmdb_api),
+         "hint": "Powers automatic poster & metadata matching."},
+        {"key": "channels", "label": "AUTH channel added", "done": len(s.auth_channels) > 0,
+         "hint": "The channel(s) the bot indexes and streams from."},
+        {"key": "base_url", "label": "Base URL set", "done": bool(s.base_url),
+         "hint": "Stremio uses this public address to reach your streams."},
+        {"key": "password", "label": "Admin password changed", "done": not verify_password("admin", s.admin_password),
+         "hint": "Change the default admin / admin login for security."},
+    ]
+    done = sum(1 for c in checks if c["done"])
+    return {"status": "success", "data": {
+        "checks": checks, "done": done, "total": len(checks), "complete": done == len(checks),
+    }}
 
 
 #----- Lightweight liveness probe; start_time changes on every boot (restart detection)

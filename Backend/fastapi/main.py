@@ -50,6 +50,7 @@ from Backend.fastapi.routes.api_routes import (
     get_tools_channels_api,
     health_api,
     health_report_api,
+    setup_status_api,
     link_token_user_api,
     list_custom_catalogs_api,
     list_media_api,
@@ -519,6 +520,10 @@ async def admin_health_view(request: Request, _: bool = Depends(require_auth)):
 @app.get("/api/admin/health/report")
 async def admin_health_report(_: bool = Depends(require_auth)):
     return await health_report_api()
+
+@app.get("/api/admin/setup-status")
+async def admin_setup_status(_: bool = Depends(require_auth)):
+    return await setup_status_api()
 
 @app.get("/api/admin/logs")
 async def admin_logs(lines: int = Query(300, ge=1, le=2000), _: bool = Depends(require_auth)):
