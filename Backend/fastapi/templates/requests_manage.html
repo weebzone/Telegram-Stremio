@@ -40,6 +40,17 @@
   .btn-del { background: transparent; color: var(--text-sec); border: 1px solid var(--hairline, rgba(255,255,255,0.1)); }
   .rq-btn:hover { filter: brightness(1.25); }
   .rq-empty { text-align: center; padding: 3rem 1rem; color: var(--text-sec); }
+  .rq-toolbtn { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.55rem 1.1rem; border-radius: 0.7rem;
+                font-weight: 700; font-size: 0.85rem; cursor: pointer; text-decoration: none; transition: all .15s;
+                border: 1px solid var(--hairline, rgba(255,255,255,0.12)); background: var(--surface, rgba(255,255,255,0.04)); color: var(--text); }
+  .rq-toolbtn:hover { border-color: var(--primary); color: var(--primary); }
+  .rq-toolbtn.primary { background: var(--primary); color: var(--bg); border-color: var(--primary); }
+  .rq-toolbtn.primary:hover { filter: brightness(1.1); color: var(--bg); }
+  .rq-pager { display: flex; align-items: center; justify-content: center; gap: 0.9rem; margin-top: 1.75rem; }
+  .rq-pager button { border: 1px solid var(--hairline, rgba(255,255,255,0.12)); background: transparent; color: var(--text);
+                     border-radius: 0.6rem; padding: 0.45rem 1rem; cursor: pointer; font-weight: 700; }
+  .rq-pager button:disabled { opacity: 0.35; cursor: not-allowed; }
+  .rq-pager .pageinfo { color: var(--text-sec); font-size: 0.85rem; font-weight: 600; }
 </style>
 
 <div class="rq-shell">
@@ -48,7 +59,10 @@
       <h1 class="section-title text-2xl sm:text-3xl">Content Requests</h1>
       <p class="muted text-sm mt-1">Titles your users requested from the public request page.</p>
     </div>
-    <a href="/request" target="_blank" class="btn-ui btn-ghost"><i class="fa-solid fa-arrow-up-right-from-square"></i> Open public page</a>
+    <div class="flex items-center gap-2">
+      <button onclick="loadRequests()" class="rq-toolbtn"><i class="fa-solid fa-rotate"></i> Refresh</button>
+      <a href="/request" target="_blank" class="rq-toolbtn primary"><i class="fa-solid fa-arrow-up-right-from-square"></i> Public page</a>
+    </div>
   </div>
 
   <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
@@ -56,7 +70,6 @@
       <button class="rq-tab active" data-type="movie" onclick="setType(this,'movie')">🎬 Movies <span id="cnt-movie">0</span></button>
       <button class="rq-tab" data-type="tv" onclick="setType(this,'tv')">📺 TV Shows <span id="cnt-tv">0</span></button>
     </div>
-    <button onclick="loadRequests()" class="btn-ui btn-ghost"><i class="fa-solid fa-rotate"></i> Refresh</button>
   </div>
 
   <div class="rq-filters mb-5">
@@ -68,12 +81,15 @@
   </div>
 
   <div id="rq-grid" class="rq-grid"></div>
+  <div id="rq-pager" class="rq-pager"></div>
 </div>
 
 <script>
 let allRequests = [];
 let curType = 'movie';
 let curStatus = '';
+let curPage = 1;
+const PER_PAGE = 18;
 
 function esc(s) {
   return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;')
@@ -82,15 +98,22 @@ function esc(s) {
 
 function setType(btn, type) {
   curType = type;
+  curPage = 1;
   document.querySelectorAll('.rq-tab').forEach(t => t.classList.remove('active'));
   btn.classList.add('active');
   render();
 }
 function setStatusFilter(btn, status) {
   curStatus = status;
+  curPage = 1;
   document.querySelectorAll('.rq-chip').forEach(t => t.classList.remove('active'));
   btn.classList.add('active');
   render();
+}
+function goPage(delta) {
+  curPage += delta;
+  render();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 function idLine(r) {
@@ -139,10 +162,25 @@ function render() {
   let items = curType === 'tv' ? tv : movies;
   if (curStatus) items = items.filter(r => r.status === curStatus);
 
+  const totalPages = Math.max(1, Math.ceil(items.length / PER_PAGE));
+  if (curPage > totalPages) curPage = totalPages;
+  if (curPage < 1) curPage = 1;
+  const pageItems = items.slice((curPage - 1) * PER_PAGE, curPage * PER_PAGE);
+
   const grid = document.getElementById('rq-grid');
-  grid.innerHTML = items.length
-    ? items.map(cardHtml).join('')
+  grid.innerHTML = pageItems.length
+    ? pageItems.map(cardHtml).join('')
     : `<div class="rq-empty" style="grid-column:1/-1"><i class="fa-solid fa-inbox" style="font-size:2rem;opacity:.5"></i><p class="mt-2">No ${curStatus || ''} ${curType === 'tv' ? 'TV' : 'movie'} requests.</p></div>`;
+
+  const pager = document.getElementById('rq-pager');
+  if (items.length > PER_PAGE) {
+    pager.innerHTML =
+      `<button onclick="goPage(-1)" ${curPage <= 1 ? 'disabled' : ''}><i class="fa-solid fa-chevron-left"></i> Prev</button>
+       <span class="pageinfo">Page ${curPage} of ${totalPages} · ${items.length} total</span>
+       <button onclick="goPage(1)" ${curPage >= totalPages ? 'disabled' : ''}>Next <i class="fa-solid fa-chevron-right"></i></button>`;
+  } else {
+    pager.innerHTML = '';
+  }
 }
 
 async function loadRequests() {
