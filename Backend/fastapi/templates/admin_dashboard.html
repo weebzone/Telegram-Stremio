@@ -377,6 +377,43 @@
         </div>
     </div>
 
+    <style>
+      .ins-stat { background: var(--surface, rgba(255,255,255,0.03)); border: 1px solid var(--hairline, rgba(255,255,255,0.08)); border-radius: 1rem; padding: 0.9rem 1rem; text-align: center; }
+      .ins-v { font-size: 1.5rem; font-weight: 800; }
+      .ins-l { font-size: 0.7rem; text-transform: uppercase; letter-spacing: .05em; color: var(--text-sec); margin-top: 0.2rem; }
+      .ins-col { background: var(--surface, rgba(255,255,255,0.03)); border: 1px solid var(--hairline, rgba(255,255,255,0.08)); border-radius: 1rem; padding: 1rem; }
+      .ins-h { font-weight: 800; font-size: 0.95rem; margin-bottom: 0.85rem; }
+      .ins-list { display: flex; flex-direction: column; gap: 0.55rem; }
+      .ins-row { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; font-size: 0.85rem; }
+      .ins-row .name { color: var(--text); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .ins-row .val { color: var(--text-sec); font-size: 0.75rem; flex-shrink: 0; }
+      .ins-bar { height: 6px; border-radius: 999px; background: var(--primary); opacity: 0.75; margin-top: 3px; }
+      .ins-empty { color: var(--text-sec); font-size: 0.82rem; }
+    </style>
+
+    <div class="glass-card rounded-3xl overflow-hidden mb-6 sm:mb-8">
+        <div class="px-5 sm:px-6 lg:px-8 py-4 sm:py-5 border-b border-hairline bg-surface flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+                <h2 class="section-title text-xl sm:text-2xl">Streaming Insights</h2>
+                <p class="muted text-sm mt-1">Most-watched titles, heaviest viewers and daily activity.</p>
+            </div>
+            <span class="pill">Overview</span>
+        </div>
+        <div class="p-4 sm:p-5 lg:p-6">
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+                <div class="ins-stat"><div class="ins-v" id="ins-total-streams">—</div><div class="ins-l">Total Streams</div></div>
+                <div class="ins-stat"><div class="ins-v" id="ins-total-data">—</div><div class="ins-l">Data Transferred</div></div>
+                <div class="ins-stat"><div class="ins-v" id="ins-avg-speed">—</div><div class="ins-l">Avg Speed</div></div>
+                <div class="ins-stat"><div class="ins-v" id="ins-active-users">—</div><div class="ins-l">Active Viewers</div></div>
+            </div>
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                <div class="ins-col"><h3 class="ins-h">🔥 Top Titles</h3><div id="ins-top-titles" class="ins-list"></div></div>
+                <div class="ins-col"><h3 class="ins-h">👤 Top Viewers</h3><div id="ins-top-users" class="ins-list"></div></div>
+                <div class="ins-col"><h3 class="ins-h">📅 Last 14 Days</h3><div id="ins-per-day" class="ins-list"></div></div>
+            </div>
+        </div>
+    </div>
+
     <div class="glass-card rounded-3xl overflow-hidden mb-6 sm:mb-8">
         <div class="px-5 sm:px-6 lg:px-8 py-4 sm:py-5 border-b border-hairline bg-surface flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
@@ -529,6 +566,53 @@
         }
     }
 
+    function fmtBytes(bytes) {
+        let b = Number(bytes || 0);
+        const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+        let i = 0;
+        while (b >= 1024 && i < units.length - 1) { b /= 1024; i++; }
+        return b.toFixed(b >= 10 || i === 0 ? 0 : 1) + ' ' + units[i];
+    }
+
+    function insText(id, val) {
+        const el = document.getElementById(id);
+        if (el) el.textContent = val;
+    }
+
+    function insRow(name, val, frac) {
+        const pct = Math.max(4, Math.round((frac || 0) * 100));
+        return `<div>
+            <div class="ins-row"><span class="name" title="${escapeHtml(name)}">${escapeHtml(name)}</span><span class="val">${escapeHtml(val)}</span></div>
+            <div class="ins-bar" style="width:${pct}%"></div>
+        </div>`;
+    }
+
+    function renderInsights(d) {
+        const s = d.summary || {};
+        insText('ins-total-streams', s.total_streams ?? 0);
+        insText('ins-total-data', fmtBytes(s.total_bytes));
+        insText('ins-avg-speed', (Number(s.avg_speed || 0)).toFixed(1) + ' MB/s');
+        insText('ins-active-users', s.active_users ?? 0);
+
+        const titles = d.top_titles || [];
+        const maxT = Math.max(1, ...titles.map(t => t.streams || 0));
+        document.getElementById('ins-top-titles').innerHTML = titles.length
+            ? titles.map(t => insRow(t.title || '—', `${t.streams} plays · ${fmtBytes(t.total_bytes)}`, t.streams / maxT)).join('')
+            : '<div class="ins-empty">No data yet.</div>';
+
+        const users = d.top_users || [];
+        const maxU = Math.max(1, ...users.map(u => u.total_bytes || 0));
+        document.getElementById('ins-top-users').innerHTML = users.length
+            ? users.map(u => insRow(u.user || '—', `${fmtBytes(u.total_bytes)} · ${u.streams} streams`, u.total_bytes / maxU)).join('')
+            : '<div class="ins-empty">No data yet.</div>';
+
+        const days = d.per_day || [];
+        const maxD = Math.max(1, ...days.map(x => x.streams || 0));
+        document.getElementById('ins-per-day').innerHTML = days.length
+            ? days.map(x => insRow(x.date, `${x.streams} · ${fmtBytes(x.total_bytes)}`, x.streams / maxD)).join('')
+            : '<div class="ins-empty">No data yet.</div>';
+    }
+
     async function fetchAnalytics() {
         try {
             const res = await fetch('/api/admin/stream-analytics');
@@ -541,6 +625,7 @@
             }
 
             const data = await res.json();
+            renderInsights(data.data || {});
             const streams = data?.data?.recent || [];
 
             if (!streams.length) {

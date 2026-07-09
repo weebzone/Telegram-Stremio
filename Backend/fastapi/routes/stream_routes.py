@@ -296,7 +296,8 @@ async def media_streamer(request: Request, chat_id: int, msg_id: int, token: str
         "request_path": str(request.url.path),
         "client_host": request.client.host if request.client else None,
         "title": final_title,
-        "user_name": token_data.get("name", "Unknown") if token_data else "Unknown"
+        "user_name": token_data.get("name", "Unknown") if token_data else "Unknown",
+        "token": token,
     }
 
     token_count = len(multi_clients) - 1
@@ -369,6 +370,7 @@ async def virtual_media_streamer(request: Request, parts_payload: list, token: s
         "client_host": request.client.host if request.client else None,
         "title": final_title,
         "user_name": token_data.get("name", "Unknown") if token_data else "Unknown",
+        "token": token,
         "split_parts": len(parts),
     }
 
@@ -433,6 +435,7 @@ async def global_media_streamer(request: Request, chat_id: int, msg_id: int, tok
         "client_host": request.client.host if request.client else None,
         "title": file_id.file_name or "global-stream",
         "user_name": token_data.get("name", "Unknown") if token_data else "Unknown",
+        "token": token,
         "global_search": True,
     }
 

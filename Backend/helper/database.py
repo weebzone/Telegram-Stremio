@@ -2073,6 +2073,8 @@ class Database:
                 "chat_id":     stats.get("chat_id"),
                 "dc_id":       stats.get("dc_id"),
                 "title":       stats.get("meta", {}).get("title"),  #----- Added title
+                "user_name":   stats.get("meta", {}).get("user_name"),
+                "token":       stats.get("meta", {}).get("token"),
                 "client_index": stats.get("client_index"),
                 "total_bytes": stats.get("total_bytes", 0),
                 "duration_sec": round(stats.get("duration", 0.0), 2),
@@ -2136,14 +2138,54 @@ class Database:
                 if "logged_at" in r:
                     r["logged_at"] = r["logged_at"].isoformat()
 
+            #----- Most-streamed titles
+            top_titles = await col.aggregate([
+                {"$match": {"title": {"$nin": [None, ""]}}},
+                {"$group": {"_id": "$title", "streams": {"$sum": 1}, "total_bytes": {"$sum": "$total_bytes"}}},
+                {"$sort": {"streams": -1}},
+                {"$limit": 8},
+            ]).to_list(None)
+            for r in top_titles:
+                r["title"] = r.pop("_id")
+
+            #----- Heaviest viewers (by data transferred)
+            top_users = await col.aggregate([
+                {"$match": {"user_name": {"$nin": [None, ""]}}},
+                {"$group": {"_id": "$user_name", "streams": {"$sum": 1}, "total_bytes": {"$sum": "$total_bytes"}}},
+                {"$sort": {"total_bytes": -1}},
+                {"$limit": 8},
+            ]).to_list(None)
+            for r in top_users:
+                r["user"] = r.pop("_id")
+
+            #----- Streams & data per day (last 14 days, chronological)
+            per_day = await col.aggregate([
+                {"$group": {
+                    "_id": {"$dateToString": {"format": "%Y-%m-%d", "date": "$logged_at"}},
+                    "streams": {"$sum": 1},
+                    "total_bytes": {"$sum": "$total_bytes"},
+                }},
+                {"$sort": {"_id": -1}},
+                {"$limit": 14},
+            ]).to_list(None)
+            for r in per_day:
+                r["date"] = r.pop("_id")
+            per_day.reverse()
+
+            distinct_users = await col.distinct("user_name")
+            summary["active_users"] = len([u for u in distinct_users if u and u != "Unknown"])
+
             return {
                 "summary":    summary,
                 "per_client": per_client,
+                "top_titles": top_titles,
+                "top_users":  top_users,
+                "per_day":    per_day,
                 "recent":     recent,
             }
         except Exception as e:
             LOGGER.error(f"get_stream_analytics error: {e}")
-            return {"summary": {}, "per_client": [], "recent": []}
+            return {"summary": {}, "per_client": [], "top_titles": [], "top_users": [], "per_day": [], "recent": []}
 
 
 
