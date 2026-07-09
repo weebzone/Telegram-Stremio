@@ -23,6 +23,11 @@ def _norm_title(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", (text or "").lower()).strip()
 
 
+def _year_int(value) -> int:
+    match = re.search(r"(\d{4})", str(value or ""))
+    return int(match.group(1)) if match else 0
+
+
 def _coll():
     return db.dbs["tracking"]["requests"]
 
@@ -199,21 +204,28 @@ async def search_titles(query: str) -> list:
 
 
 #----- Does this title already exist in the library? Check imdb id, then tmdb id, then name.
-async def media_exists(media_type: str, tmdb_id, imdb_id, title: str) -> bool:
+async def media_exists(media_type: str, tmdb_id, imdb_id, title: str, year=None) -> bool:
     media_type = _norm_type(media_type)
     try:
-        if imdb_id:
-            if await db.get_media_details(imdb_id=imdb_id):
-                return True
-        if tmdb_id:
-            if await db.find_media_doc(media_type, int(tmdb_id)):
-                return True
+        #----- 1) requested IMDb id vs library IMDb id
+        if imdb_id and await db.get_media_details(imdb_id=imdb_id):
+            return True
+        #----- 2) requested TMDB id vs library TMDB id
+        if tmdb_id and await db.find_media_doc(media_type, int(tmdb_id)):
+            return True
+        #----- 3) requested name + year vs library title + release_year
         if title:
-            found = await db.search_documents(query=title, page=1, page_size=5)
+            found = await db.search_documents(query=title, page=1, page_size=8)
             target = _norm_title(title)
+            want_year = _year_int(year)
             for item in (found.get("results") or []):
-                if item.get("media_type") == media_type and _norm_title(item.get("title")) == target:
-                    return True
+                if item.get("media_type") != media_type:
+                    continue
+                if _norm_title(item.get("title")) != target:
+                    continue
+                if want_year and _year_int(item.get("release_year")) != want_year:
+                    continue
+                return True
     except Exception as e:
         LOGGER.warning(f"[REQUEST] library existence check failed: {e}")
     return False
@@ -261,7 +273,7 @@ async def submit_request(*, media_type, tmdb_id, imdb_id, title, year, poster, c
         return {"ok": True, "reason": reason, "title": existing.get("title")}
 
     #----- Not requested before: if it's already in the library, no request needed
-    if await media_exists(media_type, tmdb_id, imdb_id, title):
+    if await media_exists(media_type, tmdb_id, imdb_id, title, year):
         return {"ok": True, "reason": "already_available", "title": title}
 
     doc = {
