@@ -17,6 +17,7 @@ from Backend.helper.global_search import global_search, is_global_search_enabled
 from Backend.helper.imdb import get_detail, get_season
 from Backend.helper.metadata import resolve_cover_url
 from Backend.helper.settings_manager import SettingsManager
+from Backend.helper.subtitles import get_subtitles_for, stremio_subtitle_entries
 from Backend.logger import LOGGER
 from Backend.pyrofork.bot import StreamBot, get_streambot_url
 
@@ -220,10 +221,10 @@ def get_resolution_priority(stream_name: str) -> int:
 @router.get("/{token}/manifest.json")
 async def get_manifest(token: str, token_data: dict = Depends(verify_token)):
     if SettingsManager.current().hide_catalog:
-        resources = ["stream"]
+        resources = ["stream", "subtitles"]
         catalogs = []
     else:
-        resources = ["catalog", "meta", "stream"]
+        resources = ["catalog", "meta", "stream", "subtitles"]
         catalogs = [
             {
                 "type": "movie",
@@ -489,6 +490,26 @@ async def get_meta(token: str, media_type: str, id: str, token_data: dict = Depe
                 })
         meta_obj["videos"] = videos
     return {"meta": meta_obj}
+
+
+#----- Subtitles for a title/episode, sourced from subtitle files in the channels
+@router.get("/{token}/subtitles/{media_type}/{id}/{extra:path}.json")
+@router.get("/{token}/subtitles/{media_type}/{id}.json")
+async def get_subtitles(token: str, media_type: str, id: str, extra: Optional[str] = None, token_data: dict = Depends(verify_token)):
+    try:
+        parts = id.split(":")
+        imdb_id = parts[0]
+        season = int(parts[1]) if len(parts) > 1 else None
+        episode = int(parts[2]) if len(parts) > 2 else None
+    except (ValueError, IndexError):
+        return {"subtitles": []}
+
+    db_media_type = "tv" if media_type == "series" else "movie"
+    subs = await get_subtitles_for(imdb_id, db_media_type, season, episode)
+    if not subs:
+        return {"subtitles": []}
+    return {"subtitles": stremio_subtitle_entries(subs, token, SettingsManager.current().base_url)}
+
 
 #----- Collect Global Search streams for a title/episode via IMDb lookup
 async def _global_streams_for(token: str, imdb_id: str, media_type: str, season_num: Optional[int], episode_num: Optional[int]) -> list:
