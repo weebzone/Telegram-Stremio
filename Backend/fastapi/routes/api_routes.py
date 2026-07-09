@@ -23,6 +23,7 @@ from Backend.helper.auto_catalog import (
 )
 from Backend.helper.custom_dl import ByteStreamer, _speed_test_single_client, run_speed_test
 from Backend.helper.encrypt import decode_string, encode_string
+from Backend.helper.health import run_health_checks
 from Backend.helper.manual_add import resolve_telegram_message
 from Backend.helper.requests_manager import (
     delete_request,
@@ -1570,6 +1571,15 @@ async def get_db_stats_api() -> dict:
 #----- Lightweight liveness probe; start_time changes on every boot (restart detection)
 async def health_api() -> dict:
     return {"status": "ok", "start_time": StartTime, "version": __version__}
+
+
+#----- Full diagnostics report (DBs, bot clients, TMDB, base URL)
+async def health_report_api() -> dict:
+    try:
+        return {"status": "success", "data": await run_health_checks()}
+    except Exception as e:
+        LOGGER.error(f"Health report error: {e}")
+        return {"status": "error", "message": str(e)}
 
 
 #----- Tail of the log file for the web viewer (was /log)

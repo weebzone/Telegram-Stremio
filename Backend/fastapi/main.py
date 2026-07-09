@@ -49,6 +49,7 @@ from Backend.fastapi.routes.api_routes import (
     get_system_stats_api,
     get_tools_channels_api,
     health_api,
+    health_report_api,
     link_token_user_api,
     list_custom_catalogs_api,
     list_media_api,
@@ -81,6 +82,7 @@ from Backend.fastapi.routes.stremio_routes import router as stremio_router
 from Backend.fastapi.routes.template_routes import (
     admin_access_page,
     admin_dashboard_page,
+    admin_health_page,
     admin_requests_page,
     admin_subscriptions_page,
     public_request_page,
@@ -509,6 +511,14 @@ async def admin_db_stats(_: bool = Depends(require_auth)):
 @app.get("/api/admin/health")
 async def admin_health(_: bool = Depends(require_auth)):
     return await health_api()
+
+@app.get("/admin/health", response_class=HTMLResponse)
+async def admin_health_view(request: Request, _: bool = Depends(require_auth)):
+    return await admin_health_page(request, _)
+
+@app.get("/api/admin/health/report")
+async def admin_health_report(_: bool = Depends(require_auth)):
+    return await health_report_api()
 
 @app.get("/api/admin/logs")
 async def admin_logs(lines: int = Query(300, ge=1, le=2000), _: bool = Depends(require_auth)):
