@@ -8,6 +8,7 @@ from pyrogram.types import Message
 
 import Backend
 from Backend import db
+from Backend.helper.announcer import announce_new_media
 from Backend.helper.auto_catalog import start_single_media_catalog_sync
 from Backend.helper.metadata import extract_default_id, metadata
 from Backend.helper.pyro import clean_filename, finalize_media_name, get_readable_file_size
@@ -69,6 +70,7 @@ async def process_file():
                 tmdb_id=metadata_info.get("tmdb_id"),
                 media_type=metadata_info.get("media_type"),
             )
+            announce_new_media(metadata_info)
         file_queue.task_done()
 
 

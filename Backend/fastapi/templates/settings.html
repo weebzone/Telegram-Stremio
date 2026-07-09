@@ -529,7 +529,41 @@
 
 
 
-    
+
+<!-- ── New Content Announcements ──────────────────────────────────── -->
+<div class="settings-card">
+    <h2><i class="fa-solid fa-bullhorn"></i> New Content Announcements</h2>
+
+    <label class="toggle-wrap">
+        <input type="checkbox" class="toggle-input" id="announce_new_content"
+            {% if settings.announce_new_content %}checked{% endif %}
+            onchange="toggleAnnouncementFields()">
+        <span class="toggle-track"></span>
+        <span class="toggle-label">
+            <strong>Announce New Titles</strong>
+            <span style="color:var(--text-sec);font-size:0.8rem;display:block">
+                Auto-post a poster card to a Telegram channel the first time a
+                new movie or series is added. Each title is announced only once.
+            </span>
+        </span>
+    </label>
+
+    <div id="announcement-fields"
+         style="{% if not settings.announce_new_content %}display:none{% endif %}">
+        <hr class="divider">
+        <label class="s-label" for="announcement_channel">ANNOUNCEMENT CHANNEL</label>
+        <p style="font-size:0.78rem;color:var(--text-sec);margin-bottom:0.75rem">
+            <i class="fa-solid fa-circle-info"></i>
+            Channel ID (e.g. <code>-1001234567890</code>) or <code>@username</code>.
+            The bot must be an <strong>admin</strong> in that channel.
+        </p>
+        <input type="text" id="announcement_channel" class="s-input"
+            value="{{ settings.announcement_channel }}"
+            placeholder="-100xxxxxxxxxx or @channel">
+    </div>
+</div>
+
+
     <!-- ── Proxy ───────────────────────────────────────────────────────── -->
     <div class="settings-card">
         <h2><i class="fa-solid fa-network-wired"></i> Proxy Settings</h2>
@@ -678,6 +712,14 @@ function toggleGlobalSearchFields() {
     }
 }
 
+function toggleAnnouncementFields() {
+    const enabled = document.getElementById('announce_new_content').checked;
+    const fields = document.getElementById('announcement-fields');
+    if (fields) {
+        fields.style.display = enabled ? '' : 'none';
+    }
+}
+
 /* ── Password visibility ──────────────────────────────────────────────── */
 function togglePwdVisibility() {
     const input = document.getElementById('admin_password');
@@ -807,6 +849,8 @@ async function saveSettings() {
         global_search:                 document.getElementById('global_search').checked,
         global_search_channels:        collectList('global_search_channels'),
         manual_channels:               collectList('manual_channels'),
+        announce_new_content:          document.getElementById('announce_new_content').checked,
+        announcement_channel:          document.getElementById('announcement_channel').value.trim(),
     };
 
     try {
@@ -876,8 +920,10 @@ function renderSettings(s) {
     document.getElementById('subscription').checked = !!s.subscription;
     document.getElementById('show_proxy_and_non_proxy_both').checked = !!s.show_proxy_and_non_proxy_both;
     document.getElementById('global_search').checked = !!s.global_search;
+    document.getElementById('announce_new_content').checked = !!s.announce_new_content;
     toggleSubFields();
     toggleGlobalSearchFields();
+    toggleAnnouncementFields();
 
     // Plain text/number fields
     document.getElementById('admin_username').value = s.admin_username || '';
@@ -888,6 +934,7 @@ function renderSettings(s) {
     document.getElementById('upstream_branch').value = s.upstream_branch || '';
     document.getElementById('subscription_group_id').value = s.subscription_group_id || 0;
     document.getElementById('http_proxy_url').value = s.http_proxy_url || '';
+    document.getElementById('announcement_channel').value = s.announcement_channel || '';
 
     // Auth channels (with per-channel anime checkbox) + other multi-value lists
     rebuildAuthChannels(s.auth_channels, s.anime_channels);
