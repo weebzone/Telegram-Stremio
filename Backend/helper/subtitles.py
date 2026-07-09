@@ -14,24 +14,56 @@ from Backend.logger import LOGGER
 
 SUBTITLE_EXTS = (".srt", ".vtt", ".ass", ".ssa", ".sub")
 
-#----- filename hint -> (ISO 639-2 code, label)
-_LANG_PATTERNS = [
-    (("english", "eng", ".en."), ("eng", "English")),
-    (("hindi", "hin", ".hi."), ("hin", "Hindi")),
-    (("spanish", "espanol", "spa", ".es."), ("spa", "Spanish")),
-    (("french", "francais", "fre", "fra", ".fr."), ("fre", "French")),
-    (("german", "deu", "ger", ".de."), ("ger", "German")),
-    (("italian", "ita", ".it."), ("ita", "Italian")),
-    (("arabic", "ara", ".ar."), ("ara", "Arabic")),
-    (("portuguese", "por", ".pt."), ("por", "Portuguese")),
-    (("russian", "rus", ".ru."), ("rus", "Russian")),
-    (("japanese", "jpn", ".ja."), ("jpn", "Japanese")),
-    (("korean", "kor", ".ko."), ("kor", "Korean")),
-    (("chinese", "zho", "chi", ".zh."), ("chi", "Chinese")),
-    (("tamil", "tam", ".ta."), ("tam", "Tamil")),
-    (("telugu", "tel", ".te."), ("tel", "Telugu")),
-    (("malayalam", "mal", ".ml."), ("mal", "Malayalam")),
-    (("bengali", "ben", ".bn."), ("ben", "Bengali")),
+#----- (ISO 639-2 code, label, match aliases: full names + ISO codes)
+_LANGUAGES = [
+    ("eng", "English", ("english", "eng")),
+    ("hin", "Hindi", ("hindi", "hin")),
+    ("tam", "Tamil", ("tamil", "tam")),
+    ("tel", "Telugu", ("telugu", "tel")),
+    ("kan", "Kannada", ("kannada", "kan")),
+    ("mal", "Malayalam", ("malayalam", "mal")),
+    ("ben", "Bengali", ("bengali", "bangla", "ben")),
+    ("mar", "Marathi", ("marathi", "mar")),
+    ("pan", "Punjabi", ("punjabi", "panjabi", "pan")),
+    ("guj", "Gujarati", ("gujarati", "guj")),
+    ("urd", "Urdu", ("urdu", "urd")),
+    ("ori", "Odia", ("odia", "oriya", "ori")),
+    ("asm", "Assamese", ("assamese", "asm")),
+    ("bho", "Bhojpuri", ("bhojpuri", "bho")),
+    ("kok", "Konkani", ("konkani", "kok")),
+    ("nep", "Nepali", ("nepali", "nep")),
+    ("sin", "Sinhala", ("sinhala", "sinhalese", "sin")),
+    ("san", "Sanskrit", ("sanskrit", "san")),
+    ("spa", "Spanish", ("spanish", "espanol", "spa")),
+    ("fre", "French", ("french", "francais", "fre", "fra")),
+    ("ger", "German", ("german", "deutsch", "ger", "deu")),
+    ("ita", "Italian", ("italian", "italiano", "ita")),
+    ("por", "Portuguese", ("portuguese", "portugues", "por")),
+    ("rus", "Russian", ("russian", "rus")),
+    ("ara", "Arabic", ("arabic", "ara")),
+    ("jpn", "Japanese", ("japanese", "jpn")),
+    ("kor", "Korean", ("korean", "kor")),
+    ("chi", "Chinese", ("chinese", "mandarin", "cantonese", "chi", "zho")),
+    ("tha", "Thai", ("thai", "tha")),
+    ("vie", "Vietnamese", ("vietnamese", "vie")),
+    ("ind", "Indonesian", ("indonesian", "bahasa", "ind")),
+    ("may", "Malay", ("malay", "melayu", "msa")),
+    ("fil", "Filipino", ("filipino", "tagalog", "fil", "tgl")),
+    ("tur", "Turkish", ("turkish", "turkce", "tur")),
+    ("dut", "Dutch", ("dutch", "nederlands", "dut", "nld")),
+    ("pol", "Polish", ("polish", "polski", "pol")),
+    ("swe", "Swedish", ("swedish", "svenska", "swe")),
+    ("nor", "Norwegian", ("norwegian", "norsk", "nor")),
+    ("dan", "Danish", ("danish", "dansk", "dan")),
+    ("fin", "Finnish", ("finnish", "suomi", "fin")),
+    ("gre", "Greek", ("greek", "gre", "ell")),
+    ("heb", "Hebrew", ("hebrew", "heb")),
+    ("per", "Persian", ("persian", "farsi", "per", "fas")),
+    ("ukr", "Ukrainian", ("ukrainian", "ukr")),
+    ("rum", "Romanian", ("romanian", "rum", "ron")),
+    ("hun", "Hungarian", ("hungarian", "magyar", "hun")),
+    ("cze", "Czech", ("czech", "cesky", "cze", "ces")),
+    ("swa", "Swahili", ("swahili", "swa")),
 ]
 
 
@@ -47,14 +79,21 @@ def subtitle_ext(name: str) -> str:
     return ".srt"
 
 
-#----- Full-word language names (len >= 4) used to trim a trailing language token
+#----- token -> (code, label) for exact matches; full-name set for trimming
+_LANG_BY_TOKEN = {}
 _LANG_WORDS = set()
-for _needles, (_code, _label) in _LANG_PATTERNS:
+for _code, _label, _aliases in _LANGUAGES:
+    for _alias in _aliases:
+        _LANG_BY_TOKEN.setdefault(_alias, (_code, _label))
+        if len(_alias) >= 4:
+            _LANG_WORDS.add(_alias)
     _LANG_WORDS.add(_label.lower())
-    for _n in _needles:
-        _n = _n.strip(".")
-        if len(_n) >= 4:
-            _LANG_WORDS.add(_n)
+
+_SUB_EXT_TOKENS = {ext.lstrip(".") for ext in SUBTITLE_EXTS}
+
+#----- Trailing tokens that describe the subtitle, not its language
+_IGNORE_TOKENS = {"forced", "sdh", "cc", "full", "default", "hearing", "impaired",
+                  "dubbed", "dub", "sub", "subs", "subtitle", "subtitles"}
 
 _TRAILING_LANG_RE = re.compile(
     r"[\s._-]+(" + "|".join(sorted(_LANG_WORDS, key=len, reverse=True)) + r")\s*$",
@@ -62,11 +101,17 @@ _TRAILING_LANG_RE = re.compile(
 )
 
 
+#----- Detect language from filename tokens: full names first, then ISO codes, scanning from the end
 def detect_language(name: str):
-    low = f".{(name or '').lower()}."
-    for needles, result in _LANG_PATTERNS:
-        if any(n in low for n in needles):
-            return result
+    tokens = [t for t in re.split(r"[^a-z0-9]+", (name or "").lower()) if t and t not in _SUB_EXT_TOKENS]
+    while tokens and tokens[-1] in _IGNORE_TOKENS:
+        tokens.pop()
+    for token in reversed(tokens):
+        if len(token) >= 4 and token in _LANG_BY_TOKEN:
+            return _LANG_BY_TOKEN[token]
+    for token in reversed(tokens):
+        if len(token) == 3 and token in _LANG_BY_TOKEN:
+            return _LANG_BY_TOKEN[token]
     return "und", "Unknown"
 
 
@@ -111,12 +156,13 @@ async def _identify(name: str):
     return info["imdb_id"], media_type, season_out, episode_out
 
 
-async def ingest_subtitle(name: str, channel: int, msg_id: int) -> None:
+#----- Match, tag and store a subtitle; returns True when stored, False when skipped
+async def ingest_subtitle(name: str, channel: int, msg_id: int) -> bool:
     try:
         identified = await _identify(name)
         if not identified:
             LOGGER.info(f"[SUBTITLE] Could not match '{name}'")
-            return
+            return False
         imdb_id, media_type, season, episode = identified
         code, label = detect_language(name)
         encoded = await encode_string({"chat_id": channel, "msg_id": msg_id})
@@ -139,8 +185,10 @@ async def ingest_subtitle(name: str, channel: int, msg_id: int) -> None:
             upsert=True,
         )
         LOGGER.info(f"[SUBTITLE] Stored {label} for {imdb_id} (S{season}E{episode}): {name}")
+        return True
     except Exception as e:
         LOGGER.error(f"[SUBTITLE] ingest failed for '{name}': {e}")
+        return False
 
 
 async def get_subtitles_for(imdb_id: str, media_type: str, season, episode):

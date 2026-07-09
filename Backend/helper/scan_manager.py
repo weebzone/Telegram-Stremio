@@ -11,6 +11,7 @@ from Backend.helper.encrypt import encode_string, decode_string
 from Backend.helper.metadata import metadata
 from Backend.helper.pyro import clean_filename, get_readable_file_size, remove_urls
 from Backend.helper.split_files import parse_split_info, strip_part_suffix
+from Backend.helper.subtitles import ingest_subtitle, is_subtitle_file
 
 SCAN_BATCH_SIZE = 200          
 SCAN_MAX_EMPTY_BATCHES = 10    
@@ -72,6 +73,8 @@ class ScanManager:
                 "skipped_dup": 0,
                 "skipped_meta": 0,
                 "skipped_nonvid": 0,
+                "subtitles_added": 0,
+                "subtitles_skipped": 0,
                 "errors": 0,
             },
             "started_at": 0.0,
@@ -89,6 +92,8 @@ class ScanManager:
             "skipped_dup": 0,
             "skipped_meta": 0,
             "skipped_nonvid": 0,
+            "subtitles_added": 0,
+            "subtitles_skipped": 0,
             "errors": 0,
         }
 
@@ -426,6 +431,16 @@ class ScanManager:
         s = self.state
         db = self._db
 
+        #----- Subtitle files: match to a title and store, don't treat as media
+        sub_name = message.document.file_name if message.document else ""
+        if sub_name and is_subtitle_file(sub_name):
+            channel_int = int(str(chat_id).replace("-100", ""))
+            if await ingest_subtitle(sub_name, channel_int, message.id):
+                s["counters"]["subtitles_added"] += 1
+            else:
+                s["counters"]["subtitles_skipped"] += 1
+            return
+
         is_video = bool(message.video)
         is_supported = is_video
         if message.document and not is_video:
@@ -493,6 +508,10 @@ class ScanManager:
     async def _purge_channel_entries(self, channel_int: int) -> int:
         db = self._db
         purged = 0
+        try:
+            await db.dbs["tracking"]["subtitles"].delete_many({"chat_id": channel_int})
+        except Exception as e:
+            LOGGER.warning(f"[ScanManager] subtitle purge failed for {channel_int}: {e}")
         for i in range(1, db.current_db_index + 1):
             storage = db.dbs.get(f"storage_{i}")
             if storage is None:
