@@ -66,8 +66,40 @@ class Database:
 
             LOGGER.info(f"Active storage DB: storage_{self.current_db_index}")
 
+            await self.ensure_indexes()
+
         except Exception as e:
             LOGGER.error(f"Database connection error: {e}")
+
+    #----- Create the indexes catalog/stream lookups rely on.
+    #----- create_index is idempotent, so this is safe to call repeatedly.
+    async def ensure_indexes(self) -> None:
+        tracking = self.dbs.get("tracking")
+        if tracking is not None:
+            try:
+                await tracking["custom_catalogs"].create_index([("updated_at", DESCENDING)])
+                await tracking["custom_catalogs"].create_index(
+                    [("items.tmdb_id", ASCENDING), ("items.media_type", ASCENDING)]
+                )
+            except Exception as e:
+                LOGGER.error(f"Failed creating tracking indexes: {e}")
+
+        for db_key in list(self.dbs.keys()):
+            if db_key.startswith("storage_"):
+                await self._ensure_storage_indexes(db_key)
+
+    #----- Ensure per-storage-DB indexes on the movie/tv collections.
+    #----- tmdb_id + imdb_id drive catalog hydration and stream lookups.
+    async def _ensure_storage_indexes(self, db_key: str) -> None:
+        db = self.dbs.get(db_key)
+        if db is None:
+            return
+        for collection_name in ("movie", "tv"):
+            try:
+                await db[collection_name].create_index([("tmdb_id", ASCENDING)])
+                await db[collection_name].create_index([("imdb_id", ASCENDING)])
+            except Exception as e:
+                LOGGER.error(f"Failed creating index on {db_key}/{collection_name}: {e}")
 
     async def disconnect(self):
         for client in self.clients.values():
@@ -117,6 +149,8 @@ class Database:
             db_type = "Tracking" if index == 0 else f"Storage {index}"
             masked_uri = re.sub(r"://(.*?):.*?@", r"://\1:*****@", uri).split('?')[0]
             LOGGER.info(f"{db_type} Database connected successfully: {masked_uri}")
+            if index > 0:
+                await self._ensure_storage_indexes(db_key)
             return True
         except Exception as e:
             LOGGER.error(f"Failed to connect database at index {index}: {e}")
@@ -874,15 +908,7 @@ class Database:
         skip = (page - 1) * page_size
         selected_items = raw_items[skip:skip + page_size]
 
-        hydrated_items = []
-        for item in selected_items:
-            doc = await self.get_document(
-                item.get("media_type", "movie"),
-                int(item.get("tmdb_id")),
-                int(item.get("db_index", 1))
-            )
-            if doc:
-                hydrated_items.append(doc)
+        hydrated_items = await self.get_documents(selected_items)
 
         total_pages = (total_count + page_size - 1) // page_size if total_count else 0
         return {
@@ -1624,6 +1650,50 @@ class Database:
         collection_name = self._collection_for(media_type)
         document = await self.dbs[db_key][collection_name].find_one({"tmdb_id": int(tmdb_id)})
         return convert_objectid_to_str(document) if document else None
+
+    #----- Batch-hydrate media docs for a list of catalog item refs.
+    #----- Groups lookups by (db_index, collection) into a single $in query
+    #----- each, then returns docs in the same order as `refs`. Missing docs
+    #----- are skipped. Replaces N sequential get_document() round-trips.
+    async def get_documents(self, refs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        if not refs:
+            return []
+
+        groups: Dict[Tuple[int, str], List[int]] = {}
+        normalized: List[Tuple[int, str, int]] = []
+        for ref in refs:
+            try:
+                tmdb_id = int(ref.get("tmdb_id"))
+                db_index = int(ref.get("db_index", 1))
+            except (TypeError, ValueError):
+                continue
+            collection_name = self._collection_for(ref.get("media_type", "movie"))
+            groups.setdefault((db_index, collection_name), []).append(tmdb_id)
+            normalized.append((db_index, collection_name, tmdb_id))
+
+        lookup: Dict[Tuple[int, str, int], Dict[str, Any]] = {}
+        for (db_index, collection_name), ids in groups.items():
+            db_key = f"storage_{db_index}"
+            if db_key not in self.dbs:
+                continue
+            try:
+                cursor = self.dbs[db_key][collection_name].find({"tmdb_id": {"$in": ids}})
+                async for document in cursor:
+                    document = convert_objectid_to_str(document)
+                    try:
+                        key = (db_index, collection_name, int(document.get("tmdb_id")))
+                    except (TypeError, ValueError):
+                        continue
+                    lookup[key] = document
+            except Exception as e:
+                LOGGER.error(f"get_documents batch fetch failed for {db_key}/{collection_name}: {e}")
+
+        ordered: List[Dict[str, Any]] = []
+        for key in normalized:
+            document = lookup.get(key)
+            if document is not None:
+                ordered.append(document)
+        return ordered
 
     async def update_document(
         self, media_type: str, tmdb_id: int, db_index: int, update_data: Dict[str, Any]
