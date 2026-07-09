@@ -39,6 +39,9 @@ from Backend.fastapi.routes.api_routes import (
     get_dead_links_api,
     get_media_visibility_api,
     get_requests_api,
+    request_popular_api,
+    request_search_api,
+    request_submit_api,
     get_stream_analytics_api,
     get_subscription_plans_api,
     get_settings_api,
@@ -80,6 +83,7 @@ from Backend.fastapi.routes.template_routes import (
     admin_dashboard_page,
     admin_requests_page,
     admin_subscriptions_page,
+    public_request_page,
     custom_catalogs_page,
     dashboard_page,
     edit_media_page,
@@ -308,14 +312,33 @@ async def link_token_to_user(token: str, payload: dict, _: bool = Depends(requir
     return await link_token_user_api(token, user_id)
 
 
-#----- Content requests
+#----- Public content request page (no auth)
+@app.get("/request", response_class=HTMLResponse)
+async def public_request(request: Request):
+    return await public_request_page(request)
+
+@app.get("/api/request/search")
+async def request_search(q: str = Query("")):
+    return await request_search_api(q)
+
+@app.get("/api/request/popular")
+async def request_popular():
+    return await request_popular_api()
+
+@app.post("/api/request/submit")
+async def request_submit(payload: dict, request: Request):
+    client_ip = request.client.host if request.client else None
+    return await request_submit_api(payload, client_ip)
+
+
+#----- Admin content requests
 @app.get("/admin/requests", response_class=HTMLResponse)
 async def admin_requests(request: Request, _: bool = Depends(require_auth)):
     return await admin_requests_page(request, _)
 
 @app.get("/api/admin/requests")
-async def get_requests(status: str = Query(None), _: bool = Depends(require_auth)):
-    return await get_requests_api(status)
+async def get_requests(_: bool = Depends(require_auth)):
+    return await get_requests_api()
 
 @app.patch("/api/admin/requests/{request_id}")
 async def update_request(request_id: str, payload: dict, _: bool = Depends(require_auth)):

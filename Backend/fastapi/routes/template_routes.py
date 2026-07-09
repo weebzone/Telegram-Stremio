@@ -224,11 +224,18 @@ async def admin_access_page(request: Request, _: bool = Depends(require_auth)):
     return templates.TemplateResponse("access_manage.html", ctx)
 
 
-#----- Content requests shell
+#----- Content requests shell (admin)
 async def admin_requests_page(request: Request, _: bool = Depends(require_auth)):
     ctx = _base_context(request)
     ctx["current_user"] = get_current_user(request)
     return templates.TemplateResponse("requests_manage.html", ctx)
+
+
+#----- Public request page (no auth)
+async def public_request_page(request: Request):
+    ctx = _base_context(request)
+    ctx["is_authenticated"] = is_authenticated(request)
+    return templates.TemplateResponse("request_public.html", ctx)
 
 
 #----- Custom catalogs shell

@@ -27,9 +27,10 @@ from Backend.helper.manual_add import resolve_telegram_message
 from Backend.helper.requests_manager import (
     delete_request,
     list_requests,
-    notify_user,
-    request_counts,
+    popular_pending,
+    search_titles,
     set_status,
+    submit_request,
 )
 from Backend.helper.metadata import (
     fetch_selected_movie_metadata,
@@ -493,27 +494,52 @@ async def clear_stream_analytics_api() -> dict:
         return {"status": "error", "message": str(e)}
 
 
-#----- Content requests (from the bot's /request command)
-async def get_requests_api(status: str = None) -> dict:
+#----- Public: search titles to request (by name, IMDb id or TMDB id)
+async def request_search_api(q: str) -> dict:
     try:
-        items = await list_requests(status)
-        counts = await request_counts()
-        return {"status": "success", "data": {"requests": items, "counts": counts}}
+        return {"status": "success", "data": await search_titles(q)}
+    except Exception as e:
+        LOGGER.error(f"Request search error: {e}")
+        return {"status": "error", "message": str(e), "data": []}
+
+
+#----- Public: submit a request for a title
+async def request_submit_api(payload: dict, client_ip: str) -> dict:
+    result = await submit_request(
+        media_type=payload.get("media_type"),
+        tmdb_id=payload.get("tmdb_id"),
+        imdb_id=payload.get("imdb_id"),
+        title=payload.get("title"),
+        year=payload.get("year"),
+        poster=payload.get("poster"),
+        client_ip=client_ip,
+    )
+    return {"status": "success" if result.get("ok") else "error", **result}
+
+
+#----- Public: most-requested pending titles
+async def request_popular_api() -> dict:
+    try:
+        return {"status": "success", "data": await popular_pending()}
+    except Exception as e:
+        return {"status": "error", "message": str(e), "data": []}
+
+
+#----- Admin: list all content requests
+async def get_requests_api() -> dict:
+    try:
+        return {"status": "success", "data": await list_requests()}
     except Exception as e:
         LOGGER.error(f"Requests API error: {e}")
         return {"status": "error", "message": str(e)}
 
 
+#----- Admin: uploaded / denied / banned / pending
 async def update_request_api(request_id: str, payload: dict) -> dict:
     new_status = str(payload.get("status", "")).strip()
     doc = await set_status(request_id, new_status)
     if not doc:
         raise HTTPException(status_code=404, detail="Request not found or invalid status.")
-
-    if new_status == "fulfilled":
-        await notify_user(doc["user_id"], f"✅ <b>Your request is now available!</b>\n\n🎬 {doc['text']}\n\nEnjoy watching.")
-    elif new_status == "rejected":
-        await notify_user(doc["user_id"], f"❌ <b>Request update</b>\n\n🎬 {doc['text']}\n\nThis couldn't be added right now.")
     return {"status": "success", "data": doc}
 
 
