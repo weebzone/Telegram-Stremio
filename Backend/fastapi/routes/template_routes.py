@@ -238,13 +238,6 @@ async def public_request_page(request: Request):
     return templates.TemplateResponse("request_public.html", ctx)
 
 
-#----- Health / diagnostics shell
-async def admin_health_page(request: Request, _: bool = Depends(require_auth)):
-    ctx = _base_context(request)
-    ctx["current_user"] = get_current_user(request)
-    return templates.TemplateResponse("health.html", ctx)
-
-
 #----- Custom catalogs shell
 async def custom_catalogs_page(request: Request, _: bool = Depends(require_auth)):
     ctx = _base_context(request)

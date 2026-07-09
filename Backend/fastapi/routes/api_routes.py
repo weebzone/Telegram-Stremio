@@ -1611,9 +1611,9 @@ async def health_api() -> dict:
 
 
 #----- Full diagnostics report (DBs, bot clients, TMDB, base URL)
-async def health_report_api() -> dict:
+async def health_report_api(force: bool = False) -> dict:
     try:
-        return {"status": "success", "data": await run_health_checks()}
+        return {"status": "success", "data": await run_health_checks(force=force)}
     except Exception as e:
         LOGGER.error(f"Health report error: {e}")
         return {"status": "error", "message": str(e)}

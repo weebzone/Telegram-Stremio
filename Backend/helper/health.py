@@ -1,4 +1,5 @@
 import asyncio
+import time
 from datetime import datetime
 
 import httpx
@@ -16,6 +17,21 @@ from Backend.pyrofork.bot import (
 
 #----- Rough Atlas free-tier (M0) storage ceiling, used only as a usage guide
 _FREE_TIER_BYTES = 512 * 1024 * 1024
+
+#----- Cache TTLs (seconds) so the panel can poll often without hammering DB/TMDB.
+#----- Bot clients are always computed fresh (in-memory) for realtime load.
+_TTL = {"databases": 30, "tmdb": 300, "base_url": 60}
+_cache: dict = {}
+
+
+async def _cached(key: str, producer, force: bool = False):
+    now = time.monotonic()
+    entry = _cache.get(key)
+    if not force and entry and (now - entry[0]) < _TTL[key]:
+        return entry[1]
+    result = await producer()
+    _cache[key] = (now, result)
+    return result
 
 
 async def _check_databases() -> dict:
@@ -88,11 +104,11 @@ async def _check_base_url() -> dict:
         return {"key": "base_url", "label": "Base URL", "status": "error", "message": str(e)[:140], "url": base}
 
 
-async def run_health_checks() -> dict:
-    databases = await _check_databases()
+async def run_health_checks(force: bool = False) -> dict:
+    databases = await _cached("databases", _check_databases, force)
     bots = _check_bots()
-    tmdb = await _check_tmdb()
-    base_url = await _check_base_url()
+    tmdb = await _cached("tmdb", _check_tmdb, force)
+    base_url = await _cached("base_url", _check_base_url, force)
 
     statuses = [databases["status"], bots["status"], tmdb["status"], base_url["status"]]
     if "down" in (databases["status"], bots["status"]):

@@ -366,18 +366,42 @@
     <div class="glass-card rounded-3xl overflow-hidden mb-6 sm:mb-8">
         <div class="px-5 sm:px-6 lg:px-8 py-4 sm:py-5 border-b border-hairline bg-surface flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
-                <h2 class="section-title text-xl sm:text-2xl">Bot Health & Load</h2>
-                <p class="muted text-sm mt-1">Track stream load, average speed, and failure trends per bot.</p>
+                <h2 class="section-title text-xl sm:text-2xl">Health &amp; Diagnostics</h2>
+                <p class="muted text-sm mt-1">Live bot load, plus database, TMDB and public-URL checks.</p>
             </div>
-            <span class="pill">Realtime status</span>
+            <div class="flex items-center gap-2">
+                <span id="hz-overall-badge" class="hz-badge s-warning">checking…</span>
+                <button onclick="fetchHealthReport(true)" class="btn-ui btn-ghost"><i class="fa-solid fa-stethoscope"></i> Recheck</button>
+            </div>
         </div>
 
-        <div id="stat-workloads" class="p-4 sm:p-5 lg:p-6">
-            <div class="empty-state">Loading bot data...</div>
+        <div class="p-4 sm:p-5 lg:p-6">
+            <div id="hz-infra" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
+                <div class="empty-state">Running checks…</div>
+            </div>
+            <h3 class="hz-subhead"><i class="fa-solid fa-robot"></i> Telegram Clients <span class="pill" style="margin-left:.35rem"><span class="loading-dot"></span> live</span></h3>
+            <div id="stat-workloads">
+                <div class="empty-state">Loading bot data...</div>
+            </div>
         </div>
     </div>
 
     <style>
+      .hz-badge { padding: 0.2rem 0.7rem; border-radius: 999px; font-size: 0.7rem; font-weight: 800; text-transform: uppercase; }
+      .s-ok { background: #22c55e22; color: #22c55e; }
+      .s-degraded, .s-warning, .s-not_configured { background: #f59e0b22; color: #f59e0b; }
+      .s-down, .s-error, .s-critical { background: #ef444422; color: #ef4444; }
+      .hz-card { border: 1px solid var(--hairline, rgba(255,255,255,0.08)); background: var(--surface, rgba(255,255,255,0.03)); border-radius: 1rem; padding: 1rem 1.1rem; }
+      .hz-top { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+      .hz-name { font-weight: 800; font-size: .92rem; display: flex; align-items: center; gap: .5rem; }
+      .hz-msg { color: var(--text-sec); font-size: .8rem; margin-top: .5rem; word-break: break-word; }
+      .hz-item { display: flex; align-items: center; justify-content: space-between; gap: .6rem; font-size: .82rem; border-top: 1px solid var(--hairline, rgba(255,255,255,0.06)); padding-top: .45rem; margin-top: .45rem; }
+      .hz-item .lbl { display: flex; align-items: center; gap: .45rem; font-weight: 600; }
+      .hz-item .meta { color: var(--text-sec); font-size: .74rem; text-align: right; }
+      .hz-subhead { font-weight: 800; font-size: 0.95rem; margin: 0.25rem 0 0.85rem; display: flex; align-items: center; gap: .5rem; }
+      .mini-dot { width: .55rem; height: .55rem; border-radius: 999px; display: inline-block; }
+      .hz-usebar { height: 5px; border-radius: 999px; background: var(--hairline, rgba(255,255,255,0.12)); overflow: hidden; width: 90px; margin-top: 3px; margin-left: auto; }
+      .hz-usebar > span { display: block; height: 100%; background: var(--primary); }
       .ins-stat { background: var(--surface, rgba(255,255,255,0.03)); border: 1px solid var(--hairline, rgba(255,255,255,0.08)); border-radius: 1rem; padding: 0.9rem 1rem; text-align: center; }
       .ins-v { font-size: 1.5rem; font-weight: 800; }
       .ins-l { font-size: 0.7rem; text-transform: uppercase; letter-spacing: .05em; color: var(--text-sec); margin-top: 0.2rem; }
@@ -564,6 +588,45 @@
             console.error(err);
             showToast('Failed to load system stats.', 'error', 'Load Error');
         }
+    }
+
+    function hzBadge(status) { return `<span class="hz-badge s-${status}">${escapeHtml(String(status).replace('_', ' '))}</span>`; }
+    function hzMini(ok) { return `<span class="mini-dot" style="background:${ok ? '#22c55e' : '#ef4444'}"></span>`; }
+
+    function hzInfraCard(sec) {
+        const icon = { databases: 'fa-database', tmdb: 'fa-film', base_url: 'fa-link' }[sec.key] || 'fa-circle-check';
+        let body;
+        if (sec.key === 'databases') {
+            body = (sec.items || []).map(i => `
+                <div class="hz-item">
+                    <div class="lbl">${hzMini(i.status === 'ok')} ${escapeHtml(i.name)}</div>
+                    <div class="meta">${i.status === 'ok'
+                        ? `${escapeHtml(i.size_mb)} MB<div class="hz-usebar"><span style="width:${Math.min(100, i.usage_pct || 0)}%"></span></div>`
+                        : escapeHtml(i.message || 'unreachable')}</div>
+                </div>`).join('') || '<div class="hz-msg">No databases.</div>';
+        } else {
+            body = `<div class="hz-msg">${escapeHtml(sec.message || '')}${sec.url ? '<br><span style="opacity:.7">' + escapeHtml(sec.url) + '</span>' : ''}</div>`;
+        }
+        return `<div class="hz-card">
+            <div class="hz-top"><span class="hz-name"><i class="fa-solid ${icon}"></i> ${escapeHtml(sec.label)}</span>${hzBadge(sec.status)}</div>
+            ${body}
+        </div>`;
+    }
+
+    async function fetchHealthReport(force) {
+        try {
+            const res = await fetch('/api/admin/health/report' + (force ? '?fresh=1' : ''));
+            const data = await res.json();
+            if (data.status !== 'success') return;
+            const d = data.data || {};
+            const overall = d.overall || 'warning';
+            const label = { ok: 'Healthy', warning: 'Attention', critical: 'Critical' }[overall] || overall;
+            const badge = document.getElementById('hz-overall-badge');
+            if (badge) { badge.className = 'hz-badge s-' + overall; badge.textContent = label; }
+            const infra = (d.sections || []).filter(s => s.key !== 'bots');
+            document.getElementById('hz-infra').innerHTML = infra.map(hzInfraCard).join('');
+            if (force) showToast('Health re-checked.', 'success', 'Health');
+        } catch (e) { /* ignore transient errors */ }
     }
 
     function fmtBytes(bytes) {
@@ -832,9 +895,11 @@
 
     document.addEventListener('DOMContentLoaded', () => {
         fetchStats();
+        fetchHealthReport();
         fetchAnalytics();
         fetchDeadLinks();
-        setInterval(fetchStats, 10000);
+        setInterval(fetchStats, 5000);          // realtime bot load
+        setInterval(fetchHealthReport, 20000);  // infra checks (cached server-side)
         setInterval(fetchAnalytics, 15000);
     });
 </script>
