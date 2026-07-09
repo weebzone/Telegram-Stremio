@@ -1,3 +1,4 @@
+import re
 from datetime import datetime
 
 from Backend import db
@@ -46,6 +47,21 @@ def subtitle_ext(name: str) -> str:
     return ".srt"
 
 
+#----- Full-word language names (len >= 4) used to trim a trailing language token
+_LANG_WORDS = set()
+for _needles, (_code, _label) in _LANG_PATTERNS:
+    _LANG_WORDS.add(_label.lower())
+    for _n in _needles:
+        _n = _n.strip(".")
+        if len(_n) >= 4:
+            _LANG_WORDS.add(_n)
+
+_TRAILING_LANG_RE = re.compile(
+    r"[\s._-]+(" + "|".join(sorted(_LANG_WORDS, key=len, reverse=True)) + r")\s*$",
+    re.IGNORECASE,
+)
+
+
 def detect_language(name: str):
     low = f".{(name or '').lower()}."
     for needles, result in _LANG_PATTERNS:
@@ -54,28 +70,45 @@ def detect_language(name: str):
     return "und", "Unknown"
 
 
+#----- Drop the subtitle extension and any trailing language word(s)
+def _strip_language(name: str) -> str:
+    base = name or ""
+    for ext in SUBTITLE_EXTS:
+        if base.lower().endswith(ext):
+            base = base[: -len(ext)]
+            break
+    prev = None
+    while prev != base:
+        prev = base
+        base = _TRAILING_LANG_RE.sub("", base)
+    return base.strip() or (name or "")
+
+
 #----- Resolve a subtitle filename to (imdb_id, media_type, season, episode)
 async def _identify(name: str):
-    parsed = parse_media_name(clean_filename(name))
+    default_id = extract_default_id(name)
+    parsed = parse_media_name(clean_filename(_strip_language(name)))
     title = parsed.get("title")
-    if not title:
-        return None
-
     year = parsed.get("year")
     season = parsed.get("season")
     episode = parsed.get("episode")
-    default_id = extract_default_id(name)
 
-    if season and episode and not isinstance(season, list) and not isinstance(episode, list):
-        info = await fetch_tv_metadata(title, int(season), int(episode), None, year, None, default_id)
+    #----- Need either a direct IMDb/TMDb id or a parsable title to match
+    if not default_id and not title:
+        return None
+
+    is_tv = bool(season and episode and not isinstance(season, list) and not isinstance(episode, list))
+    if is_tv:
+        info = await fetch_tv_metadata(title or "", int(season), int(episode), None, year, None, default_id)
+        season_out, episode_out = int(season), int(episode)
     else:
-        info = await fetch_movie_metadata(title, None, year, None, default_id)
-        season = episode = None
+        info = await fetch_movie_metadata(title or "", None, year, None, default_id)
+        season_out = episode_out = None
 
     if not info or not info.get("imdb_id"):
         return None
     media_type = "tv" if info.get("media_type") in ("tv", "series") else "movie"
-    return info["imdb_id"], media_type, season, episode
+    return info["imdb_id"], media_type, season_out, episode_out
 
 
 async def ingest_subtitle(name: str, channel: int, msg_id: int) -> None:
