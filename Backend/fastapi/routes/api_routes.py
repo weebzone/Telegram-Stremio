@@ -24,6 +24,13 @@ from Backend.helper.auto_catalog import (
 from Backend.helper.custom_dl import ByteStreamer, _speed_test_single_client, run_speed_test
 from Backend.helper.encrypt import decode_string, encode_string
 from Backend.helper.manual_add import resolve_telegram_message
+from Backend.helper.requests_manager import (
+    delete_request,
+    list_requests,
+    notify_user,
+    request_counts,
+    set_status,
+)
 from Backend.helper.metadata import (
     fetch_selected_movie_metadata,
     fetch_selected_tv_metadata,
@@ -484,6 +491,37 @@ async def clear_stream_analytics_api() -> dict:
         }
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+
+#----- Content requests (from the bot's /request command)
+async def get_requests_api(status: str = None) -> dict:
+    try:
+        items = await list_requests(status)
+        counts = await request_counts()
+        return {"status": "success", "data": {"requests": items, "counts": counts}}
+    except Exception as e:
+        LOGGER.error(f"Requests API error: {e}")
+        return {"status": "error", "message": str(e)}
+
+
+async def update_request_api(request_id: str, payload: dict) -> dict:
+    new_status = str(payload.get("status", "")).strip()
+    doc = await set_status(request_id, new_status)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Request not found or invalid status.")
+
+    if new_status == "fulfilled":
+        await notify_user(doc["user_id"], f"✅ <b>Your request is now available!</b>\n\n🎬 {doc['text']}\n\nEnjoy watching.")
+    elif new_status == "rejected":
+        await notify_user(doc["user_id"], f"❌ <b>Request update</b>\n\n🎬 {doc['text']}\n\nThis couldn't be added right now.")
+    return {"status": "success", "data": doc}
+
+
+async def delete_request_api(request_id: str) -> dict:
+    if not await delete_request(request_id):
+        raise HTTPException(status_code=404, detail="Request not found.")
+    return {"status": "success", "message": "Request deleted."}
+
 
 #----- Admin subscription management
 async def get_subscription_plans_api() -> dict:

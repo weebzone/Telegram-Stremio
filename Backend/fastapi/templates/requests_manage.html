@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+{% block title %}Content Requests - Telegram Stremio{% endblock %}
+
+{% block content %}
+<style>
+  .req-shell { max-width: 1000px; margin: 0 auto; }
+  .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.75rem; }
+  .stat-box { background: var(--surface, rgba(255,255,255,0.03)); border: 1px solid var(--hairline, rgba(255,255,255,0.08));
+              border-radius: 1rem; padding: 0.9rem 1rem; text-align: center; }
+  .stat-box .v { font-size: 1.6rem; font-weight: 800; }
+  .stat-box .l { font-size: 0.72rem; text-transform: uppercase; letter-spacing: .05em; color: var(--text-sec); }
+  .tabs { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+  .tab { padding: 0.4rem 0.9rem; border-radius: 9999px; border: 1px solid var(--hairline, rgba(255,255,255,0.08));
+         cursor: pointer; font-size: 0.85rem; font-weight: 600; color: var(--text-sec); background: transparent; }
+  .tab.active { background: var(--primary); color: var(--bg); border-color: var(--primary); }
+  .req-row { display: flex; align-items: center; gap: 1rem; padding: 0.9rem 1rem; border: 1px solid var(--hairline, rgba(255,255,255,0.08));
+             border-radius: 1rem; background: var(--surface, rgba(255,255,255,0.03)); margin-bottom: 0.6rem; }
+  .req-main { flex: 1; min-width: 0; }
+  .req-title { font-weight: 700; word-break: break-word; }
+  .req-meta { font-size: 0.78rem; color: var(--text-sec); margin-top: 0.15rem; }
+  .req-actions { display: flex; gap: 0.4rem; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
+  .badge { padding: 0.15rem 0.6rem; border-radius: 9999px; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; }
+  .badge-pending { background: #f59e0b22; color: #f59e0b; }
+  .badge-fulfilled { background: #22c55e22; color: #22c55e; }
+  .badge-rejected { background: #ef444422; color: #ef4444; }
+  .icon-btn { width: 2.1rem; height: 2.1rem; border-radius: 0.6rem; border: 1px solid var(--hairline, rgba(255,255,255,0.08));
+              background: transparent; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+  .icon-btn:hover { background: var(--surface-2, rgba(255,255,255,0.06)); }
+</style>
+
+<div class="req-shell">
+  <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+    <div>
+      <h1 class="section-title text-2xl sm:text-3xl">Content Requests</h1>
+      <p class="muted text-sm mt-1">Titles your users requested with <code>/request</code> in the bot.</p>
+    </div>
+    <button onclick="loadRequests()" class="btn-ui btn-ghost"><i class="fa-solid fa-rotate"></i> Refresh</button>
+  </div>
+
+  <div class="stat-grid mb-4">
+    <div class="stat-box"><div class="v" style="color:#f59e0b" id="rq-pending">0</div><div class="l">Pending</div></div>
+    <div class="stat-box"><div class="v" style="color:#22c55e" id="rq-fulfilled">0</div><div class="l">Fulfilled</div></div>
+    <div class="stat-box"><div class="v" style="color:#ef4444" id="rq-rejected">0</div><div class="l">Rejected</div></div>
+    <div class="stat-box"><div class="v" id="rq-total">0</div><div class="l">Total</div></div>
+  </div>
+
+  <div class="tabs mb-4">
+    <button class="tab active" data-status="" onclick="setFilter(this, '')">All</button>
+    <button class="tab" data-status="pending" onclick="setFilter(this, 'pending')">Pending</button>
+    <button class="tab" data-status="fulfilled" onclick="setFilter(this, 'fulfilled')">Fulfilled</button>
+    <button class="tab" data-status="rejected" onclick="setFilter(this, 'rejected')">Rejected</button>
+  </div>
+
+  <div id="req-list"></div>
+</div>
+
+<script>
+let currentFilter = '';
+
+function setFilter(btn, status) {
+  currentFilter = status;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  loadRequests();
+}
+
+function fmtDate(iso) {
+  if (!iso) return '';
+  try { return new Date(iso).toLocaleString(); } catch (e) { return iso; }
+}
+
+function esc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+}
+
+function rowHtml(r) {
+  const uname = r.username ? '@' + esc(r.username) : 'N/A';
+  const badge = `<span class="badge badge-${r.status}">${r.status}</span>`;
+  let actions = '';
+  if (r.status !== 'fulfilled')
+    actions += `<button class="icon-btn" title="Mark fulfilled" onclick="setStatus('${r._id}','fulfilled')"><i class="fa-solid fa-check" style="color:#22c55e"></i></button>`;
+  if (r.status !== 'rejected')
+    actions += `<button class="icon-btn" title="Reject" onclick="setStatus('${r._id}','rejected')"><i class="fa-solid fa-xmark" style="color:#ef4444"></i></button>`;
+  if (r.status !== 'pending')
+    actions += `<button class="icon-btn" title="Reopen" onclick="setStatus('${r._id}','pending')"><i class="fa-solid fa-rotate-left"></i></button>`;
+  actions += `<button class="icon-btn" title="Delete" onclick="removeRequest('${r._id}')"><i class="fa-solid fa-trash"></i></button>`;
+
+  return `<div class="req-row">
+    <div class="req-main">
+      <div class="req-title">🎬 ${esc(r.text)} &nbsp;${badge}</div>
+      <div class="req-meta">👤 ${esc(r.user_name)} · ${uname} · 🆔 ${esc(r.user_id)} · 🕒 ${fmtDate(r.created_at)}</div>
+    </div>
+    <div class="req-actions">${actions}</div>
+  </div>`;
+}
+
+async function loadRequests() {
+  const list = document.getElementById('req-list');
+  list.innerHTML = `<p class="muted text-sm">Loading…</p>`;
+  try {
+    const url = '/api/admin/requests' + (currentFilter ? ('?status=' + currentFilter) : '');
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data.status !== 'success') throw new Error(data.message || 'Failed to load');
+
+    const c = data.data.counts || {};
+    setTextSafe('rq-pending', c.pending || 0);
+    setTextSafe('rq-fulfilled', c.fulfilled || 0);
+    setTextSafe('rq-rejected', c.rejected || 0);
+    setTextSafe('rq-total', c.total || 0);
+
+    const items = data.data.requests || [];
+    list.innerHTML = items.length
+      ? items.map(rowHtml).join('')
+      : `<p class="muted text-sm" style="text-align:center;padding:2rem 0">No requests here yet.</p>`;
+  } catch (e) {
+    list.innerHTML = `<p class="text-sm" style="color:#ef4444">Failed to load requests.</p>`;
+  }
+}
+
+function setTextSafe(id, val) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = val;
+}
+
+async function setStatus(id, status) {
+  try {
+    const res = await fetch('/api/admin/requests/' + id, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Update failed');
+    showToast('Request marked ' + status + '.', 'success', 'Updated');
+    loadRequests();
+  } catch (e) {
+    showToast(e.message || 'Update failed', 'error', 'Error');
+  }
+}
+
+async function removeRequest(id) {
+  try {
+    const res = await fetch('/api/admin/requests/' + id, { method: 'DELETE' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || 'Delete failed');
+    showToast('Request deleted.', 'success', 'Deleted');
+    loadRequests();
+  } catch (e) {
+    showToast(e.message || 'Delete failed', 'error', 'Error');
+  }
+}
+
+document.addEventListener('DOMContentLoaded', loadRequests);
+</script>
+{% endblock %}

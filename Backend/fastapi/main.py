@@ -24,6 +24,7 @@ from Backend.fastapi.routes.api_routes import (
     delete_custom_catalog_api,
     delete_media_api,
     delete_movie_quality_api,
+    delete_request_api,
     delete_subscription_plan_api,
     delete_tv_episode_api,
     delete_tv_quality_api,
@@ -37,6 +38,7 @@ from Backend.fastapi.routes.api_routes import (
     get_custom_catalog_items_api,
     get_dead_links_api,
     get_media_visibility_api,
+    get_requests_api,
     get_stream_analytics_api,
     get_subscription_plans_api,
     get_settings_api,
@@ -65,6 +67,7 @@ from Backend.fastapi.routes.api_routes import (
     update_auto_catalog_settings_api,
     update_custom_catalog_api,
     update_media_api,
+    update_request_api,
     update_settings_api,
     update_subscription_plan_api,
     update_token_limits_api,
@@ -75,6 +78,7 @@ from Backend.fastapi.routes.stremio_routes import router as stremio_router
 from Backend.fastapi.routes.template_routes import (
     admin_access_page,
     admin_dashboard_page,
+    admin_requests_page,
     admin_subscriptions_page,
     custom_catalogs_page,
     dashboard_page,
@@ -302,6 +306,24 @@ async def link_token_to_user(token: str, payload: dict, _: bool = Depends(requir
     if not user_id:
         raise HTTPException(status_code=400, detail="user_id is required.")
     return await link_token_user_api(token, user_id)
+
+
+#----- Content requests
+@app.get("/admin/requests", response_class=HTMLResponse)
+async def admin_requests(request: Request, _: bool = Depends(require_auth)):
+    return await admin_requests_page(request, _)
+
+@app.get("/api/admin/requests")
+async def get_requests(status: str = Query(None), _: bool = Depends(require_auth)):
+    return await get_requests_api(status)
+
+@app.patch("/api/admin/requests/{request_id}")
+async def update_request(request_id: str, payload: dict, _: bool = Depends(require_auth)):
+    return await update_request_api(request_id, payload)
+
+@app.delete("/api/admin/requests/{request_id}")
+async def delete_request_route(request_id: str, _: bool = Depends(require_auth)):
+    return await delete_request_api(request_id)
 
 @app.get("/api/system/speedtest")
 async def speed_test(
