@@ -1,21 +1,21 @@
 name: Deploy Docs to GitHub Pages
 
 # Builds the Sphinx (Furo) documentation in docs/ and publishes it to GitHub Pages.
-# Runs on every push to main/master that touches the docs, and can be triggered manually.
 #
-# One-time setup (all doable from a browser):
-#   1. Merge this workflow into your default branch (main/master).
-#   2. In this GitHub repo: Settings -> Pages -> "Build and deployment"
-#        - Source: "GitHub Actions"
-#   3. Push a commit to docs/ (or run this workflow manually from the Actions tab).
-#      Your site will be published at:
-#        https://<your-username>.github.io/<your-repo>/
+# The build job uses actions/configure-pages with enablement, which programmatically
+# sets the repo's Pages source to "GitHub Actions" — so you do NOT need to manually
+# flip Settings -> Pages -> Source. It also stops the automatic Jekyll builder
+# ("pages build and deployment") from serving raw Markdown.
 #
+# Publishes to: https://<your-username>.github.io/<your-repo>/
 # No secrets required — GitHub Pages uses the built-in GITHUB_TOKEN.
+#
+# NOTE: "docs/user-guide" is included below so the site can be previewed before the
+#       PR is merged. After merging, that branch line can be removed (master is enough).
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, docs/user-guide]
     paths:
       - "docs/**"
       - ".github/workflows/docs.yml"
@@ -38,6 +38,11 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Configure GitHub Pages (sets source to GitHub Actions)
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
 
       - name: Set up Python
         uses: actions/setup-python@v5
