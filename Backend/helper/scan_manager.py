@@ -11,6 +11,7 @@ from Backend.helper.encrypt import encode_string, decode_string
 from Backend.helper.metadata import metadata
 from Backend.helper.pyro import clean_filename, get_readable_file_size, remove_urls
 from Backend.helper.split_files import parse_split_info, strip_part_suffix
+from Backend.helper.subtitles import ingest_subtitle, is_subtitle_file
 
 SCAN_BATCH_SIZE = 200          
 SCAN_MAX_EMPTY_BATCHES = 10    
@@ -18,6 +19,7 @@ SCAN_MAX_ID_CAP = 1_000_000
 SCAN_BATCH_DELAY = 0.5         
 SCAN_PERSIST_EVERY = 1         
 SCAN_PROBE_TEXT = "🔄"         
+SCAN_PROCESS_CONCURRENCY = 8   
 
 DBCHECK_CONCURRENCY = 5        
 DBCHECK_BATCH_DELAY = 0.3      
@@ -48,9 +50,10 @@ class ScanManager:
         self._task: Optional[asyncio.Task] = None
         self._cancel = False
         self._lock = asyncio.Lock()
+        self._db_lock = asyncio.Lock()
         self.state: Dict[str, Any] = self._blank_state()
 
-    # ── State helpers ────────────────────────────────────────────────────────
+    #----- ── State helpers ────────────────────────────────────────────────────────
     @staticmethod
     def _blank_state() -> Dict[str, Any]:
         return {
@@ -70,6 +73,8 @@ class ScanManager:
                 "skipped_dup": 0,
                 "skipped_meta": 0,
                 "skipped_nonvid": 0,
+                "subtitles_added": 0,
+                "subtitles_skipped": 0,
                 "errors": 0,
             },
             "started_at": 0.0,
@@ -87,6 +92,8 @@ class ScanManager:
             "skipped_dup": 0,
             "skipped_meta": 0,
             "skipped_nonvid": 0,
+            "subtitles_added": 0,
+            "subtitles_skipped": 0,
             "errors": 0,
         }
 
@@ -289,7 +296,6 @@ class ScanManager:
             await self._persist()
 
     async def _scan_channel(self, client, chat_id: int, ch_key: str) -> bool:
-        db = self._db
         s = self.state
 
         try:
@@ -317,7 +323,7 @@ class ScanManager:
         batch_count = 0
 
         while not self._cancel and current < SCAN_MAX_ID_CAP:
-            # ── Stop condition ───────────────────────────────────────────────
+            #----- ── Stop condition ───────────────────────────────────────────────
             if use_probe:
                 if current > last_id:
                     break
@@ -358,20 +364,27 @@ class ScanManager:
             if not isinstance(messages, list):
                 messages = [messages]
 
-            batch_had_content = False
-            for message in messages:
-                if self._cancel:
-                    s["cursors"][str(ch_key)] = current
-                    s["current_id"] = current
-                    await self._persist()
-                    return False
-                if message is None or message.empty:
-                    continue
+            to_process = [m for m in messages if m is not None and not m.empty]
+            batch_had_content = bool(to_process)
 
-                batch_had_content = True
-                s["counters"]["total_found"] += 1
-                await self._process_message(message, chat_id)
-                s["counters"]["processed"] += 1
+            if to_process:
+                s["counters"]["total_found"] += len(to_process)
+                sem = asyncio.Semaphore(SCAN_PROCESS_CONCURRENCY)
+
+                async def _worker(msg):
+                    async with sem:
+                        if self._cancel:
+                            return
+                        await self._process_message(msg, chat_id)
+                        s["counters"]["processed"] += 1
+
+                await asyncio.gather(*(_worker(m) for m in to_process))
+
+            if self._cancel:
+                s["cursors"][str(ch_key)] = current
+                s["current_id"] = current
+                await self._persist()
+                return False
 
             empty_streak = 0 if batch_had_content else empty_streak + 1
             current = upper
@@ -417,6 +430,16 @@ class ScanManager:
     async def _process_message(self, message, chat_id: int) -> None:
         s = self.state
         db = self._db
+
+        #----- Subtitle files: match to a title and store, don't treat as media
+        sub_name = message.document.file_name if message.document else ""
+        if sub_name and is_subtitle_file(sub_name):
+            channel_int = int(str(chat_id).replace("-100", ""))
+            if await ingest_subtitle(sub_name, channel_int, message.id):
+                s["counters"]["subtitles_added"] += 1
+            else:
+                s["counters"]["subtitles_skipped"] += 1
+            return
 
         is_video = bool(message.video)
         is_supported = is_video
@@ -464,14 +487,15 @@ class ScanManager:
             title_clean += '.mkv'
 
         try:
-            updated_id = await db.insert_media(
-                metadata_info,
-                channel=channel_int,
-                msg_id=msg_id,
-                size=size,
-                name=title_clean,
-                raw_size=raw_size,
-            )
+            async with self._db_lock:
+                updated_id = await db.insert_media(
+                    metadata_info,
+                    channel=channel_int,
+                    msg_id=msg_id,
+                    size=size,
+                    name=title_clean,
+                    raw_size=raw_size,
+                )
             if updated_id:
                 s["counters"]["indexed"] += 1
             else:
@@ -480,10 +504,14 @@ class ScanManager:
             LOGGER.error(f"[ScanManager] DB insert error msg {msg_id}: {e}")
             s["counters"]["errors"] += 1
 
-    # ── Purge (rescan helper) ────────────────────────────────────────────────
+    #----- ── Purge (rescan helper) ────────────────────────────────────────────────
     async def _purge_channel_entries(self, channel_int: int) -> int:
         db = self._db
         purged = 0
+        try:
+            await db.dbs["tracking"]["subtitles"].delete_many({"chat_id": channel_int})
+        except Exception as e:
+            LOGGER.warning(f"[ScanManager] subtitle purge failed for {channel_int}: {e}")
         for i in range(1, db.current_db_index + 1):
             storage = db.dbs.get(f"storage_{i}")
             if storage is None:
@@ -584,7 +612,7 @@ class DbCheckManager:
             "error": s["error"],
         }
 
-    # ── Control ───────────────────────────────────────────────────────────────
+    #----- ── Control ───────────────────────────────────────────────────────────────
     async def start(self, client) -> Dict[str, Any]:
         async with self._lock:
             if self.state["status"] == "running":
@@ -602,7 +630,7 @@ class DbCheckManager:
         self._cancel = True
         return {"ok": True, "message": "Stop requested — finishing the current batch."}
 
-    # ── Single-message check ───────────────────────────────────────────────────
+    #----- ── Single-message check ───────────────────────────────────────────────────
     async def _check_message(self, client, stream_hash: str):
         try:
             decoded = await decode_string(stream_hash)
@@ -663,7 +691,7 @@ class DbCheckManager:
         elapsed = max(1, int(_now() - s["started_at"]))
         s["speed"] = s["checked"] // elapsed
 
-    # ── Worker ──────────────────────────────────────────────────────────────────
+    #----- ── Worker ──────────────────────────────────────────────────────────────────
     async def _run(self, client) -> None:
         db = self._db
         s = self.state
@@ -673,7 +701,7 @@ class DbCheckManager:
                 if storage is None:
                     continue
 
-                # Movies
+                #----- Movies
                 last_id = None
                 while not self._cancel:
                     query = {"_id": {"$gt": last_id}} if last_id else {}
@@ -692,7 +720,7 @@ class DbCheckManager:
                             await self._record_results(batch, results)
                             await asyncio.sleep(DBCHECK_BATCH_DELAY)
 
-                # TV
+                #----- TV
                 last_id = None
                 while not self._cancel:
                     query = {"_id": {"$gt": last_id}} if last_id else {}
@@ -729,10 +757,9 @@ class DbCheckManager:
             s["finished_at"] = _now()
             LOGGER.error(f"[DbCheck] Error: {e}")
 
-    # ── Purge ────────────────────────────────────────────────────────────────────
+    #----- ── Purge ────────────────────────────────────────────────────────────────────
     async def purge(self, stream_ids: Optional[List[str]] = None) -> Dict[str, Any]:
-        """Delete the given dead stream entries (defaults to the ones found in the
-        last check). Returns how many were purged."""
+        #----- Delete the given dead stream entries (defaults to the last check's); returns count purged
         db = self._db
         if stream_ids is None:
             stream_ids = [d["id"] for d in self.state.get("dead_entries", [])]
@@ -749,7 +776,7 @@ class DbCheckManager:
             )
             purged += sum(1 for r in results if r is True)
 
-        # Drop purged ids from the in-memory dead list
+        #----- Drop purged ids from the in-memory dead list
         purged_set = set(stream_ids)
         self.state["dead_entries"] = [
             d for d in self.state.get("dead_entries", []) if d["id"] not in purged_set
@@ -759,6 +786,6 @@ class DbCheckManager:
                 "purged": purged}
 
 
-# ── Singletons ──────────────────────────────────────────────────────────────
+#----- ── Singletons ──────────────────────────────────────────────────────────────
 scan_manager = ScanManager()
 dbcheck_manager = DbCheckManager()

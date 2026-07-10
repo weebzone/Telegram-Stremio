@@ -1,6 +1,6 @@
 import asyncio
 import re
-from typing import Optional, List
+from typing import List, Optional
 
 import httpx
 from rapidfuzz import fuzz
@@ -10,7 +10,6 @@ from Backend.logger import LOGGER
 ANILIST_URL = "https://graphql.anilist.co"
 ANIZIP_URL = "https://api.ani.zip/mappings"
 
-# Min title similarity to trust an AniList hit; below this we fall back to TMDb/Cinemeta.
 _ANIME_TITLE_THRESHOLD = 0.55
 
 _client: Optional[httpx.AsyncClient] = None
@@ -51,7 +50,6 @@ query ($search: String) {
 }
 """
 
-
 async def _get_client() -> httpx.AsyncClient:
     global _client
     async with _client_lock:
@@ -78,8 +76,6 @@ def _normalize_title(title: str) -> str:
     t = re.sub(r"[^\w\s]", " ", t)
     return re.sub(r"\s+", " ", t).strip()
 
-
-# Coverage-aware fuzzy ratio (mirrors metadata._fuzzy_ratio).
 def _fuzzy_ratio(a: str, b: str) -> float:
     if not a or not b:
         return 0.0
@@ -92,8 +88,6 @@ def _fuzzy_ratio(a: str, b: str) -> float:
     except Exception:
         return 0.0
 
-
-# Best similarity between the parsed title and the AniList titles/synonyms.
 def _title_match_score(query: str, media: dict) -> float:
     titles = media.get("title") or {}
     candidates = [titles.get("romaji"), titles.get("english"), *(media.get("synonyms") or [])]
@@ -107,8 +101,6 @@ def _title_match_score(query: str, media: dict) -> float:
             best = max(best, _fuzzy_ratio(q, cn))
     return best
 
-
-# Drop an AniList hit whose title is too far from the parsed title.
 def _validate_match(media: Optional[dict], title: str, context: str) -> Optional[dict]:
     if not media:
         return None
@@ -122,12 +114,10 @@ def _validate_match(media: Optional[dict], title: str, context: str) -> Optional
         return None
     return media
 
-
 def _season_queries(title: str, season: Optional[int]) -> List[str]:
     if season and int(season) > 1:
         return [f"{title} Season {season}", f"{title} {season}", title]
     return [title]
-
 
 async def _anilist_request(search: str, query: str = _ANILIST_QUERY) -> Optional[dict]:
     try:
@@ -139,7 +129,6 @@ async def _anilist_request(search: str, query: str = _ANILIST_QUERY) -> Optional
     except Exception as e:
         LOGGER.warning(f"[ANIME] AniList search failed for '{search}': {e}")
         return None
-
 
 async def search_anime(title: str, season: Optional[int] = None) -> Optional[dict]:
     cache_key = f"{title}::{season}"
@@ -186,8 +175,6 @@ def _anizip_image(images, cover_type: str) -> str:
     return ""
 
 
-# Build the fields shared by anime movie/TV payloads from AniList + ani.zip data.
-# imdb_id may be None when ani.zip lacks it — the caller resolves it from tmdb_id.
 def _common_payload(media: dict, doc: dict, title: str) -> dict:
     mappings = doc.get("mappings") or {}
     tmdb_id = mappings.get("themoviedb_id")
@@ -216,8 +203,6 @@ def _common_payload(media: dict, doc: dict, title: str) -> dict:
         "runtime": f"{duration} min" if duration else "",
     }
 
-
-# Resolve accurate anime TV metadata via AniList (search) + api.ani.zip (mappings/episodes).
 async def fetch_anime_metadata(title, season, episode, encoded_string, year=None, quality=None) -> Optional[dict]:
     media = await search_anime(title, season)
     if not media:
@@ -246,8 +231,6 @@ async def fetch_anime_metadata(title, season, episode, encoded_string, year=None
     })
     return payload
 
-
-# Resolve accurate anime movie metadata via AniList (format MOVIE) + api.ani.zip.
 async def fetch_anime_movie_metadata(title, encoded_string, year=None, quality=None) -> Optional[dict]:
     media = await search_anime_movie(title)
     if not media:

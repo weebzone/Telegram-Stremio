@@ -259,7 +259,7 @@
     <div class="glass-card rounded-3xl overflow-hidden mb-6 sm:mb-8">
         <div class="hero-wrap">
             {% if media_details.backdrop %}
-            <img src="{{ media_details.backdrop }}" alt="{{ media_details.title }} backdrop" class="hero-backdrop"
+            <img src="{{ cover_url(media_details.backdrop) }}" alt="{{ media_details.title }} backdrop" class="hero-backdrop"
                  onerror="this.style.display='none'">
             {% endif %}
             <div class="hero-gradient"></div>
@@ -267,7 +267,7 @@
             <div class="relative z-10 p-5 sm:p-6 lg:p-8">
                 <div class="flex flex-col md:flex-row md:items-end gap-5 sm:gap-6">
                     <div class="mx-auto md:mx-0 flex-shrink-0">
-                        <img src="{{ media_details.poster or '/static/placeholder.jpg' }}"
+                        <img src="{{ cover_url(media_details.poster) or '/static/placeholder.jpg' }}"
                              alt="{{ media_details.title }}"
                              class="w-36 sm:w-40 md:w-48 h-54 sm:h-60 md:h-72 object-cover rounded-2xl shadow-2xl border border-hairline-strong"
                              onerror="this.src='https://via.placeholder.com/300x450/e5e7eb/9ca3af?text=No+Image'">
@@ -386,9 +386,39 @@
                 Remove
             </button>
         </div>
-        <p id="custom-catalog-status" class="muted text-sm mt-3">Only visible catalogs appear in Stremio. Hidden catalogs remain manageable in web panel.</p>
+        <div id="media-in-catalogs" class="flex flex-wrap gap-2 mt-3"></div>
+        <p id="custom-catalog-status" class="muted text-sm mt-3">Add this title to a catalog, then choose who can see it below.</p>
+
+        <div class="mt-5 pt-5" style="border-top:1px solid color-mix(in srgb, var(--border) 85%, transparent)">
+            <label class="field-label">Who can see this title</label>
+            <div class="flex flex-col sm:flex-row sm:items-center gap-3">
+                <select id="media-visibility" class="field-input" onchange="onMediaVisibilityChange()">
+                    <option value="public">Everyone</option>
+                    <option value="tokens">Specific users</option>
+                    <option value="owner">Owner only (hidden)</option>
+                </select>
+                <button type="button" onclick="applyMediaVisibility()" class="btn-ui btn-primary sm:w-auto shrink-0">Apply</button>
+            </div>
+            <div id="media-token-picker-wrap" class="hidden mt-3">
+                <label class="field-label">Allowed users</label>
+                <div id="media-token-picker" class="me-token-picker"></div>
+            </div>
+            <p class="muted text-xs mt-3">This overrides the title's visibility in every custom catalog it belongs to.</p>
+        </div>
     </div>
     {% endif %}
+
+    <style>
+        .me-token-picker { max-height: 12rem; overflow-y: auto; border: 1px solid color-mix(in srgb, var(--border) 95%, transparent); border-radius: 0.9rem; padding: .5rem; display: flex; flex-direction: column; gap: .35rem; background: color-mix(in srgb, var(--bg) 74%, transparent); }
+        .me-token-row { display: flex; align-items: center; gap: .6rem; padding: .5rem .65rem; border-radius: .7rem; cursor: pointer; }
+        .me-token-row:hover { background: color-mix(in srgb, var(--primary) 10%, transparent); }
+        .me-token-row input { width: 1.05rem; height: 1.05rem; accent-color: var(--primary); cursor: pointer; flex-shrink: 0; }
+        .me-chip { display: inline-flex; align-items: center; gap: .35rem; padding: .3rem .7rem; border-radius: 9999px; font-size: .75rem; font-weight: 800; border: 1px solid var(--border); max-width: 100%; }
+        .me-chip-hidden { color: rgb(248 113 113); background: color-mix(in srgb, rgb(239 68 68) 14%, transparent); border-color: color-mix(in srgb, rgb(239 68 68) 30%, transparent); }
+        .me-chip-custom { color: rgb(96 165 250); background: color-mix(in srgb, rgb(59 130 246) 14%, transparent); border-color: color-mix(in srgb, rgb(59 130 246) 30%, transparent); }
+        .me-chip-auto { color: rgb(52 211 153); background: color-mix(in srgb, rgb(16 185 129) 14%, transparent); border-color: color-mix(in srgb, rgb(16 185 129) 30%, transparent); }
+        .me-chip-empty { color: var(--text-sec); background: color-mix(in srgb, var(--bg) 70%, transparent); }
+    </style>
 
     <div class="glass-card rounded-3xl p-5 sm:p-6 lg:p-8 mb-6 sm:mb-8">
         <div class="flex items-center justify-between gap-3 mb-5 sm:mb-6">
@@ -465,14 +495,18 @@
     <div class="glass-card rounded-3xl p-5 sm:p-6 lg:p-8">
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5 sm:mb-6">
             <h3 class="section-title text-xl sm:text-2xl">Available Content</h3>
-            <span class="pill">Manage streams, episodes, and seasons</span>
+            <div class="flex items-center gap-2">
+                <button type="button" onclick="openAddStream()" class="btn-ui btn-success">
+                    ➕ {{ 'Add Season / Episode / Stream' if media_type == 'tv' else 'Add Stream' }}
+                </button>
+            </div>
         </div>
 
         {% if media_type == 'movie' and media_details.telegram %}
-        <div class="space-y-3">
+        <div class="space-y-3" id="movie-quality-list">
             {% set sorted_qualities = media_details.telegram|sort(attribute='quality') %}
             {% for quality in sorted_qualities %}
-            <div class="quality-row rounded-2xl p-4 sm:p-5">
+            <div class="quality-row rounded-2xl p-4 sm:p-5" data-quality-row>
                 <div class="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
                     <div class="min-w-0 flex-1">
                         <div class="flex flex-wrap items-center gap-2 sm:gap-3">
@@ -491,7 +525,7 @@
                         <button onclick="runSpeedTest('{{ quality.id }}', 'movie', '{{ quality.quality }}')" class="btn-ui btn-info w-full">
                             🚀 Speed Test
                         </button>
-                        <button onclick="deleteQuality('{{ quality.id }}')" class="btn-ui btn-danger w-full">
+                        <button onclick="deleteQuality('{{ quality.id }}', this)" class="btn-ui btn-danger w-full">
                             Delete
                         </button>
                     </div>
@@ -499,30 +533,39 @@
             </div>
             {% endfor %}
         </div>
+        <div id="content-empty-state" class="hidden text-center py-10">
+            <p class="muted text-sm sm:text-base">No content available</p>
+        </div>
 
         {% elif media_type == 'tv' and media_details.seasons %}
-        <div class="space-y-4 sm:space-y-5">
+        <div class="space-y-4 sm:space-y-5" id="season-list">
             {% for season in media_details.seasons|sort(attribute='season_number') %}
-            <div class="glass-card-soft rounded-3xl overflow-hidden border border-hairline">
+            <div class="glass-card-soft rounded-3xl overflow-hidden border border-hairline" data-season-block data-season="{{ season.season_number }}">
                 <div class="px-4 sm:px-5 lg:px-6 py-4 sm:py-5 border-b border-hairline bg-surface">
                     <div class="flex items-center justify-between gap-3">
-                        <div>
+                        <div class="min-w-0">
                             <h4 class="section-title text-base sm:text-lg lg:text-xl">Season {{ season.season_number }}</h4>
-                            <p class="muted text-xs sm:text-sm mt-1">{{ season.episodes|length }} episode{{ 's' if season.episodes|length != 1 else '' }}</p>
+                            <p class="muted text-xs sm:text-sm mt-1" data-ep-count>{{ season.episodes|length }} episode{{ 's' if season.episodes|length != 1 else '' }}</p>
                         </div>
 
-                        <button type="button" onclick="toggleSeason({{ loop.index0 }})" class="btn-ui btn-ghost px-3 py-2">
-                            <svg id="season-arrow-{{ loop.index0 }}" class="w-4 h-4 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-                            </svg>
-                        </button>
+                        <div class="flex items-center gap-2 flex-shrink-0">
+                            <button type="button" onclick="deleteTVSeason({{ season.season_number }}, this)" class="btn-ui btn-danger px-3 py-2 text-xs sm:text-sm" title="Delete entire Season {{ season.season_number }}">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                <span class="hidden sm:inline">Delete Season</span>
+                            </button>
+                            <button type="button" onclick="toggleSeason({{ loop.index0 }})" class="btn-ui btn-ghost px-3 py-2">
+                                <svg id="season-arrow-{{ loop.index0 }}" class="w-4 h-4 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                </svg>
+                            </button>
+                        </div>
                     </div>
                 </div>
 
                 <div id="season-content-{{ loop.index0 }}" class="season-content">
-                    <div class="divide-y divide-hairline">
+                    <div class="divide-y divide-hairline" data-episodes>
                         {% for episode in season.episodes|sort(attribute='episode_number') %}
-                        <div class="p-4 sm:p-5">
+                        <div class="p-4 sm:p-5" data-episode-block data-episode="{{ episode.episode_number }}">
                             <div class="flex flex-col xl:flex-row xl:items-start gap-4">
                                 <div class="flex-shrink-0 w-12 h-12 rounded-2xl bg-primary/15 border border-primary/20 flex items-center justify-center mx-auto xl:mx-0">
                                     <span class="text-sm font-black text-primary">{{ episode.episode_number }}</span>
@@ -531,16 +574,16 @@
                                 <div class="flex-1 min-w-0">
                                     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
                                         <h5 class="text-sm sm:text-base font-semibold text-white text-center sm:text-left">{{ episode.title }}</h5>
-                                        <button onclick="deleteTVEpisode({{ season.season_number }}, {{ episode.episode_number }})" class="btn-ui btn-danger px-3 py-2 text-xs sm:text-sm w-full sm:w-auto">
+                                        <button onclick="deleteTVEpisode({{ season.season_number }}, {{ episode.episode_number }}, this)" class="btn-ui btn-danger px-3 py-2 text-xs sm:text-sm w-full sm:w-auto">
                                             Delete Episode
                                         </button>
                                     </div>
 
-                                    {% if episode.telegram %}
-                                    <div class="space-y-2">
+                                    <div class="space-y-2" data-ep-qualities>
+                                        {% if episode.telegram %}
                                         {% set sorted_episode_qualities = episode.telegram|sort(attribute='quality') %}
                                         {% for quality in sorted_episode_qualities %}
-                                        <div class="quality-row rounded-2xl p-3 sm:p-4">
+                                        <div class="quality-row rounded-2xl p-3 sm:p-4" data-tv-quality>
                                             <div class="flex flex-col xl:flex-row xl:items-center justify-between gap-3">
                                                 <div class="min-w-0 flex-1">
                                                     <div class="flex flex-wrap items-center gap-2 sm:gap-3">
@@ -557,31 +600,28 @@
                                                     <button onclick="runSpeedTest('{{ quality.id }}', 'tv', '{{ quality.quality }}')" class="btn-ui btn-info w-full text-xs sm:text-sm">
                                                         🚀 Speed Test
                                                     </button>
-                                                    <button onclick="deleteTVQuality({{ season.season_number }}, {{ episode.episode_number }}, '{{ quality.id }}')" class="btn-ui btn-danger w-full text-xs sm:text-sm">
+                                                    <button onclick="deleteTVQuality({{ season.season_number }}, {{ episode.episode_number }}, '{{ quality.id }}', this)" class="btn-ui btn-danger w-full text-xs sm:text-sm">
                                                         Delete
                                                     </button>
                                                 </div>
                                             </div>
                                         </div>
                                         {% endfor %}
+                                        {% else %}
+                                        <p class="muted text-xs sm:text-sm text-center sm:text-left" data-no-qualities>No qualities available</p>
+                                        {% endif %}
                                     </div>
-                                    {% else %}
-                                    <p class="muted text-xs sm:text-sm text-center sm:text-left">No qualities available</p>
-                                    {% endif %}
                                 </div>
                             </div>
                         </div>
                         {% endfor %}
                     </div>
-
-                    <div class="px-4 sm:px-5 lg:px-6 py-4 border-t border-hairline bg-surface flex justify-center sm:justify-start">
-                        <button onclick="deleteTVSeason({{ season.season_number }})" class="btn-ui btn-danger px-4 py-2 text-sm">
-                            Delete Entire Season
-                        </button>
-                    </div>
                 </div>
             </div>
             {% endfor %}
+        </div>
+        <div id="content-empty-state-tv" class="hidden text-center py-10">
+            <p class="muted text-sm sm:text-base">No content available</p>
         </div>
         {% else %}
         <div class="text-center py-10">
@@ -645,6 +685,84 @@
                 <button onclick="closeSpeedTest()" class="btn-ui btn-ghost">
                     Close
                 </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    #add-stream-modal .as-input {
+        width: 100%; border-radius: 0.85rem;
+        border: 1px solid color-mix(in srgb, var(--border) 95%, transparent);
+        background: color-mix(in srgb, var(--bg) 78%, transparent);
+        color: var(--text); padding: 0.7rem 0.9rem; font-size: 0.9rem; outline: none;
+    }
+    #add-stream-modal .as-input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 16%, transparent); }
+    #add-stream-modal .as-label { display:block; font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-sec); margin-bottom:0.35rem; }
+    #add-stream-modal .as-btn { display:inline-flex; align-items:center; justify-content:center; gap:0.4rem; border-radius:0.85rem; padding:0.7rem 1.1rem; font-weight:700; font-size:0.88rem; border:1px solid transparent; cursor:pointer; white-space:nowrap; transition:filter .15s ease; }
+    #add-stream-modal .as-btn:hover { filter: brightness(1.06); }
+    #add-stream-modal .as-btn-ghost { background: color-mix(in srgb, var(--bg) 74%, transparent); color: var(--text); border-color: color-mix(in srgb, var(--border) 95%, transparent); }
+    #add-stream-modal .as-btn-success { background: rgb(16 185 129); color:#fff; }
+</style>
+
+<div id="add-stream-modal" class="fixed inset-0 z-50 hidden" aria-modal="true" role="dialog">
+    <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="closeAddStream()"></div>
+    <div class="absolute inset-0 flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div class="glass-card w-full sm:max-w-xl rounded-t-3xl sm:rounded-3xl max-h-[92dvh] sm:max-h-[90dvh] flex flex-col">
+            <div class="flex items-center justify-between gap-3 px-4 sm:px-6 py-4 border-b border-hairline">
+                <h2 class="text-base sm:text-xl font-black text-text">➕ Add Stream</h2>
+                <button onclick="closeAddStream()" class="text-text-secondary hover:text-text text-3xl leading-none">&times;</button>
+            </div>
+
+            <div class="px-4 sm:px-6 py-5 space-y-4 overflow-y-auto flex-1 min-h-0">
+                {% if media_type == 'tv' %}
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="as-label">Season *</label>
+                        <input id="as-season" type="number" min="0" class="as-input" placeholder="1">
+                    </div>
+                    <div>
+                        <label class="as-label">Episode *</label>
+                        <input id="as-episode" type="number" min="0" class="as-input" placeholder="1">
+                    </div>
+                    <div class="col-span-2">
+                        <label class="as-label">Episode Title</label>
+                        <input id="as-episode-title" class="as-input" placeholder="Optional">
+                    </div>
+                </div>
+                <p class="text-xs text-text-secondary">New season/episode numbers are created automatically; existing ones just get the new stream.</p>
+                {% endif %}
+
+                <div>
+                    <div class="flex items-center justify-between gap-2">
+                        <label class="as-label" style="margin-bottom:0">Telegram message link(s) *</label>
+                        <button type="button" onclick="addStreamPart()" class="text-xs font-bold text-primary shrink-0"><i class="fa-solid fa-plus"></i> Add split part</button>
+                    </div>
+                    <div id="as-parts" class="space-y-2 mt-2"></div>
+                    <p class="text-xs text-text-secondary mt-2">Add more parts only for a split file (they join into one stream, in order).</p>
+                    <p id="as-resolve-state" class="text-xs text-text-secondary mt-1 hidden"></p>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                        <label class="as-label">Quality *</label>
+                        <select id="as-quality" class="as-input" onchange="document.getElementById('as-quality-custom').classList.toggle('hidden', this.value !== '__custom')">
+                            <option value="">Select</option>
+                            <option>480p</option><option>720p</option><option selected>1080p</option>
+                            <option>2160p</option><option value="__custom">Custom…</option>
+                        </select>
+                    </div>
+                    <div class="sm:col-span-2">
+                        <label class="as-label">File name</label>
+                        <input id="as-name" class="as-input" placeholder="Auto-detected on resolve">
+                    </div>
+                </div>
+                <input id="as-quality-custom" class="as-input hidden" placeholder="Custom quality label (e.g. 4K HDR)">
+            </div>
+
+            <div class="flex flex-col sm:flex-row sm:justify-end gap-2 sm:gap-3 px-4 sm:px-6 py-4 border-t border-hairline">
+                <button onclick="closeAddStream()" class="as-btn as-btn-ghost w-full sm:w-auto">Cancel</button>
+                <button id="as-submit" onclick="submitAddStream()" class="as-btn as-btn-success w-full sm:w-auto">Add Stream</button>
             </div>
         </div>
     </div>
@@ -885,7 +1003,29 @@
         }
     }
 
-    async function deleteQuality(id) {
+    function _refreshSeasonHeight(node) {
+        const content = node.closest('.season-content') || (node.querySelector ? node.querySelector('.season-content') : null);
+        if (content && !content.classList.contains('season-collapsed')) {
+            requestAnimationFrame(() => { content.style.maxHeight = content.scrollHeight + 'px'; });
+        }
+    }
+
+    function _updateSeasonCount(seasonBlock) {
+        const count = seasonBlock.querySelectorAll('[data-episode-block]').length;
+        const label = seasonBlock.querySelector('[data-ep-count]');
+        if (label) label.textContent = `${count} episode${count !== 1 ? 's' : ''}`;
+        return count;
+    }
+
+    function _checkContentEmpty(listId, emptyId) {
+        const list = document.getElementById(listId);
+        if (list && !list.querySelector(list === document.getElementById('season-list') ? '[data-season-block]' : '[data-quality-row]')) {
+            list.classList.add('hidden');
+            document.getElementById(emptyId)?.classList.remove('hidden');
+        }
+    }
+
+    async function deleteQuality(id, btn) {
         if (!confirm(`Are you sure you want to delete ${id}?`)) return;
 
         try {
@@ -895,7 +1035,8 @@
 
             if (response.ok) {
                 showSuccessMessage(`${id} deleted successfully`);
-                setTimeout(() => location.reload(), 900);
+                btn?.closest('[data-quality-row]')?.remove();
+                _checkContentEmpty('movie-quality-list', 'content-empty-state');
             } else {
                 const error = await response.json().catch(() => ({}));
                 showErrorMessage(`Error deleting: ${error.detail || 'Unknown error'}`);
@@ -906,7 +1047,7 @@
         }
     }
 
-    async function deleteTVQuality(season, episode, id) {
+    async function deleteTVQuality(season, episode, id, btn) {
         if (!confirm(`Are you sure you want to delete ${id} from Season ${season} Episode ${episode}?`)) return;
 
         try {
@@ -916,7 +1057,15 @@
 
             if (response.ok) {
                 showSuccessMessage(`${id} deleted successfully`);
-                setTimeout(() => location.reload(), 900);
+                const epBlock = btn?.closest('[data-episode-block]');
+                btn?.closest('[data-tv-quality]')?.remove();
+                if (epBlock) {
+                    const qWrap = epBlock.querySelector('[data-ep-qualities]');
+                    if (qWrap && !qWrap.querySelector('[data-tv-quality]')) {
+                        qWrap.innerHTML = '<p class="muted text-xs sm:text-sm text-center sm:text-left" data-no-qualities>No qualities available</p>';
+                    }
+                    _refreshSeasonHeight(epBlock);
+                }
             } else {
                 const error = await response.json().catch(() => ({}));
                 showErrorMessage(`Error deleting: ${error.detail || 'Unknown error'}`);
@@ -927,7 +1076,7 @@
         }
     }
 
-    async function deleteTVEpisode(season, episode) {
+    async function deleteTVEpisode(season, episode, btn) {
         if (!confirm(`Delete Season ${season} Episode ${episode}? This removes the episode and all its qualities.`)) return;
 
         try {
@@ -937,7 +1086,16 @@
 
             if (response.ok) {
                 showSuccessMessage(`Episode ${episode} deleted successfully`);
-                setTimeout(() => location.reload(), 900);
+                const seasonBlock = btn?.closest('[data-season-block]');
+                btn?.closest('[data-episode-block]')?.remove();
+                if (seasonBlock) {
+                    if (_updateSeasonCount(seasonBlock) === 0) {
+                        seasonBlock.remove();
+                        _checkContentEmpty('season-list', 'content-empty-state-tv');
+                    } else {
+                        _refreshSeasonHeight(seasonBlock);
+                    }
+                }
             } else {
                 const error = await response.json().catch(() => ({}));
                 showErrorMessage(`Error deleting episode: ${error.detail || 'Unknown error'}`);
@@ -948,7 +1106,7 @@
         }
     }
 
-    async function deleteTVSeason(season) {
+    async function deleteTVSeason(season, btn) {
         if (!confirm(`Delete the entire Season ${season}? This action cannot be undone.`)) return;
 
         try {
@@ -958,7 +1116,8 @@
 
             if (response.ok) {
                 showSuccessMessage(`Season ${season} deleted successfully`);
-                setTimeout(() => location.reload(), 900);
+                btn?.closest('[data-season-block]')?.remove();
+                _checkContentEmpty('season-list', 'content-empty-state-tv');
             } else {
                 const error = await response.json().catch(() => ({}));
                 showErrorMessage(`Error deleting season: ${error.detail || 'Unknown error'}`);
@@ -1006,6 +1165,102 @@
     const CURRENT_DB_INDEX = Number("{{ db_index }}");
     const CURRENT_MEDIA_TYPE = "{{ media_type }}";
 
+    let meSubscriptionOn = false;
+    let meTokens = [];
+
+    function mePublicLabel() { return meSubscriptionOn ? 'Active subscribers' : 'Everyone'; }
+
+    async function loadMediaVisibilityDeps() {
+        try {
+            const [sRes, tRes] = await Promise.all([
+                fetch('/api/admin/settings'),
+                fetch('/api/admin/access/tokens')
+            ]);
+            const sData = await sRes.json().catch(() => ({}));
+            const tData = await tRes.json().catch(() => ({}));
+            meSubscriptionOn = !!(sData.settings && sData.settings.subscription);
+            meTokens = (tData.tokens || []).filter(t => t.token);
+        } catch (e) {}
+        const opt = document.querySelector('#media-visibility option[value="public"]');
+        if (opt) opt.textContent = mePublicLabel();
+        await loadMediaVisibility();
+    }
+
+    function renderMediaTokenPicker(selected) {
+        const box = document.getElementById('media-token-picker');
+        if (!box) return;
+        const sel = new Set(selected || []);
+        if (!meTokens.length) {
+            box.innerHTML = '<p class="muted text-xs p-2">No users/tokens found. Create access tokens on the Access page first.</p>';
+            return;
+        }
+        box.innerHTML = meTokens.map(t => `
+            <label class="me-token-row">
+                <input type="checkbox" value="${escapeHtml(t.token)}" ${sel.has(t.token) ? 'checked' : ''}>
+                <span class="min-w-0">
+                    <span class="font-bold text-sm block truncate text-white">${escapeHtml(t.user_name || 'User')}</span>
+                    <span class="muted text-xs block truncate">${escapeHtml((t.token || '').slice(0, 12))}…${t.user_id ? ' · ' + escapeHtml(t.user_id) : ''}</span>
+                </span>
+            </label>`).join('');
+    }
+
+    function getMediaPickedTokens() {
+        return Array.from(document.querySelectorAll('#media-token-picker input:checked')).map(i => i.value);
+    }
+
+    function onMediaVisibilityChange(selected) {
+        const mode = document.getElementById('media-visibility').value;
+        const wrap = document.getElementById('media-token-picker-wrap');
+        if (wrap) wrap.classList.toggle('hidden', mode !== 'tokens');
+        if (mode === 'tokens') renderMediaTokenPicker(selected || []);
+    }
+
+    async function loadMediaVisibility() {
+        try {
+            const params = new URLSearchParams({
+                tmdb_id: String(CURRENT_TMDB_ID),
+                db_index: String(CURRENT_DB_INDEX),
+                media_type: CURRENT_MEDIA_TYPE
+            });
+            const res = await fetch(`/api/custom-catalogs/media-visibility?${params}`);
+            const data = await res.json().catch(() => ({}));
+            const vis = data.visibility || {};
+            const mode = vis.visibility || 'public';
+            const sel = document.getElementById('media-visibility');
+            if (sel) sel.value = mode;
+            onMediaVisibilityChange(vis.allowed_tokens || []);
+        } catch (e) {
+            onMediaVisibilityChange([]);
+        }
+    }
+
+    async function applyMediaVisibility() {
+        const visibility = document.getElementById('media-visibility').value;
+        const allowed_tokens = visibility === 'tokens' ? getMediaPickedTokens() : [];
+        if (visibility === 'tokens' && !allowed_tokens.length) {
+            showErrorMessage('Select at least one user.');
+            return;
+        }
+        try {
+            const res = await fetch('/api/custom-catalogs/media-visibility', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    tmdb_id: CURRENT_TMDB_ID,
+                    db_index: CURRENT_DB_INDEX,
+                    media_type: CURRENT_MEDIA_TYPE,
+                    visibility,
+                    allowed_tokens
+                })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.detail || 'Failed to update visibility');
+            showSuccessMessage(data.message || 'Visibility updated.');
+        } catch (e) {
+            showErrorMessage(e.message || 'Failed to update visibility.');
+        }
+    }
+
     function setCatalogStatus(message, type = 'info') {
         const status = document.getElementById('custom-catalog-status');
         if (!status) return;
@@ -1014,6 +1269,34 @@
         if (type === 'success') status.classList.add('text-emerald-300');
         if (type === 'error') status.classList.add('text-rose-300');
         if (type === 'warn') status.classList.add('text-amber-300');
+    }
+
+    //----- Rank a catalog for default selection: hidden (3) > custom (2) > auto (1)
+    function catalogRank(c) {
+        const hidden = (c.visibility === 'owner') || (c.visible === false);
+        if (hidden) return 3;
+        if (!c.auto) return 2;
+        return 1;
+    }
+
+    //----- Show which catalogs this title currently belongs to
+    function renderMediaInCatalogs(catalogs) {
+        const box = document.getElementById('media-in-catalogs');
+        if (!box) return;
+        const inList = (catalogs || []).filter(c => c.contains_current);
+        if (!inList.length) {
+            box.innerHTML = '<span class="me-chip me-chip-empty">Not in any catalog yet</span>';
+            return;
+        }
+        inList.sort((a, b) => catalogRank(b) - catalogRank(a));
+        box.innerHTML = inList.map(c => {
+            const hidden = (c.visibility === 'owner') || (c.visible === false);
+            const kind = c.auto ? 'auto' : (hidden ? 'hidden' : 'custom');
+            const icon = c.auto ? '✨' : (hidden ? '🔒' : '🎯');
+            const label = c.auto ? 'Auto' : (hidden ? 'Hidden' : 'Custom');
+            const excl = c.exclusive ? ' · 🔐' : '';
+            return `<span class="me-chip me-chip-${kind}" title="${escapeHtml(label)} catalog">${icon} ${escapeHtml(c.name)}${excl}</span>`;
+        }).join('');
     }
 
     async function loadMediaCatalogDropdown(selectedCatalogId = '') {
@@ -1050,8 +1333,15 @@
                 return `<option value="${escapeHtml(catalog._id)}" data-visible="${catalog.visible ? '1' : '0'}" data-added="${catalog.contains_current ? '1' : '0'}">${escapeHtml(catalog.name)} (${visibility}${added})</option>`;
             }).join('');
 
+            renderMediaInCatalogs(catalogs);
+
+            //----- Pre-select the catalog this title lives in: hidden > custom > auto
+            const containing = catalogs.filter(c => c.contains_current);
+            const priority = [...containing].sort((a, b) => catalogRank(b) - catalogRank(a))[0];
             if (selectedCatalogId && catalogs.some(c => c._id === selectedCatalogId)) {
                 select.value = selectedCatalogId;
+            } else if (priority) {
+                select.value = priority._id;
             }
 
             select.disabled = false;
@@ -1101,7 +1391,14 @@
             const data = await res.json().catch(() => ({}));
             if (!res.ok) throw new Error(data.detail || 'Failed to add title to catalog');
 
-            showToast(data.message || 'Added to catalog.', 'success', 'Success');
+            let msg = data.message || 'Added to catalog.';
+            if (data.visibility_synced) {
+                await loadMediaVisibility();
+                msg += data.visibility_synced === 'owner'
+                    ? ' Title is now Owner only.'
+                    : ' Title is now limited to specific users.';
+            }
+            showToast(msg, 'success', 'Success');
             await loadMediaCatalogDropdown(catalogId);
         } catch (error) {
             showToast(error.message || 'Failed to add title to catalog', 'error', 'Error');
@@ -1139,6 +1436,7 @@
         const select = document.getElementById('custom-catalog-select');
         if (select) select.addEventListener('change', updateCatalogDropdownStatus);
         loadMediaCatalogDropdown();
+        loadMediaVisibilityDeps();
         document.querySelectorAll('.season-content').forEach((content, index) => {
             if (index > 0) {
                 content.classList.add('season-collapsed');
@@ -1391,7 +1689,139 @@
     }
 
     document.addEventListener('keydown', e => {
-        if (e.key === 'Escape') closeSpeedTest();
+        if (e.key === 'Escape') { closeSpeedTest(); closeAddStream(); }
     });
+
+    function addStreamResetParts() {
+        document.getElementById('as-parts').innerHTML =
+            `<div class="flex flex-col sm:flex-row gap-2" data-part>
+                <input class="as-input as-part-url" placeholder="https://t.me/c/123456/789">
+                <button type="button" onclick="addStreamResolve()" class="as-btn as-btn-ghost w-full sm:w-auto">Resolve</button>
+             </div>`;
+    }
+
+    function addStreamPart() {
+        const div = document.createElement('div');
+        div.className = 'flex flex-col sm:flex-row gap-2';
+        div.setAttribute('data-part', '');
+        div.innerHTML = `<input class="as-input as-part-url" placeholder="Split part link (in order)">
+            <button type="button" onclick="this.closest('[data-part]').remove()" class="as-btn as-btn-ghost w-full sm:w-auto">Remove</button>`;
+        document.getElementById('as-parts').appendChild(div);
+    }
+
+    function addStreamCollectParts() {
+        return [...document.querySelectorAll('#as-parts .as-part-url')]
+            .map(i => i.value.trim()).filter(Boolean).map(url => ({ url }));
+    }
+
+    function openAddStream() {
+        ['as-name', 'as-season', 'as-episode', 'as-episode-title', 'as-quality-custom'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.value = '';
+        });
+        addStreamResetParts();
+        const q = document.getElementById('as-quality');
+        if (q) q.value = '1080p';
+        document.getElementById('as-quality-custom')?.classList.add('hidden');
+        document.getElementById('as-resolve-state')?.classList.add('hidden');
+        document.getElementById('add-stream-modal').classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeAddStream() {
+        document.getElementById('add-stream-modal')?.classList.add('hidden');
+        document.body.style.overflow = '';
+    }
+
+    function addStreamQuality() {
+        const sel = document.getElementById('as-quality');
+        if (sel.value === '__custom') return document.getElementById('as-quality-custom').value.trim();
+        return sel.value;
+    }
+
+    async function addStreamResolve() {
+        const first = document.querySelector('#as-parts .as-part-url');
+        const url = first ? first.value.trim() : '';
+        const state = document.getElementById('as-resolve-state');
+        if (!url) { showErrorMessage('Paste a Telegram message link first.'); return; }
+        state.textContent = 'Resolving...';
+        state.classList.remove('hidden');
+        try {
+            const res = await fetch('/api/media/resolve-telegram', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.detail || 'Could not resolve link');
+            const d = data.data || {};
+            document.getElementById('as-name').value = d.name || '';
+            if (d.quality) {
+                const sel = document.getElementById('as-quality');
+                const custom = document.getElementById('as-quality-custom');
+                const opt = [...sel.options].find(o => o.value.toLowerCase() === String(d.quality).toLowerCase());
+                if (opt) {
+                    sel.value = opt.value;
+                    custom.classList.add('hidden');
+                } else {
+                    sel.value = '__custom';
+                    custom.value = d.quality;
+                    custom.classList.remove('hidden');
+                }
+            }
+            if (mediaType === 'tv') {
+                if (d.season != null && !document.getElementById('as-season').value) document.getElementById('as-season').value = d.season;
+                if (d.episode != null && !document.getElementById('as-episode').value) document.getElementById('as-episode').value = d.episode;
+            }
+            state.textContent = `Found: ${d.name || 'file'} (${d.size || '—'})`;
+        } catch (e) {
+            state.textContent = e.message || 'Could not resolve link.';
+            showErrorMessage(e.message || 'Could not resolve link.');
+        }
+    }
+
+    async function submitAddStream() {
+        const btn = document.getElementById('as-submit');
+        const parts = addStreamCollectParts();
+        const quality = addStreamQuality();
+        if (!parts.length) { showErrorMessage('Paste at least one Telegram message link.'); return; }
+        if (!quality) { showErrorMessage('Select a quality.'); return; }
+
+        const payload = {
+            media_type: mediaType,
+            tmdb_id: tmdbId,
+            db_index: dbIndex,
+            stream: { quality, name: document.getElementById('as-name').value.trim() || undefined, parts }
+        };
+
+        if (mediaType === 'tv') {
+            const s = document.getElementById('as-season').value.trim();
+            const ep = document.getElementById('as-episode').value.trim();
+            if (s === '' || ep === '') { showErrorMessage('Season and episode are required.'); return; }
+            payload.season_number = Number(s);
+            payload.episode_number = Number(ep);
+            payload.episode_title = document.getElementById('as-episode-title').value.trim() || undefined;
+        }
+
+        btn.disabled = true;
+        try {
+            const res = await fetch('/api/media/manual-add', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.detail || 'Failed to add stream');
+            showSuccessMessage(data.message || 'Stream added successfully.');
+            closeAddStream();
+            const goTmdb = data.tmdb_id || tmdbId;
+            const goDb = data.db_index || dbIndex;
+            setTimeout(() => {
+                window.location.href = `/media/edit?tmdb_id=${goTmdb}&db_index=${goDb}&media_type=${mediaType}`;
+            }, 700);
+        } catch (e) {
+            showErrorMessage(e.message || 'Failed to add stream.');
+        } finally {
+            btn.disabled = false;
+        }
+    }
 </script>
 {% endblock %}

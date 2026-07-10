@@ -42,6 +42,11 @@
                         <i class="fa-solid fa-tv"></i>
                         TV Shows
                     </a>
+                    <button type="button" onclick="openManualAdd()"
+                       class="inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold transition border bg-emerald-500 text-white border-emerald-500 shadow-lg shadow-emerald-500/20 hover:bg-emerald-500/90">
+                        <i class="fa-solid fa-plus"></i>
+                        Add Content
+                    </button>
                 </div>
             </div>
 
@@ -489,5 +494,278 @@
         border-radius: 999px;
         background: rgba(255, 255, 255, 0.2);
     }
+
+    .ma-input {
+        width: 100%;
+        background: var(--background, var(--bg));
+        border: 1px solid var(--border);
+        color: var(--text);
+        border-radius: 0.9rem;
+        padding: 0.7rem 0.9rem;
+        font-size: 0.9rem;
+        outline: none;
+    }
+    .ma-input:focus { border-color: var(--primary); }
+    .ma-label { display:block; font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-secondary,var(--text-sec)); margin-bottom:0.35rem; }
+    .ma-tab { flex:1; padding:0.55rem; border-radius:0.75rem; font-weight:700; font-size:0.85rem; border:1px solid var(--border); background:transparent; color:var(--text); cursor:pointer; }
+    .ma-tab.active { background:var(--primary); color:#fff; border-color:var(--primary); }
 </style>
+
+<!-- Manual Add modal -->
+<div id="manual-add-modal" class="fixed inset-0 z-50 hidden" aria-modal="true" role="dialog">
+    <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="closeManualAdd()"></div>
+    <div class="absolute inset-0 flex items-start sm:items-center justify-center p-2 sm:p-4 overflow-y-auto">
+        <div class="glass-panel rounded-3xl w-full max-w-2xl my-4">
+            <div class="flex items-center justify-between gap-3 px-5 sm:px-6 py-4 border-b border-hairline">
+                <h2 class="text-lg sm:text-xl font-extrabold text-text"><i class="fa-solid fa-plus text-emerald-400"></i> Add Content Manually</h2>
+                <button onclick="closeManualAdd()" class="text-text-secondary hover:text-text text-3xl leading-none">&times;</button>
+            </div>
+
+            <div class="px-5 sm:px-6 py-5 space-y-5 max-h-[75vh] overflow-y-auto">
+                <!-- Type -->
+                <div>
+                    <label class="ma-label">Type</label>
+                    <div class="flex gap-2">
+                        <button type="button" class="ma-tab" data-ma-type="movie" onclick="maSetType('movie')"><i class="fa-solid fa-film"></i> Movie</button>
+                        <button type="button" class="ma-tab" data-ma-type="tv" onclick="maSetType('tv')"><i class="fa-solid fa-tv"></i> TV Show</button>
+                    </div>
+                </div>
+
+                <!-- Title details -->
+                <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                    <div class="sm:col-span-2">
+                        <label class="ma-label">Title *</label>
+                        <input id="ma-m-title" class="ma-input" placeholder="Custom title">
+                    </div>
+                    <div>
+                        <label class="ma-label">Year (optional)</label>
+                        <input id="ma-m-year" type="number" class="ma-input" placeholder="Telegram upload year">
+                    </div>
+                    <div>
+                        <label class="ma-label">Rating (optional)</label>
+                        <input id="ma-m-rating" type="number" step="0.1" min="0" max="10" class="ma-input" placeholder="Random">
+                    </div>
+                </div>
+                <div>
+                    <label class="ma-label">Genres (optional, comma-separated)</label>
+                    <input id="ma-m-genres" class="ma-input" placeholder="Left empty = random">
+                </div>
+                <div>
+                    <label class="ma-label">Description (optional)</label>
+                    <textarea id="ma-m-description" rows="2" class="ma-input" placeholder="Left empty = random"></textarea>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="ma-label">Poster URL (optional)</label>
+                        <input id="ma-m-poster" type="url" class="ma-input" placeholder="Left empty = generated from title">
+                    </div>
+                    <div>
+                        <label class="ma-label">Backdrop URL (optional)</label>
+                        <input id="ma-m-backdrop" type="url" class="ma-input" placeholder="Left empty = generated from title">
+                    </div>
+                </div>
+                <p class="text-xs text-text-secondary -mt-2">Only <span class="text-text font-semibold">Title *</span>, stream link and quality are required. Empty optional fields are auto-filled &mdash; poster &amp; backdrop become a random gradient cover with the title text.</p>
+
+                <!-- TV episode fields -->
+                <div id="ma-tv-fields" class="hidden grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div>
+                        <label class="ma-label">Season *</label>
+                        <input id="ma-season" type="number" min="0" class="ma-input" placeholder="1">
+                    </div>
+                    <div>
+                        <label class="ma-label">Episode *</label>
+                        <input id="ma-episode" type="number" min="0" class="ma-input" placeholder="1">
+                    </div>
+                    <div class="col-span-2">
+                        <label class="ma-label">Episode Title (optional)</label>
+                        <input id="ma-episode-title" class="ma-input" placeholder="Left empty = S01E01 style">
+                    </div>
+                </div>
+
+                <!-- Stream -->
+                <div class="space-y-3">
+                    <div class="flex items-center justify-between gap-2">
+                        <label class="ma-label" style="margin-bottom:0">Stream link(s) *</label>
+                        <button type="button" onclick="maAddPart()" class="text-xs font-bold text-primary shrink-0"><i class="fa-solid fa-plus"></i> Add split part</button>
+                    </div>
+                    <div id="ma-parts" class="space-y-2"></div>
+                    <p class="text-xs text-text-secondary">Add more parts only for a split file (they join into one stream, in order).</p>
+                    <p id="ma-resolve-state" class="text-xs text-text-secondary hidden"></p>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                            <label class="ma-label">Quality *</label>
+                            <select id="ma-quality" class="ma-input">
+                                <option value="">Select</option>
+                                <option>480p</option><option>720p</option><option selected>1080p</option>
+                                <option>2160p</option><option value="__custom">Custom…</option>
+                            </select>
+                        </div>
+                        <div class="sm:col-span-2">
+                            <label class="ma-label">File name</label>
+                            <input id="ma-name" class="ma-input" placeholder="Auto-detected on resolve">
+                        </div>
+                    </div>
+                    <input id="ma-quality-custom" class="ma-input hidden" placeholder="Custom quality label (e.g. 4K HDR)">
+                </div>
+            </div>
+
+            <div class="flex flex-col sm:flex-row justify-end gap-3 px-5 sm:px-6 py-4 border-t border-hairline">
+                <button onclick="closeManualAdd()" class="px-5 py-2.5 rounded-2xl glass-panel border border-hairline text-text font-bold text-sm">Cancel</button>
+                <button id="ma-submit" onclick="submitManualAdd()" class="px-5 py-2.5 rounded-2xl bg-emerald-500 text-white font-bold text-sm">Add Content</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let maType = mediaType;
+
+    function maResetParts() {
+        document.getElementById('ma-parts').innerHTML =
+            `<div class="flex flex-col sm:flex-row gap-2" data-part>
+                <input class="ma-input ma-part-url" placeholder="https://t.me/c/123456/789">
+                <button type="button" onclick="maResolve()" class="px-4 py-2.5 rounded-xl glass-panel border border-hairline text-text font-bold text-sm shrink-0">Resolve</button>
+             </div>`;
+    }
+
+    function maAddPart() {
+        const div = document.createElement('div');
+        div.className = 'flex flex-col sm:flex-row gap-2';
+        div.setAttribute('data-part', '');
+        div.innerHTML = `<input class="ma-input ma-part-url" placeholder="Split part link (in order)">
+            <button type="button" onclick="this.closest('[data-part]').remove()" class="px-4 py-2.5 rounded-xl border border-hairline text-red-300 font-bold text-sm shrink-0">Remove</button>`;
+        document.getElementById('ma-parts').appendChild(div);
+    }
+
+    function maCollectParts() {
+        return [...document.querySelectorAll('#ma-parts .ma-part-url')]
+            .map(i => i.value.trim()).filter(Boolean).map(url => ({ url }));
+    }
+
+    function openManualAdd() {
+        maSetType(mediaType);
+        ['ma-name','ma-season','ma-episode','ma-episode-title','ma-m-title','ma-m-year','ma-m-rating','ma-m-genres','ma-m-description','ma-m-poster','ma-m-backdrop','ma-quality-custom'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+        maResetParts();
+        document.getElementById('ma-quality').value = '1080p';
+        document.getElementById('ma-quality-custom').classList.add('hidden');
+        document.getElementById('ma-resolve-state').classList.add('hidden');
+        document.getElementById('manual-add-modal').classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeManualAdd() {
+        document.getElementById('manual-add-modal').classList.add('hidden');
+        document.body.style.overflow = '';
+    }
+
+    function maSetType(type) {
+        maType = type;
+        document.querySelectorAll('[data-ma-type]').forEach(b => b.classList.toggle('active', b.dataset.maType === type));
+        document.getElementById('ma-tv-fields').classList.toggle('hidden', type !== 'tv');
+    }
+
+    async function maResolve() {
+        const first = document.querySelector('#ma-parts .ma-part-url');
+        const url = first ? first.value.trim() : '';
+        const state = document.getElementById('ma-resolve-state');
+        if (!url) { showToast('Paste a Telegram message link first.', 'error', 'Error'); return; }
+        state.textContent = 'Resolving...';
+        state.classList.remove('hidden');
+        try {
+            const res = await fetch('/api/media/resolve-telegram', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ url })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.detail || 'Could not resolve link');
+            const d = data.data || {};
+            document.getElementById('ma-name').value = d.name || '';
+            if (d.quality) {
+                const sel = document.getElementById('ma-quality');
+                const custom = document.getElementById('ma-quality-custom');
+                const opt = [...sel.options].find(o => o.value.toLowerCase() === String(d.quality).toLowerCase());
+                if (opt) {
+                    sel.value = opt.value;
+                    custom.classList.add('hidden');
+                } else {
+                    sel.value = '__custom';
+                    custom.value = d.quality;
+                    custom.classList.remove('hidden');
+                }
+            }
+            if (maType === 'tv') {
+                if (d.season != null && !document.getElementById('ma-season').value) document.getElementById('ma-season').value = d.season;
+                if (d.episode != null && !document.getElementById('ma-episode').value) document.getElementById('ma-episode').value = d.episode;
+            }
+            state.textContent = `Found: ${d.name || 'file'} (${d.size || '—'})`;
+        } catch (e) {
+            state.textContent = e.message || 'Could not resolve link.';
+            showToast(e.message || 'Could not resolve link.', 'error', 'Error');
+        }
+    }
+
+    function maQuality() {
+        const sel = document.getElementById('ma-quality');
+        if (sel.value === '__custom') return document.getElementById('ma-quality-custom').value.trim();
+        return sel.value;
+    }
+
+    async function submitManualAdd() {
+        const btn = document.getElementById('ma-submit');
+        const parts = maCollectParts();
+        const quality = maQuality();
+        const title = document.getElementById('ma-m-title').value.trim();
+        if (!title) { showToast('Enter a title.', 'error', 'Error'); return; }
+        if (!parts.length) { showToast('Paste at least one Telegram message link.', 'error', 'Error'); return; }
+        if (!quality) { showToast('Select a quality.', 'error', 'Error'); return; }
+
+        const payload = {
+            media_type: maType,
+            stream: { quality, name: document.getElementById('ma-name').value.trim() || undefined, parts },
+            manual_metadata: {
+                title,
+                year: document.getElementById('ma-m-year').value.trim(),
+                rate: document.getElementById('ma-m-rating').value.trim(),
+                genres: document.getElementById('ma-m-genres').value.trim(),
+                description: document.getElementById('ma-m-description').value.trim(),
+                poster: document.getElementById('ma-m-poster').value.trim(),
+                backdrop: document.getElementById('ma-m-backdrop').value.trim(),
+            }
+        };
+
+        if (maType === 'tv') {
+            const s = document.getElementById('ma-season').value.trim();
+            const e = document.getElementById('ma-episode').value.trim();
+            if (s === '' || e === '') { showToast('Season and episode are required.', 'error', 'Error'); return; }
+            payload.season_number = Number(s);
+            payload.episode_number = Number(e);
+            payload.episode_title = document.getElementById('ma-episode-title').value.trim() || undefined;
+        }
+
+        btn.disabled = true;
+        try {
+            const res = await fetch('/api/media/manual-add', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.detail || 'Failed to add content');
+            showToast(data.message || 'Added successfully.', 'success', 'Added');
+            closeManualAdd();
+            if (data.media_type === mediaType) {
+                loadMedia(currentPage, currentSearch);
+            }
+        } catch (e) {
+            showToast(e.message || 'Failed to add content.', 'error', 'Error');
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        document.getElementById('ma-quality').addEventListener('change', (e) => {
+            document.getElementById('ma-quality-custom').classList.toggle('hidden', e.target.value !== '__custom');
+        });
+    });
+</script>
 {% endblock %}

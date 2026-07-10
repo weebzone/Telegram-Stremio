@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en" class="{{ 'dark' if theme.is_dark else 'light' }}">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Install Telegram Stremio Addon</title>
+
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='{{ theme.colors.primary | replace('#','%23') }}'/%3E%3Cpath d='M12.5 9.5l10 6.5-10 6.5z' fill='white'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"/>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+:root {
+    color-scheme: {{ 'dark' if theme.is_dark else 'light' }};
+    --primary: {{ theme.colors.primary }};
+    --secondary: {{ theme.colors.secondary }};
+    --accent: {{ theme.colors.accent }};
+    --bg: {{ theme.colors.background }};
+    --card: {{ theme.colors.card }};
+    --border: {{ theme.colors.border }};
+    --text: {{ theme.colors.text }};
+    --text-sec: {{ theme.colors.text_secondary }};
+    --surface: color-mix(in srgb, var(--text) 5%, transparent);
+    --surface-2: color-mix(in srgb, var(--text) 9%, transparent);
+    --hairline: color-mix(in srgb, var(--text) 12%, transparent);
+    --hairline-strong: color-mix(in srgb, var(--text) 20%, transparent);
+    --ring: color-mix(in srgb, var(--primary) 35%, transparent);
+    --shadow-color: {{ '0,0,0' if theme.is_dark else '15,23,42' }};
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+    font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    background-color: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+}
+
+body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-image:
+        radial-gradient(circle at 15% 10%, color-mix(in srgb, var(--primary) 14%, transparent), transparent 40%),
+        radial-gradient(circle at 85% 85%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 40%);
+}
+
+.card {
+    background: color-mix(in srgb, var(--card) 90%, var(--bg));
+    border: 1px solid var(--hairline);
+    border-radius: 1.75rem;
+    box-shadow: 0 24px 60px rgba(var(--shadow-color), {{ '0.45' if theme.is_dark else '0.16' }});
+    padding: 40px 32px;
+    max-width: 480px;
+    width: 100%;
+    text-align: center;
+}
+
+.brand { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 20px; }
+.brand-logo {
+    width: 44px; height: 44px; border-radius: 9999px;
+    background: var(--primary); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1rem; box-shadow: 0 0 18px color-mix(in srgb, var(--primary) 55%, transparent);
+}
+.brand-name {
+    font-size: 1.6rem; font-weight: 800; letter-spacing: 0.02em;
+    background: linear-gradient(90deg, var(--primary), var(--accent));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+
+h1 { font-size: 1.15rem; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+.sub-title { color: var(--text-sec); font-size: 0.85rem; margin-bottom: 26px; line-height: 1.5; }
+
+.info-row {
+    display: flex; justify-content: space-between; align-items: center;
+    background: var(--surface); border: 1px solid var(--hairline);
+    border-radius: 0.85rem; padding: 12px 16px; margin-bottom: 10px; font-size: 0.88rem;
+}
+.info-label { color: var(--text-sec); font-weight: 500; }
+.info-val { font-weight: 700; color: var(--text); }
+.status-badge {
+    display: inline-flex; align-items: center; gap: 0.35rem;
+    padding: 3px 12px; border-radius: 9999px; font-size: 0.78rem; font-weight: 700;
+    background: {{ status_color }}22; color: {{ status_color }};
+}
+
+.btn-install {
+    display: flex; align-items: center; justify-content: center; gap: 0.6rem;
+    width: 100%; margin: 26px 0 12px;
+    background: linear-gradient(135deg, var(--primary), var(--secondary));
+    color: #fff; font-weight: 700; font-size: 0.98rem;
+    padding: 14px 24px; border-radius: 1rem; border: none;
+    cursor: pointer; text-decoration: none;
+    box-shadow: 0 10px 26px color-mix(in srgb, var(--primary) 32%, transparent);
+    transition: filter .2s ease, transform .12s ease;
+}
+.btn-install:hover { filter: brightness(1.08); }
+.btn-install:active { transform: scale(.98); }
+
+.btn-web {
+    display: block; color: var(--primary); font-size: 0.82rem;
+    font-weight: 600; text-decoration: none; margin-bottom: 22px;
+}
+.btn-web:hover { text-decoration: underline; }
+
+.steps {
+    background: var(--surface); border: 1px solid var(--hairline);
+    border-radius: 0.85rem; padding: 14px 18px; margin: 16px 0;
+    text-align: left; font-size: 0.85rem; color: var(--text-sec);
+}
+.steps b { color: var(--text); }
+.steps ol { margin-top: 8px; margin-left: 18px; line-height: 1.9; }
+
+.url-box {
+    background: color-mix(in srgb, var(--bg) 70%, var(--card));
+    border: 1px solid var(--hairline); border-radius: 0.7rem;
+    padding: 10px 14px; font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 0.72rem; color: var(--text-sec);
+    word-break: break-all; text-align: left; margin-top: 16px;
+}
+
+.btn-copy {
+    margin-top: 10px; width: 100%; padding: 10px;
+    background: var(--surface); border: 1px solid var(--hairline); color: var(--text-sec);
+    border-radius: 0.7rem; cursor: pointer; font-size: 0.85rem; font-weight: 600;
+    transition: background .2s ease, color .2s ease, border-color .2s ease;
+}
+.btn-copy:hover { background: var(--surface-2); color: var(--text); border-color: var(--hairline-strong); }
+</style>
+</head>
+<body>
+<div class="card">
+    <div class="brand">
+        <div class="brand-logo"><i class="fa-solid fa-play"></i></div>
+        <span class="brand-name">TG Stremio</span>
+    </div>
+
+    <h1>Install / Update Addon</h1>
+    <p class="sub-title">Add or refresh your personal Telegram library inside Stremio.</p>
+
+    <div class="info-row">
+        <span class="info-label">User</span>
+        <span class="info-val">{{ user_name }}</span>
+    </div>
+    <div class="info-row">
+        <span class="info-label">Status</span>
+        <span class="status-badge">{{ status_text }}</span>
+    </div>
+    <div class="info-row">
+        <span class="info-label">Expires</span>
+        <span class="info-val">{{ expiry_str }}</span>
+    </div>
+
+    <a href="{{ web_install_url }}" class="btn-install" target="_blank">
+        <i class="fa-solid fa-bolt"></i> Install / Update in Stremio
+    </a>
+
+    <div class="steps">
+        <b>Prefer to do it manually?</b>
+        <ol>
+            <li>Open Stremio and go to the <b>Add-ons</b> tab</li>
+            <li>Click the <b>Search / URL</b> field</li>
+            <li>Paste the URL below and press Enter</li>
+        </ol>
+    </div>
+
+    <div class="url-box" id="murl">{{ manifest_url }}</div>
+    <button onclick="copyUrl()" class="btn-copy"><i class="fa-solid fa-copy"></i> Copy URL</button>
+</div>
+
+<script>
+function copyUrl() {
+    const url = document.getElementById('murl').textContent.trim();
+    navigator.clipboard.writeText(url).then(() => {
+        const b = document.querySelector('.btn-copy');
+        b.innerHTML = '<i class="fa-solid fa-check"></i> Copied!';
+        setTimeout(() => b.innerHTML = '<i class="fa-solid fa-copy"></i> Copy URL', 2000);
+    });
+}
+</script>
+</body>
+</html>

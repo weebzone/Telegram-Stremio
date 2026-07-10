@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{% block title %}Telegram Stremio{% endblock %}</title>
 
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='{{ theme.colors.primary | replace('#','%23') }}'/%3E%3Cpath d='M12.5 9.5l10 6.5-10 6.5z' fill='white'/%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='{{ theme.colors.primary | replace('#','%23') }}'/%3E%3Cpath d='M12.5 9.5l10 6.5-10 6.5z' fill='white'/%3E%3C/svg%3E">
+
 <script src="https://cdn.tailwindcss.com"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"/>
 
@@ -160,7 +163,7 @@ body::before {
     font-weight: 600;
 }
 
-.nav-link:hover, .nav-link.active-page {
+.nav-link.pill-active {
     color: var(--bg) !important; 
 }
 
@@ -370,6 +373,7 @@ tailwind.config = {
         <a href="/admin/dashboard" class="nav-link">Admin</a>
         <a href="/admin/subscriptions" class="nav-link">Subs</a>
         <a href="/admin/access" class="nav-link">Access</a>
+        <a href="/admin/requests" class="nav-link">Requests</a>
         <a href="/admin/tools" class="nav-link">Tools</a>
         <a href="/admin/settings" class="nav-link">Settings</a>
     </div>
@@ -443,6 +447,7 @@ tailwind.config = {
             <a href="/admin/dashboard" class="px-4 py-3 rounded-xl hover:bg-primary hover:text-background transition flex items-center gap-3 font-semibold"><i class="fa-solid fa-chart-line"></i> Admin</a>
             <a href="/admin/subscriptions" class="px-4 py-3 rounded-xl hover:bg-primary hover:text-background transition flex items-center gap-3 font-semibold"><i class="fa-solid fa-credit-card"></i> Subs</a>
             <a href="/admin/access" class="px-4 py-3 rounded-xl hover:bg-primary hover:text-background transition flex items-center gap-3 font-semibold"><i class="fa-solid fa-shield"></i> Access</a>
+            <a href="/admin/requests" class="px-4 py-3 rounded-xl hover:bg-primary hover:text-background transition flex items-center gap-3 font-semibold"><i class="fa-solid fa-inbox"></i> Requests</a>
             <a href="/admin/tools" class="px-4 py-3 rounded-xl hover:bg-primary hover:text-background transition flex items-center gap-3 font-semibold"><i class="fa-solid fa-screwdriver-wrench"></i> Tools</a>
             <!-- ↓ NEW -->
             <a href="/admin/settings" class="px-4 py-3 rounded-xl hover:bg-primary hover:text-background transition flex items-center gap-3 font-semibold"><i class="fa-solid fa-gear"></i> Settings</a>
@@ -522,7 +527,7 @@ function checkOverlay() {
     }
 }
 
-function showToast(message, type = 'info', title = '') {
+function showToast(message, type = 'info', title = '', duration = 2600) {
     const container = document.getElementById('toast-container');
     if (!container) return;
 
@@ -550,7 +555,7 @@ function showToast(message, type = 'info', title = '') {
         setTimeout(() => {
             if (toast.parentNode) toast.parentNode.removeChild(toast);
         }, 200);
-    }, 2600);
+    }, duration);
 }
 
 function escapeHtml(str) {
@@ -612,15 +617,13 @@ function movePill(el) {
     pill.style.height = r.height + "px";
     pill.style.left = (r.left - pr.left) + "px";
     pill.style.top = (r.top - pr.top) + "px";
+    links.forEach(l => l.classList.toggle("pill-active", l === el));
 }
 
 window.addEventListener('load', () => {
     const current = window.location.pathname;
     activeLink = [...links].find(l => l.getAttribute("href") === current) || links[0];
-    if(activeLink) {
-        activeLink.classList.add('active-page');
-        movePill(activeLink);
-    }
+    if(activeLink) movePill(activeLink);
 });
 
 links.forEach(l => {

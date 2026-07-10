@@ -154,6 +154,8 @@
             <div class="stat-box"><div class="v" id="sc-dup">0</div><div class="l">Skipped (dup)</div></div>
             <div class="stat-box"><div class="v" id="sc-meta">0</div><div class="l">Skipped (meta)</div></div>
             <div class="stat-box"><div class="v" id="sc-nonvid">0</div><div class="l">Non-video</div></div>
+            <div class="stat-box"><div class="v" style="color:#3b82f6" id="sc-sub-added">0</div><div class="l">Subtitles added</div></div>
+            <div class="stat-box"><div class="v" id="sc-sub-skipped">0</div><div class="l">Subtitles skipped</div></div>
             <div class="stat-box"><div class="v" style="color:#ef4444" id="sc-errors">0</div><div class="l">Errors</div></div>
         </div>
 
@@ -353,6 +355,8 @@ function renderScan(s) {
     setText('sc-dup', c.skipped_dup || 0);
     setText('sc-meta', c.skipped_meta || 0);
     setText('sc-nonvid', c.skipped_nonvid || 0);
+    setText('sc-sub-added', c.subtitles_added || 0);
+    setText('sc-sub-skipped', c.subtitles_skipped || 0);
     setText('sc-errors', c.errors || 0);
     setText('scan-elapsed', s.elapsed || '0s');
 

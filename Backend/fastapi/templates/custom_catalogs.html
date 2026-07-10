@@ -179,6 +179,20 @@
     cursor: pointer;
     transition: .2s ease;
     border: 1px solid var(--line);
+    flex-shrink: 0;
+  }
+
+  /* Toggle row (visibility exclusive / search) */
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+    border-radius: 1rem;
+    padding: .75rem .85rem;
+    background: color-mix(in srgb, var(--bg) 64%, transparent);
+    border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+    cursor: pointer;
   }
 
   .switch::after {
@@ -300,6 +314,38 @@
     opacity: 1;
   }
 
+  .token-picker {
+    max-height: 12rem;
+    overflow-y: auto;
+    border: 1px solid var(--line);
+    border-radius: 1rem;
+    padding: .5rem;
+    display: flex;
+    flex-direction: column;
+    gap: .35rem;
+    background: color-mix(in srgb, var(--bg) 70%, transparent);
+  }
+  .token-row {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    padding: .5rem .65rem;
+    border-radius: .75rem;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: background .15s ease;
+  }
+  .token-row:hover { background: color-mix(in srgb, var(--primary) 10%, transparent); }
+  .token-row input { width: 1.05rem; height: 1.05rem; accent-color: var(--primary); cursor: pointer; flex-shrink: 0; }
+  .vis-chip {
+    display: inline-flex; align-items: center; gap: .4rem;
+    padding: .3rem .7rem; border-radius: 9999px; font-size: .72rem; font-weight: 900;
+    border: 1px solid var(--line);
+  }
+  .vis-public { color: rgb(52 211 153); background: color-mix(in srgb, rgb(16 185 129) 14%, transparent); border-color: color-mix(in srgb, rgb(16 185 129) 30%, transparent); }
+  .vis-tokens { color: rgb(96 165 250); background: color-mix(in srgb, rgb(59 130 246) 14%, transparent); border-color: color-mix(in srgb, rgb(59 130 246) 30%, transparent); }
+  .vis-owner  { color: rgb(248 113 113); background: color-mix(in srgb, rgb(239 68 68) 14%, transparent); border-color: color-mix(in srgb, rgb(239 68 68) 30%, transparent); }
+
   @media (max-width: 640px) {
     .hero-card { min-height: 13rem; }
     .btn-ui { width: 100%; }
@@ -314,11 +360,10 @@
         <div>
           <div class="flex flex-wrap items-center gap-2 mb-3">
             <span class="pill">Custom Stremio sections</span>
-            <span class="pill">No Stremio search/filter</span>
           </div>
-          <h1 class="section-title text-3xl sm:text-4xl lg:text-5xl">Custom Catalogs</h1>
+          <h1 class="section-title text-2xl sm:text-4xl lg:text-5xl">Custom Catalogs</h1>
           <p class="muted mt-3 max-w-2xl text-sm sm:text-base leading-7">
-            Build dynamic curated rows like Bollywood, Anime, Kids, 4K, Watch Later, or hidden private lists from your existing Telegram media.
+            Curate your own Stremio rows — Anime, 4K, or private lists — from your Telegram media.
           </p>
         </div>
       </div>
@@ -349,14 +394,13 @@
           <span class="pill">✨ Auto catalogs</span>
           <span id="auto-sync-status" class="pill">Checking status...</span>
         </div>
-        <h2 class="section-title text-2xl sm:text-3xl">Auto-create by selected language & OTT</h2>
+        <h2 class="section-title text-xl sm:text-3xl">Auto Catalogs</h2>
         <p class="muted text-sm sm:text-base mt-2 leading-7 max-w-3xl">
-          On app startup this scans your movie and series library, fetches TMDb original language + watch providers, then creates only the auto catalogs you select below. Genre auto catalogs are removed.
+          Auto-build rows by language & OTT provider. Enable the ones you want, then sync.
         </p>
       </div>
       <div class="flex flex-col sm:flex-row gap-3">
-        <button id="auto-sync-btn" onclick="runAutoSync(false)" class="btn-ui btn-primary lg:w-auto">⚡ Quick Sync</button>
-        <button id="auto-rebuild-btn" onclick="runAutoSync(true)" class="btn-ui btn-ghost lg:w-auto">♻️ Full Rebuild</button>
+        <button id="auto-sync-btn" onclick="runAutoSync()" class="btn-ui btn-primary lg:w-auto">⚡ Sync</button>
       </div>
     </div>
 
@@ -364,7 +408,7 @@
       <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
         <div>
           <h3 class="section-title text-xl">Choose Auto Catalogs</h3>
-          <p class="muted text-sm mt-1">Disable anything you do not want to auto-create. Save, then run Full Rebuild once to apply removed catalogs.</p>
+          <p class="muted text-sm mt-1">Save your selection, then press Sync to apply.</p>
         </div>
         <button id="save-auto-settings-btn" onclick="saveAutoCatalogSettings()" class="btn-ui btn-ghost md:w-auto">💾 Save Selection</button>
       </div>
@@ -382,7 +426,7 @@
         <div class="flex items-start justify-between gap-3 mb-5">
           <div>
             <h2 class="section-title text-2xl">Create Catalog</h2>
-            <p class="muted text-sm mt-1">Visible catalogs appear in Stremio manifest. Hidden catalogs stay only in web panel.</p>
+            <p class="muted text-sm mt-1">Visibility decides who sees it in Stremio.</p>
           </div>
           <span class="pill">New</span>
         </div>
@@ -393,14 +437,20 @@
             <input id="catalog-name" class="field-input" placeholder="Example: Bollywood Hits" required>
           </div>
 
-          <label class="catalog-card p-4 flex items-center justify-between gap-4 cursor-pointer select-none">
-            <div>
-              <p class="font-black">Show in Stremio</p>
-              <p class="muted text-xs mt-1">Turn off to keep this catalog private in web panel.</p>
-            </div>
-            <input id="catalog-visible" type="checkbox" checked class="switch-input hidden">
-            <span class="switch"></span>
-          </label>
+          <div>
+            <label class="field-label">Who can see it</label>
+            <select id="catalog-visibility" class="field-select" onchange="onVisibilityModeChange('catalog')">
+              <option value="public">Everyone</option>
+              <option value="tokens">Specific users</option>
+              <option value="owner">Owner only (hidden)</option>
+            </select>
+            <p class="muted text-xs mt-2" id="catalog-visibility-hint">Shown to everyone who installed the addon.</p>
+          </div>
+
+          <div id="catalog-token-picker-wrap" class="hidden">
+            <label class="field-label">Allowed users</label>
+            <div id="catalog-token-picker" class="token-picker"></div>
+          </div>
 
           <button class="btn-ui btn-primary w-full" type="submit">➕ Create Catalog</button>
         </form>
@@ -445,6 +495,47 @@
 
       <div id="catalog-workspace" class="hidden space-y-6">
         <div class="catalog-card p-4 sm:p-5">
+          <div class="flex flex-col md:flex-row md:items-end gap-3">
+            <div class="flex-1">
+              <label class="field-label">Catalog visibility</label>
+              <select id="ws-visibility" class="field-select" onchange="onVisibilityModeChange('ws')">
+                <option value="public">Everyone</option>
+                <option value="tokens">Specific users</option>
+                <option value="owner">Owner only (hidden)</option>
+              </select>
+            </div>
+            <button onclick="applyCatalogVisibility()" class="btn-ui btn-primary md:w-auto">Apply to all titles</button>
+          </div>
+          <div id="ws-token-picker-wrap" class="hidden mt-3">
+            <label class="field-label">Allowed users</label>
+            <div id="ws-token-picker" class="token-picker"></div>
+          </div>
+
+          <div id="ws-exclusive-wrap" class="hidden mt-3 space-y-2">
+            <label class="toggle-row">
+              <span class="min-w-0">
+                <span class="font-bold text-sm block">🔒 Only visible in this catalog</span>
+                <span class="muted text-xs block">Removed from Default, Auto and other catalogs.</span>
+              </span>
+              <input type="checkbox" id="ws-exclusive" class="switch-input hidden" onchange="onExclusiveChange()">
+              <span class="switch"></span>
+            </label>
+            <div id="ws-search-wrap" class="hidden">
+              <label class="toggle-row">
+                <span class="min-w-0">
+                  <span class="font-bold text-sm block">🔎 Allow search</span>
+                  <span class="muted text-xs block">Let allowed users find these titles via search.</span>
+                </span>
+                <input type="checkbox" id="ws-searchable" class="switch-input hidden">
+                <span class="switch"></span>
+              </label>
+            </div>
+          </div>
+
+          <p class="muted text-xs mt-3">Applies to every title in this catalog. Fine-tune a single title from its <b>Edit</b> page.</p>
+        </div>
+
+        <div class="catalog-card p-4 sm:p-5">
           <div class="flex flex-col sm:flex-row sm:items-end gap-3">
             <div class="flex-1">
               <label class="field-label">Search existing media</label>
@@ -488,6 +579,106 @@
 let catalogs = [];
 let selectedCatalogId = null;
 let catalogListExpanded = false;
+let subscriptionOn = false;
+let availableTokens = [];
+
+const VIS_META = {
+  public: { icon: '🌐', chip: 'vis-public' },
+  tokens: { icon: '🎯', chip: 'vis-tokens' },
+  owner:  { icon: '🔒', chip: 'vis-owner' },
+};
+
+function publicLabel() { return subscriptionOn ? 'Active subscribers' : 'Everyone'; }
+
+function visibilityLabel(mode) {
+  if (mode === 'tokens') return 'Specific users';
+  if (mode === 'owner') return 'Owner only';
+  return publicLabel();
+}
+
+function visibilityHint(mode) {
+  if (mode === 'tokens') return 'Shown only to the users you select below.';
+  if (mode === 'owner') return 'Hidden from all users. Visible only to you and in this panel.';
+  return subscriptionOn ? 'Shown to all active subscribers.' : 'Shown to everyone who installed the addon.';
+}
+
+function applyPublicLabels() {
+  document.querySelectorAll('#catalog-visibility option[value="public"], #ws-visibility option[value="public"]')
+    .forEach(o => o.textContent = publicLabel());
+}
+
+async function loadSettings() {
+  try {
+    const res = await fetch('/api/admin/settings');
+    const data = await res.json().catch(() => ({}));
+    subscriptionOn = !!(data.settings && data.settings.subscription);
+  } catch (e) {}
+  applyPublicLabels();
+  onVisibilityModeChange('catalog');
+}
+
+async function loadTokens() {
+  try {
+    const res = await fetch('/api/admin/access/tokens');
+    const data = await res.json().catch(() => ({}));
+    availableTokens = (data.tokens || []).filter(t => t.token);
+  } catch (e) { availableTokens = []; }
+}
+
+function renderTokenPicker(containerId, selected) {
+  const box = document.getElementById(containerId);
+  if (!box) return;
+  const sel = new Set(selected || []);
+  if (!availableTokens.length) {
+    box.innerHTML = '<p class="muted text-xs p-2">No users/tokens found. Create access tokens on the Access page first.</p>';
+    return;
+  }
+  box.innerHTML = availableTokens.map(t => `
+    <label class="token-row">
+      <input type="checkbox" value="${escapeHtml(t.token)}" ${sel.has(t.token) ? 'checked' : ''}>
+      <span class="min-w-0">
+        <span class="font-bold text-sm block truncate">${escapeHtml(t.user_name || 'User')}</span>
+        <span class="muted text-xs block truncate">${escapeHtml((t.token || '').slice(0, 12))}…${t.user_id ? ' · ' + escapeHtml(t.user_id) : ''}</span>
+      </span>
+    </label>`).join('');
+}
+
+function getPickedTokens(containerId) {
+  return Array.from(document.querySelectorAll(`#${containerId} input:checked`)).map(i => i.value);
+}
+
+function onVisibilityModeChange(scope) {
+  const isWs = scope === 'ws';
+  const mode = document.getElementById(isWs ? 'ws-visibility' : 'catalog-visibility').value;
+  const wrap = document.getElementById(isWs ? 'ws-token-picker-wrap' : 'catalog-token-picker-wrap');
+  if (wrap) wrap.classList.toggle('hidden', mode !== 'tokens');
+  if (mode === 'tokens') {
+    const preset = isWs ? (getSelectedCatalog()?.allowed_tokens || []) : [];
+    renderTokenPicker(isWs ? 'ws-token-picker' : 'catalog-token-picker', preset);
+  }
+  if (!isWs) {
+    const hint = document.getElementById('catalog-visibility-hint');
+    if (hint) hint.textContent = visibilityHint(mode);
+  } else {
+    //----- Exclusive lock is only offered for restricted, non-auto catalogs
+    const isAuto = !!(getSelectedCatalog()?.auto);
+    const canExclusive = !isAuto && mode !== 'public';
+    const exclWrap = document.getElementById('ws-exclusive-wrap');
+    if (exclWrap) exclWrap.classList.toggle('hidden', !canExclusive);
+    if (!canExclusive) {
+      const ex = document.getElementById('ws-exclusive');
+      if (ex) ex.checked = false;
+    }
+    onExclusiveChange();
+  }
+}
+
+function onExclusiveChange() {
+  const on = !!document.getElementById('ws-exclusive')?.checked;
+  const wrapVisible = !document.getElementById('ws-exclusive-wrap')?.classList.contains('hidden');
+  const searchWrap = document.getElementById('ws-search-wrap');
+  if (searchWrap) searchWrap.classList.toggle('hidden', !(on && wrapVisible));
+}
 
 function posterOrFallback(item) {
   return item.poster || 'https://via.placeholder.com/120x180/111827/94a3b8?text=No+Poster';
@@ -505,7 +696,7 @@ function getSelectedCatalog() {
 
 function updateStats() {
   const total = catalogs.length;
-  const visible = catalogs.filter(c => c.visible).length;
+  const visible = catalogs.filter(c => (c.visibility || 'public') !== 'owner').length;
   const items = catalogs.reduce((sum, c) => sum + ((c.items || []).length), 0);
   document.getElementById('stat-total').textContent = total;
   document.getElementById('stat-visible').textContent = visible;
@@ -572,21 +763,21 @@ function renderCatalogs() {
   box.innerHTML = catalogs.map(c => {
     const isActive = c._id === selectedCatalogId;
     const count = (c.items || []).length;
+    const mode = c.visibility || 'public';
+    const meta = VIS_META[mode] || VIS_META.public;
     return `<div class="catalog-card p-4 ${isActive ? 'active' : ''}">
-      <div class="flex items-start justify-between gap-3">
-        <button class="text-left min-w-0 flex-1" onclick="selectCatalog('${c._id}')">
-          <div class="flex items-center gap-2 min-w-0">
-            <span class="text-xl">${c.auto ? '✨' : (c.visible ? '🌐' : '🔒')}</span>
-            <h3 class="font-black truncate">${escapeHtml(c.name)}</h3>
-            ${c.auto ? '<span class="pill text-[0.62rem] px-2 py-0.5">Auto</span>' : ''}
-          </div>
-          <p class="muted text-xs mt-2">${count} title${count === 1 ? '' : 's'} · ${c.visible ? 'Visible in Stremio' : 'Hidden from Stremio'}</p>
-        </button>
-        <label class="flex items-center gap-2 shrink-0" title="Toggle Stremio visibility">
-          <input type="checkbox" ${c.visible ? 'checked' : ''} onchange="toggleVisibility('${c._id}', this.checked)" class="switch-input hidden">
-          <span class="switch"></span>
-        </label>
-      </div>
+      <button class="text-left w-full min-w-0" onclick="selectCatalog('${c._id}')">
+        <div class="flex items-center gap-2 min-w-0">
+          <span class="text-xl">${c.auto ? '✨' : meta.icon}</span>
+          <h3 class="font-black truncate">${escapeHtml(c.name)}</h3>
+          ${c.auto ? '<span class="pill text-[0.62rem] px-2 py-0.5">Auto</span>' : ''}
+        </div>
+        <div class="flex items-center gap-2 mt-2 flex-wrap">
+          <span class="vis-chip ${meta.chip}">${meta.icon} ${escapeHtml(visibilityLabel(mode))}</span>
+          ${c.exclusive ? `<span class="vis-chip vis-owner">🔒 Exclusive${c.searchable ? ' · 🔎' : ''}</span>` : ''}
+          <span class="muted text-xs">${count} title${count === 1 ? '' : 's'}</span>
+        </div>
+      </button>
     </div>`;
   }).join('');
 
@@ -627,36 +818,62 @@ function updateSelectedHeader() {
   deleteBtn.classList.remove('hidden');
   visibilityPill.classList.remove('hidden');
   countPill.classList.remove('hidden');
-  visibilityPill.textContent = catalog.visible ? '🌐 Visible in Stremio' : '🔒 Hidden from Stremio';
+
+  const mode = catalog.visibility || 'public';
+  const meta = VIS_META[mode] || VIS_META.public;
+  visibilityPill.className = `pill vis-chip ${meta.chip}`;
+  visibilityPill.textContent = `${meta.icon} ${visibilityLabel(mode)}`;
   countPill.textContent = `${(catalog.items || []).length} title${(catalog.items || []).length === 1 ? '' : 's'}`;
   document.getElementById('selected-title').textContent = catalog.name || 'Selected Catalog';
-  document.getElementById('selected-subtitle').textContent = catalog.visible
-    ? 'This catalog appears on the Stremio catalog screen.'
-    : 'This catalog is private in the web panel and hidden from Stremio.';
+  document.getElementById('selected-subtitle').textContent = 'Manage titles and choose who can see this catalog in Stremio.';
+
+  const sel = document.getElementById('ws-visibility');
+  if (sel) sel.value = mode;
+
+  const exToggle = document.getElementById('ws-exclusive');
+  const searchToggle = document.getElementById('ws-searchable');
+  if (exToggle) exToggle.checked = !!catalog.exclusive;
+  if (searchToggle) searchToggle.checked = !!catalog.searchable;
+
+  onVisibilityModeChange('ws');
 }
 
 async function createCatalog(event) {
   event.preventDefault();
   const name = document.getElementById('catalog-name').value.trim();
-  const visible = document.getElementById('catalog-visible').checked;
+  const visibility = document.getElementById('catalog-visibility').value;
+  const allowed_tokens = visibility === 'tokens' ? getPickedTokens('catalog-token-picker') : [];
   if (!name) return showToast('Catalog name is required', 'error', 'Error');
+  if (visibility === 'tokens' && !allowed_tokens.length)
+    return showToast('Select at least one user for a restricted catalog.', 'error', 'Error');
   const res = await fetch('/api/custom-catalogs', {
-    method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name, visible})
+    method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name, visibility, allowed_tokens})
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) return showToast(data.detail || 'Failed to create catalog', 'error', 'Error');
   document.getElementById('catalog-name').value = '';
+  document.getElementById('catalog-visibility').value = 'public';
+  onVisibilityModeChange('catalog');
   showToast('Catalog created', 'success', 'Success');
   await loadCatalogs();
 }
 
-async function toggleVisibility(id, visible) {
-  const catalog = catalogs.find(c => c._id === id);
-  const res = await fetch(`/api/custom-catalogs/${id}`, {
-    method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name: catalog?.name, visible})
+async function applyCatalogVisibility() {
+  const catalog = getSelectedCatalog();
+  if (!catalog) return;
+  const visibility = document.getElementById('ws-visibility').value;
+  const allowed_tokens = visibility === 'tokens' ? getPickedTokens('ws-token-picker') : [];
+  if (visibility === 'tokens' && !allowed_tokens.length)
+    return showToast('Select at least one user.', 'error', 'Error');
+  const canExclusive = !catalog.auto && visibility !== 'public';
+  const exclusive = canExclusive && !!document.getElementById('ws-exclusive')?.checked;
+  const searchable = exclusive && !!document.getElementById('ws-searchable')?.checked;
+  const res = await fetch(`/api/custom-catalogs/${catalog._id}`, {
+    method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name: catalog.name, visibility, allowed_tokens, exclusive, searchable})
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) showToast(data.detail || 'Failed to update visibility', 'error', 'Error');
+  if (!res.ok) return showToast(data.detail || 'Failed to update visibility', 'error', 'Error');
+  showToast(exclusive ? 'Exclusive lock applied — titles now show only here' : 'Visibility applied to all titles in this catalog', 'success', 'Success');
   await loadCatalogs();
 }
 
@@ -808,7 +1025,7 @@ async function saveAutoCatalogSettings() {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.detail || 'Failed to save settings');
-    showToast('Auto catalog selection saved. Run Full Rebuild once to remove disabled catalog items.', 'success', 'Saved');
+    showToast('Auto catalog selection saved. Press Sync to apply the changes.', 'success', 'Saved');
     await loadAutoCatalogSettings();
   } catch (error) {
     showToast(error.message || 'Failed to save settings', 'error', 'Error');
@@ -822,31 +1039,27 @@ let autoSyncPollTimer = null;
 async function loadAutoSyncStatus() {
   const pill = document.getElementById('auto-sync-status');
   const syncBtn = document.getElementById('auto-sync-btn');
-  const rebuildBtn = document.getElementById('auto-rebuild-btn');
   if (!pill) return;
   try {
     const res = await fetch('/api/custom-catalogs/auto-sync/status');
     const data = await res.json().catch(() => ({}));
     const status = data.status || {};
-    const mode = status.mode === 'full_rebuild' ? 'Full rebuild' : 'Quick sync';
 
     if (status.running) {
-      pill.textContent = `${mode} running: ${status.scanned || 0} scanned · ${status.classified || 0} checked`;
+      pill.textContent = `Sync running: ${status.scanned || 0} scanned · ${status.classified || 0} checked`;
       if (syncBtn) syncBtn.disabled = true;
-      if (rebuildBtn) rebuildBtn.disabled = true;
       if (!autoSyncPollTimer) {
         autoSyncPollTimer = setInterval(loadAutoSyncStatus, 3000);
       }
     } else {
       if (status.finished_at) {
         pill.textContent = status.error
-          ? `${mode} failed`
-          : `${mode}: ${status.classified || 0} checked · ${status.skipped || 0} skipped`;
+          ? 'Sync failed'
+          : `Synced: ${status.classified || 0} checked · ${status.skipped || 0} reused`;
       } else {
-        pill.textContent = 'Quick sync runs on boot';
+        pill.textContent = 'Sync runs on boot';
       }
       if (syncBtn) syncBtn.disabled = false;
-      if (rebuildBtn) rebuildBtn.disabled = false;
       if (autoSyncPollTimer) {
         clearInterval(autoSyncPollTimer);
         autoSyncPollTimer = null;
@@ -858,24 +1071,20 @@ async function loadAutoSyncStatus() {
   }
 }
 
-async function runAutoSync(fullRebuild = false) {
-  const btn = document.getElementById(fullRebuild ? 'auto-rebuild-btn' : 'auto-sync-btn');
-  const otherBtn = document.getElementById(fullRebuild ? 'auto-sync-btn' : 'auto-rebuild-btn');
+async function runAutoSync() {
+  const btn = document.getElementById('auto-sync-btn');
   const old = btn.textContent;
   btn.disabled = true;
-  if (otherBtn) otherBtn.disabled = true;
-  btn.textContent = fullRebuild ? '⏳ Rebuilding...' : '⏳ Syncing...';
+  btn.textContent = '⏳ Syncing...';
   try {
-    const url = `/api/custom-catalogs/auto-sync?full_rebuild=${fullRebuild ? 'true' : 'false'}`;
-    const res = await fetch(url, { method: 'POST' });
+    const res = await fetch('/api/custom-catalogs/auto-sync', { method: 'POST' });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.detail || 'Auto sync failed');
+    if (!res.ok) throw new Error(data.detail || 'Sync failed');
     const result = data.result || {};
-    const title = fullRebuild ? 'Full rebuild started' : 'Quick sync started';
-    showToast(result.message || data.message || 'Auto sync started in background.', 'info', title);
+    showToast(result.message || data.message || 'Sync started in background.', 'info', 'Sync started');
     await loadAutoSyncStatus();
   } catch (error) {
-    showToast(error.message || 'Auto sync failed', 'error', 'Error');
+    showToast(error.message || 'Sync failed', 'error', 'Error');
   } finally {
     btn.textContent = old;
     await loadAutoSyncStatus();
@@ -894,6 +1103,11 @@ function toggleCatalogExpand() {
   if (btn) btn.textContent = catalogListExpanded ? '▴ Collapse list' : '▾ Show all catalogs';
 }
 
-document.addEventListener('DOMContentLoaded', () => { loadCatalogs(); loadAutoSyncStatus(); loadAutoCatalogSettings(); });
+document.addEventListener('DOMContentLoaded', async () => {
+  await Promise.all([loadSettings(), loadTokens()]);
+  loadCatalogs();
+  loadAutoSyncStatus();
+  loadAutoCatalogSettings();
+});
 </script>
 {% endblock %}

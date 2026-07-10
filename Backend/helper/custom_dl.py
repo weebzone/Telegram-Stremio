@@ -1,28 +1,32 @@
 import asyncio
 import random
 import re
-import time
 import secrets
-from collections import deque
-from typing import Dict, List, Union, Optional, Tuple
+import time
 import traceback
+from collections import deque
+from typing import Dict, List, Optional, Tuple, Union
+
 from fastapi import Request
-from pyrogram import Client, raw, utils
+from pyrogram import Client, raw
 from pyrogram.errors import AuthBytesInvalid
-from pyrogram.file_id import FileId, FileType, ThumbnailSource
-from pyrogram.session import Session, Auth
-from Backend.logger import LOGGER
-from Backend.helper.exceptions import FIleNotFound
-from Backend.helper.pyro import get_file_ids
+from pyrogram.file_id import FileId
+from pyrogram.session import Auth, Session
+
 from Backend import db
-from Backend.pyrofork.bot import work_loads, multi_clients, client_dc_map, client_failures, client_avg_mbps
+from Backend.helper.exceptions import FileNotFound
+from Backend.helper.pyro import get_file_ids
+from Backend.logger import LOGGER
+from Backend.pyrofork.bot import client_avg_mbps, client_dc_map, client_failures, multi_clients, work_loads
 
 ACTIVE_STREAMS: Dict[str, Dict] = {}
 RECENT_STREAMS = deque(maxlen=20)
 
+
+#----- Telegram file byte streamer with prefetch, multi-client parallelism, and telemetry
 class ByteStreamer:
-    CHUNK_SIZE = 1024 * 1024  # 1 MB
-    CLEAN_INTERVAL = 30 * 60  # 30 minutes
+    CHUNK_SIZE = 1024 * 1024
+    CLEAN_INTERVAL = 30 * 60
     _instances: Dict[int, "ByteStreamer"] = {}
 
     def __init__(self, client: Client, client_index: int = -1):
@@ -69,15 +73,17 @@ class ByteStreamer:
             except Exception:
                 continue
 
+    #----- Fetch (and cache) Telegram FileId properties for a message
     async def get_file_properties(self, chat_id: int, message_id: int) -> FileId:
         if message_id not in self._file_id_cache:
             file_id = await get_file_ids(self.client, int(chat_id), int(message_id))
             if not file_id:
                 LOGGER.warning("Message %s not found", message_id)
-                raise FIleNotFound
+                raise FileNotFound
             self._file_id_cache[message_id] = file_id
         return self._file_id_cache[message_id]
 
+    #----- Build a prefetching, range-aware streaming generator for a file
     async def prefetch_stream(
         self,
         file_id: FileId,
@@ -205,13 +211,13 @@ class ByteStreamer:
             return seq_idx, None
 
         async def producer():
+            scheduled_tasks = {}
             try:
                 if part_count <= 0:
                     await q.put((None, None))
                     return
 
                 next_to_schedule = 0
-                scheduled_tasks = {}
                 results_buffer = {}
                 next_to_put = 0
                 max_parallel = max(1, parallelism)
@@ -290,6 +296,17 @@ class ByteStreamer:
                     await q.put((None, None))
                 except Exception:
                     pass
+            finally:
+                stop_event.set()
+                if scheduled_tasks:
+                    for t in scheduled_tasks.values():
+                        if not t.done():
+                            t.cancel()
+                    try:
+                        await asyncio.gather(*scheduled_tasks.values(), return_exceptions=True)
+                    except Exception:
+                        pass
+                    scheduled_tasks.clear()
 
         async def consumer_generator():
             producer_task = asyncio.create_task(producer())
@@ -302,6 +319,7 @@ class ByteStreamer:
                     if _disconnect_check_counter % 8 == 0:
                         try:
                             if request and await request.is_disconnected():
+                                stop_event.set()
                                 ACTIVE_STREAMS[stream_id]["status"] = "cancelled"
                                 break
                         except Exception:
@@ -311,6 +329,7 @@ class ByteStreamer:
                         off_chunk = await asyncio.wait_for(q.get(), timeout=90.0)
                     except asyncio.TimeoutError:
                         LOGGER.error("Producer stall (90 s) for stream %s — aborting", stream_id)
+                        stop_event.set()
                         ACTIVE_STREAMS[stream_id]["status"] = "error"
                         break
 
@@ -321,8 +340,17 @@ class ByteStreamer:
                     if off is None and chunk is None:
                         break
 
+                    if part_count == 1:
+                        out_chunk = chunk[first_part_cut:last_part_cut]
+                    elif current_part_idx == 1:
+                        out_chunk = chunk[first_part_cut:]
+                    elif current_part_idx == part_count:
+                        out_chunk = chunk[:last_part_cut]
+                    else:
+                        out_chunk = chunk
+
                     try:
-                        chunk_len = len(chunk)
+                        chunk_len = len(out_chunk)
                     except Exception:
                         chunk_len = 0
 
@@ -354,28 +382,24 @@ class ByteStreamer:
                     if instant_mbps > ACTIVE_STREAMS[stream_id]["peak_mbps"]:
                         ACTIVE_STREAMS[stream_id]["peak_mbps"] = instant_mbps
 
-                    if part_count == 1:
-                        yield chunk[first_part_cut:last_part_cut]
-                    elif current_part_idx == 1:
-                        yield chunk[first_part_cut:]
-                    elif current_part_idx == part_count:
-                        yield chunk[:last_part_cut]
-                    else:
-                        yield chunk
+                    yield out_chunk
 
                     current_part_idx += 1
 
             except asyncio.CancelledError:
+                stop_event.set()
                 if not producer_task.done():
                     producer_task.cancel()
                 ACTIVE_STREAMS[stream_id]["status"] = "cancelled"
                 raise
             except Exception as e:
                 LOGGER.exception("Consumer error for stream %s: %s", stream_id, e)
+                stop_event.set()
                 ACTIVE_STREAMS[stream_id]["status"] = "error"
                 if not producer_task.done():
                     producer_task.cancel()
             finally:
+                stop_event.set()
                 if not producer_task.done():
                     try:
                         producer_task.cancel()
@@ -486,13 +510,11 @@ class ByteStreamer:
             LOGGER.debug("ByteStreamer: cleared file_id cache")
 
 
-# ---------------------------------------------------------------------------
-# Speed Test helper – runs independently, on-demand per file
-# ---------------------------------------------------------------------------
-
+#----- Speed test helper (runs independently, on-demand per file)
 TEST_CHUNK_SIZE = 100 * 1024 * 1024
 
 
+#----- Download a fixed slice from one client and measure throughput
 async def _speed_test_single_client(
     client: Client,
     client_index: int,
@@ -615,6 +637,7 @@ async def _speed_test_single_client(
     return result
 
 
+#----- Run the speed test across every connected client, fastest first
 async def run_speed_test(chat_id: int, message_id: int) -> List[dict]:
     if not multi_clients:
         return [{"error": "No bot clients connected"}]

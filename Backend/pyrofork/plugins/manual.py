@@ -1,19 +1,19 @@
+from pyrogram import Client, enums, filters
+from pyrogram.types import Message
+
 import Backend
 from Backend.helper.custom_filter import CustomFilters
-from pyrogram import filters, Client, enums
-from pyrogram.types import Message
 from Backend.logger import LOGGER
 
 
+#----- Owner-only /set: set or clear the default IMDB/TMDB URL for uploads
 @Client.on_message(filters.command('set') & filters.private & CustomFilters.owner, group=10)
 async def manual(client: Client, message: Message):
     try:
         command = message.text.split(maxsplit=1)
 
         if len(command) == 2:
-            url = command[1].strip()
-            Backend.USE_DEFAULT_ID = url
-
+            Backend.USE_DEFAULT_ID = command[1].strip()
             await message.reply_text(
                 f"✅ <b>Default IMDB/TMDB URL Set!</b>\n\n"
                 f"Now the bot will use this URL for any files you send:\n"
@@ -36,4 +36,3 @@ async def manual(client: Client, message: Message):
     except Exception as e:
         LOGGER.error(f"Error in /set handler: {e}")
         await message.reply_text(f"⚠️ An error occurred: {e}")
-        

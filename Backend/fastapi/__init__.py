@@ -1,8 +1,9 @@
 import uvicorn
+
 from Backend.config import Telegram
 from Backend.fastapi.main import app
 
-
+#----- Uvicorn server bound to the FastAPI app
 Port = Telegram.PORT
 config = uvicorn.Config(
     app=app,

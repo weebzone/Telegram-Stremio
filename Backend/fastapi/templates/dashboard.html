@@ -21,6 +21,8 @@
         </div>
     </header>
 
+    <div id="setup-card" class="mb-8"></div>
+
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <div class="glass-panel p-5 rounded-[2rem] flex items-center gap-4">
             <div class="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary shadow-glow">
@@ -967,8 +969,51 @@
     document.addEventListener('DOMContentLoaded', () => {
         formatInitialBytes();
         loadStreamStats();
+        loadSetupStatus();
         setInterval(loadStreamStats, 30000);
         setInterval(refreshLiveDurations, 1000);
     });
+
+    async function loadSetupStatus() {
+        const wrap = document.getElementById('setup-card');
+        if (!wrap) return;
+        try {
+            const res = await fetch('/api/admin/setup-status');
+            if (!res.ok) return;
+            const data = await res.json();
+            const d = data.data || {};
+            const checks = d.checks || [];
+            if (!checks.length || d.complete) { wrap.innerHTML = ''; return; }
+
+            const rows = checks.map(c => `
+                <a href="/admin/settings" class="flex items-start gap-3 p-3 rounded-2xl transition hover:bg-primary/5 ${c.done ? 'opacity-60' : ''}">
+                    <span class="mt-0.5 w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${c.done ? 'bg-green-500/20 text-green-400' : 'bg-amber-500/20 text-amber-400'}">
+                        <i class="fa-solid ${c.done ? 'fa-check' : 'fa-arrow-right'} text-xs"></i>
+                    </span>
+                    <span>
+                        <span class="font-bold text-sm ${c.done ? 'line-through text-text-secondary' : 'text-text'}">${escapeHtmlSetup(c.label)}</span>
+                        <span class="block text-xs text-text-secondary mt-0.5">${escapeHtmlSetup(c.hint)}</span>
+                    </span>
+                </a>`).join('');
+
+            const pct = Math.round((d.done / d.total) * 100);
+            wrap.innerHTML = `
+                <div class="glass-panel rounded-[2rem] p-6 border border-primary/20">
+                    <div class="flex items-center justify-between gap-3 mb-4">
+                        <div>
+                            <h2 class="text-lg font-extrabold text-text flex items-center gap-2"><i class="fa-solid fa-rocket text-primary"></i> Finish setting up</h2>
+                            <p class="text-xs text-text-secondary mt-1">${d.done} of ${d.total} steps done — complete these to go live.</p>
+                        </div>
+                        <div class="text-2xl font-black text-primary">${pct}%</div>
+                    </div>
+                    <div class="w-full h-2 rounded-full bg-white/10 overflow-hidden mb-4"><div class="h-full bg-primary" style="width:${pct}%"></div></div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">${rows}</div>
+                </div>`;
+        } catch (e) { /* ignore */ }
+    }
+
+    function escapeHtmlSetup(v) {
+        return String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+    }
 </script>
 {% endblock %}

@@ -1,0 +1,219 @@
+import re
+from datetime import datetime
+
+from Backend import db
+from Backend.helper.encrypt import encode_string
+from Backend.helper.metadata import (
+    extract_default_id,
+    fetch_movie_metadata,
+    fetch_tv_metadata,
+    parse_media_name,
+)
+from Backend.helper.pyro import clean_filename
+from Backend.logger import LOGGER
+
+SUBTITLE_EXTS = (".srt", ".vtt", ".ass", ".ssa", ".sub")
+
+#----- (ISO 639-2 code, label, match aliases: full names + ISO codes)
+_LANGUAGES = [
+    ("eng", "English", ("english", "eng")),
+    ("hin", "Hindi", ("hindi", "hin")),
+    ("tam", "Tamil", ("tamil", "tam")),
+    ("tel", "Telugu", ("telugu", "tel")),
+    ("kan", "Kannada", ("kannada", "kan")),
+    ("mal", "Malayalam", ("malayalam", "mal")),
+    ("ben", "Bengali", ("bengali", "bangla", "ben")),
+    ("mar", "Marathi", ("marathi", "mar")),
+    ("pan", "Punjabi", ("punjabi", "panjabi", "pan")),
+    ("guj", "Gujarati", ("gujarati", "guj")),
+    ("urd", "Urdu", ("urdu", "urd")),
+    ("ori", "Odia", ("odia", "oriya", "ori")),
+    ("asm", "Assamese", ("assamese", "asm")),
+    ("bho", "Bhojpuri", ("bhojpuri", "bho")),
+    ("kok", "Konkani", ("konkani", "kok")),
+    ("nep", "Nepali", ("nepali", "nep")),
+    ("sin", "Sinhala", ("sinhala", "sinhalese", "sin")),
+    ("san", "Sanskrit", ("sanskrit", "san")),
+    ("spa", "Spanish", ("spanish", "espanol", "spa")),
+    ("fre", "French", ("french", "francais", "fre", "fra")),
+    ("ger", "German", ("german", "deutsch", "ger", "deu")),
+    ("ita", "Italian", ("italian", "italiano", "ita")),
+    ("por", "Portuguese", ("portuguese", "portugues", "por")),
+    ("rus", "Russian", ("russian", "rus")),
+    ("ara", "Arabic", ("arabic", "ara")),
+    ("jpn", "Japanese", ("japanese", "jpn")),
+    ("kor", "Korean", ("korean", "kor")),
+    ("chi", "Chinese", ("chinese", "mandarin", "cantonese", "chi", "zho")),
+    ("tha", "Thai", ("thai", "tha")),
+    ("vie", "Vietnamese", ("vietnamese", "vie")),
+    ("ind", "Indonesian", ("indonesian", "bahasa", "ind")),
+    ("may", "Malay", ("malay", "melayu", "msa")),
+    ("fil", "Filipino", ("filipino", "tagalog", "fil", "tgl")),
+    ("tur", "Turkish", ("turkish", "turkce", "tur")),
+    ("dut", "Dutch", ("dutch", "nederlands", "dut", "nld")),
+    ("pol", "Polish", ("polish", "polski", "pol")),
+    ("swe", "Swedish", ("swedish", "svenska", "swe")),
+    ("nor", "Norwegian", ("norwegian", "norsk", "nor")),
+    ("dan", "Danish", ("danish", "dansk", "dan")),
+    ("fin", "Finnish", ("finnish", "suomi", "fin")),
+    ("gre", "Greek", ("greek", "gre", "ell")),
+    ("heb", "Hebrew", ("hebrew", "heb")),
+    ("per", "Persian", ("persian", "farsi", "per", "fas")),
+    ("ukr", "Ukrainian", ("ukrainian", "ukr")),
+    ("rum", "Romanian", ("romanian", "rum", "ron")),
+    ("hun", "Hungarian", ("hungarian", "magyar", "hun")),
+    ("cze", "Czech", ("czech", "cesky", "cze", "ces")),
+    ("swa", "Swahili", ("swahili", "swa")),
+]
+
+
+def is_subtitle_file(name: str) -> bool:
+    return bool(name) and name.lower().strip().endswith(SUBTITLE_EXTS)
+
+
+def subtitle_ext(name: str) -> str:
+    low = (name or "").lower()
+    for ext in SUBTITLE_EXTS:
+        if low.endswith(ext):
+            return ext
+    return ".srt"
+
+
+#----- token -> (code, label) for exact matches; full-name set for trimming
+_LANG_BY_TOKEN = {}
+_LANG_WORDS = set()
+for _code, _label, _aliases in _LANGUAGES:
+    for _alias in _aliases:
+        _LANG_BY_TOKEN.setdefault(_alias, (_code, _label))
+        if len(_alias) >= 4:
+            _LANG_WORDS.add(_alias)
+    _LANG_WORDS.add(_label.lower())
+
+_SUB_EXT_TOKENS = {ext.lstrip(".") for ext in SUBTITLE_EXTS}
+
+#----- Trailing tokens that describe the subtitle, not its language
+_IGNORE_TOKENS = {"forced", "sdh", "cc", "full", "default", "hearing", "impaired",
+                  "dubbed", "dub", "sub", "subs", "subtitle", "subtitles"}
+
+_TRAILING_LANG_RE = re.compile(
+    r"[\s._-]+(" + "|".join(sorted(_LANG_WORDS, key=len, reverse=True)) + r")\s*$",
+    re.IGNORECASE,
+)
+
+
+#----- Detect language from filename tokens: full names first, then ISO codes, scanning from the end
+def detect_language(name: str):
+    tokens = [t for t in re.split(r"[^a-z0-9]+", (name or "").lower()) if t and t not in _SUB_EXT_TOKENS]
+    while tokens and tokens[-1] in _IGNORE_TOKENS:
+        tokens.pop()
+    for token in reversed(tokens):
+        if len(token) >= 4 and token in _LANG_BY_TOKEN:
+            return _LANG_BY_TOKEN[token]
+    for token in reversed(tokens):
+        if len(token) == 3 and token in _LANG_BY_TOKEN:
+            return _LANG_BY_TOKEN[token]
+    return "und", "Unknown"
+
+
+#----- Drop the subtitle extension and any trailing language word(s)
+def _strip_language(name: str) -> str:
+    base = name or ""
+    for ext in SUBTITLE_EXTS:
+        if base.lower().endswith(ext):
+            base = base[: -len(ext)]
+            break
+    prev = None
+    while prev != base:
+        prev = base
+        base = _TRAILING_LANG_RE.sub("", base)
+    return base.strip() or (name or "")
+
+
+#----- Resolve a subtitle filename to (imdb_id, media_type, season, episode)
+async def _identify(name: str):
+    default_id = extract_default_id(name)
+    parsed = parse_media_name(clean_filename(_strip_language(name)))
+    title = parsed.get("title")
+    year = parsed.get("year")
+    season = parsed.get("season")
+    episode = parsed.get("episode")
+
+    #----- Need either a direct IMDb/TMDb id or a parsable title to match
+    if not default_id and not title:
+        return None
+
+    is_tv = bool(season and episode and not isinstance(season, list) and not isinstance(episode, list))
+    if is_tv:
+        info = await fetch_tv_metadata(title or "", int(season), int(episode), None, year, None, default_id)
+        season_out, episode_out = int(season), int(episode)
+    else:
+        info = await fetch_movie_metadata(title or "", None, year, None, default_id)
+        season_out = episode_out = None
+
+    if not info or not info.get("imdb_id"):
+        return None
+    media_type = "tv" if info.get("media_type") in ("tv", "series") else "movie"
+    return info["imdb_id"], media_type, season_out, episode_out
+
+
+#----- Match, tag and store a subtitle; returns True when stored, False when skipped
+async def ingest_subtitle(name: str, channel: int, msg_id: int) -> bool:
+    try:
+        identified = await _identify(name)
+        if not identified:
+            LOGGER.info(f"[SUBTITLE] Could not match '{name}'")
+            return False
+        imdb_id, media_type, season, episode = identified
+        code, label = detect_language(name)
+        encoded = await encode_string({"chat_id": channel, "msg_id": msg_id})
+
+        await db.dbs["tracking"]["subtitles"].update_one(
+            {"chat_id": int(channel), "msg_id": int(msg_id)},
+            {"$set": {
+                "imdb_id": imdb_id,
+                "media_type": media_type,
+                "season": int(season) if season else None,
+                "episode": int(episode) if episode else None,
+                "lang_code": code,
+                "lang_label": label,
+                "name": name,
+                "chat_id": int(channel),
+                "msg_id": int(msg_id),
+                "encoded": encoded,
+                "added_at": datetime.utcnow(),
+            }},
+            upsert=True,
+        )
+        LOGGER.info(f"[SUBTITLE] Stored {label} for {imdb_id} (S{season}E{episode}): {name}")
+        return True
+    except Exception as e:
+        LOGGER.error(f"[SUBTITLE] ingest failed for '{name}': {e}")
+        return False
+
+
+async def get_subtitles_for(imdb_id: str, media_type: str, season, episode):
+    query = {"imdb_id": imdb_id}
+    if media_type == "tv":
+        query["season"] = int(season) if season else None
+        query["episode"] = int(episode) if episode else None
+    return [doc async for doc in db.dbs["tracking"]["subtitles"].find(query)]
+
+
+async def remove_subtitle(channel, msg_id) -> bool:
+    result = await db.dbs["tracking"]["subtitles"].delete_one(
+        {"chat_id": int(channel), "msg_id": int(msg_id)}
+    )
+    return result.deleted_count > 0
+
+
+#----- Shape stored subtitles into Stremio subtitle objects
+def stremio_subtitle_entries(subs: list, token: str, base_url: str) -> list:
+    entries = []
+    for sub in subs:
+        ext = subtitle_ext(sub.get("name"))
+        entries.append({
+            "id": f"tg-{sub.get('msg_id')}",
+            "url": f"{base_url}/sub/{token}/{sub.get('encoded')}/subtitle{ext}",
+            "lang": sub.get("lang_code") or "und",
+        })
+    return entries

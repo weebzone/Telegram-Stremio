@@ -826,16 +826,18 @@ After this first run, **every push to your fork auto-deploys**. Watch the build 
 
 ### 🎬 Step 8: Use Your Addon
 
-Your addon manifest will be available at:
-
-```
-https://<your-hf-username>-<your-space-name>.hf.space/stremio/manifest.json
-```
-
 1. Open `https://<your-hf-username>-<your-space-name>.hf.space/login`
 2. Log in (default `admin` / `admin`) and **immediately change the password**.
 3. Set your **Base URL** in the web Settings page to `https://<your-hf-username>-<your-space-name>.hf.space`.
-4. Add the manifest URL to Stremio/Nuvio and enjoy. 🎉
+4. Now open bot and send /start command it give you the manifest url
+5. Add the manifest URL to Stremio/Nuvio and enjoy. 🎉
+
+### 🎬 Step 9: Setup the Additional value
+
+1. Go to Web settings page `https://<your-hf-username>-<your-space-name>.hf.space/admin/settings`.
+2. Fill up the TMDB API, AUTH CHANNEL.
+3. If you need to fill up other things check [Web Settings](#-step-4-configure-everything-else-web-settings-page)
+4. Save the settings and enjoy.
 
 # 📺 Setting Up Your App (Nuvio Recommended)
 
@@ -859,14 +861,8 @@ Download Nuvio from an official source:
 1. Open **Nuvio** and go to the **Addons** section.
 2. Paste your addon **manifest URL** and install it:
 
-| Deployment Method | Addon URL |
-| :--- | :--- |
-| **Heroku** | `https://<your-heroku-app>.herokuapp.com/stremio/manifest.json` |
-| **Custom Domain** | `https://<your-domain>/stremio/manifest.json` |
-
 3. Done! 🎉 Your Telegram library now appears in the catalog and streams directly.
 
-> 🔑 If you run in **subscription mode**, each user installs their own **personal** addon URL (`/stremio/{token}/manifest.json`) that the bot gives them.
 
 
 ## 🏅 Contributors

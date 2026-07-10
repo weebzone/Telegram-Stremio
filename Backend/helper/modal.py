@@ -1,10 +1,10 @@
 from datetime import datetime
 from typing import List, Optional
+
 from pydantic import BaseModel, Field
 
-# ---------------------------
-# Quality Detail Schema
-# ---------------------------
+
+#----- Quality detail schema
 class QualityPart(BaseModel):
     part_number: int
     chat_id: int
@@ -21,9 +21,7 @@ class QualityDetail(BaseModel):
     parts: Optional[List[QualityPart]] = None
 
 
-# ---------------------------
-# Episode Schema
-# ---------------------------
+#----- Episode schema
 class Episode(BaseModel):
     episode_number: int
     title: str
@@ -33,17 +31,13 @@ class Episode(BaseModel):
     telegram: Optional[List[QualityDetail]]
 
 
-# ---------------------------
-# Season Schema
-# ---------------------------
+#----- Season schema
 class Season(BaseModel):
     season_number: int
     episodes: List[Episode] = Field(default_factory=list)
 
 
-# ---------------------------
-# TV Show Schema
-# ---------------------------
+#----- TV show schema
 class TVShowSchema(BaseModel):
     tmdb_id: Optional[int] = None
     imdb_id: Optional[str] = None
@@ -70,9 +64,7 @@ class TVShowSchema(BaseModel):
     auto_catalog: Optional[dict] = None
 
 
-# ---------------------------
-# Movie Schema
-# ---------------------------
+#----- Movie schema
 class MovieSchema(BaseModel):
     tmdb_id: Optional[int] = None
     imdb_id: Optional[str] = None

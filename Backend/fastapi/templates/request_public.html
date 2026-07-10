@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+{% block title %}Request a Title{% endblock %}
+
+{% block content %}
+<style>
+  .rp-shell { max-width: 1100px; margin: 0 auto; }
+  .rp-hero { text-align: center; padding: 1rem 0 1.75rem; }
+  .rp-hero h1 { font-size: clamp(1.8rem, 4vw, 2.8rem); font-weight: 900; letter-spacing: -0.02em;
+                background: linear-gradient(120deg, var(--primary), var(--accent, var(--primary)));
+                -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+  .rp-hero p { color: var(--text-sec); margin-top: 0.5rem; font-size: 0.98rem; }
+  .rp-search { display: flex; gap: 0.6rem; max-width: 640px; margin: 1.25rem auto 0; }
+  .rp-search input { flex: 1; background: var(--surface, rgba(255,255,255,0.05)); border: 1px solid var(--hairline, rgba(255,255,255,0.12));
+                     color: var(--text); border-radius: 9999px; padding: 0.85rem 1.25rem; font-size: 1rem; outline: none; }
+  .rp-search input:focus { border-color: var(--primary); }
+  .rp-search button { background: var(--primary); color: var(--bg); border: none; border-radius: 9999px;
+                      padding: 0 1.5rem; font-weight: 800; cursor: pointer; font-size: 1rem; }
+  .rp-hint { text-align: center; color: var(--text-sec); font-size: 0.8rem; margin-top: 0.6rem; }
+  .rp-section-title { font-size: 1.15rem; font-weight: 800; margin: 2rem 0 1rem; display: flex; align-items: center; gap: 0.5rem; }
+  .rp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 1rem; }
+  .rp-card { background: var(--surface, rgba(255,255,255,0.03)); border: 1px solid var(--hairline, rgba(255,255,255,0.08));
+             border-radius: 1rem; overflow: hidden; display: flex; flex-direction: column; transition: transform .15s, border-color .15s; }
+  .rp-card:hover { transform: translateY(-3px); border-color: var(--primary); }
+  .rp-poster { position: relative; aspect-ratio: 2/3; background: linear-gradient(135deg, #1f2937, #111827); }
+  .rp-poster img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .rp-poster .noimg { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 2rem; color: var(--text-sec); }
+  .rp-type { position: absolute; top: 0.5rem; left: 0.5rem; background: rgba(0,0,0,0.65); color: #fff;
+             padding: 0.15rem 0.55rem; border-radius: 9999px; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; }
+  .rp-count { position: absolute; top: 0.5rem; right: 0.5rem; background: var(--primary); color: var(--bg);
+              padding: 0.15rem 0.55rem; border-radius: 9999px; font-size: 0.72rem; font-weight: 800; }
+  .rp-body { padding: 0.65rem 0.75rem; display: flex; flex-direction: column; gap: 0.5rem; flex: 1; }
+  .rp-title { font-weight: 700; font-size: 0.9rem; line-height: 1.25; }
+  .rp-btn { margin-top: auto; border: none; border-radius: 0.6rem; padding: 0.5rem; font-weight: 800; font-size: 0.82rem;
+            cursor: pointer; background: color-mix(in srgb, var(--primary) 18%, transparent); color: var(--primary); }
+  .rp-btn:hover { background: var(--primary); color: var(--bg); }
+  .rp-empty { text-align: center; color: var(--text-sec); padding: 2rem 1rem; }
+  .rp-spinner { text-align: center; color: var(--text-sec); padding: 2rem; }
+</style>
+
+<div class="rp-shell">
+  <div class="rp-hero">
+    <h1>Request a Movie or Show</h1>
+    <p>Can't find something? Search below and send a request — we'll try to add it.</p>
+    <form class="rp-search" onsubmit="doSearch(event)">
+      <input id="rp-q" type="text" placeholder="Search by name, IMDb ID (tt…) or TMDB ID" autocomplete="off">
+      <button type="submit"><i class="fa-solid fa-magnifying-glass"></i></button>
+    </form>
+    <p class="rp-hint">Examples: <b>Inception</b> · <b>tt1375666</b> · <b>27205</b></p>
+  </div>
+
+  <div id="rp-results-wrap" style="display:none">
+    <div class="rp-section-title"><i class="fa-solid fa-list"></i> Search results</div>
+    <div id="rp-results" class="rp-grid"></div>
+  </div>
+
+  <div id="rp-popular-wrap">
+    <div class="rp-section-title"><i class="fa-solid fa-fire" style="color:#f59e0b"></i> Most Requested</div>
+    <div id="rp-popular" class="rp-grid"></div>
+  </div>
+</div>
+
+<script>
+let searchResults = [];
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+}
+
+function posterHtml(r, extra) {
+  const img = r.poster ? `<img src="${esc(r.poster)}" loading="lazy" alt="">`
+                       : `<div class="noimg"><i class="fa-solid fa-film"></i></div>`;
+  const type = r.media_type === 'tv' ? 'TV' : 'Movie';
+  return `<div class="rp-poster">${img}<span class="rp-type">${type}</span>${extra || ''}</div>`;
+}
+
+function resultCard(r, idx) {
+  const yr = r.year ? ` (${esc(r.year)})` : '';
+  return `<div class="rp-card">
+    ${posterHtml(r)}
+    <div class="rp-body">
+      <div class="rp-title">${esc(r.title)}${yr}</div>
+      <button class="rp-btn" onclick="sendRequest(${idx})"><i class="fa-solid fa-paper-plane"></i> Request</button>
+    </div>
+  </div>`;
+}
+
+function popularCard(r) {
+  const yr = r.year ? ` (${esc(r.year)})` : '';
+  const count = `<span class="rp-count">👥 ${esc(r.request_count || 0)}</span>`;
+  return `<div class="rp-card">
+    ${posterHtml(r, count)}
+    <div class="rp-body"><div class="rp-title">${esc(r.title)}${yr}</div></div>
+  </div>`;
+}
+
+async function doSearch(e) {
+  if (e) e.preventDefault();
+  const q = document.getElementById('rp-q').value.trim();
+  if (q.length < 2) { showToast('Type at least 2 characters.', 'info'); return; }
+  const wrap = document.getElementById('rp-results-wrap');
+  const box = document.getElementById('rp-results');
+  wrap.style.display = '';
+  box.innerHTML = `<div class="rp-spinner" style="grid-column:1/-1"><i class="fa-solid fa-spinner fa-spin"></i> Searching…</div>`;
+  try {
+    const res = await fetch('/api/request/search?q=' + encodeURIComponent(q));
+    const data = await res.json();
+    searchResults = data.data || [];
+    box.innerHTML = searchResults.length
+      ? searchResults.map((r, i) => resultCard(r, i)).join('')
+      : `<div class="rp-empty" style="grid-column:1/-1">No matches found. Try a different name or an IMDb/TMDB ID.</div>`;
+  } catch (err) {
+    box.innerHTML = `<div class="rp-empty" style="grid-column:1/-1;color:#ef4444">Search failed. Please try again.</div>`;
+  }
+}
+
+async function sendRequest(idx) {
+  const r = searchResults[idx];
+  if (!r) return;
+  try {
+    const res = await fetch('/api/request/submit', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        media_type: r.media_type, tmdb_id: r.tmdb_id, imdb_id: r.imdb_id || null,
+        title: r.title, year: r.year, poster: r.poster,
+      }),
+    });
+    const data = await res.json();
+    const map = {
+      created:            ['🎉 Request submitted! We\'ll try to add it soon.', 'success', 'Requested'],
+      added:              ['👍 Added your vote — this was already requested.', 'success', 'Requested'],
+      reopened:           ['🔄 Request re-opened. Thanks!', 'success', 'Requested'],
+      already_available:  ['✅ Good news — this is already in the library!', 'info', 'Available'],
+      banned:             ['🚫 This title has been banned and can\'t be requested.', 'error', 'Not allowed'],
+      invalid:            ['⚠️ Could not identify this title.', 'error', 'Error'],
+    };
+    const m = map[data.reason] || (data.ok ? ['Request submitted!', 'success', 'Requested']
+                                            : ['Something went wrong.', 'error', 'Error']);
+    showToast(m[0], m[1], m[2]);
+    if (data.ok) loadPopular();
+  } catch (err) {
+    showToast('Request failed. Please try again.', 'error', 'Error');
+  }
+}
+
+async function loadPopular() {
+  const box = document.getElementById('rp-popular');
+  const wrap = document.getElementById('rp-popular-wrap');
+  try {
+    const res = await fetch('/api/request/popular');
+    const data = await res.json();
+    const items = data.data || [];
+    if (!items.length) { wrap.style.display = 'none'; return; }
+    wrap.style.display = '';
+    box.innerHTML = items.map(popularCard).join('');
+  } catch (err) {
+    wrap.style.display = 'none';
+  }
+}
+
+document.addEventListener('DOMContentLoaded', loadPopular);
+</script>
+{% endblock %}

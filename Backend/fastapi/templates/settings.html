@@ -4,6 +4,25 @@
 {% block content %}
 
 <style>
+/* ── Backup & Restore ────────────────────────────────────────────────────── */
+.bk-desc { color: var(--text-sec); font-size: 0.85rem; margin-bottom: 1rem; }
+.bk-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+@media (max-width: 520px) { .bk-actions { grid-template-columns: 1fr; } }
+.bk-btn { display: flex; align-items: center; gap: 0.85rem; padding: 0.9rem 1.1rem; border-radius: 0.9rem; cursor: pointer;
+          text-decoration: none; text-align: left; transition: all .15s;
+          border: 1px solid var(--border); background: color-mix(in srgb, var(--card) 92%, var(--bg)); }
+.bk-btn:hover { transform: translateY(-1px); border-color: var(--primary); }
+.bk-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+.bk-ic { width: 2.5rem; height: 2.5rem; border-radius: 0.7rem; display: flex; align-items: center; justify-content: center; font-size: 1.05rem; flex-shrink: 0; }
+.bk-export .bk-ic { background: color-mix(in srgb, var(--primary) 18%, transparent); color: var(--primary); }
+.bk-import .bk-ic { background: #22c55e22; color: #22c55e; }
+.bk-txt { display: flex; flex-direction: column; line-height: 1.25; }
+.bk-txt b { font-size: 0.95rem; color: var(--text); }
+.bk-txt small { font-size: 0.75rem; color: var(--text-sec); }
+.bk-status { margin-top: 0.9rem; font-size: 0.85rem; color: var(--text-sec); display: flex; align-items: center; gap: 0.5rem; }
+.bk-warn { color: var(--text-sec); font-size: 0.78rem; margin-top: 0.85rem; }
+.bk-warn i { color: var(--warning, #f59e0b); }
+
 /* ── Toggle switch ───────────────────────────────────────────────────────── */
 .toggle-wrap { display: flex; align-items: center; gap: 0.75rem; cursor: pointer; }
 .toggle-input { position: absolute; opacity: 0; width: 0; height: 0; }
@@ -84,10 +103,39 @@
 }
 .add-btn:hover { background: color-mix(in srgb, var(--primary) 28%, transparent); }
 
+/* ── Anime channel checkbox ──────────────────────────────────────────────── */
+.auth-item .s-input { min-width: 0; }
+.anime-check {
+    display: inline-flex; align-items: center; gap: 0.35rem; flex-shrink: 0;
+    cursor: pointer; user-select: none; white-space: nowrap;
+    padding: 0.4rem 0.6rem; border-radius: 0.6rem;
+    border: 1px solid var(--border); background: transparent;
+    font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.03em; color: var(--text-sec); transition: all 0.15s;
+}
+.anime-check input { width: 0.95rem; height: 0.95rem; accent-color: var(--primary); cursor: pointer; margin: 0; }
+.anime-check:hover { border-color: color-mix(in srgb, var(--primary) 35%, transparent); }
+.anime-check.is-anime {
+    color: var(--primary);
+    border-color: color-mix(in srgb, var(--primary) 45%, transparent);
+    background: color-mix(in srgb, var(--primary) 12%, transparent);
+}
+
 /* ── Grid helpers ────────────────────────────────────────────────────────── */
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
 @media (max-width: 640px) { .grid-2 { grid-template-columns: 1fr; } }
 .divider { border: none; border-top: 1px solid var(--border); margin: 1.25rem 0; }
+
+/* ── Stats grid ──────────────────────────────────────────────────────────── */
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px,1fr)); gap: 0.75rem; }
+.stat-box {
+    background: color-mix(in srgb, var(--bg) 55%, transparent);
+    border: 1px solid var(--border); border-radius: 0.9rem;
+    padding: 0.75rem 0.9rem;
+}
+.stat-box .v { font-size: 1.3rem; font-weight: 800; }
+.stat-box .l { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-sec); }
+.hint { font-size: 0.78rem; color: var(--text-sec); }
 </style>
 
 <!-- Page header -->
@@ -107,6 +155,61 @@
 </div>
 
 <div class="space-y-6" id="settings-root">
+
+    <!-- ── System & Maintenance ─────────────────────────────────────────── -->
+    <div class="settings-card">
+        <h2><i class="fa-solid fa-server"></i> System &amp; Maintenance</h2>
+
+        <!-- DB & system stats -->
+        <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <label class="s-label" style="margin-bottom:0">Database &amp; System Stats</label>
+            <button class="add-btn" type="button" onclick="loadDbStats(this)">
+                <i class="fa-solid fa-rotate"></i> Refresh
+            </button>
+        </div>
+        <div class="stat-grid" id="stats-grid">
+            <div class="hint" style="grid-column:1/-1"><i class="fa-solid fa-spinner fa-spin"></i> Loading stats…</div>
+        </div>
+
+        <hr class="divider">
+
+        <!-- Live logs -->
+        <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <label class="s-label" style="margin-bottom:0">Logs</label>
+            <div class="flex items-center gap-3 flex-wrap">
+                <label class="anime-check" title="Auto-refresh the log every 2s">
+                    <input type="checkbox" id="log-live-toggle" onchange="toggleLiveLogs()">
+                    <span>Live</span>
+                </label>
+                <button class="add-btn" type="button" onclick="loadLogs(this)">
+                    <i class="fa-solid fa-rotate"></i> Refresh
+                </button>
+                <button class="add-btn" type="button" onclick="window.open('/api/admin/logs/download','_blank')">
+                    <i class="fa-solid fa-download"></i> Download
+                </button>
+            </div>
+        </div>
+        <pre id="log-view" style="background:color-mix(in srgb,var(--bg) 80%,#000);border:1px solid var(--border);
+            border-radius:0.75rem;padding:1rem;font-family:'JetBrains Mono',monospace;font-size:0.75rem;
+            line-height:1.5;color:var(--text);max-height:340px;overflow:auto;white-space:pre-wrap;
+            word-break:break-word;margin:0">Loading logs…</pre>
+
+        <hr class="divider">
+
+        <!-- Restart -->
+        <label class="s-label">Restart App</label>
+        <p style="font-size:0.83rem;color:var(--text-sec);margin-bottom:1rem">
+            Pulls the latest code from the upstream repo/branch above and restarts the server.
+            The web app becomes unreachable for a few seconds — this page will reconnect
+            automatically once it's back online.
+        </p>
+        <button id="restart-btn" onclick="restartApp()"
+            class="flex items-center gap-2 px-6 py-2.5 rounded-full font-bold text-sm text-white shadow-lg transition-all"
+            style="background:#ef4444;box-shadow:0 0 18px rgba(239,68,68,0.4)">
+            <i class="fa-solid fa-power-off"></i>
+            <span>Restart Now</span>
+        </button>
+    </div>
 
     <!-- ── General ─────────────────────────────────────────────────────── -->
     <div class="settings-card">
@@ -166,17 +269,44 @@
             </div>
         </div>
 
+        <div style="margin-top:1rem">
+            <label class="s-label" for="session_secret">Session Secret</label>
+            <div style="position:relative">
+                <input type="password" id="session_secret" class="s-input"
+                    placeholder="Leave blank to keep current secret"
+                    style="padding-right:2.5rem" autocomplete="new-password">
+                <button type="button" onclick="generateSessionSecret()" title="Generate a random secret"
+                    style="position:absolute;right:0.75rem;top:50%;transform:translateY(-50%);
+                           background:none;border:none;color:var(--text-sec);cursor:pointer">
+                    <i class="fa-solid fa-dice"></i>
+                </button>
+            </div>
+            <p style="font-size:0.75rem;color:var(--text-sec);margin-top:0.3rem">
+                Signs admin login sessions. Changing it logs out all admins after the next restart.
+                {% if settings.session_secret_set is defined and settings.session_secret_set %}
+                    <i class="fa-solid fa-circle-check" style="color:#22c55e"></i> Secret is set
+                {% endif %}
+            </p>
+        </div>
+
         <hr class="divider">
 
         <!-- Auth Channels -->
         <label class="s-label">AUTH_CHANNELS
             <span style="font-weight:400;text-transform:none;letter-spacing:0">
-                — users must be a member of at least one</span>
+                — users must be a member of at least one. Tick <strong>Anime</strong> on a
+                channel to index its files with AniList + api.ani.zip metadata.</span>
         </label>
+        {% set anime_norm = settings.anime_channels | map('string') | map('replace', '-100', '') | list %}
         <div class="multi-list-items" id="auth_channels_items">
             {% for ch in settings.auth_channels %}
-            <div class="multi-item">
+            {% set is_anime = (ch | string | replace('-100', '')) in anime_norm %}
+            <div class="multi-item auth-item">
                 <input type="text" class="s-input" value="{{ ch }}" data-list="auth_channels">
+                <label class="anime-check {% if is_anime %}is-anime{% endif %}" title="Mark as anime channel — uses AniList/ani.zip metadata">
+                    <input type="checkbox" class="anime-toggle" {% if is_anime %}checked{% endif %} onchange="syncAnimeChip(this)">
+                    <span>Anime</span>
+                </label>
                 <button class="remove-btn" onclick="removeItem(this)" title="Remove">
                     <i class="fa-solid fa-xmark"></i>
                 </button>
@@ -188,36 +318,6 @@
                 placeholder="Channel username or -100xxxxx ID"
                 onkeydown="if(event.key==='Enter'){event.preventDefault();addItem('auth_channels')}">
             <button class="add-btn" onclick="addItem('auth_channels')">+ Add Channel</button>
-        </div>
-
-        <hr class="divider">
-
-        <!-- Anime Channels -->
-        <label class="s-label">ANIME_CHANNELS
-            <span style="font-weight:400;text-transform:none;letter-spacing:0">
-                — files from these channels use AniList + api.ani.zip for accurate metadata</span>
-        </label>
-        <p style="font-size:0.78rem;color:var(--text-sec);margin-bottom:0.75rem">
-            Enter numeric channel IDs (e.g. <code>-1001234567890</code> or bare
-            <code>1234567890</code>). Use this for anime channels where IMDb/TMDB
-            matching is inaccurate.
-        </p>
-        <div class="multi-list-items" id="anime_channels_items">
-            {% for ch in settings.anime_channels %}
-            <div class="multi-item">
-                <input type="text" class="s-input" value="{{ ch }}" data-list="anime_channels"
-                    placeholder="-100xxxxxxxxxx">
-                <button class="remove-btn" onclick="removeItem(this)" title="Remove">
-                    <i class="fa-solid fa-xmark"></i>
-                </button>
-            </div>
-            {% endfor %}
-        </div>
-        <div class="add-row">
-            <input type="text" id="anime_channels_new" class="s-input"
-                placeholder="-100xxxxxxxxxx or bare numeric ID"
-                onkeydown="if(event.key==='Enter'){event.preventDefault();addItem('anime_channels')}">
-            <button class="add-btn" onclick="addItem('anime_channels')">+ Add Channel</button>
         </div>
     </div>
 
@@ -244,14 +344,42 @@
                 <label class="s-label" for="upstream_repo">Upstream Repo</label>
                 <input type="text" id="upstream_repo" class="s-input"
                     value="{{ settings.upstream_repo }}"
-                    placeholder="user/repo">
+                    placeholder="https://github.com/user/repo">
             </div>
             <div>
                 <label class="s-label" for="upstream_branch">Upstream Branch</label>
                 <input type="text" id="upstream_branch" class="s-input"
                     value="{{ settings.upstream_branch }}"
-                    placeholder="main">
+                    placeholder="master">
             </div>
+        </div>
+    </div>
+
+    <!-- ── Manual Add Channels ─────────────────────────────────────────── -->
+    <div class="settings-card">
+        <h2><i class="fa-solid fa-hand-pointer"></i> Manual Add Channels</h2>
+        <label class="s-label">MANUAL_CHANNELS
+            <span style="font-weight:400;text-transform:none;letter-spacing:0">
+                — files sent here are <strong>not</strong> auto-indexed with TMDb/IMDb.
+                Add them by hand from Media Management by pasting a message link.
+                Listing a channel here also cleans up its streams when a file is deleted.</span>
+        </label>
+        <div class="multi-list-items" id="manual_channels_items">
+            {% for ch in settings.manual_channels %}
+            <div class="multi-item">
+                <input type="text" class="s-input" value="{{ ch }}" data-list="manual_channels"
+                    placeholder="-100xxxxxxxxxx">
+                <button class="remove-btn" onclick="removeItem(this)" title="Remove">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            {% endfor %}
+        </div>
+        <div class="add-row">
+            <input type="text" id="manual_channels_new" class="s-input"
+                placeholder="Channel username or -100xxxxx ID"
+                onkeydown="if(event.key==='Enter'){event.preventDefault();addItem('manual_channels')}">
+            <button class="add-btn" onclick="addItem('manual_channels')">+ Add Channel</button>
         </div>
     </div>
 
@@ -420,7 +548,41 @@
 
 
 
-    
+
+<!-- ── New Content Announcements ──────────────────────────────────── -->
+<div class="settings-card">
+    <h2><i class="fa-solid fa-bullhorn"></i> New Content Announcements</h2>
+
+    <label class="toggle-wrap">
+        <input type="checkbox" class="toggle-input" id="announce_new_content"
+            {% if settings.announce_new_content %}checked{% endif %}
+            onchange="toggleAnnouncementFields()">
+        <span class="toggle-track"></span>
+        <span class="toggle-label">
+            <strong>Announce New Titles</strong>
+            <span style="color:var(--text-sec);font-size:0.8rem;display:block">
+                Auto-post a poster card to a Telegram channel the first time a
+                new movie or series is added. Each title is announced only once.
+            </span>
+        </span>
+    </label>
+
+    <div id="announcement-fields"
+         style="{% if not settings.announce_new_content %}display:none{% endif %}">
+        <hr class="divider">
+        <label class="s-label" for="announcement_channel">ANNOUNCEMENT CHANNEL</label>
+        <p style="font-size:0.78rem;color:var(--text-sec);margin-bottom:0.75rem">
+            <i class="fa-solid fa-circle-info"></i>
+            Channel ID (e.g. <code>-1001234567890</code>) or <code>@username</code>.
+            The bot must be an <strong>admin</strong> in that channel.
+        </p>
+        <input type="text" id="announcement_channel" class="s-input"
+            value="{{ settings.announcement_channel }}"
+            placeholder="-100xxxxxxxxxx or @channel">
+    </div>
+</div>
+
+
     <!-- ── Proxy ───────────────────────────────────────────────────────── -->
     <div class="settings-card">
         <h2><i class="fa-solid fa-network-wired"></i> Proxy Settings</h2>
@@ -530,7 +692,49 @@
         </div>
     </div>
 
+    <!-- ── Backup & Restore ───────────────────────────────────────────── -->
+    <div class="settings-card">
+        <h2><i class="fa-solid fa-box-archive"></i> Backup &amp; Restore</h2>
+        <p class="bk-desc">
+            Export everything — settings, custom catalogs, subscription plans and access tokens — to a JSON file,
+            or restore from one. Passwords and the session secret are never exported, but the file can hold bot
+            tokens and database URIs, so keep it private.
+        </p>
+
+        <div class="bk-actions">
+            <a href="/api/admin/backup/export" class="bk-btn bk-export" download>
+                <span class="bk-ic"><i class="fa-solid fa-cloud-arrow-down"></i></span>
+                <span class="bk-txt"><b>Export</b><small>Download backup</small></span>
+            </a>
+            <input type="file" id="restore-file" accept="application/json,.json" style="display:none" onchange="restoreBackup(this)">
+            <button type="button" id="restore-btn" class="bk-btn bk-import"
+                    onclick="document.getElementById('restore-file').click()">
+                <span class="bk-ic"><i class="fa-solid fa-cloud-arrow-up"></i></span>
+                <span class="bk-txt"><b>Import</b><small>Restore from file</small></span>
+            </button>
+        </div>
+
+        <div id="restore-status" class="bk-status" style="display:none"></div>
+
+        <p class="bk-warn">
+            <i class="fa-solid fa-triangle-exclamation"></i>
+            Restoring replaces your catalogs, plans and tokens, and reconnects extra databases and bot tokens from the file.
+        </p>
+    </div>
+
 </div><!-- /settings-root -->
+
+<!-- ── Restart overlay ──────────────────────────────────────────────────── -->
+<div id="restart-overlay" style="position:fixed;inset:0;z-index:9998;display:none;
+    align-items:center;justify-content:center;background:rgba(0,0,0,0.72);backdrop-filter:blur(8px)">
+    <div style="text-align:center;padding:2rem;max-width:420px">
+        <i class="fa-solid fa-arrows-rotate fa-spin" style="font-size:2.5rem;color:var(--primary)"></i>
+        <h3 style="font-size:1.25rem;font-weight:800;margin-top:1rem;color:#fff">Restarting…</h3>
+        <p id="restart-overlay-msg" style="margin-top:0.5rem;font-size:0.9rem;color:rgba(255,255,255,0.75)">
+            Applying updates and bringing the server back online. Please wait.
+        </p>
+    </div>
+</div>
 
 <!-- Floating save (mobile) -->
 <div class="fixed bottom-6 right-6 md:hidden z-50">
@@ -557,6 +761,14 @@ function toggleGlobalSearchFields() {
     }
 }
 
+function toggleAnnouncementFields() {
+    const enabled = document.getElementById('announce_new_content').checked;
+    const fields = document.getElementById('announcement-fields');
+    if (fields) {
+        fields.style.display = enabled ? '' : 'none';
+    }
+}
+
 /* ── Password visibility ──────────────────────────────────────────────── */
 function togglePwdVisibility() {
     const input = document.getElementById('admin_password');
@@ -570,18 +782,49 @@ function togglePwdVisibility() {
     }
 }
 
+/* ── Session secret generator ─────────────────────────────────────────── */
+function generateSessionSecret() {
+    const bytes = new Uint8Array(32);
+    crypto.getRandomValues(bytes);
+    const input = document.getElementById('session_secret');
+    input.value = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+    input.type = 'text';
+}
+
 /* ── Multi-value list helpers ─────────────────────────────────────────── */
+function authRowHTML(value, isAnime) {
+    return `
+        <input type="text" class="s-input" value="${escapeHtmlAttr(value)}" data-list="auth_channels">
+        <label class="anime-check ${isAnime ? 'is-anime' : ''}" title="Mark as anime channel — uses AniList/ani.zip metadata">
+            <input type="checkbox" class="anime-toggle" ${isAnime ? 'checked' : ''} onchange="syncAnimeChip(this)">
+            <span>Anime</span>
+        </label>
+        <button class="remove-btn" onclick="removeItem(this)" title="Remove">
+            <i class="fa-solid fa-xmark"></i>
+        </button>
+    `;
+}
+
+function syncAnimeChip(cb) {
+    const chip = cb.closest('.anime-check');
+    if (chip) chip.classList.toggle('is-anime', cb.checked);
+}
+
 function addItem(listKey) {
     const newInput = document.getElementById(listKey + '_new');
     const value = newInput.value.trim();
     if (!value) return;
 
     const container = document.getElementById(listKey + '_items');
-    const isNumeric = listKey === 'approver_ids';
-
     const item = document.createElement('div');
-    item.className = 'multi-item';
-    item.innerHTML = `
+
+    if (listKey === 'auth_channels') {
+        item.className = 'multi-item auth-item';
+        item.innerHTML = authRowHTML(value, false);
+    } else {
+        const isNumeric = listKey === 'approver_ids';
+        item.className = 'multi-item';
+        item.innerHTML = `
         <input type="${isNumeric ? 'number' : 'text'}"
                class="s-input"
                value="${escapeHtmlAttr(value)}"
@@ -590,9 +833,25 @@ function addItem(listKey) {
             <i class="fa-solid fa-xmark"></i>
         </button>
     `;
+    }
+
     container.appendChild(item);
     newInput.value = '';
     newInput.focus();
+}
+
+function collectAnimeChannels() {
+    const container = document.getElementById('auth_channels_items');
+    if (!container) return [];
+    const out = [];
+    container.querySelectorAll('.multi-item').forEach(row => {
+        const toggle = row.querySelector('.anime-toggle');
+        const input = row.querySelector('input[data-list="auth_channels"]');
+        if (toggle && toggle.checked && input && input.value.trim()) {
+            out.push(input.value.trim());
+        }
+    });
+    return out;
 }
 
 function removeItem(btn) {
@@ -620,12 +879,13 @@ async function saveSettings() {
         hide_catalog:                  document.getElementById('hide_catalog').checked,
         admin_username:                document.getElementById('admin_username').value.trim(),
         admin_password:                document.getElementById('admin_password').value,  // blank = keep
+        session_secret:                document.getElementById('session_secret').value,  // blank = keep
         tmdb_api:                      document.getElementById('tmdb_api').value.trim(),
         base_url:                      document.getElementById('base_url').value.trim(),
         upstream_repo:                 document.getElementById('upstream_repo').value.trim(),
         upstream_branch:               document.getElementById('upstream_branch').value.trim(),
         auth_channels:                 collectList('auth_channels'),
-        anime_channels:                collectList('anime_channels'),
+        anime_channels:                collectAnimeChannels(),
         subscription:                  document.getElementById('subscription').checked,
         subscription_group_id:         parseInt(document.getElementById('subscription_group_id').value || '0', 10),
         payment_instructions:          document.getElementById('payment_instructions').value.trim(),
@@ -637,6 +897,9 @@ async function saveSettings() {
         extra_databases:               collectList('extra_databases'),
         global_search:                 document.getElementById('global_search').checked,
         global_search_channels:        collectList('global_search_channels'),
+        manual_channels:               collectList('manual_channels'),
+        announce_new_content:          document.getElementById('announce_new_content').checked,
+        announcement_channel:          document.getElementById('announcement_channel').value.trim(),
     };
 
     try {
@@ -673,6 +936,39 @@ async function saveSettings() {
     }
 }
 
+/* ── Backup & Restore ───────────────────────────────────────────────────── */
+async function restoreBackup(input) {
+    const file = input.files && input.files[0];
+    input.value = '';
+    if (!file) return;
+    if (!confirm('Restore this backup? It will replace your catalogs, plans and tokens, and reconnect databases / bot tokens.')) return;
+
+    const btn = document.getElementById('restore-btn');
+    const status = document.getElementById('restore-status');
+    if (btn) btn.disabled = true;
+    if (status) {
+        status.style.display = 'flex';
+        status.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Importing — connecting databases and starting clients…';
+    }
+    try {
+        const payload = JSON.parse(await file.text());
+        const res = await fetch('/api/admin/backup/import', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Restore failed');
+        if (status) status.innerHTML = '<i class="fa-solid fa-circle-check" style="color:#22c55e"></i> Imported successfully — reloading…';
+        showToast(data.message || 'Backup restored.', 'success', 'Restored');
+        setTimeout(() => location.reload(), 1500);
+    } catch (err) {
+        if (status) status.innerHTML = '<i class="fa-solid fa-circle-xmark" style="color:#ef4444"></i> ' + escapeHtmlAttr(err.message || 'Invalid backup file.');
+        showToast(err.message || 'Invalid backup file.', 'error', 'Error');
+        if (btn) btn.disabled = false;
+    }
+}
+
 /* ── Utilities ─────────────────────────────────────────────────────────── */
 function escapeHtmlAttr(str) {
     return String(str)
@@ -706,8 +1002,10 @@ function renderSettings(s) {
     document.getElementById('subscription').checked = !!s.subscription;
     document.getElementById('show_proxy_and_non_proxy_both').checked = !!s.show_proxy_and_non_proxy_both;
     document.getElementById('global_search').checked = !!s.global_search;
+    document.getElementById('announce_new_content').checked = !!s.announce_new_content;
     toggleSubFields();
     toggleGlobalSearchFields();
+    toggleAnnouncementFields();
 
     // Plain text/number fields
     document.getElementById('admin_username').value = s.admin_username || '';
@@ -718,13 +1016,14 @@ function renderSettings(s) {
     document.getElementById('upstream_branch').value = s.upstream_branch || '';
     document.getElementById('subscription_group_id').value = s.subscription_group_id || 0;
     document.getElementById('http_proxy_url').value = s.http_proxy_url || '';
+    document.getElementById('announcement_channel').value = s.announcement_channel || '';
 
-    // Simple multi-value lists
-    rebuildSimpleList('auth_channels_items', s.auth_channels, 'text');
-    rebuildSimpleList('anime_channels_items', s.anime_channels, 'text');
+    // Auth channels (with per-channel anime checkbox) + other multi-value lists
+    rebuildAuthChannels(s.auth_channels, s.anime_channels);
     rebuildSimpleList('approver_ids_items', s.approver_ids, 'number');
     rebuildSimpleList('multi_tokens_items', s.multi_tokens, 'text');
     rebuildSimpleList('global_search_channels_items', s.global_search_channels, 'text');
+    rebuildSimpleList('manual_channels_items', s.manual_channels, 'text');
 
     // Databases — needs the live connection-status dot per entry
     rebuildDatabaseList(s.database_list || []);
@@ -750,6 +1049,20 @@ function rebuildSimpleList(containerId, values, inputType) {
     });
 }
 
+function rebuildAuthChannels(values, animeValues) {
+    const container = document.getElementById('auth_channels_items');
+    if (!container) return;
+    const animeNorm = (animeValues || []).map(v => String(v).split('-100').join(''));
+    container.innerHTML = '';
+    (values || []).forEach(val => {
+        const isAnime = animeNorm.includes(String(val).split('-100').join(''));
+        const item = document.createElement('div');
+        item.className = 'multi-item auth-item';
+        item.innerHTML = authRowHTML(val, isAnime);
+        container.appendChild(item);
+    });
+}
+
 function rebuildDatabaseList(dbList) {
     const container = document.getElementById('extra_databases_items');
     if (!container) return;
@@ -771,6 +1084,118 @@ function rebuildDatabaseList(dbList) {
         container.appendChild(item);
     });
 }
+
+/* ── System & Maintenance ───────────────────────────────────────────────── */
+const STAT_FIELDS = [
+    ['movies', 'Movies'], ['tv_shows', 'TV Shows'], ['episodes', 'Episodes'],
+    ['streams', 'Streams'], ['db_size', 'DB Size'],
+    ['auth_channels', 'AUTH Channels'], ['version', 'Version'],
+];
+let logLiveTimer = null;
+
+/* Spin the clicked refresh button's icon while an async action runs */
+function spinIcon(btn, on) {
+    const icon = btn && btn.querySelector('i');
+    if (icon) icon.classList.toggle('fa-spin', on);
+}
+
+async function loadDbStats(btn) {
+    const grid = document.getElementById('stats-grid');
+    spinIcon(btn, true);
+    try {
+        const res = await fetch('/api/admin/stats');
+        const data = await res.json();
+        if (data.status !== 'success') throw new Error(data.message || 'failed');
+        const s = data.data;
+        grid.innerHTML = STAT_FIELDS.map(([k, label]) =>
+            `<div class="stat-box"><div class="v">${escapeHtml(String(s[k] ?? '—'))}</div><div class="l">${label}</div></div>`
+        ).join('');
+    } catch (e) {
+        grid.innerHTML = `<div class="hint" style="grid-column:1/-1;color:#ef4444">Failed to load stats.</div>`;
+    } finally {
+        spinIcon(btn, false);
+    }
+}
+
+async function loadLogs(btn) {
+    const view = document.getElementById('log-view');
+    spinIcon(btn, true);
+    try {
+        const res = await fetch('/api/admin/logs');
+        const data = await res.json();
+        if (data.status === 'success') {
+            const atBottom = view.scrollHeight - view.scrollTop - view.clientHeight < 40;
+            view.textContent = data.log || '(log is empty)';
+            if (atBottom) view.scrollTop = view.scrollHeight;
+        } else {
+            view.textContent = data.message || 'Could not read log.';
+        }
+    } catch (e) {
+        view.textContent = 'Network error while loading logs.';
+    } finally {
+        spinIcon(btn, false);
+    }
+}
+
+function toggleLiveLogs() {
+    const on = document.getElementById('log-live-toggle').checked;
+    if (logLiveTimer) { clearInterval(logLiveTimer); logLiveTimer = null; }
+    if (on) { loadLogs(); logLiveTimer = setInterval(loadLogs, 2000); }
+}
+
+async function restartApp() {
+    if (!confirm('Restart the app now? It will pull the latest code and be unreachable for a few seconds.')) return;
+
+    let before = null;
+    try { before = (await (await fetch('/api/admin/health')).json()).start_time; } catch (e) {}
+
+    try {
+        const res = await fetch('/api/admin/restart', { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) { showToast(data.detail || 'Could not restart.', 'error', 'Error'); return; }
+        showToast(data.message || 'Restart initiated.', 'info', 'Restart');
+    } catch (e) {
+        showToast('Network error.', 'error', 'Error'); return;
+    }
+
+    // Web app goes down during restart — poll health until start_time changes, then reload.
+    if (logLiveTimer) { clearInterval(logLiveTimer); logLiveTimer = null; }
+    document.getElementById('restart-overlay').style.display = 'flex';
+    document.body.style.overflow = 'hidden';   // lock background scroll while overlay is up
+    const msg = document.getElementById('restart-overlay-msg');
+    let wasDown = false;
+
+    const poll = setInterval(async () => {
+        try {
+            const res = await fetch('/api/admin/health', { cache: 'no-store' });
+            if (!res.ok) throw new Error('not ready');
+            const d = await res.json();
+            if (wasDown || (before && d.start_time && d.start_time !== before)) {
+                clearInterval(poll);
+                msg.textContent = 'Back online! Reloading…';
+                // Persist a flag so the success notice survives the page reload below.
+                sessionStorage.setItem('restartSuccess', '1');
+                setTimeout(() => window.location.reload(), 900);
+            }
+        } catch (e) {
+            wasDown = true;   // server is down — it's restarting
+            msg.textContent = 'Server offline — waiting for it to come back…';
+        }
+    }, 2000);
+}
+
+/* Run after DOMContentLoaded so base.html helpers (showToast) are defined —
+   the base script that defines showToast is parsed after this block, so calling
+   it at parse time would throw and abort the initial stats/log load. */
+window.addEventListener('DOMContentLoaded', () => {
+    // Post-restart success notice (survives the reload) for ~8s
+    if (sessionStorage.getItem('restartSuccess')) {
+        sessionStorage.removeItem('restartSuccess');
+        showToast('The app restarted successfully and is back online.', 'success', 'Restart complete', 8000);
+    }
+    loadDbStats();
+    loadLogs();
+});
 </script>
 
 {% endblock %}
