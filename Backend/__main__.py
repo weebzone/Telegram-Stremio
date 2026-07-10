@@ -11,6 +11,7 @@ from Backend.fastapi import server
 from Backend.fastapi.main import app
 from Backend.helper import subscription_task_manager
 from Backend.helper.auto_catalog import start_auto_catalog_sync_background
+from Backend.helper.config_validator import validate_env
 from Backend.helper.link_checker import DeadLinkChecker
 from Backend.helper.pinger import ping
 from Backend.helper.pyro import restart_notification, setup_bot_commands
@@ -28,6 +29,15 @@ async def start_services():
     try:
         LOGGER.info(f"Initializing Telegram-Stremio v-{__version__}")
         await asyncio.sleep(1.2)
+
+        #----- Validate config.env before touching any subsystem
+        env_errors = validate_env()
+        if env_errors:
+            for msg in env_errors:
+                LOGGER.error(f"[config.env] {msg}")
+            LOGGER.error("Fix the config.env values listed above and restart.")
+            return
+        await asyncio.sleep(0.3)
 
         await db.connect()
         await asyncio.sleep(1.2)

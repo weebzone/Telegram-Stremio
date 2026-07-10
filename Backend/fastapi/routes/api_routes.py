@@ -22,6 +22,7 @@ from Backend.helper.auto_catalog import (
     update_auto_catalog_settings,
 )
 from Backend.helper.backup import export_config, import_config
+from Backend.helper.config_validator import validate_settings
 from Backend.helper.custom_dl import ByteStreamer, _speed_test_single_client, run_speed_test
 from Backend.helper.encrypt import decode_string, encode_string
 from Backend.helper.health import run_health_checks
@@ -1315,97 +1316,40 @@ async def get_settings_api() -> dict:
 
 async def update_settings_api(payload: dict) -> dict:
 
-    #----- Empty password string means leave it unchanged
-    if "admin_password" in payload and not str(payload["admin_password"]).strip():
-        del payload["admin_password"]
-    if "session_secret" in payload and not str(payload["session_secret"]).strip():
-        del payload["session_secret"]
+    #----- Empty password/secret means leave it unchanged
+    for key in ("admin_password", "session_secret"):
+        if key in payload and not str(payload[key]).strip():
+            del payload[key]
 
-    #----- Type coercion and validation
-    bool_keys = {"replace_mode", "hide_catalog", "subscription", "show_proxy_and_non_proxy_both", "announce_new_content"}
-    for key in bool_keys:
+    #----- Type coercion (booleans, string lists, trimmed strings)
+    for key in ("replace_mode", "hide_catalog", "subscription",
+                "show_proxy_and_non_proxy_both", "announce_new_content"):
         if key in payload:
             payload[key] = bool(payload[key])
 
-    list_str_keys = {"auth_channels", "multi_tokens", "extra_databases", "global_search_channels", "anime_channels", "manual_channels"}
-    for key in list_str_keys:
-        if key in payload:
-            if not isinstance(payload[key], list):
-                raise HTTPException(status_code=400, detail=f"'{key}' must be a list.")
+    for key in ("auth_channels", "multi_tokens", "extra_databases",
+                "global_search_channels", "anime_channels", "manual_channels"):
+        if key in payload and isinstance(payload[key], list):
             payload[key] = [str(v).strip() for v in payload[key] if str(v).strip()]
 
-    if "extra_databases" in payload:
-        for uri in payload["extra_databases"]:
-            if not uri.startswith(("mongodb://", "mongodb+srv://")):
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Invalid database URI (must start with mongodb:// or mongodb+srv://): {uri[:30]}…"
-                )
-
-    if "approver_ids" in payload:
-        if not isinstance(payload["approver_ids"], list):
-            raise HTTPException(status_code=400, detail="'approver_ids' must be a list.")
-        try:
-            payload["approver_ids"] = [int(v) for v in payload["approver_ids"] if str(v).strip()]
-        except (ValueError, TypeError):
-            raise HTTPException(status_code=400, detail="All approver_ids must be integers.")
-
-    if "subscription_group_id" in payload:
-        try:
-            payload["subscription_group_id"] = int(payload["subscription_group_id"])
-        except (ValueError, TypeError):
-            raise HTTPException(status_code=400, detail="'subscription_group_id' must be an integer.")
-    if "global_search_channels" in payload:
-        cleaned = []
-        for channel in payload["global_search_channels"]:
-            channel = str(channel).strip()
-            if not channel:
-                continue
-            try:
-                int(channel)
-            except ValueError:
-                raise HTTPException(status_code=400,
-                    detail=f"Invalid channel id: {channel}"
-                    )
-            cleaned.append(channel)
-        payload["global_search_channels"] = cleaned
-
-    if "anime_channels" in payload:
-        cleaned = []
-        for channel in payload["anime_channels"]:
-            channel = str(channel).strip()
-            if not channel:
-                continue
-            try:
-                int(channel.replace("-100", ""))
-            except ValueError:
-                raise HTTPException(status_code=400,
-                    detail=f"Invalid anime channel id: {channel}"
-                    )
-            cleaned.append(channel)
-        payload["anime_channels"] = cleaned
-
-    if "manual_channels" in payload:
-        cleaned = []
-        for channel in payload["manual_channels"]:
-            channel = str(channel).strip()
-            if not channel:
-                continue
-            try:
-                int(channel.replace("-100", ""))
-            except ValueError:
-                raise HTTPException(status_code=400,
-                    detail=f"Invalid manual channel id: {channel}"
-                    )
-            cleaned.append(channel)
-        payload["manual_channels"] = cleaned
-
-    #----- Strip whitespace from string fields
     for key in ("tmdb_api", "base_url", "upstream_repo", "upstream_branch",
                 "admin_username", "admin_password", "session_secret", "http_proxy_url",
                 "payment_instructions", "payment_qr_url", "announcement_channel"):
         if key in payload and isinstance(payload[key], str):
             payload[key] = payload[key].strip()
+
+    #----- Validate every entry first; only save when all checks pass
+    errors = validate_settings(payload)
+    if errors:
+        raise HTTPException(status_code=400, detail="Couldn't save — please fix: " + " • ".join(errors))
+
+    #----- Numeric coercion (values are already validated as numbers)
+    if isinstance(payload.get("approver_ids"), list):
+        payload["approver_ids"] = [int(str(v).strip()) for v in payload["approver_ids"] if str(v).strip()]
+    if payload.get("subscription_group_id") in (None, ""):
+        payload.pop("subscription_group_id", None)
+    elif "subscription_group_id" in payload:
+        payload["subscription_group_id"] = int(str(payload["subscription_group_id"]).strip())
 
     if payload.get("admin_password"):
         payload["admin_password"] = hash_password(payload["admin_password"])
