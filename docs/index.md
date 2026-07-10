@@ -2,23 +2,34 @@
 
 Welcome to the **Telegram-Stremio** documentation — a self-hosted media server that
 turns your Telegram channels into a personal Netflix-style library you can watch
-inside **Stremio** (or **Nuvio**) on any device.
+inside **Stremio** (or **Nuvio**) on any device. 🍿
 
-```{admonition} What is this, in one sentence?
+## 💛 Who is this for?
+
+::::{grid} 1 1 3 3
+:gutter: 3
+
+:::{grid-item-card} 🎬 Your own free Netflix
+For anyone who wants a **personal, ad-free streaming library** — your movies and
+shows, beautiful posters and all, without paying a monthly bill.
+:::
+
+:::{grid-item-card} 📚 Stream personal files
+For anyone who wants to stream their **own videos, lectures, or recordings** from
+anywhere — no re-uploading, no downloads, just press play.
+:::
+
+:::{grid-item-card} 💳 Earn with subscriptions
+For anyone who wants to **make money** by offering paid access — built-in plans,
+payments, and an approval flow, all handled for you.
+:::
+::::
+
+```{admonition} No coding required
 :class: tip
-You upload movies and shows to a private Telegram channel, and this app makes them
-appear as a browsable, streamable catalog in your Stremio-compatible app — with
-posters, descriptions, seasons, and episodes filled in automatically.
-```
-
-## Who is this for?
-
-- **Beginners** who have never written code and just want their own streaming library.
-- **Power users** who want subscriptions, multiple databases, and load balancing.
-- **Developers** who want to understand the API and internals.
-
 You do **not** need to be a programmer. If you can copy, paste, and click buttons,
-you can run this.
+you can run this. 🙌
+```
 
 ## What can it do?
 
@@ -32,16 +43,6 @@ you can run this.
 - 🔐 Per-user access tokens and permissions.
 - 🔍 Global search across your channels.
 
-## How the pieces fit together
-
-```text
-   You upload a file            The app reads it            You watch it
-┌─────────────────────┐     ┌─────────────────────┐     ┌──────────────────┐
-│  Telegram Channel    │ ──▶ │  Bot + FastAPI +     │ ──▶ │  Stremio / Nuvio │
-│  (your movies/shows) │     │  MongoDB + PyroFork  │     │  on any device   │
-└─────────────────────┘     └─────────────────────┘     └──────────────────┘
-```
-
 ```{admonition} Beginner Tip
 :class: tip
 Think of Telegram as your **hard drive**, this app as the **librarian** that
@@ -49,7 +50,7 @@ organizes everything and prints nice labels, and Stremio as the **TV remote**
 you use to actually watch.
 ```
 
-## New here? Start with these
+## 🚀 New here? Start with these
 
 ::::{grid} 1 1 2 2
 :gutter: 3
