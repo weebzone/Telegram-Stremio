@@ -79,6 +79,7 @@ from Backend.fastapi.routes.api_routes import (
     update_subscription_plan_api,
     update_token_limits_api,
 )
+from Backend.helper.config_validator import INSTANCE_ID
 from Backend.fastapi.routes.stream_routes import decay_client_failures
 from Backend.fastapi.routes.stream_routes import router as stream_router
 from Backend.fastapi.routes.stremio_routes import router as stremio_router
@@ -161,6 +162,10 @@ async def public_status(request: Request):
 @app.get("/stremio", response_class=HTMLResponse)
 async def stremio_guide(request: Request):
     return await stremio_guide_page(request)
+
+@app.get("/api/instance")
+async def instance_marker():
+    return {"instance": INSTANCE_ID}
 
 
 #----- Protected routes (authentication required)

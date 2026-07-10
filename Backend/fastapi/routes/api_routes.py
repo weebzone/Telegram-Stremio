@@ -22,7 +22,7 @@ from Backend.helper.auto_catalog import (
     update_auto_catalog_settings,
 )
 from Backend.helper.backup import export_config, import_config
-from Backend.helper.config_validator import validate_settings
+from Backend.helper.config_validator import validate_settings, validate_settings_live
 from Backend.helper.custom_dl import ByteStreamer, _speed_test_single_client, run_speed_test
 from Backend.helper.encrypt import decode_string, encode_string
 from Backend.helper.health import run_health_checks
@@ -1340,6 +1340,8 @@ async def update_settings_api(payload: dict) -> dict:
 
     #----- Validate every entry first; only save when all checks pass
     errors = validate_settings(payload)
+    if not errors:
+        errors = await validate_settings_live(payload)
     if errors:
         raise HTTPException(status_code=400, detail="Couldn't save — please fix: " + " • ".join(errors))
 
