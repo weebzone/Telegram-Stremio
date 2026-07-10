@@ -1,0 +1,5 @@
+# Sphinx build output
+_build/
+
+# Local virtual environment used to build the docs
+.venv/

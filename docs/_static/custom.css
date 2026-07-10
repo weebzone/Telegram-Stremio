@@ -1,0 +1,21 @@
+/* Small visual tweaks on top of the Furo theme. */
+
+/* Make callout boxes a touch more prominent. */
+.admonition {
+    border-radius: 8px;
+}
+
+/* Nicer tables that stretch to full width. */
+table.docutils {
+    width: 100%;
+}
+
+/* Slightly rounder code blocks. */
+div.highlight {
+    border-radius: 8px;
+}
+
+/* Emoji-friendly headings keep their spacing. */
+h1, h2, h3 {
+    scroll-margin-top: 1.5rem;
+}
