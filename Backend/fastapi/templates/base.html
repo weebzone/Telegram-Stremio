@@ -152,6 +152,16 @@ body::before {
 *::-webkit-scrollbar-thumb { background: var(--hairline-strong); border-radius: 9999px; border: 2px solid transparent; background-clip: padding-box; }
 *::-webkit-scrollbar-thumb:hover { background: var(--muted); }
 
+
+#nav-container{
+    scrollbar-width:none;
+    -ms-overflow-style:none;
+}
+
+#nav-container::-webkit-scrollbar{
+    display:none;
+}
+    
 .nav-link {
     color: var(--text-sec);
     border-radius: 9999px;
@@ -159,6 +169,7 @@ body::before {
     transition: color 0.3s ease;
     position: relative;
     z-index: 1;
+    flex-shrink:0;
     white-space: nowrap;
     font-weight: 600;
 }
@@ -353,7 +364,11 @@ tailwind.config = {
 
 <div id="overlay" class="fixed inset-0 z-40 opacity-0 pointer-events-none"></div>
 
-<nav id="navbar" class="fixed top-6 left-1/2 -translate-x-1/2 w-[95%] max-w-6xl z-50 glass-panel glass-nav glass-pill px-5 py-3 flex justify-between items-center transition-all duration-300">
+<nav id="navbar"
+class="fixed top-6 left-1/2 -translate-x-1/2 w-[95%] max-w-7xl z-50
+glass-panel glass-nav glass-pill
+px-6 py-3
+grid grid-cols-[auto_1fr_auto] items-center gap-6">
     
     <a href="/" class="flex items-center gap-3 shrink-0">
         <div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center shadow-[0_0_15px_var(--primary)]">
@@ -365,7 +380,7 @@ tailwind.config = {
     </a>
 
     {% if current_user %}
-    <div id="nav-container" class="hidden md:flex absolute left-1/2 -translate-x-1/2 items-center gap-1 p-1 bg-black/10 rounded-full border border-hairline">
+    <div id="nav-container" class="hidden xl:flex justify-center items-center gap-1 w-full min-w-0 overflow-x-auto overflow-y-hidden scrollbar-hide p-1 bg-black/10 rounded-full border border-hairline">
         <div id="active-pill" class="pointer-events-none"></div>
         <a href="/" class="nav-link">Home</a>
         <a href="/media/manage" class="nav-link">Media</a>
