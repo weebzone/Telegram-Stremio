@@ -170,11 +170,17 @@ body::before {
 
 #active-pill {
     position: absolute;
+    inset: auto;
     background: var(--primary);
     border-radius: 9999px;
-    transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    pointer-events: none;
     z-index: 0;
     box-shadow: 0 0 15px color-mix(in srgb, var(--primary) 40%, transparent);
+    transition:
+        left 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+        top 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+        width 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+        height 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .toast {
@@ -369,7 +375,7 @@ tailwind.config = {
     </a>
 
     {% if current_user %}
-    <div id="nav-container" class="hidden md:flex min-w-0 justify-self-center items-center gap-1 p-1 bg-black/10 rounded-full border border-hairline">
+    <div id="nav-container" class="hidden md:flex relative isolate min-w-0 justify-self-center items-center gap-1 p-1 bg-black/10 rounded-full border border-hairline">
         <div id="active-pill" class="pointer-events-none"></div>
         <a href="/" class="nav-link">Home</a>
         <a href="/media/manage" class="nav-link">Media</a>
