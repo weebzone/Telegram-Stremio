@@ -509,6 +509,12 @@
     .ma-label { display:block; font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-secondary,var(--text-sec)); margin-bottom:0.35rem; }
     .ma-tab { flex:1; padding:0.55rem; border-radius:0.75rem; font-weight:700; font-size:0.85rem; border:1px solid var(--border); background:transparent; color:var(--text); cursor:pointer; }
     .ma-tab.active { background:var(--primary); color:#fff; border-color:var(--primary); }
+    .ma-catalog-picker { max-height:10rem; overflow-y:auto; border:1px solid var(--border); border-radius:0.85rem; padding:.4rem; display:flex; flex-direction:column; gap:.25rem; background:var(--background, var(--bg)); }
+    .ma-cat-row { display:flex; align-items:center; gap:.55rem; padding:.45rem .6rem; border-radius:.6rem; cursor:pointer; transition:background .15s ease; }
+    .ma-cat-row:hover { background:color-mix(in srgb, var(--primary) 10%, transparent); }
+    .ma-cat-row.disabled { opacity:.4; pointer-events:none; }
+    .ma-cat-row input { width:1rem; height:1rem; accent-color:var(--primary); cursor:pointer; flex-shrink:0; }
+    .ma-cat-excl { font-size:.65rem; font-weight:800; padding:.15rem .4rem; border-radius:9999px; background:color-mix(in srgb, rgb(239 68 68) 16%, transparent); color:rgb(248 113 113); border:1px solid color-mix(in srgb, rgb(239 68 68) 30%, transparent); }
 </style>
 
 <!-- Manual Add modal -->
@@ -607,6 +613,15 @@
                     </div>
                     <input id="ma-quality-custom" class="ma-input hidden" placeholder="Custom quality label (e.g. 4K HDR)">
                 </div>
+
+                <!-- Custom Catalog selector -->
+                <div>
+                    <label class="ma-label">Add to Custom Catalog</label>
+                    <div id="ma-catalog-list" class="ma-catalog-picker">
+                        <p class="text-xs text-text-secondary">Loading catalogs...</p>
+                    </div>
+                    <p class="text-xs text-text-secondary mt-1">Exclusive catalogs don't allow other selections.</p>
+                </div>
             </div>
 
             <div class="flex flex-col sm:flex-row justify-end gap-3 px-5 sm:px-6 py-4 border-t border-hairline">
@@ -619,6 +634,67 @@
 
 <script>
     let maType = mediaType;
+
+    async function loadMaCatalogs() {
+        const box = document.getElementById('ma-catalog-list');
+        if (!box) return;
+        box.innerHTML = '<p class="text-xs text-text-secondary">Loading...</p>';
+        try {
+            const res = await fetch('/api/media/manual-add/catalogs');
+            const data = await res.json().catch(() => ({}));
+            const catalogs = data.catalogs || [];
+            if (!catalogs.length) {
+                box.innerHTML = '<p class="text-xs text-text-secondary">No custom catalogs found.</p>';
+                return;
+            }
+            box.innerHTML = catalogs.map((c, i) => {
+                const safe = (s) => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+                return `<label class="ma-cat-row" data-exclusive="${c.exclusive ? '1' : '0'}">
+                    <input type="checkbox" value="${safe(c._id)}" onchange="onMaCatalogCheck(this)">
+                    <span class="text-sm font-semibold text-white truncate">${safe(c.name)}</span>
+                    ${c.exclusive ? '<span class="ma-cat-excl">Exclusive</span>' : ''}
+                </label>`;
+            }).join('');
+        } catch (e) {
+            box.innerHTML = '<p class="text-xs text-text-secondary">Failed to load catalogs.</p>';
+        }
+    }
+
+    function onMaCatalogCheck(input) {
+        const box = document.getElementById('ma-catalog-list');
+        const rows = box.querySelectorAll('.ma-cat-row');
+        const row = input.closest('.ma-cat-row');
+        const isExclusive = row?.dataset.exclusive === '1';
+
+        if (input.checked && isExclusive) {
+            rows.forEach(r => {
+                if (r !== row) {
+                    r.classList.add('disabled');
+                    r.querySelector('input').checked = false;
+                }
+            });
+        } else if (!input.checked && isExclusive) {
+            rows.forEach(r => r.classList.remove('disabled'));
+        } else if (input.checked && !isExclusive) {
+            rows.forEach(r => {
+                if (r.dataset.exclusive === '1') {
+                    r.classList.add('disabled');
+                    r.querySelector('input').checked = false;
+                }
+            });
+        } else {
+            const anyNonExclChecked = [...box.querySelectorAll('.ma-cat-row:not([data-exclusive="1"]) input:checked')].length > 0;
+            if (!anyNonExclChecked) {
+                rows.forEach(r => r.classList.remove('disabled'));
+            }
+        }
+    }
+
+    function getMaSelectedCatalogIds() {
+        const box = document.getElementById('ma-catalog-list');
+        if (!box) return [];
+        return [...box.querySelectorAll('input:checked')].map(i => i.value);
+    }
 
     function maResetParts() {
         document.getElementById('ma-parts').innerHTML =
@@ -651,6 +727,7 @@
         document.getElementById('ma-resolve-state').classList.add('hidden');
         document.getElementById('manual-add-modal').classList.remove('hidden');
         document.body.style.overflow = 'hidden';
+        loadMaCatalogs();
     }
 
     function closeManualAdd() {
@@ -722,6 +799,7 @@
         const payload = {
             media_type: maType,
             stream: { quality, name: document.getElementById('ma-name').value.trim() || undefined, parts },
+            catalog_ids: getMaSelectedCatalogIds(),
             manual_metadata: {
                 title,
                 year: document.getElementById('ma-m-year').value.trim(),

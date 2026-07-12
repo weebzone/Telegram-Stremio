@@ -703,12 +703,6 @@
     #add-stream-modal .as-btn:hover { filter: brightness(1.06); }
     #add-stream-modal .as-btn-ghost { background: color-mix(in srgb, var(--bg) 74%, transparent); color: var(--text); border-color: color-mix(in srgb, var(--border) 95%, transparent); }
     #add-stream-modal .as-btn-success { background: rgb(16 185 129); color:#fff; }
-    #add-stream-modal .as-catalog-picker { max-height:10rem; overflow-y:auto; border:1px solid color-mix(in srgb, var(--border) 95%, transparent); border-radius:0.85rem; padding:.4rem; display:flex; flex-direction:column; gap:.25rem; background:color-mix(in srgb, var(--bg) 74%, transparent); }
-    #add-stream-modal .as-cat-row { display:flex; align-items:center; gap:.55rem; padding:.45rem .6rem; border-radius:.6rem; cursor:pointer; transition:background .15s ease; }
-    #add-stream-modal .as-cat-row:hover { background:color-mix(in srgb, var(--primary) 10%, transparent); }
-    #add-stream-modal .as-cat-row.disabled { opacity:.4; pointer-events:none; }
-    #add-stream-modal .as-cat-row input { width:1rem; height:1rem; accent-color:var(--primary); cursor:pointer; flex-shrink:0; }
-    #add-stream-modal .as-cat-excl { font-size:.65rem; font-weight:800; padding:.15rem .4rem; border-radius:9999px; background:color-mix(in srgb, rgb(239 68 68) 16%, transparent); color:rgb(248 113 113); border:1px solid color-mix(in srgb, rgb(239 68 68) 30%, transparent); }
 </style>
 
 <div id="add-stream-modal" class="fixed inset-0 z-50 hidden" aria-modal="true" role="dialog">
@@ -764,14 +758,6 @@
                     </div>
                 </div>
                 <input id="as-quality-custom" class="as-input hidden" placeholder="Custom quality label (e.g. 4K HDR)">
-
-                <div id="as-catalog-section">
-                    <label class="as-label">Add to Custom Catalog</label>
-                    <div id="as-catalog-list" class="as-catalog-picker">
-                        <p class="text-xs text-text-secondary">Loading catalogs...</p>
-                    </div>
-                    <p class="text-xs text-text-secondary mt-1">Exclusive catalogs don't allow other selections.</p>
-                </div>
             </div>
 
             <div class="flex flex-col sm:flex-row sm:justify-end gap-2 sm:gap-3 px-4 sm:px-6 py-4 border-t border-hairline">
@@ -1728,68 +1714,6 @@
             .map(i => i.value.trim()).filter(Boolean).map(url => ({ url }));
     }
 
-    let _asCatalogs = [];
-
-    async function loadAddStreamCatalogs() {
-        const box = document.getElementById('as-catalog-list');
-        if (!box) return;
-        box.innerHTML = '<p class="text-xs text-text-secondary">Loading...</p>';
-        try {
-            const res = await fetch('/api/media/manual-add/catalogs');
-            const data = await res.json().catch(() => ({}));
-            _asCatalogs = data.catalogs || [];
-            if (!_asCatalogs.length) {
-                box.innerHTML = '<p class="text-xs text-text-secondary">No custom catalogs found.</p>';
-                return;
-            }
-            box.innerHTML = _asCatalogs.map((c, i) => `
-                <label class="as-cat-row" data-cat-idx="${i}" data-exclusive="${c.exclusive ? '1' : '0'}">
-                    <input type="checkbox" value="${escapeHtml(c._id)}" onchange="onCatalogCheck(this)">
-                    <span class="text-sm font-semibold text-white truncate">${escapeHtml(c.name)}</span>
-                    ${c.exclusive ? '<span class="as-cat-excl">Exclusive</span>' : ''}
-                </label>`).join('');
-        } catch (e) {
-            box.innerHTML = '<p class="text-xs text-text-secondary">Failed to load catalogs.</p>';
-        }
-    }
-
-    function onCatalogCheck(input) {
-        const box = document.getElementById('as-catalog-list');
-        const rows = box.querySelectorAll('.as-cat-row');
-        const checked = box.querySelectorAll('input:checked');
-        const row = input.closest('.as-cat-row');
-        const isExclusive = row?.dataset.exclusive === '1';
-
-        if (input.checked && isExclusive) {
-            rows.forEach(r => {
-                if (r !== row) {
-                    r.classList.add('disabled');
-                    r.querySelector('input').checked = false;
-                }
-            });
-        } else if (!input.checked && isExclusive) {
-            rows.forEach(r => r.classList.remove('disabled'));
-        } else if (input.checked && !isExclusive) {
-            rows.forEach(r => {
-                if (r.dataset.exclusive === '1') {
-                    r.classList.add('disabled');
-                    r.querySelector('input').checked = false;
-                }
-            });
-        } else {
-            const anyNonExclChecked = [...box.querySelectorAll('.as-cat-row:not([data-exclusive="1"]) input:checked')].length > 0;
-            if (!anyNonExclChecked) {
-                rows.forEach(r => r.classList.remove('disabled'));
-            }
-        }
-    }
-
-    function getSelectedCatalogIds() {
-        const box = document.getElementById('as-catalog-list');
-        if (!box) return [];
-        return [...box.querySelectorAll('input:checked')].map(i => i.value);
-    }
-
     function openAddStream() {
         ['as-name', 'as-season', 'as-episode', 'as-episode-title', 'as-quality-custom'].forEach(id => {
             const el = document.getElementById(id);
@@ -1802,7 +1726,6 @@
         document.getElementById('as-resolve-state')?.classList.add('hidden');
         document.getElementById('add-stream-modal').classList.remove('hidden');
         document.body.style.overflow = 'hidden';
-        loadAddStreamCatalogs();
     }
 
     function closeAddStream() {
@@ -1867,8 +1790,7 @@
             media_type: mediaType,
             tmdb_id: tmdbId,
             db_index: dbIndex,
-            stream: { quality, name: document.getElementById('as-name').value.trim() || undefined, parts },
-            catalog_ids: getSelectedCatalogIds()
+            stream: { quality, name: document.getElementById('as-name').value.trim() || undefined, parts }
         };
 
         if (mediaType === 'tv') {
