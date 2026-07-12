@@ -115,8 +115,10 @@ def _max_episode(doc: dict, season_number: int) -> int:
     return 0
 
 
-#----- Add a forwarded file as a stream on the custom-session media (personal files)
-async def _handle_manual_custom_session(client: Client, message: Message) -> None:
+#----- Add a forwarded file as a stream on a personal-session title.
+#----- Personal files carry no metadata, so season/episode come from the session and
+#----- the quality is auto-detected from the video (falling back to the session value).
+async def _handle_personal_session(client: Client, message: Message) -> None:
     session = Backend.MANUAL_SESSION
     if not session:
         return
@@ -140,7 +142,7 @@ async def _handle_manual_custom_session(client: Client, message: Message) -> Non
         p_msg = int(resolved["msg_id"])
         encoded = await encode_string({"chat_id": p_channel, "msg_id": p_msg})
         name = resolved["name"]
-        quality = resolved.get("quality") or "HD"
+        quality = resolved.get("quality") or session.get("quality") or "HD"
 
         metadata_info = _base_from_doc(doc)
         metadata_info.update({
@@ -186,14 +188,24 @@ async def _handle_manual_custom_session(client: Client, message: Message) -> Non
 #----- Ingest new channel media into the queue after building metadata
 @Client.on_message(filters.channel & (filters.document | filters.video))
 async def file_receive_handler(client: Client, message: Message):
-    if _is_manual_channel(message.chat.id):
-        #----- Manual channel: only act when a web-set upload session is active
-        if Backend.MANUAL_SESSION:
-            await _handle_manual_custom_session(client, message)
+    session = Backend.MANUAL_SESSION
+    is_manual = _is_manual_channel(message.chat.id)
+
+    #----- Manual channel + personal session: add straight onto the personal title
+    if is_manual and session and session.get("kind") == "personal":
+        await _handle_personal_session(client, message)
         return
-    if str(message.chat.id) not in SettingsManager.current().auth_channels:
+
+    #----- Manual channel otherwise only proceeds during a real (TMDB/IMDb) session;
+    #----- real files are parsed from their name/caption and forced onto the session id.
+    if is_manual:
+        if not (session and session.get("kind") == "real"):
+            return
+    elif str(message.chat.id) not in SettingsManager.current().auth_channels:
         await message.reply_text("> Channel is not in AUTH_CHANNEL")
         return
+
+    override_id = session["default_id"] if (session and session.get("kind") == "real") else None
     try:
         sub_name = (message.document.file_name if message.document else "") or ""
         if sub_name and is_subtitle_file(sub_name):
@@ -207,7 +219,7 @@ async def file_receive_handler(client: Client, message: Message):
 
         _, title, msg_id, raw_size, size, channel = _extract_fields(message)
 
-        metadata_info = await metadata(clean_filename(title), int(channel), msg_id)
+        metadata_info = await metadata(clean_filename(title), int(channel), msg_id, override_id=override_id)
         if metadata_info is None:
             LOGGER.warning(f"Metadata failed for file: {title} (ID: {msg_id})")
             return

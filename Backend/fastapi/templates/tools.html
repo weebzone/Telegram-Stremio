@@ -152,7 +152,7 @@
 
             <div id="ms-results" class="chip-list mt-3" style="display:none"></div>
 
-            <!-- Selected + season/episode -->
+            <!-- Selected + options -->
             <div id="ms-selected-box" class="hidden mt-4" style="border:1px solid var(--border);border-radius:0.9rem;padding:0.9rem 1.1rem">
                 <div class="flex items-center gap-3">
                     <img id="ms-sel-poster" src="" alt="" style="width:2.75rem;height:4rem;object-fit:cover;border-radius:0.4rem;flex-shrink:0;background:var(--card)">
@@ -162,20 +162,39 @@
                     </div>
                 </div>
 
-                <div id="ms-tv-fields" class="hidden mt-3 grid grid-cols-2 gap-3">
-                    <div>
-                        <label class="s-label">Season <span style="color:#ef4444">*</span></label>
-                        <input id="ms-season" type="number" min="0" placeholder="e.g. 1"
+                <!-- Real (TMDB/IMDb) title: everything auto-detected -->
+                <p id="ms-real-note" class="hint hidden mt-3" style="border:1px solid rgba(59,130,246,0.3);background:rgba(59,130,246,0.08);border-radius:0.75rem;padding:0.7rem 0.9rem">
+                    <i class="fa-solid fa-wand-magic-sparkles" style="color:#3b82f6"></i>
+                    Season, episode and quality are read automatically from each file's name/caption.
+                    Just start the session and forward files — to your <strong>auth</strong> or <strong>manual</strong> channel.
+                </p>
+
+                <!-- Personal title: manual metadata -->
+                <div id="ms-personal-fields" class="hidden mt-3">
+                    <div id="ms-tv-fields" class="hidden grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="s-label">Season <span style="color:#ef4444">*</span></label>
+                            <input id="ms-season" type="number" min="0" placeholder="e.g. 1"
+                                   style="width:100%;background:color-mix(in srgb,var(--bg) 60%,transparent);border:1px solid var(--border);border-radius:0.9rem;padding:0.6rem 0.9rem;color:var(--text);outline:none">
+                        </div>
+                        <div>
+                            <label class="s-label">Episode (optional)</label>
+                            <input id="ms-episode" type="number" min="0" placeholder="Empty = next episode"
+                                   style="width:100%;background:color-mix(in srgb,var(--bg) 60%,transparent);border:1px solid var(--border);border-radius:0.9rem;padding:0.6rem 0.9rem;color:var(--text);outline:none">
+                        </div>
+                        <p class="hint col-span-2" style="margin-top:-0.25rem">
+                            Set an <strong>episode</strong> to pile every forwarded file onto that one episode (multiple qualities).
+                            Leave it <strong>empty</strong> so each file becomes the next episode (E1, E2, E3…).
+                        </p>
+                    </div>
+                    <div class="mt-3">
+                        <label class="s-label">Quality (optional)</label>
+                        <input id="ms-quality" placeholder="Auto-detected from video; fallback HD (e.g. 1080p)"
                                style="width:100%;background:color-mix(in srgb,var(--bg) 60%,transparent);border:1px solid var(--border);border-radius:0.9rem;padding:0.6rem 0.9rem;color:var(--text);outline:none">
                     </div>
-                    <div>
-                        <label class="s-label">Episode (optional)</label>
-                        <input id="ms-episode" type="number" min="0" placeholder="Empty = next episode"
-                               style="width:100%;background:color-mix(in srgb,var(--bg) 60%,transparent);border:1px solid var(--border);border-radius:0.9rem;padding:0.6rem 0.9rem;color:var(--text);outline:none">
-                    </div>
-                    <p class="hint col-span-2" style="margin-top:-0.25rem">
-                        Set an <strong>episode</strong> to pile every forwarded file onto that one episode (multiple qualities).
-                        Leave it <strong>empty</strong> so each file becomes the next episode (E1, E2, E3…).
+                    <p class="hint mt-2">
+                        <i class="fa-solid fa-circle-info"></i> Personal files carry no metadata — forward them to your
+                        <strong>manual channel only</strong>.
                     </p>
                 </div>
 
@@ -185,9 +204,10 @@
 
         <hr class="divider">
         <p class="hint">
-            <strong>How to use:</strong> 1) Search and select the title. 2) For a TV show, enter the season
-            (and optionally an episode). 3) Start the session. 4) Forward the files to your manual channel.
-            5) End the session when you're done. Set your manual channel in
+            <strong>How to use:</strong> 1) Search and select a title from your library. 2) Real TMDB/IMDb titles need
+            nothing else — season, episode and quality come from the file. Personal titles need a season for TV
+            (episode &amp; quality optional). 3) Start the session. 4) Forward the files (real → auth or manual channel;
+            personal → manual channel only). 5) End the session when done. Configure channels in
             <a href="/admin/settings" style="color:var(--primary)">Settings</a>.
         </p>
     </div>
@@ -367,13 +387,21 @@ function pickManualResult(i) {
     const r = msResults[i];
     if (!r) return;
     msSelected = r;
+    const isPersonal = !!r.is_personal;
+    const isTv = r.media_type === 'tv';
+
     document.getElementById('ms-sel-poster').src = r.poster || '/static/placeholder.jpg';
     document.getElementById('ms-sel-title').textContent = r.title;
     document.getElementById('ms-sel-sub').textContent =
-        `${r.media_type === 'tv' ? 'TV Show' : 'Movie'} · ${r.year || '—'} · TMDB ${r.tmdb_id} · DB #${r.db_index}`;
-    document.getElementById('ms-tv-fields').classList.toggle('hidden', r.media_type !== 'tv');
+        `${isTv ? 'TV Show' : 'Movie'} · ${isPersonal ? 'Personal' : 'TMDB/IMDb'} · ${r.year || '—'} · TMDB ${r.tmdb_id} · DB #${r.db_index}`;
+
+    document.getElementById('ms-real-note').classList.toggle('hidden', isPersonal);
+    document.getElementById('ms-personal-fields').classList.toggle('hidden', !isPersonal);
+    document.getElementById('ms-tv-fields').classList.toggle('hidden', !(isPersonal && isTv));
+
     document.getElementById('ms-season').value = '';
     document.getElementById('ms-episode').value = '';
+    document.getElementById('ms-quality').value = '';
     document.getElementById('ms-selected-box').classList.remove('hidden');
     document.getElementById('ms-results').style.display = 'none';
 }
@@ -385,12 +413,16 @@ async function startManualSession() {
         db_index: msSelected.db_index,
         media_type: msSelected.media_type,
     };
-    if (msSelected.media_type === 'tv') {
-        const s = document.getElementById('ms-season').value.trim();
-        if (s === '') { showToast('Season number is required for TV shows.', 'error', 'Session'); return; }
-        payload.season = s;
-        const ep = document.getElementById('ms-episode').value.trim();
-        if (ep !== '') payload.episode = ep;
+    if (msSelected.is_personal) {
+        if (msSelected.media_type === 'tv') {
+            const s = document.getElementById('ms-season').value.trim();
+            if (s === '') { showToast('Season number is required for personal TV shows.', 'error', 'Session'); return; }
+            payload.season = s;
+            const ep = document.getElementById('ms-episode').value.trim();
+            if (ep !== '') payload.episode = ep;
+        }
+        const q = document.getElementById('ms-quality').value.trim();
+        if (q !== '') payload.quality = q;
     }
     try {
         const res = await fetch('/api/admin/tools/manual-session', {
@@ -433,14 +465,21 @@ function renderManualSession(session) {
         const isTv = session.media_type === 'tv';
         document.getElementById('ms-active-title').textContent =
             `${session.title || 'Title'}${session.year ? ' (' + session.year + ')' : ''}`;
+
         let detail = isTv ? 'TV Show' : 'Movie';
-        if (isTv) {
-            detail += ` · Season ${session.season}`;
-            detail += (session.episode !== null && session.episode !== undefined)
-                ? ` · Episode ${session.episode} (all files → this episode)`
-                : ' · each file → next episode';
+        if (session.is_personal) {
+            detail += ' · Personal';
+            if (isTv) {
+                detail += ` · Season ${session.season}`;
+                detail += (session.episode !== null && session.episode !== undefined)
+                    ? ` · Episode ${session.episode} (all files → this episode)`
+                    : ' · each file → next episode';
+            } else {
+                detail += ' · each file → a new quality';
+            }
+            detail += ' · forward to MANUAL channel only';
         } else {
-            detail += ' · each file → a new quality';
+            detail += ' · TMDB/IMDb · season/episode/quality auto-detected · forward to AUTH or MANUAL channel';
         }
         document.getElementById('ms-active-detail').textContent = detail;
     } else {

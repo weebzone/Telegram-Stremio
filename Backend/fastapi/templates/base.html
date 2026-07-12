@@ -645,6 +645,28 @@ if(navContainer) {
         if(activeLink) movePill(activeLink);
     });
 }
+
+{% if current_user %}
+/* Remind the admin that a manual upload session is active (except on Tools) */
+(function manualSessionReminder() {
+    if (window.location.pathname === '/admin/tools') return;
+    async function check() {
+        try {
+            const res = await fetch('/api/admin/tools/manual-session');
+            if (!res.ok) return;
+            const data = await res.json();
+            const s = data.session;
+            if (s && s.tmdb_id !== undefined && s.tmdb_id !== null) {
+                const label = s.title ? `"${s.title}"` : 'a title';
+                showToast(`Uploads are being added to ${label}. Open Tools to stop it if you're done.`,
+                          'error', '⚠ Upload session active', 5000);
+            }
+        } catch (e) { /* ignore */ }
+    }
+    check();
+    setInterval(check, 60000);
+})();
+{% endif %}
 </script>
 
 </body>

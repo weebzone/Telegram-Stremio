@@ -1467,6 +1467,20 @@ async def update_settings_api(payload: dict) -> dict:
             cleaned.append(channel)
         payload["manual_channels"] = cleaned
 
+    #----- A channel may never be both an AUTH channel and a MANUAL channel
+    if "auth_channels" in payload or "manual_channels" in payload:
+        current = SettingsManager.current()
+        final_auth = payload.get("auth_channels", list(current.auth_channels))
+        final_manual = payload.get("manual_channels", list(current.manual_channels))
+        auth_norm = {str(c).strip().replace("-100", "") for c in final_auth if str(c).strip()}
+        manual_norm = {str(c).strip().replace("-100", "") for c in final_manual if str(c).strip()}
+        overlap = auth_norm & manual_norm
+        if overlap:
+            raise HTTPException(
+                status_code=400,
+                detail=f"A channel can't be both an AUTH and a MANUAL channel: {', '.join(sorted(overlap))}"
+            )
+
     #----- Strip whitespace from string fields
     for key in ("tmdb_api", "base_url", "upstream_repo", "upstream_branch",
                 "admin_username", "admin_password", "session_secret", "http_proxy_url",
@@ -1521,6 +1535,14 @@ async def get_tools_channels_api() -> dict:
 
 #----- ── Manual upload session (web replacement for the /set bot command) ──
 
+#----- Personal (hand-made) titles get a negative synthetic tmdb_id; real ones are positive
+def _is_personal_media(tmdb_id) -> bool:
+    try:
+        return int(tmdb_id) < 0
+    except (TypeError, ValueError):
+        return False
+
+
 #----- Normalize a media document into a compact session-picker result
 def _session_result(doc: dict) -> dict:
     mt = doc.get("media_type") or doc.get("type") or "movie"
@@ -1532,6 +1554,8 @@ def _session_result(doc: dict) -> dict:
         "title": doc.get("title") or "",
         "year": doc.get("release_year") or "",
         "poster": resolve_cover_url(doc.get("poster") or ""),
+        "imdb_id": doc.get("imdb_id") or "",
+        "is_personal": _is_personal_media(doc.get("tmdb_id")),
     }
 
 
@@ -1588,7 +1612,9 @@ async def get_manual_session_api() -> dict:
     return {"session": getattr(Backend, "MANUAL_SESSION", None)}
 
 
-#----- Activate a manual upload session targeting an existing library title
+#----- Activate a manual upload session targeting an existing library title.
+#----- Real (TMDB/IMDb) titles parse season/episode/quality from each file; personal
+#----- (hand-made) titles need a season for TV since their files carry no metadata.
 async def set_manual_session_api(payload: dict) -> dict:
     tmdb_id = payload.get("tmdb_id")
     db_index = payload.get("db_index")
@@ -1601,37 +1627,61 @@ async def set_manual_session_api(payload: dict) -> dict:
     if not doc:
         raise HTTPException(status_code=404, detail="That title was not found in your library.")
 
-    season = payload.get("season")
-    episode = payload.get("episode")
-
-    if media_type == "tv":
-        if season is None or str(season).strip() == "":
-            raise HTTPException(status_code=400, detail="A season number is required for TV shows.")
-        try:
-            season = int(season)
-        except (TypeError, ValueError):
-            raise HTTPException(status_code=400, detail="Season must be a number.")
-        if episode is not None and str(episode).strip() != "":
-            try:
-                episode = int(episode)
-            except (TypeError, ValueError):
-                raise HTTPException(status_code=400, detail="Episode must be a number.")
-        else:
-            episode = None
-    else:
-        season = None
-        episode = None
-
-    Backend.MANUAL_SESSION = {
+    is_personal = _is_personal_media(tmdb_id)
+    session = {
         "tmdb_id": int(tmdb_id),
         "db_index": int(db_index),
         "media_type": media_type,
-        "season": season,
-        "episode": episode,
         "title": doc.get("title") or "",
         "year": doc.get("release_year") or "",
+        "is_personal": is_personal,
     }
-    return {"status": "success", "session": Backend.MANUAL_SESSION}
+
+    if is_personal:
+        #----- Personal: files have no usable metadata, so season/episode come from here
+        season = payload.get("season")
+        episode = payload.get("episode")
+        quality = str(payload.get("quality") or "").strip()
+
+        if media_type == "tv":
+            if season is None or str(season).strip() == "":
+                raise HTTPException(status_code=400, detail="A season number is required for personal TV shows.")
+            try:
+                season = int(season)
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=400, detail="Season must be a number.")
+            if episode is not None and str(episode).strip() != "":
+                try:
+                    episode = int(episode)
+                except (TypeError, ValueError):
+                    raise HTTPException(status_code=400, detail="Episode must be a number.")
+            else:
+                episode = None
+        else:
+            season = None
+            episode = None
+
+        session.update({
+            "kind": "personal",
+            "default_id": None,
+            "season": season,
+            "episode": episode,
+            "quality": quality or None,
+        })
+    else:
+        #----- Real: force the title's own id and let metadata() parse from each file
+        imdb_id = doc.get("imdb_id") or ""
+        default_id = imdb_id if str(imdb_id).startswith("tt") else str(int(tmdb_id))
+        session.update({
+            "kind": "real",
+            "default_id": default_id,
+            "season": None,
+            "episode": None,
+            "quality": None,
+        })
+
+    Backend.MANUAL_SESSION = session
+    return {"status": "success", "session": session}
 
 
 #----- Clear the active manual upload session
