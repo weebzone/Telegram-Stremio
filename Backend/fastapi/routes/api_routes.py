@@ -852,6 +852,25 @@ async def apply_media_rescan_api(request: Request, tmdb_id: int, db_index: int, 
 }
 
 
+#----- Manual add: fetch full metadata for a selected TMDB/IMDB title to autofill the form
+async def resolve_manual_metadata_api(media_type: str, selected_id: str) -> dict:
+    selected_id = str(selected_id or "").strip()
+    if not selected_id:
+        raise HTTPException(status_code=400, detail="selected_id is required.")
+    mt = _normalize_media_type(media_type)
+    data = await (
+        fetch_selected_movie_metadata(selected_id) if mt == "movie"
+        else fetch_selected_tv_metadata(selected_id)
+    )
+    if not data:
+        raise HTTPException(status_code=404, detail="Could not fetch metadata for the selected title.")
+    if data.get("poster"):
+        data["poster"] = resolve_cover_url(data["poster"])
+    if data.get("backdrop"):
+        data["backdrop"] = resolve_cover_url(data["backdrop"])
+    return {"metadata": data}
+
+
 #----- Manual add: resolve a Telegram post link into a streamable file
 async def resolve_telegram_api(payload: dict) -> dict:
     client = _scan_client()

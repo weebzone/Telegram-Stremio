@@ -10,6 +10,8 @@ import Backend
 from Backend import db
 from Backend.helper.announcer import announce_new_media
 from Backend.helper.auto_catalog import start_single_media_catalog_sync
+from Backend.helper.encrypt import encode_string
+from Backend.helper.manual_add import resolve_telegram_message
 from Backend.helper.requests_manager import auto_fulfill
 from Backend.helper.metadata import extract_default_id, metadata
 from Backend.helper.pyro import clean_filename, finalize_media_name, get_readable_file_size
@@ -21,6 +23,7 @@ from Backend.logger import LOGGER
 
 file_queue = Queue()
 db_lock = Lock()
+manual_session_lock = Lock()
 
 
 #----- True when the message carries a streamable video or a split-archive part
@@ -84,12 +87,115 @@ async def process_file():
 create_task(process_file())
 
 
+#----- Build a title-level metadata base from an existing media document
+def _base_from_doc(doc: dict) -> dict:
+    return {
+        "tmdb_id": doc.get("tmdb_id"),
+        "imdb_id": doc.get("imdb_id"),
+        "title": doc.get("title") or "",
+        "year": doc.get("release_year") or 0,
+        "rate": doc.get("rating") or 0,
+        "description": doc.get("description") or "",
+        "poster": doc.get("poster") or "",
+        "backdrop": doc.get("backdrop") or "",
+        "logo": doc.get("logo") or "",
+        "genres": doc.get("genres") or [],
+        "cast": doc.get("cast") or [],
+        "runtime": str(doc.get("runtime") or ""),
+        "original_language": doc.get("original_language"),
+        "origin_country": doc.get("origin_country") or [],
+    }
+
+
+#----- Highest existing episode number in a season, or 0 if none
+def _max_episode(doc: dict, season_number: int) -> int:
+    for season in doc.get("seasons", []) or []:
+        if season.get("season_number") == season_number:
+            eps = [e.get("episode_number", 0) for e in season.get("episodes", []) or []]
+            return max(eps) if eps else 0
+    return 0
+
+
+#----- Add a forwarded file as a stream on the custom-session media (personal files)
+async def _handle_manual_custom_session(client: Client, message: Message) -> None:
+    session = Backend.MANUAL_SESSION
+    if not session:
+        return
+    async with manual_session_lock:
+        channel = str(message.chat.id).replace("-100", "")
+        try:
+            resolved = await resolve_telegram_message(client, chat_id=channel, msg_id=message.id)
+        except Exception as e:
+            LOGGER.warning(f"[Manual Session] Could not resolve message {message.id}: {e}")
+            return
+
+        custom_id = session["custom_id"]
+        media_type = session["media_type"]
+        location = await db.find_media_doc(media_type, custom_id)
+        if not location:
+            LOGGER.warning(f"[Manual Session] Custom id {custom_id} not found; ignoring file.")
+            return
+        doc = location[0]
+
+        p_channel = int(resolved["chat_id"])
+        p_msg = int(resolved["msg_id"])
+        encoded = await encode_string({"chat_id": p_channel, "msg_id": p_msg})
+        name = resolved["name"]
+        quality = resolved.get("quality") or "HD"
+
+        metadata_info = _base_from_doc(doc)
+        metadata_info.update({
+            "media_type": media_type,
+            "quality": quality,
+            "encoded_string": encoded,
+            "group_key": None,
+            "part_number": None,
+            "is_anime": bool(doc.get("is_anime")),
+        })
+
+        if media_type == "tv":
+            season_number = session["season"]
+            episode_number = session["episode"]
+            if episode_number is None:
+                episode_number = _max_episode(doc, season_number) + 1
+            thumb_url = ""
+            if resolved.get("has_thumb"):
+                thumb_url = f"/thumb/{encoded}"
+            metadata_info.update({
+                "season_number": season_number,
+                "episode_number": episode_number,
+                "episode_title": f"S{season_number:02d}E{episode_number:02d}",
+                "episode_backdrop": thumb_url or metadata_info.get("backdrop") or "",
+                "episode_overview": "",
+                "episode_released": "",
+            })
+
+        async with db_lock:
+            updated_id = await db.insert_media(
+                metadata_info, channel=p_channel, msg_id=p_msg,
+                size=resolved["size"], name=name, raw_size=int(resolved.get("raw_size") or 0),
+            )
+
+        if updated_id:
+            where = (f"S{metadata_info['season_number']:02d}E{metadata_info['episode_number']:02d} "
+                     if media_type == "tv" else "")
+            LOGGER.info(f"[Manual Session] Added {quality} {where}to '{metadata_info.get('title')}' (id {custom_id}).")
+        else:
+            LOGGER.warning(f"[Manual Session] Insert failed for message {message.id}.")
+
+
 #----- Ingest new channel media into the queue after building metadata
 @Client.on_message(filters.channel & (filters.document | filters.video))
 async def file_receive_handler(client: Client, message: Message):
     if _is_manual_channel(message.chat.id):
-        return
-    if str(message.chat.id) not in SettingsManager.current().auth_channels:
+        #----- Custom-id session: add streams straight onto the session's media
+        if Backend.MANUAL_SESSION:
+            await _handle_manual_custom_session(client, message)
+            return
+        #----- URL session: index the file like an auth channel; otherwise skip
+        if not Backend.USE_DEFAULT_ID:
+            return
+    elif str(message.chat.id) not in SettingsManager.current().auth_channels:
         await message.reply_text("> Channel is not in AUTH_CHANNEL")
         return
     try:

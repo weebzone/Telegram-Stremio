@@ -515,6 +515,14 @@
     .ma-cat-row.disabled { opacity:.4; pointer-events:none; }
     .ma-cat-row input { width:1rem; height:1rem; accent-color:var(--primary); cursor:pointer; flex-shrink:0; }
     .ma-cat-excl { font-size:.65rem; font-weight:800; padding:.15rem .4rem; border-radius:9999px; background:color-mix(in srgb, rgb(239 68 68) 16%, transparent); color:rgb(248 113 113); border:1px solid color-mix(in srgb, rgb(239 68 68) 30%, transparent); }
+    .ma-search-results { max-height:16rem; overflow-y:auto; margin-top:.5rem; display:flex; flex-direction:column; gap:.4rem; }
+    .ma-result-row { display:flex; align-items:center; gap:.7rem; padding:.5rem; border-radius:.7rem; border:1px solid var(--border); background:var(--background, var(--bg)); cursor:pointer; text-align:left; transition:border-color .15s ease; }
+    .ma-result-row:hover { border-color:var(--primary); }
+    .ma-result-poster { width:2.5rem; height:3.75rem; object-fit:cover; border-radius:.4rem; flex-shrink:0; background:var(--surface,#222); }
+    .ma-result-meta { min-width:0; flex:1; }
+    .ma-src-badge { font-size:.6rem; font-weight:800; padding:.1rem .4rem; border-radius:9999px; background:color-mix(in srgb, var(--primary) 16%, transparent); color:var(--primary); border:1px solid color-mix(in srgb, var(--primary) 30%, transparent); text-transform:uppercase; }
+    .ma-linked-chip { display:inline-flex; align-items:center; gap:.5rem; padding:.35rem .7rem; border-radius:9999px; font-size:.78rem; font-weight:700; background:color-mix(in srgb, rgb(16 185 129) 14%, transparent); color:rgb(52 211 153); border:1px solid color-mix(in srgb, rgb(16 185 129) 30%, transparent); }
+    .ma-unlink-btn { background:none; border:none; color:inherit; font-size:1.1rem; line-height:1; cursor:pointer; padding:0 .1rem; }
 </style>
 
 <!-- Manual Add modal -->
@@ -534,6 +542,24 @@
                     <div class="flex gap-2">
                         <button type="button" class="ma-tab" data-ma-type="movie" onclick="maSetType('movie')"><i class="fa-solid fa-film"></i> Movie</button>
                         <button type="button" class="ma-tab" data-ma-type="tv" onclick="maSetType('tv')"><i class="fa-solid fa-tv"></i> TV Show</button>
+                    </div>
+                </div>
+
+                <!-- Search TMDB/Cinemeta to auto-fill -->
+                <div>
+                    <label class="ma-label">Search title (TMDB / Cinemeta) — optional</label>
+                    <div class="flex flex-col sm:flex-row gap-2">
+                        <input id="ma-search-query" class="ma-input" placeholder="Title, IMDb id/link or TMDB id/link">
+                        <button type="button" onclick="maSearchTitles()" class="px-4 py-2.5 rounded-xl bg-primary text-white font-bold text-sm shrink-0"><i class="fa-solid fa-magnifying-glass"></i> Search</button>
+                    </div>
+                    <p id="ma-search-state" class="text-xs text-text-secondary mt-1 hidden"></p>
+                    <div id="ma-search-results" class="ma-search-results hidden"></div>
+                    <div id="ma-linked-badge" class="hidden mt-2">
+                        <span class="ma-linked-chip">
+                            <i class="fa-solid fa-link"></i>
+                            <span id="ma-linked-text"></span>
+                            <button type="button" onclick="maUnlink()" title="Unlink and enter manually" class="ma-unlink-btn">&times;</button>
+                        </span>
                     </div>
                 </div>
 
@@ -634,6 +660,88 @@
 
 <script>
     let maType = mediaType;
+    let maSelectedId = null;
+    let maSearchList = [];
+
+    function maEsc(s) {
+        return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    async function maSearchTitles() {
+        const q = document.getElementById('ma-search-query').value.trim();
+        const state = document.getElementById('ma-search-state');
+        const box = document.getElementById('ma-search-results');
+        if (!q) { showToast('Enter a title, IMDb or TMDB id/link.', 'error', 'Error'); return; }
+        state.textContent = 'Searching...';
+        state.classList.remove('hidden');
+        box.classList.add('hidden');
+        box.innerHTML = '';
+        try {
+            const params = new URLSearchParams({ media_type: maType, query: q });
+            const yearVal = document.getElementById('ma-m-year').value.trim();
+            if (yearVal) params.set('year', yearVal);
+            const res = await fetch(`/api/media/rescan/search?${params.toString()}`);
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.detail || 'Search failed');
+            maSearchList = data.results || [];
+            if (!maSearchList.length) {
+                state.textContent = 'No matches found.';
+                return;
+            }
+            state.textContent = `Found ${maSearchList.length} match${maSearchList.length > 1 ? 'es' : ''}. Pick one to auto-fill.`;
+            box.innerHTML = maSearchList.map((r, i) => `
+                <button type="button" class="ma-result-row" onclick="maPickResult(${i})">
+                    <img class="ma-result-poster" src="${maEsc(r.poster) || '/static/placeholder.jpg'}" onerror="this.src='/static/placeholder.jpg'">
+                    <span class="ma-result-meta">
+                        <span class="flex items-center gap-2">
+                            <span class="text-sm font-bold text-white truncate">${maEsc(r.title)}</span>
+                            <span class="ma-src-badge">${maEsc(r.source)}</span>
+                        </span>
+                        <span class="text-xs text-text-secondary block truncate">${maEsc(r.year || '—')} · IMDb: ${maEsc(r.imdb_id || 'N/A')} · TMDB: ${maEsc(r.tmdb_id || 'N/A')}</span>
+                    </span>
+                </button>`).join('');
+            box.classList.remove('hidden');
+        } catch (e) {
+            state.textContent = e.message || 'Search failed.';
+        }
+    }
+
+    async function maPickResult(index) {
+        const item = maSearchList[index];
+        if (!item) return;
+        const selectedId = item.tmdb_id || item.imdb_id;
+        if (!selectedId) { showToast('This result has no usable id.', 'error', 'Error'); return; }
+        const state = document.getElementById('ma-search-state');
+        state.textContent = 'Loading metadata...';
+        state.classList.remove('hidden');
+        try {
+            const params = new URLSearchParams({ media_type: maType, selected_id: String(selectedId) });
+            const res = await fetch(`/api/media/manual-add/resolve-meta?${params.toString()}`);
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.detail || 'Could not load metadata');
+            const m = data.metadata || {};
+            document.getElementById('ma-m-title').value = m.title || '';
+            document.getElementById('ma-m-year').value = m.release_year || '';
+            document.getElementById('ma-m-rating').value = m.rating || '';
+            document.getElementById('ma-m-genres').value = Array.isArray(m.genres) ? m.genres.join(', ') : (m.genres || '');
+            document.getElementById('ma-m-description').value = m.description || '';
+            document.getElementById('ma-m-poster').value = m.poster || '';
+            document.getElementById('ma-m-backdrop').value = m.backdrop || '';
+
+            maSelectedId = String(selectedId);
+            document.getElementById('ma-linked-text').textContent = `${m.title || 'Selected'} (${item.source})`;
+            document.getElementById('ma-linked-badge').classList.remove('hidden');
+            document.getElementById('ma-search-results').classList.add('hidden');
+            state.classList.add('hidden');
+        } catch (e) {
+            state.textContent = e.message || 'Could not load metadata.';
+        }
+    }
+
+    function maUnlink() {
+        maSelectedId = null;
+        document.getElementById('ma-linked-badge').classList.add('hidden');
+    }
 
     async function loadMaCatalogs() {
         const box = document.getElementById('ma-catalog-list');
@@ -720,11 +828,17 @@
 
     function openManualAdd() {
         maSetType(mediaType);
-        ['ma-name','ma-season','ma-episode','ma-episode-title','ma-m-title','ma-m-year','ma-m-rating','ma-m-genres','ma-m-description','ma-m-poster','ma-m-backdrop','ma-quality-custom'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+        ['ma-name','ma-season','ma-episode','ma-episode-title','ma-m-title','ma-m-year','ma-m-rating','ma-m-genres','ma-m-description','ma-m-poster','ma-m-backdrop','ma-quality-custom','ma-search-query'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
         maResetParts();
         document.getElementById('ma-quality').value = '1080p';
         document.getElementById('ma-quality-custom').classList.add('hidden');
         document.getElementById('ma-resolve-state').classList.add('hidden');
+        document.getElementById('ma-search-state').classList.add('hidden');
+        document.getElementById('ma-search-results').classList.add('hidden');
+        document.getElementById('ma-search-results').innerHTML = '';
+        maSelectedId = null;
+        maSearchList = [];
+        document.getElementById('ma-linked-badge').classList.add('hidden');
         document.getElementById('manual-add-modal').classList.remove('hidden');
         document.body.style.overflow = 'hidden';
         loadMaCatalogs();
@@ -810,6 +924,8 @@
                 backdrop: document.getElementById('ma-m-backdrop').value.trim(),
             }
         };
+
+        if (maSelectedId) payload.selected_id = maSelectedId;
 
         if (maType === 'tv') {
             const s = document.getElementById('ma-season').value.trim();

@@ -59,6 +59,7 @@ from Backend.fastapi.routes.api_routes import (
     manage_subscriber_api,
     manual_add_media_api,
     list_manual_add_catalogs_api,
+    resolve_manual_metadata_api,
     purge_dead_links_api,
     remove_custom_catalog_item_api,
     resolve_telegram_api,
@@ -405,6 +406,10 @@ async def manual_add_media(payload: dict, _: bool = Depends(require_auth)):
 @app.get("/api/media/manual-add/catalogs")
 async def manual_add_catalogs(_: bool = Depends(require_auth)):
     return await list_manual_add_catalogs_api()
+
+@app.get("/api/media/manual-add/resolve-meta")
+async def manual_add_resolve_meta(media_type: str, selected_id: str, _: bool = Depends(require_auth)):
+    return await resolve_manual_metadata_api(media_type, selected_id)
 
 
 #----- Custom catalog management

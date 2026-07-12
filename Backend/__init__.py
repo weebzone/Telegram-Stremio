@@ -11,6 +11,7 @@ now = datetime.now(timezone)
 StartTime = time()
 
 USE_DEFAULT_ID: str = None
+MANUAL_SESSION: dict = None
 db = Database()
 
 __version__ = "4.4.1"
