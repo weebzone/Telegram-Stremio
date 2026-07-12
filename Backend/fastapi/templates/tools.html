@@ -119,10 +119,9 @@
         </div>
 
         <p class="hint mt-3 mb-4">
-            Pick a title already in your library, then forward its files to your
-            <strong>manual channel</strong> — each file is added to that title automatically,
-            no need to open this page again for every file. Ideal for adding extra qualities
-            or episodes in bulk.
+            Bulk-add files to a title without filling a form for each one. Pick a title from your
+            library, start a session, then simply forward the files to a channel — each file is
+            attached to that title automatically. Great for adding extra qualities or whole seasons.
         </p>
 
         <!-- Active session banner -->
@@ -135,7 +134,7 @@
                 <button class="btn btn-danger" onclick="endManualSession()"><i class="fa-solid fa-stop"></i> End session</button>
             </div>
             <p class="hint mt-2" style="color:#22c55e">
-                <i class="fa-solid fa-circle-check"></i> Session active — forward files to your manual channel now.
+                <i class="fa-solid fa-circle-check"></i> Session is live — forward the files now, then click <strong>End session</strong> when finished.
             </p>
         </div>
 
@@ -162,12 +161,24 @@
                     </div>
                 </div>
 
-                <!-- Real (TMDB/IMDb) title: everything auto-detected -->
-                <p id="ms-real-note" class="hint hidden mt-3" style="border:1px solid rgba(59,130,246,0.3);background:rgba(59,130,246,0.08);border-radius:0.75rem;padding:0.7rem 0.9rem">
-                    <i class="fa-solid fa-wand-magic-sparkles" style="color:#3b82f6"></i>
-                    Season, episode and quality are read automatically from each file's name/caption.
-                    Just start the session and forward files — to your <strong>auth</strong> or <strong>manual</strong> channel.
-                </p>
+                <!-- Real (TMDB/IMDb) title: metadata read from each file -->
+                <div id="ms-real-note" class="hidden mt-3">
+                    <p class="hint" style="border:1px solid rgba(59,130,246,0.3);background:rgba(59,130,246,0.08);border-radius:0.75rem;padding:0.7rem 0.9rem">
+                        <i class="fa-solid fa-wand-magic-sparkles" style="color:#3b82f6"></i>
+                        Season, episode and quality are read from each file's name/caption automatically.
+                        Forward files to your <strong>auth</strong> or <strong>manual</strong> channel.
+                    </p>
+                    <div id="ms-real-tv-season" class="hidden mt-3">
+                        <label class="s-label">Fallback season (optional)</label>
+                        <input id="ms-real-season" type="number" min="0" placeholder="Only if files have no season, e.g. anime absolute numbers"
+                               style="width:100%;background:color-mix(in srgb,var(--bg) 60%,transparent);border:1px solid var(--border);border-radius:0.9rem;padding:0.6rem 0.9rem;color:var(--text);outline:none">
+                        <p class="hint mt-2">
+                            <i class="fa-solid fa-circle-info"></i> Leave empty when files already contain <code>S01E05</code>-style numbering.
+                            Set it for absolute-numbered files like <code>One Piece - 1142 (1080p).mkv</code> — the episode (1142)
+                            is read from the name and placed in this season.
+                        </p>
+                    </div>
+                </div>
 
                 <!-- Personal title: manual metadata -->
                 <div id="ms-personal-fields" class="hidden mt-3">
@@ -203,13 +214,34 @@
         </div>
 
         <hr class="divider">
-        <p class="hint">
-            <strong>How to use:</strong> 1) Search and select a title from your library. 2) Real TMDB/IMDb titles need
-            nothing else — season, episode and quality come from the file. Personal titles need a season for TV
-            (episode &amp; quality optional). 3) Start the session. 4) Forward the files (real → auth or manual channel;
-            personal → manual channel only). 5) End the session when done. Configure channels in
-            <a href="/admin/settings" style="color:var(--primary)">Settings</a>.
-        </p>
+
+        <div class="hint">
+            <div class="text-sm font-bold" style="color:var(--text)"><i class="fa-solid fa-list-ol"></i> How it works</div>
+            <ol style="margin:0.6rem 0 0 1.1rem;padding:0;list-style:decimal;display:flex;flex-direction:column;gap:0.35rem">
+                <li>Search your library and select the title.</li>
+                <li>Confirm the options for that title (see the two types below).</li>
+                <li>Click <strong>Start session</strong>.</li>
+                <li>Forward the files to the right channel.</li>
+                <li>Click <strong>End session</strong> when you're done.</li>
+            </ol>
+
+            <div class="text-sm font-bold mt-4" style="color:var(--text)"><i class="fa-solid fa-clapperboard"></i> TMDB / IMDb titles</div>
+            <p class="mt-1">
+                Nothing to fill in — season, episode and quality are read from each file's name/caption.
+                Forward to your <strong>auth</strong> or <strong>manual</strong> channel. If your files use absolute
+                episode numbers with no season (e.g. anime), set the optional <strong>Fallback season</strong>.
+            </p>
+
+            <div class="text-sm font-bold mt-4" style="color:var(--text)"><i class="fa-solid fa-file-circle-plus"></i> Personal titles (hand-made)</div>
+            <p class="mt-1">
+                These files have no metadata, so you set it here: <strong>season is required</strong> for TV
+                (episode &amp; quality optional). Forward to your <strong>manual channel only</strong>.
+                With an episode set, every file joins that one episode as a new quality; leave episode empty and
+                each file becomes the next episode.
+            </p>
+
+            <p class="mt-3">Configure your auth and manual channels in <a href="/admin/settings" style="color:var(--primary)">Settings</a>.</p>
+        </div>
     </div>
 
     <!-- ══ Channel Scanner ══════════════════════════════════════════════ -->
@@ -396,12 +428,14 @@ function pickManualResult(i) {
         `${isTv ? 'TV Show' : 'Movie'} · ${isPersonal ? 'Personal' : 'TMDB/IMDb'} · ${r.year || '—'} · TMDB ${r.tmdb_id} · DB #${r.db_index}`;
 
     document.getElementById('ms-real-note').classList.toggle('hidden', isPersonal);
+    document.getElementById('ms-real-tv-season').classList.toggle('hidden', isPersonal || !isTv);
     document.getElementById('ms-personal-fields').classList.toggle('hidden', !isPersonal);
     document.getElementById('ms-tv-fields').classList.toggle('hidden', !(isPersonal && isTv));
 
     document.getElementById('ms-season').value = '';
     document.getElementById('ms-episode').value = '';
     document.getElementById('ms-quality').value = '';
+    document.getElementById('ms-real-season').value = '';
     document.getElementById('ms-selected-box').classList.remove('hidden');
     document.getElementById('ms-results').style.display = 'none';
 }
@@ -423,6 +457,9 @@ async function startManualSession() {
         }
         const q = document.getElementById('ms-quality').value.trim();
         if (q !== '') payload.quality = q;
+    } else if (msSelected.media_type === 'tv') {
+        const rs = document.getElementById('ms-real-season').value.trim();
+        if (rs !== '') payload.season = rs;
     }
     try {
         const res = await fetch('/api/admin/tools/manual-session', {
@@ -479,7 +516,11 @@ function renderManualSession(session) {
             }
             detail += ' · forward to MANUAL channel only';
         } else {
-            detail += ' · TMDB/IMDb · season/episode/quality auto-detected · forward to AUTH or MANUAL channel';
+            detail += ' · TMDB/IMDb · auto-detected from each file';
+            if (isTv && session.season !== null && session.season !== undefined) {
+                detail += ` · fallback Season ${session.season}`;
+            }
+            detail += ' · forward to AUTH or MANUAL channel';
         }
         document.getElementById('ms-active-detail').textContent = detail;
     } else {

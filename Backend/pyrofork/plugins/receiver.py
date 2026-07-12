@@ -205,7 +205,9 @@ async def file_receive_handler(client: Client, message: Message):
         await message.reply_text("> Channel is not in AUTH_CHANNEL")
         return
 
-    override_id = session["default_id"] if (session and session.get("kind") == "real") else None
+    is_real_session = bool(session and session.get("kind") == "real")
+    override_id = session["default_id"] if is_real_session else None
+    season_hint = session.get("season") if is_real_session else None
     try:
         sub_name = (message.document.file_name if message.document else "") or ""
         if sub_name and is_subtitle_file(sub_name):
@@ -219,7 +221,7 @@ async def file_receive_handler(client: Client, message: Message):
 
         _, title, msg_id, raw_size, size, channel = _extract_fields(message)
 
-        metadata_info = await metadata(clean_filename(title), int(channel), msg_id, override_id=override_id)
+        metadata_info = await metadata(clean_filename(title), int(channel), msg_id, override_id=override_id, season_hint=season_hint)
         if metadata_info is None:
             LOGGER.warning(f"Metadata failed for file: {title} (ID: {msg_id})")
             return

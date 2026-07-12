@@ -1669,13 +1669,25 @@ async def set_manual_session_api(payload: dict) -> dict:
             "quality": quality or None,
         })
     else:
-        #----- Real: force the title's own id and let metadata() parse from each file
+        #----- Real: force the title's own id and let metadata() parse from each file.
+        #----- An optional season is only used as a fallback for files that carry an
+        #----- episode but no season (e.g. absolute-numbered anime).
         imdb_id = doc.get("imdb_id") or ""
         default_id = imdb_id if str(imdb_id).startswith("tt") else str(int(tmdb_id))
+
+        season = payload.get("season")
+        if media_type == "tv" and season is not None and str(season).strip() != "":
+            try:
+                season = int(season)
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=400, detail="Season must be a number.")
+        else:
+            season = None
+
         session.update({
             "kind": "real",
             "default_id": default_id,
-            "season": None,
+            "season": season,
             "episode": None,
             "quality": None,
         })

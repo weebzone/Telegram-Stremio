@@ -757,7 +757,7 @@ async def fetch_movie_metadata(title, encoded_string, year=None, quality=None, d
 
 
 #----- ── Main entry point ────────────────────────────────────────────────────────
-async def metadata(filename: str, channel: int, msg_id, override_id: str = None) -> dict | None:
+async def metadata(filename: str, channel: int, msg_id, override_id: str = None, season_hint: int = None) -> dict | None:
     if _MULTIPART_RE.search(filename):
         LOGGER.info(f"Skipping {filename}: split video file not meant to be combined in Stremio")
         return None
@@ -787,6 +787,11 @@ async def metadata(filename: str, channel: int, msg_id, override_id: str = None)
     episode = parsed.get("episode")
     year = parsed.get("year")
     quality = parsed.get("quality")
+
+    #----- Absolute-numbered files (e.g. anime "One Piece - 1142") carry an episode
+    #----- but no season; a session-provided hint supplies the missing season.
+    if season_hint is not None and episode and not season and not isinstance(episode, list):
+        season = season_hint
 
     if combined:
         season, episode = combined["season"], combined["start"] or 1
