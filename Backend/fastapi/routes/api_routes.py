@@ -1044,35 +1044,39 @@ async def manual_add_media_api(payload: dict) -> dict:
     location = await db.find_media_doc(media_type, result_tmdb_id)
     result_db_index = location[1] if location else db.current_db_index
 
+    #----- Assign to selected custom catalogs before triggering auto sync, so any
+    #----- exclusivity is stamped on the doc first and auto sync correctly skips it.
+    #----- Guarded on `location` so we never add a reference to a non-existent doc.
+    catalog_ids = payload.get("catalog_ids") or []
+    catalogs_added = []
+    if location:
+        for cat_id in catalog_ids:
+            try:
+                cat_id = str(cat_id).strip()
+                if not cat_id:
+                    continue
+                added = await db.add_item_to_custom_catalog(cat_id, int(result_tmdb_id), int(result_db_index), media_type)
+                if added:
+                    catalog = await db.get_custom_catalog(cat_id)
+                    if catalog:
+                        catalogs_added.append(catalog.get("name", cat_id))
+                        cat_vis = catalog.get("visibility")
+                        if cat_vis in ("owner", "tokens"):
+                            await db.set_media_visibility(
+                                int(result_tmdb_id), int(result_db_index), media_type,
+                                cat_vis, catalog.get("allowed_tokens") or []
+                            )
+                        if catalog.get("exclusive"):
+                            await db.mark_item_exclusive(
+                                cat_id, int(result_tmdb_id), int(result_db_index),
+                                media_type, catalog.get("searchable", False)
+                            )
+            except Exception:
+                pass
+
     if result_tmdb_id and result_tmdb_id > 0:
         try:
             start_single_media_catalog_sync(db, tmdb_id=result_tmdb_id, media_type=media_type)
-        except Exception:
-            pass
-
-    catalog_ids = payload.get("catalog_ids") or []
-    catalogs_added = []
-    for cat_id in catalog_ids:
-        try:
-            cat_id = str(cat_id).strip()
-            if not cat_id:
-                continue
-            added = await db.add_item_to_custom_catalog(cat_id, int(result_tmdb_id), int(result_db_index), media_type)
-            if added:
-                catalog = await db.get_custom_catalog(cat_id)
-                if catalog:
-                    catalogs_added.append(catalog.get("name", cat_id))
-                    cat_vis = catalog.get("visibility")
-                    if cat_vis in ("owner", "tokens"):
-                        await db.set_media_visibility(
-                            int(result_tmdb_id), int(result_db_index), media_type,
-                            cat_vis, catalog.get("allowed_tokens") or []
-                        )
-                    if catalog.get("exclusive"):
-                        await db.mark_item_exclusive(
-                            cat_id, int(result_tmdb_id), int(result_db_index),
-                            media_type, catalog.get("searchable", False)
-                        )
         except Exception:
             pass
 
