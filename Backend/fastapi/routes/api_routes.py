@@ -1467,19 +1467,40 @@ async def update_settings_api(payload: dict) -> dict:
             cleaned.append(channel)
         payload["manual_channels"] = cleaned
 
-    #----- A channel may never be both an AUTH channel and a MANUAL channel
-    if "auth_channels" in payload or "manual_channels" in payload:
+    #----- The same channel id may not appear in more than one channel field.
+    #----- Only AUTH ∩ ANIME is allowed, because an anime channel is an auth channel
+    #----- that's flagged as anime (the receiver only indexes files from auth channels).
+    _channel_fields = ("auth_channels", "manual_channels", "global_search_channels",
+                       "anime_channels", "announcement_channel")
+    if any(field in payload for field in _channel_fields):
         current = SettingsManager.current()
-        final_auth = payload.get("auth_channels", list(current.auth_channels))
-        final_manual = payload.get("manual_channels", list(current.manual_channels))
-        auth_norm = {str(c).strip().replace("-100", "") for c in final_auth if str(c).strip()}
-        manual_norm = {str(c).strip().replace("-100", "") for c in final_manual if str(c).strip()}
-        overlap = auth_norm & manual_norm
-        if overlap:
-            raise HTTPException(
-                status_code=400,
-                detail=f"A channel can't be both an AUTH and a MANUAL channel: {', '.join(sorted(overlap))}"
-            )
+
+        def _norm_ids(values) -> set:
+            if isinstance(values, str):
+                values = [values]
+            return {str(c).strip().replace("-100", "") for c in (values or []) if str(c).strip()}
+
+        groups = {
+            "AUTH": _norm_ids(payload.get("auth_channels", list(current.auth_channels))),
+            "MANUAL": _norm_ids(payload.get("manual_channels", list(current.manual_channels))),
+            "GLOBAL SEARCH": _norm_ids(payload.get("global_search_channels", list(current.global_search_channels))),
+            "ANIME": _norm_ids(payload.get("anime_channels", list(current.anime_channels))),
+            "ANNOUNCEMENT": _norm_ids(payload.get("announcement_channel", current.announcement_channel)),
+        }
+
+        allowed_overlap = frozenset({"AUTH", "ANIME"})
+        names = list(groups)
+        for i in range(len(names)):
+            for j in range(i + 1, len(names)):
+                a, b = names[i], names[j]
+                if frozenset({a, b}) == allowed_overlap:
+                    continue
+                clash = groups[a] & groups[b]
+                if clash:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Channel {', '.join(sorted(clash))} can't be in both {a} and {b} channels — each channel may only belong to one field."
+                    )
 
     #----- Strip whitespace from string fields
     for key in ("tmdb_api", "base_url", "upstream_repo", "upstream_branch",
