@@ -58,6 +58,7 @@ from Backend.fastapi.routes.api_routes import (
     list_media_api,
     manage_subscriber_api,
     manual_add_media_api,
+    list_manual_add_catalogs_api,
     purge_dead_links_api,
     remove_custom_catalog_item_api,
     resolve_telegram_api,
@@ -400,6 +401,10 @@ async def resolve_telegram(payload: dict, _: bool = Depends(require_auth)):
 @app.post("/api/media/manual-add")
 async def manual_add_media(payload: dict, _: bool = Depends(require_auth)):
     return await manual_add_media_api(payload)
+
+@app.get("/api/media/manual-add/catalogs")
+async def manual_add_catalogs(_: bool = Depends(require_auth)):
+    return await list_manual_add_catalogs_api()
 
 
 #----- Custom catalog management

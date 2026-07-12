@@ -1050,7 +1050,35 @@ async def manual_add_media_api(payload: dict) -> dict:
         except Exception:
             pass
 
+    catalog_ids = payload.get("catalog_ids") or []
+    catalogs_added = []
+    for cat_id in catalog_ids:
+        try:
+            cat_id = str(cat_id).strip()
+            if not cat_id:
+                continue
+            added = await db.add_item_to_custom_catalog(cat_id, int(result_tmdb_id), int(result_db_index), media_type)
+            if added:
+                catalog = await db.get_custom_catalog(cat_id)
+                if catalog:
+                    catalogs_added.append(catalog.get("name", cat_id))
+                    cat_vis = catalog.get("visibility")
+                    if cat_vis in ("owner", "tokens"):
+                        await db.set_media_visibility(
+                            int(result_tmdb_id), int(result_db_index), media_type,
+                            cat_vis, catalog.get("allowed_tokens") or []
+                        )
+                    if catalog.get("exclusive"):
+                        await db.mark_item_exclusive(
+                            cat_id, int(result_tmdb_id), int(result_db_index),
+                            media_type, catalog.get("searchable", False)
+                        )
+        except Exception:
+            pass
+
     message = f"Split stream added ({len(resolved_parts)} parts)." if is_split else "Stream added successfully."
+    if catalogs_added:
+        message += f" Added to: {', '.join(catalogs_added)}."
     return {
         "status": "success",
         "message": message,
@@ -1082,6 +1110,20 @@ async def list_custom_catalogs_api(
                     for item in catalog.get("items", []) or []
                 )
         return {"catalogs": catalogs}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+async def list_manual_add_catalogs_api():
+    try:
+        catalogs = await db.get_custom_catalogs()
+        filtered = [c for c in catalogs if not c.get("auto")]
+        filtered.sort(key=lambda c: (0 if c.get("exclusive") else 1, (c.get("name") or "").lower()))
+        return {"catalogs": [
+            {"_id": c["_id"], "name": c["name"], "exclusive": bool(c.get("exclusive")),
+             "visibility": c.get("visibility", "public")}
+            for c in filtered
+        ]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
