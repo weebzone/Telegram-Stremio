@@ -18,7 +18,6 @@ from Backend.helper.pyro import clean_filename, finalize_media_name, get_readabl
 from Backend.helper.settings_manager import SettingsManager
 from Backend.helper.split_files import parse_split_info
 from Backend.helper.subtitles import ingest_subtitle, is_subtitle_file, remove_subtitle
-from Backend.helper.task_manager import edit_message
 from Backend.logger import LOGGER
 
 file_queue = Queue()
@@ -129,11 +128,11 @@ async def _handle_manual_custom_session(client: Client, message: Message) -> Non
             LOGGER.warning(f"[Manual Session] Could not resolve message {message.id}: {e}")
             return
 
-        custom_id = session["custom_id"]
+        tmdb_id = session["tmdb_id"]
         media_type = session["media_type"]
-        location = await db.find_media_doc(media_type, custom_id)
+        location = await db.find_media_doc(media_type, tmdb_id)
         if not location:
-            LOGGER.warning(f"[Manual Session] Custom id {custom_id} not found; ignoring file.")
+            LOGGER.warning(f"[Manual Session] Target id {tmdb_id} not found; ignoring file.")
             return
         doc = location[0]
 
@@ -179,7 +178,7 @@ async def _handle_manual_custom_session(client: Client, message: Message) -> Non
         if updated_id:
             where = (f"S{metadata_info['season_number']:02d}E{metadata_info['episode_number']:02d} "
                      if media_type == "tv" else "")
-            LOGGER.info(f"[Manual Session] Added {quality} {where}to '{metadata_info.get('title')}' (id {custom_id}).")
+            LOGGER.info(f"[Manual Session] Added {quality} {where}to '{metadata_info.get('title')}' (id {tmdb_id}).")
         else:
             LOGGER.warning(f"[Manual Session] Insert failed for message {message.id}.")
 
@@ -188,14 +187,11 @@ async def _handle_manual_custom_session(client: Client, message: Message) -> Non
 @Client.on_message(filters.channel & (filters.document | filters.video))
 async def file_receive_handler(client: Client, message: Message):
     if _is_manual_channel(message.chat.id):
-        #----- Custom-id session: add streams straight onto the session's media
+        #----- Manual channel: only act when a web-set upload session is active
         if Backend.MANUAL_SESSION:
             await _handle_manual_custom_session(client, message)
-            return
-        #----- URL session: index the file like an auth channel; otherwise skip
-        if not Backend.USE_DEFAULT_ID:
-            return
-    elif str(message.chat.id) not in SettingsManager.current().auth_channels:
+        return
+    if str(message.chat.id) not in SettingsManager.current().auth_channels:
         await message.reply_text("> Channel is not in AUTH_CHANNEL")
         return
     try:
@@ -217,10 +213,6 @@ async def file_receive_handler(client: Client, message: Message):
             return
 
         title = _finalize_title(title, metadata_info)
-
-        if Backend.USE_DEFAULT_ID:
-            new_caption = (message.caption + "\n\n" + Backend.USE_DEFAULT_ID) if message.caption else Backend.USE_DEFAULT_ID
-            create_task(edit_message(chat_id=message.chat.id, msg_id=message.id, new_caption=new_caption))
 
         await file_queue.put((metadata_info, int(channel), msg_id, size, raw_size, title))
     except FloodWait as e:

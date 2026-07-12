@@ -48,8 +48,12 @@ from Backend.fastapi.routes.api_routes import (
     get_subscription_plans_api,
     get_settings_api,
     get_logs_api,
+    get_manual_session_api,
     get_system_stats_api,
     get_tools_channels_api,
+    clear_manual_session_api,
+    search_manual_session_api,
+    set_manual_session_api,
     health_api,
     health_report_api,
     setup_status_api,
@@ -566,6 +570,22 @@ async def admin_tools(request: Request, _: bool = Depends(require_auth)):
 @app.get("/api/admin/tools/channels")
 async def tools_channels(_: bool = Depends(require_auth)):
     return await get_tools_channels_api()
+
+@app.get("/api/admin/tools/manual-session")
+async def tools_manual_session_get(_: bool = Depends(require_auth)):
+    return await get_manual_session_api()
+
+@app.get("/api/admin/tools/manual-session/search")
+async def tools_manual_session_search(query: str = Query(""), _: bool = Depends(require_auth)):
+    return await search_manual_session_api(query)
+
+@app.post("/api/admin/tools/manual-session")
+async def tools_manual_session_set(payload: dict, _: bool = Depends(require_auth)):
+    return await set_manual_session_api(payload)
+
+@app.delete("/api/admin/tools/manual-session")
+async def tools_manual_session_clear(_: bool = Depends(require_auth)):
+    return await clear_manual_session_api()
 
 @app.post("/api/admin/tools/scan/start")
 async def tools_scan_start(payload: dict, _: bool = Depends(require_auth)):

@@ -11,6 +11,7 @@ from time import time
 from fastapi import HTTPException, Query, Request
 from fastapi.responses import FileResponse, StreamingResponse
 
+import Backend
 from Backend import StartTime, __version__, db
 from Backend.fastapi.routes.stream_routes import _streamer_by_client
 from Backend.fastapi.routes.stremio_routes import invalidate_membership_cache
@@ -35,6 +36,7 @@ from Backend.helper.requests_manager import (
     submit_request,
 )
 from Backend.helper.metadata import (
+    extract_default_id,
     fetch_selected_movie_metadata,
     fetch_selected_tv_metadata,
     gradient_cover_path,
@@ -1515,6 +1517,127 @@ async def get_tools_channels_api() -> dict:
             LOGGER.warning(f"[Tools] Could not resolve channel {ch}: {e}")
         result.append({"id": str(ch), "name": name})
     return {"status": "success", "data": result}
+
+
+#----- ── Manual upload session (web replacement for the /set bot command) ──
+
+#----- Normalize a media document into a compact session-picker result
+def _session_result(doc: dict) -> dict:
+    mt = doc.get("media_type") or doc.get("type") or "movie"
+    mt = "tv" if str(mt).lower() in ("tv", "series") else "movie"
+    return {
+        "tmdb_id": doc.get("tmdb_id"),
+        "db_index": doc.get("db_index"),
+        "media_type": mt,
+        "title": doc.get("title") or "",
+        "year": doc.get("release_year") or "",
+        "poster": resolve_cover_url(doc.get("poster") or ""),
+    }
+
+
+#----- Search the local library by title or an IMDb/TMDB id/link
+async def search_manual_session_api(query: str) -> dict:
+    query = (query or "").strip()
+    if not query:
+        return {"results": []}
+
+    results: list[dict] = []
+    seen: set = set()
+
+    def _add(doc: dict) -> None:
+        entry = _session_result(doc)
+        key = (entry["tmdb_id"], entry["db_index"], entry["media_type"])
+        if entry["tmdb_id"] is None or key in seen:
+            return
+        seen.add(key)
+        results.append(entry)
+
+    #----- Try an id-based lookup first (imdb tt… or a tmdb id/link)
+    default_id = extract_default_id(query)
+    if default_id:
+        try:
+            if str(default_id).startswith("tt"):
+                doc = await db.get_media_details(default_id)
+                if doc:
+                    _add(doc)
+            else:
+                for mt in ("movie", "tv"):
+                    location = await db.find_media_doc(mt, int(default_id))
+                    if location:
+                        found, db_index = location
+                        found["media_type"] = mt
+                        found["db_index"] = db_index
+                        _add(found)
+        except Exception as e:
+            LOGGER.warning(f"[Manual Session] id lookup failed for '{query}': {e}")
+
+    #----- Fall back to a title search
+    if not results:
+        try:
+            data = await db.search_documents(query, 1, 20)
+            for doc in data.get("results", []):
+                _add(doc)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Search failed: {e}")
+
+    return {"results": results}
+
+
+#----- Current active manual upload session (or None)
+async def get_manual_session_api() -> dict:
+    return {"session": getattr(Backend, "MANUAL_SESSION", None)}
+
+
+#----- Activate a manual upload session targeting an existing library title
+async def set_manual_session_api(payload: dict) -> dict:
+    tmdb_id = payload.get("tmdb_id")
+    db_index = payload.get("db_index")
+    media_type = _normalize_media_type(payload.get("media_type", "movie"))
+
+    if tmdb_id is None or db_index is None:
+        raise HTTPException(status_code=400, detail="tmdb_id and db_index are required.")
+
+    doc = await db.get_document(media_type, int(tmdb_id), int(db_index))
+    if not doc:
+        raise HTTPException(status_code=404, detail="That title was not found in your library.")
+
+    season = payload.get("season")
+    episode = payload.get("episode")
+
+    if media_type == "tv":
+        if season is None or str(season).strip() == "":
+            raise HTTPException(status_code=400, detail="A season number is required for TV shows.")
+        try:
+            season = int(season)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="Season must be a number.")
+        if episode is not None and str(episode).strip() != "":
+            try:
+                episode = int(episode)
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=400, detail="Episode must be a number.")
+        else:
+            episode = None
+    else:
+        season = None
+        episode = None
+
+    Backend.MANUAL_SESSION = {
+        "tmdb_id": int(tmdb_id),
+        "db_index": int(db_index),
+        "media_type": media_type,
+        "season": season,
+        "episode": episode,
+        "title": doc.get("title") or "",
+        "year": doc.get("release_year") or "",
+    }
+    return {"status": "success", "session": Backend.MANUAL_SESSION}
+
+
+#----- Clear the active manual upload session
+async def clear_manual_session_api() -> dict:
+    Backend.MANUAL_SESSION = None
+    return {"status": "success"}
 
 
 #----- Start a scan or rescan job over the given channels

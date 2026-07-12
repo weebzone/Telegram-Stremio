@@ -111,6 +111,87 @@
 
 <div class="space-y-6">
 
+    <!-- ══ Manual Upload Session ═════════════════════════════════════════ -->
+    <div class="tool-card">
+        <div class="flex items-center justify-between flex-wrap gap-2">
+            <h2 style="margin-bottom:0"><i class="fa-solid fa-cloud-arrow-up"></i> Manual Upload Session</h2>
+            <span id="ms-status-pill" class="status-pill status-idle">No session</span>
+        </div>
+
+        <p class="hint mt-3 mb-4">
+            Pick a title already in your library, then forward its files to your
+            <strong>manual channel</strong> — each file is added to that title automatically,
+            no need to open this page again for every file. Ideal for adding extra qualities
+            or episodes in bulk.
+        </p>
+
+        <!-- Active session banner -->
+        <div id="ms-active" class="hidden mb-4" style="border:1px solid rgba(34,197,94,0.35);background:rgba(34,197,94,0.10);border-radius:0.9rem;padding:0.9rem 1.1rem">
+            <div class="flex items-center justify-between flex-wrap gap-2">
+                <div class="min-w-0">
+                    <div class="text-sm font-bold" id="ms-active-title">—</div>
+                    <div class="hint" id="ms-active-detail"></div>
+                </div>
+                <button class="btn btn-danger" onclick="endManualSession()"><i class="fa-solid fa-stop"></i> End session</button>
+            </div>
+            <p class="hint mt-2" style="color:#22c55e">
+                <i class="fa-solid fa-circle-check"></i> Session active — forward files to your manual channel now.
+            </p>
+        </div>
+
+        <!-- Setup (hidden while a session is active) -->
+        <div id="ms-setup">
+            <label class="s-label">Find a title in your library</label>
+            <div class="flex flex-col sm:flex-row gap-2">
+                <input id="ms-query" class="flex-1" placeholder="Title (with or without year), IMDb id/link, or TMDB id/link"
+                       style="background:color-mix(in srgb,var(--bg) 60%,transparent);border:1px solid var(--border);border-radius:0.9rem;padding:0.7rem 1rem;color:var(--text);outline:none"
+                       onkeydown="if(event.key==='Enter'){event.preventDefault();searchManualSession();}">
+                <button class="btn btn-primary" onclick="searchManualSession()"><i class="fa-solid fa-magnifying-glass"></i> Search</button>
+            </div>
+            <p id="ms-search-state" class="hint mt-2" style="display:none"></p>
+
+            <div id="ms-results" class="chip-list mt-3" style="display:none"></div>
+
+            <!-- Selected + season/episode -->
+            <div id="ms-selected-box" class="hidden mt-4" style="border:1px solid var(--border);border-radius:0.9rem;padding:0.9rem 1.1rem">
+                <div class="flex items-center gap-3">
+                    <img id="ms-sel-poster" src="" alt="" style="width:2.75rem;height:4rem;object-fit:cover;border-radius:0.4rem;flex-shrink:0;background:var(--card)">
+                    <div class="min-w-0 flex-1">
+                        <div class="text-sm font-bold truncate" id="ms-sel-title">—</div>
+                        <div class="hint" id="ms-sel-sub"></div>
+                    </div>
+                </div>
+
+                <div id="ms-tv-fields" class="hidden mt-3 grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="s-label">Season <span style="color:#ef4444">*</span></label>
+                        <input id="ms-season" type="number" min="0" placeholder="e.g. 1"
+                               style="width:100%;background:color-mix(in srgb,var(--bg) 60%,transparent);border:1px solid var(--border);border-radius:0.9rem;padding:0.6rem 0.9rem;color:var(--text);outline:none">
+                    </div>
+                    <div>
+                        <label class="s-label">Episode (optional)</label>
+                        <input id="ms-episode" type="number" min="0" placeholder="Empty = next episode"
+                               style="width:100%;background:color-mix(in srgb,var(--bg) 60%,transparent);border:1px solid var(--border);border-radius:0.9rem;padding:0.6rem 0.9rem;color:var(--text);outline:none">
+                    </div>
+                    <p class="hint col-span-2" style="margin-top:-0.25rem">
+                        Set an <strong>episode</strong> to pile every forwarded file onto that one episode (multiple qualities).
+                        Leave it <strong>empty</strong> so each file becomes the next episode (E1, E2, E3…).
+                    </p>
+                </div>
+
+                <button class="btn btn-primary mt-3" onclick="startManualSession()"><i class="fa-solid fa-play"></i> Start session</button>
+            </div>
+        </div>
+
+        <hr class="divider">
+        <p class="hint">
+            <strong>How to use:</strong> 1) Search and select the title. 2) For a TV show, enter the season
+            (and optionally an episode). 3) Start the session. 4) Forward the files to your manual channel.
+            5) End the session when you're done. Set your manual channel in
+            <a href="/admin/settings" style="color:var(--primary)">Settings</a>.
+        </p>
+    </div>
+
     <!-- ══ Channel Scanner ══════════════════════════════════════════════ -->
     <div class="tool-card">
         <div class="flex items-center justify-between flex-wrap gap-2">
@@ -239,6 +320,149 @@
 </div>
 
 <script>
+/* ─────────────── Manual Upload Session ─────────────── */
+let msResults = [];
+let msSelected = null;
+
+async function searchManualSession() {
+    const q = document.getElementById('ms-query').value.trim();
+    const state = document.getElementById('ms-search-state');
+    const box = document.getElementById('ms-results');
+    if (!q) { showToast('Type a title, IMDb or TMDB id/link.', 'error', 'Search'); return; }
+    state.style.display = '';
+    state.textContent = 'Searching your library…';
+    box.style.display = 'none';
+    box.innerHTML = '';
+    document.getElementById('ms-selected-box').classList.add('hidden');
+    msSelected = null;
+    try {
+        const res = await fetch('/api/admin/tools/manual-session/search?query=' + encodeURIComponent(q));
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Search failed');
+        msResults = data.results || [];
+        if (!msResults.length) {
+            state.textContent = 'No matching title found in your library. Add it first from Media Management.';
+            return;
+        }
+        state.textContent = `Found ${msResults.length} title${msResults.length > 1 ? 's' : ''}. Select one:`;
+        box.innerHTML = msResults.map((r, i) => `
+            <label class="chip" onclick="pickManualResult(${i})">
+                <img src="${escapeHtmlAttr(r.poster) || '/static/placeholder.jpg'}" onerror="this.src='/static/placeholder.jpg'"
+                     style="width:2.25rem;height:3.25rem;object-fit:cover;border-radius:0.35rem;flex-shrink:0;background:var(--card)">
+                <span class="min-w-0">
+                    <span class="c-name block truncate">${escapeHtml(r.title)}
+                        <span class="status-pill ${r.media_type === 'tv' ? 'status-running' : 'status-idle'}" style="margin-left:.4rem">${r.media_type === 'tv' ? 'TV' : 'Movie'}</span>
+                    </span>
+                    <span class="c-id">${escapeHtml(String(r.year || '—'))} · TMDB ${escapeHtml(String(r.tmdb_id))} · DB #${escapeHtml(String(r.db_index))}</span>
+                </span>
+            </label>
+        `).join('');
+        box.style.display = '';
+    } catch (e) {
+        state.textContent = e.message || 'Search failed.';
+    }
+}
+
+function pickManualResult(i) {
+    const r = msResults[i];
+    if (!r) return;
+    msSelected = r;
+    document.getElementById('ms-sel-poster').src = r.poster || '/static/placeholder.jpg';
+    document.getElementById('ms-sel-title').textContent = r.title;
+    document.getElementById('ms-sel-sub').textContent =
+        `${r.media_type === 'tv' ? 'TV Show' : 'Movie'} · ${r.year || '—'} · TMDB ${r.tmdb_id} · DB #${r.db_index}`;
+    document.getElementById('ms-tv-fields').classList.toggle('hidden', r.media_type !== 'tv');
+    document.getElementById('ms-season').value = '';
+    document.getElementById('ms-episode').value = '';
+    document.getElementById('ms-selected-box').classList.remove('hidden');
+    document.getElementById('ms-results').style.display = 'none';
+}
+
+async function startManualSession() {
+    if (!msSelected) { showToast('Select a title first.', 'error', 'Session'); return; }
+    const payload = {
+        tmdb_id: msSelected.tmdb_id,
+        db_index: msSelected.db_index,
+        media_type: msSelected.media_type,
+    };
+    if (msSelected.media_type === 'tv') {
+        const s = document.getElementById('ms-season').value.trim();
+        if (s === '') { showToast('Season number is required for TV shows.', 'error', 'Session'); return; }
+        payload.season = s;
+        const ep = document.getElementById('ms-episode').value.trim();
+        if (ep !== '') payload.episode = ep;
+    }
+    try {
+        const res = await fetch('/api/admin/tools/manual-session', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Could not start session');
+        showToast('Session started. Forward files to your manual channel.', 'success', 'Session');
+        renderManualSession(data.session);
+    } catch (e) {
+        showToast(e.message || 'Could not start session.', 'error', 'Session');
+    }
+}
+
+async function endManualSession() {
+    try {
+        const res = await fetch('/api/admin/tools/manual-session', { method: 'DELETE' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Could not end session');
+        showToast('Session ended.', 'info', 'Session');
+        renderManualSession(null);
+    } catch (e) {
+        showToast(e.message || 'Could not end session.', 'error', 'Session');
+    }
+}
+
+function renderManualSession(session) {
+    const pill = document.getElementById('ms-status-pill');
+    const active = document.getElementById('ms-active');
+    const setup = document.getElementById('ms-setup');
+
+    if (session && session.tmdb_id !== undefined && session.tmdb_id !== null) {
+        pill.className = 'status-pill status-running';
+        pill.textContent = 'Active';
+        active.classList.remove('hidden');
+        setup.classList.add('hidden');
+
+        const isTv = session.media_type === 'tv';
+        document.getElementById('ms-active-title').textContent =
+            `${session.title || 'Title'}${session.year ? ' (' + session.year + ')' : ''}`;
+        let detail = isTv ? 'TV Show' : 'Movie';
+        if (isTv) {
+            detail += ` · Season ${session.season}`;
+            detail += (session.episode !== null && session.episode !== undefined)
+                ? ` · Episode ${session.episode} (all files → this episode)`
+                : ' · each file → next episode';
+        } else {
+            detail += ' · each file → a new quality';
+        }
+        document.getElementById('ms-active-detail').textContent = detail;
+    } else {
+        pill.className = 'status-pill status-idle';
+        pill.textContent = 'No session';
+        active.classList.add('hidden');
+        setup.classList.remove('hidden');
+        document.getElementById('ms-results').style.display = 'none';
+        document.getElementById('ms-selected-box').classList.add('hidden');
+        document.getElementById('ms-search-state').style.display = 'none';
+        msSelected = null;
+    }
+}
+
+async function loadManualSession() {
+    try {
+        const res = await fetch('/api/admin/tools/manual-session');
+        const data = await res.json();
+        renderManualSession(data.session);
+    } catch (e) { /* ignore */ }
+}
+
 /* ─────────────── State ─────────────── */
 let scanTimer = null;
 let dbcTimer = null;
@@ -563,6 +787,7 @@ function escapeHtmlAttr(str) {
 }
 
 /* ─────────────── Init ─────────────── */
+loadManualSession();
 loadChannels();
 pollScan().then(() => {
     const pill = document.getElementById('scan-status-pill');
