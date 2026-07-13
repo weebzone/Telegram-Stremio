@@ -612,6 +612,12 @@
             : `<span class="status-badge status-active"><i class="fas fa-circle text-[8px]"></i> Active</span>`;
     }
 
+    function getAdminBadge(t) {
+        return t.is_admin
+            ? `<span class="status-badge" style="background: color-mix(in srgb, #f5c518 18%, transparent); color: #f5c518;"><i class="fas fa-crown text-[8px]"></i> Admin</span>`
+            : '';
+    }
+
     function buildAddonHtml(t) {
         if (!t.has_token) {
             return `
@@ -710,7 +716,7 @@
                 <tr class="${rowCls}">
                     <td class="px-4 py-4">${getStatusBadge(t)}</td>
                     <td class="px-4 py-4">
-                        <div class="font-semibold section-title">${escHtml(displayName)}</div>
+                        <div class="font-semibold section-title flex items-center gap-2 flex-wrap">${escHtml(displayName)} ${getAdminBadge(t)}</div>
                         ${idHtml}
                     </td>
                     <td class="px-4 py-4">${buildAddonHtml(t)}</td>
@@ -748,7 +754,7 @@
                 <div class="mobile-token-card ${t.is_expired ? 'row-expired' : ''}">
                     <div class="flex items-start justify-between gap-3 mb-3">
                         <div class="min-w-0">
-                            <div class="font-semibold section-title break-words">${escHtml(displayName)}</div>
+                            <div class="font-semibold section-title break-words flex items-center gap-2 flex-wrap">${escHtml(displayName)} ${getAdminBadge(t)}</div>
                             <div class="text-xs text-soft mt-1 break-all">${t.user_id ? 'ID: ' + t.user_id : 'No linked user'}</div>
                         </div>
                         <div class="shrink-0">${getStatusBadge(t)}</div>

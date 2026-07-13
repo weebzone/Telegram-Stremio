@@ -284,7 +284,10 @@
                         {% for token in api_tokens %}
                         <tr class="group hover:bg-surface transition-colors" id="token-row-{{ loop.index0 }}">
                             <td class="py-6 px-8">
-                                <p class="font-bold text-text">{{ token.name }}</p>
+                                <div class="flex items-center gap-2 flex-wrap">
+                                    <p class="font-bold text-text">{{ token.name }}</p>
+                                    {% if token.is_admin %}<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold" style="background: color-mix(in srgb, #f5c518 16%, transparent); color: #f5c518;"><i class="fa-solid fa-crown text-[8px]"></i> Admin</span>{% endif %}
+                                </div>
                                 <p class="text-[10px] text-text-secondary uppercase mt-1">
                                     {{ token.created_at.strftime('%Y-%m-%d') if token.created_at else 'Unknown date' }}
                                 </p>

@@ -599,6 +599,12 @@
             : '<span class="metric-badge badge-expired"><i class="fas fa-circle text-[8px]"></i> Expired</span>';
     }
 
+    function getAdminBadge(u) {
+        return u.is_admin
+            ? '<span class="metric-badge" style="background: color-mix(in srgb, #f5c518 16%, transparent); color: #f5c518;"><i class="fas fa-crown text-[8px]"></i> Admin</span>'
+            : '';
+    }
+
     async function fetchPlans() {
         const container = document.getElementById('plans-container');
         container.innerHTML = `
@@ -758,7 +764,7 @@
             return `
                 <tr>
                     <td class="px-6 py-4">
-                        <div class="font-semibold section-title">${name}</div>
+                        <div class="font-semibold section-title flex items-center gap-2 flex-wrap">${name} ${getAdminBadge(u)}</div>
                         <div class="text-xs text-soft mt-1">ID: ${u._id}</div>
                     </td>
                     <td class="px-6 py-4 text-center">${statusBadge}</td>
@@ -806,7 +812,7 @@
                 <div class="mobile-user-card">
                     <div class="flex items-start justify-between gap-3 mb-3">
                         <div class="min-w-0">
-                            <div class="font-semibold section-title break-words">${name}</div>
+                            <div class="font-semibold section-title break-words flex items-center gap-2 flex-wrap">${name} ${getAdminBadge(u)}</div>
                             <div class="text-xs text-soft mt-1 break-all">ID: ${u._id}</div>
                         </div>
                         <div class="shrink-0">${statusBadge}</div>

@@ -618,6 +618,8 @@ async def delete_subscription_plan_api(plan_id: str) -> dict:
 async def get_all_subscribers_api() -> dict:
     try:
         users = await db.get_all_subscribers()
+        for u in users:
+            u["is_admin"] = db._is_owner(u.get("_id"))
         return {"status": "success", "data": users}
     except Exception as e:
         return {"status": "error", "message": str(e)}
@@ -722,6 +724,7 @@ async def get_all_tokens_api() -> dict:
                 "user_id": user_id,
                 "user_name": display_name(user, user_id, token_doc.get("name") if token_doc else None),
                 "user_found": user_found,
+                "is_admin": bool((token_doc or {}).get("is_admin")) or db._is_owner(user_id),
                 "has_token": bool(token_str),
                 "created_at": created.isoformat() if created else None,
                 "expires_at": expiry.isoformat() if expiry else None,
