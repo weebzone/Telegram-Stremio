@@ -47,27 +47,23 @@ async def verify_token(token: str):
                 pass
             return when < ref
 
-        #----- An admin-set token expiry is an explicit grant, honoured in every mode
+        #----- An admin-set token expiry is an explicit grant, honoured in every mode.
+        #----- Otherwise the token must be backed by an active subscription.
+        #----- (When valid, fall through so data-limit checks still apply.)
         token_expiry = token_data.get("expires_at")
         if token_expiry is not None:
             if _expired(token_expiry):
                 token_data["subscription_expired"] = True
-            return token_data
-
-        user_id = token_data.get("user_id")
-        if not user_id:
-            token_data["subscription_expired"] = True
-            return token_data
-
-        user = await db.get_user(int(user_id))
-        if not user or user.get("subscription_status") != "active":
-            token_data["subscription_expired"] = True
-            return token_data
-
-        expiry = user.get("subscription_expiry")
-        if not expiry or _expired(expiry):
-            token_data["subscription_expired"] = True
-            return token_data
+                return token_data
+        else:
+            user_id = token_data.get("user_id")
+            user = await db.get_user(int(user_id)) if user_id else None
+            expiry = user.get("subscription_expiry") if user else None
+            if (not user_id or not user
+                    or user.get("subscription_status") != "active"
+                    or not expiry or _expired(expiry)):
+                token_data["subscription_expired"] = True
+                return token_data
 
     if daily_limit := limits.get("daily_limit_gb"):
         if daily_limit > 0:
