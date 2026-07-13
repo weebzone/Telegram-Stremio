@@ -300,8 +300,18 @@ async def set_token_lifetime_api(token: str, payload: dict) -> dict:
     return {"status": "success", "subscription_exempt": exempt}
 
 
-#----- Set/extend/reduce a token's own expiry (subscription-off mode)
+#----- Set/extend/reduce a token's own expiry (subscription-off mode).
+#----- Optionally attach a Telegram user id at the same time.
 async def set_token_expiry_api(token: str, payload: dict) -> dict:
+    user_id = payload.get("user_id")
+    if user_id not in (None, "", 0, "0"):
+        try:
+            uid = int(user_id)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="Invalid Telegram user id.")
+        #----- Enforces one-user-one-token + pulls the real Telegram name
+        await link_token_user_api(token, uid)
+
     action = str(payload.get("action") or "set")
     days = int(payload.get("days") or 0)
     result = await db.update_token_expiry(token, action, days)
@@ -313,6 +323,21 @@ async def set_token_expiry_api(token: str, payload: dict) -> dict:
 #----- How many tokens would stop working if subscription mode is enabled
 async def subscription_preflight_api() -> dict:
     return {"status": "success", "uncovered": await db.count_uncovered_tokens()}
+
+
+#----- Relabel "User <id>" placeholder subscribers with their real Telegram name
+async def backfill_subscriber_names_api() -> dict:
+    users = await db.get_all_subscribers()
+    updated = 0
+    for u in users:
+        uid = u.get("_id")
+        if uid is None or (u.get("first_name") or "") != f"User {uid}":
+            continue
+        name = await _fetch_tg_name(uid)
+        if name and name != f"User {uid}":
+            await db.update_subscriber_name(uid, name)
+            updated += 1
+    return {"status": "success", "updated": updated, "message": f"{updated} name(s) updated."}
 
 
 #----- Mark all tokens that aren't linked to a user as lifetime
@@ -657,14 +682,14 @@ async def manage_subscriber_api(user_id: int, payload: dict) -> dict:
     try:
         action = payload.get("action")
         days = int(payload.get("days", 0))
-        
-        if action not in ["extend", "reduce", "delete"]:
+
+        if action not in ["extend", "reduce", "delete", "remove"]:
             raise HTTPException(status_code=400, detail="Invalid action")
-            
+
         success = await db.manage_subscriber(user_id, action, days)
 
-        #----- On revoke, kick the user from the group immediately (ban+unban)
-        if success and action == "delete" and SettingsManager.current().subscription:
+        #----- On revoke/remove, kick the user from the group immediately (ban+unban)
+        if success and action in ("delete", "remove") and SettingsManager.current().subscription:
             group_id = SettingsManager.current().subscription_group_id
             if group_id:
                 try:
@@ -681,7 +706,7 @@ async def manage_subscriber_api(user_id: int, payload: dict) -> dict:
                 pass
 
         if success:
-            verb = {"extend": "extended", "reduce": "reduced", "delete": "revoked"}.get(action, "updated")
+            verb = {"extend": "extended", "reduce": "reduced", "delete": "revoked", "remove": "removed"}.get(action, "updated")
             return {"status": "success", "message": f"User subscription {verb} successfully"}
         else:
             raise HTTPException(status_code=404, detail="User not found or update failed")

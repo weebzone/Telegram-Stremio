@@ -24,6 +24,7 @@ from Backend.fastapi.routes.api_routes import (
     set_token_lifetime_api,
     set_token_expiry_api,
     subscription_preflight_api,
+    backfill_subscriber_names_api,
     dbcheck_status_api,
     delete_custom_catalog_api,
     delete_media_api,
@@ -341,6 +342,10 @@ async def grant_lifetime(_: bool = Depends(require_auth)):
 @app.get("/api/admin/subscriptions/preflight")
 async def subscription_preflight(_: bool = Depends(require_auth)):
     return await subscription_preflight_api()
+
+@app.post("/api/admin/subscriptions/backfill-names")
+async def backfill_subscriber_names(_: bool = Depends(require_auth)):
+    return await backfill_subscriber_names_api()
 
 
 #----- Public content request page (no auth)

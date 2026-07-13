@@ -33,9 +33,8 @@ async def verify_token(token: str):
     except (TypeError, ValueError):
         token_data["is_admin"] = bool(token_data.get("is_admin"))
 
-    #----- Subscription expiry check (only when the SUBSCRIPTION feature is enabled).
-    #----- Admin and lifetime (subscription-exempt) tokens always bypass expiry.
-    if SettingsManager.current().subscription and not token_data["is_admin"] and not token_data.get("subscription_exempt"):
+    #----- Access expiry checks. Admin and never-expires tokens always bypass.
+    if not token_data["is_admin"] and not token_data.get("subscription_exempt"):
 
         #----- Compare correctly regardless of timezone awareness
         def _expired(when):
@@ -47,15 +46,15 @@ async def verify_token(token: str):
                 pass
             return when < ref
 
-        #----- An admin-set token expiry is an explicit grant, honoured in every mode.
-        #----- Otherwise the token must be backed by an active subscription.
+        #----- A token's own expiry is enforced in every mode. With no token expiry,
+        #----- an active subscription is required only while subscription mode is on.
         #----- (When valid, fall through so data-limit checks still apply.)
         token_expiry = token_data.get("expires_at")
         if token_expiry is not None:
             if _expired(token_expiry):
                 token_data["subscription_expired"] = True
                 return token_data
-        else:
+        elif SettingsManager.current().subscription:
             user_id = token_data.get("user_id")
             user = await db.get_user(int(user_id)) if user_id else None
             expiry = user.get("subscription_expiry") if user else None

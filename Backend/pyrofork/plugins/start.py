@@ -47,6 +47,13 @@ async def send_start_message(client: Client, message: Message):
         if not is_active and user and user.get("subscription_status") == "active":
             await db.mark_user_expired(user_id)
 
+        #----- Honour a manual token grant (never-expires or a future token expiry)
+        if not is_active:
+            token_doc = await db.get_api_token_by_user(user_id)
+            if token_doc and (token_doc.get("subscription_exempt")
+                              or (token_doc.get("expires_at") and token_doc["expires_at"] > now)):
+                is_active = True
+
         if not is_active:
             plans = await db.get_subscription_plans()
             if not plans:

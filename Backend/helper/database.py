@@ -417,7 +417,17 @@ class Database:
             await self.align_token_with_subscription(user_id)
             return True
 
+        elif action == "remove":
+            await self.align_token_with_subscription(user_id)
+            await self.dbs["tracking"]["users"].delete_one({"_id": user_id})
+            return True
+
         return False
+
+    #----- Update a subscriber's display name (and the linked token's name)
+    async def update_subscriber_name(self, user_id: int, name: str) -> None:
+        await self.dbs["tracking"]["users"].update_one({"_id": user_id}, {"$set": {"first_name": name}})
+        await self.dbs["tracking"]["api_tokens"].update_one({"user_id": user_id}, {"$set": {"name": name}})
 
     async def assign_subscription(self, user_id: int, days: int, name: str = None) -> dict:
         #----- Upsert a subscription for any user_id, creating a record if it doesn't exist

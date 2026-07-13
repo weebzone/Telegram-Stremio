@@ -395,6 +395,10 @@
                     <i class="fas fa-plus"></i>
                     Add Plan
                 </button>
+                <button onclick="backfillNames()" class="glass-btn rounded-2xl px-5 py-3 text-sm font-bold inline-flex items-center gap-2" title="Fetch real Telegram names for 'User <id>' entries">
+                    <i class="fas fa-id-badge"></i>
+                    Sync Names
+                </button>
                 <button onclick="fetchSubscribers()" class="glass-btn rounded-2xl px-5 py-3 text-sm font-bold inline-flex items-center gap-2">
                     <i class="fas fa-rotate-right"></i>
                     Refresh Users
@@ -783,6 +787,10 @@
                                 class="action-chip glass-btn-danger">
                                 Revoke
                             </button>
+                            <button onclick="removeSubscriber(${u._id})"
+                                class="action-chip glass-btn" title="Delete from list">
+                                Remove
+                            </button>
                         </div>
                     </td>
                 </tr>
@@ -840,6 +848,10 @@
                             Revoke
                         </button>
                     </div>
+                    <button onclick="removeSubscriber(${u._id})"
+                        class="action-chip glass-btn w-full mt-2">
+                        Remove from list
+                    </button>
                 </div>
             `;
         }).join('');
@@ -1021,6 +1033,31 @@
             closeUserModal();
         }
     });
+
+    async function removeSubscriber(userId) {
+        if (!confirm('Remove this user from the list? This deletes their subscription record (their token access is revoked).')) return;
+        try {
+            const res = await fetch(`/api/admin/subscriptions/users/${userId}/manage`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'remove', days: 0 })
+            });
+            if (!res.ok) throw new Error('Failed');
+            showToast('User removed.', 'success', 'Removed');
+            fetchSubscribers();
+        } catch (err) {
+            showToast('Failed to remove user.', 'error', 'Failed');
+        }
+    }
+
+    async function backfillNames() {
+        try {
+            const res = await fetch('/api/admin/subscriptions/backfill-names', { method: 'POST' });
+            const data = await res.json();
+            if (res.ok) { showToast(data.message || 'Names synced.', 'success', 'Synced'); fetchSubscribers(); }
+            else { showToast('Failed to sync names.', 'error', 'Failed'); }
+        } catch (err) {
+            showToast('Failed to sync names.', 'error', 'Failed');
+        }
+    }
 
     document.addEventListener('DOMContentLoaded', () => {
         fetchPlans();

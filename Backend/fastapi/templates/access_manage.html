@@ -318,6 +318,11 @@
                 <input type="number" id="assign-custom-days" placeholder="e.g. 30" min="1" class="glass-input">
                 <p class="text-xs text-soft mt-2" id="assign-days-hint">Custom days override selected plan.</p>
             </div>
+            <div class="modal-field" id="assign-userid-field" style="display:none">
+                <label>Link Telegram User ID <span class="text-soft text-xs">(optional)</span></label>
+                <input type="number" id="assign-userid" placeholder="e.g. 123456789" class="glass-input">
+                <p class="text-xs text-soft mt-2">Attaches this token to a user so it's reused when they press /start.</p>
+            </div>
         </div>
         <div class="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-6">
             <button onclick="closeModal('assign-modal')" class="glass-btn rounded-2xl px-5 py-3 text-sm font-bold">Cancel</button>
@@ -653,6 +658,10 @@
         document.getElementById('assign-days-hint').textContent = subEnabled
             ? 'Custom days override the selected plan. Leave empty or 0 for never expires.'
             : 'Leave empty or 0 for never expires.';
+
+        const uidField = document.getElementById('assign-userid-field');
+        uidField.style.display = subEnabled ? 'none' : '';
+        document.getElementById('assign-userid').value = (!subEnabled && userId) ? userId : '';
         openModal('assign-modal');
     }
 
@@ -669,8 +678,11 @@
                 });
             } else {
                 const token = document.getElementById('assign-token').value;
+                const uid = parseInt(document.getElementById('assign-userid').value) || 0;
+                const body = { action: 'set', days };
+                if (uid) body.user_id = uid;
                 resp = await fetch(`/api/admin/access/tokens/${encodeURIComponent(token)}/expiry`, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'set', days }),
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
                 });
             }
             const data = await resp.json();
