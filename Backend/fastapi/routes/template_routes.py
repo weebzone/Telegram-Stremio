@@ -147,6 +147,17 @@ async def dashboard_page(request: Request, _: bool = Depends(require_auth)):
     api_tokens = await db.get_all_api_tokens()
     for t in api_tokens:
         t["is_admin"] = bool(t.get("is_admin")) or db._is_owner(t.get("user_id"))
+        #----- Prefer the linked user's Telegram name (keeps the dashboard in sync
+        #----- with the Access page); fall back to the token alias.
+        t["display_name"] = t.get("name")
+        uid = t.get("user_id")
+        if uid:
+            try:
+                u = await db.get_user(int(uid))
+                if u:
+                    t["display_name"] = u.get("first_name") or u.get("username") or t.get("name")
+            except Exception:
+                pass
     ctx["api_tokens"] = api_tokens
     return templates.TemplateResponse("dashboard.html", ctx)
 

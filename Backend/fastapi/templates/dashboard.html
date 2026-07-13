@@ -285,8 +285,9 @@
                         <tr class="group hover:bg-surface transition-colors" id="token-row-{{ loop.index0 }}">
                             <td class="py-6 px-8">
                                 <div class="flex items-center gap-2 flex-wrap">
-                                    <p class="font-bold text-text">{{ token.name }}</p>
+                                    <p class="font-bold text-text">{{ token.display_name or token.name }}</p>
                                     {% if token.is_admin %}<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold" style="background: color-mix(in srgb, #f5c518 16%, transparent); color: #f5c518;"><i class="fa-solid fa-crown text-[8px]"></i> Admin</span>{% endif %}
+                                    {% if token.display_name and token.display_name != token.name %}<span class="text-[10px] text-text-secondary">({{ token.name }})</span>{% endif %}
                                 </div>
                                 <p class="text-[10px] text-text-secondary uppercase mt-1">
                                     {{ token.created_at.strftime('%Y-%m-%d') if token.created_at else 'Unknown date' }}
@@ -354,8 +355,9 @@
                     <div class="flex items-start justify-between gap-3">
                         <div class="min-w-0">
                             <div class="flex items-center gap-2 flex-wrap">
-                                <p class="font-bold text-text truncate">{{ token.name }}</p>
+                                <p class="font-bold text-text truncate">{{ token.display_name or token.name }}</p>
                                 {% if token.is_admin %}<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold" style="background: color-mix(in srgb, #f5c518 16%, transparent); color: #f5c518;"><i class="fa-solid fa-crown text-[8px]"></i> Admin</span>{% endif %}
+                                {% if token.display_name and token.display_name != token.name %}<span class="text-[10px] text-text-secondary shrink-0">({{ token.name }})</span>{% endif %}
                             </div>
                             <p class="text-[10px] text-text-secondary uppercase mt-1">
                                 {{ token.created_at.strftime('%Y-%m-%d') if token.created_at else 'Unknown date' }}
