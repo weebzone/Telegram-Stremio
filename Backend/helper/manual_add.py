@@ -84,4 +84,6 @@ async def resolve_telegram_message(client, url: str = None, chat_id=None, msg_id
         "height": height,
         "has_thumb": bool(getattr(media, "thumbs", None)),
         "upload_year": upload_year,
+        "split_key": split_info[0] if split_info else None,
+        "part_number": split_info[1] if split_info else None,
     }

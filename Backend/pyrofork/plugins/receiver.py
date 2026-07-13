@@ -144,13 +144,14 @@ async def _handle_personal_session(client: Client, message: Message) -> None:
         name = resolved["name"]
         quality = resolved.get("quality") or session.get("quality") or "HD"
 
+        split_key = resolved.get("split_key")
         metadata_info = _base_from_doc(doc)
         metadata_info.update({
             "media_type": media_type,
             "quality": quality,
             "encoded_string": encoded,
-            "group_key": None,
-            "part_number": None,
+            "group_key": f"{channel}:{quality}:{split_key}" if split_key else None,
+            "part_number": resolved.get("part_number"),
             "is_anime": bool(doc.get("is_anime")),
         })
 
