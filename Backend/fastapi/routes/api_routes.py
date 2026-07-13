@@ -276,20 +276,39 @@ def _parse_limit(val):
 async def create_token_api(payload: dict):
     try:
         token_name = payload.get("name")
-        daily_limit = payload.get("daily_limit_gb")
-        monthly_limit = payload.get("monthly_limit_gb")
-
         if not token_name:
             raise HTTPException(status_code=400, detail="Token name is required")
 
         new_token = await db.add_api_token(
             token_name,
-            _parse_limit(daily_limit),
-            _parse_limit(monthly_limit)
+            _parse_limit(payload.get("daily_limit_gb")),
+            _parse_limit(payload.get("monthly_limit_gb")),
+            subscription_exempt=bool(payload.get("subscription_exempt")),
         )
         return new_token
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+#----- Toggle a token's lifetime (subscription-exempt) flag
+async def set_token_lifetime_api(token: str, payload: dict) -> dict:
+    exempt = bool(payload.get("subscription_exempt"))
+    if not await db.set_token_lifetime(token, exempt):
+        raise HTTPException(status_code=404, detail="Token not found.")
+    return {"status": "success", "subscription_exempt": exempt}
+
+
+#----- How many tokens would stop working if subscription mode is enabled
+async def subscription_preflight_api() -> dict:
+    return {"status": "success", "uncovered": await db.count_uncovered_tokens()}
+
+
+#----- Mark all tokens that aren't linked to a user as lifetime
+async def grant_lifetime_api() -> dict:
+    count = await db.grant_lifetime_to_unlinked()
+    return {"status": "success", "updated": count, "message": f"{count} token(s) marked as lifetime."}
 
 async def update_token_limits_api(token: str, payload: dict):
     try:
@@ -689,6 +708,8 @@ async def get_all_tokens_api() -> dict:
                 return token_name
             return f"User {user_id}" if user_id else "Telegram User"
 
+        sub_on = SettingsManager.current().subscription
+
         #----- Unified access entry from optional user + token records
         def build_entry(user_id, user, token_doc):
             expiry = None
@@ -699,37 +720,39 @@ async def get_all_tokens_api() -> dict:
                 sub_status = user.get("subscription_status")
                 expiry = user.get("subscription_expiry")
 
-            if token_doc:
-                t_expiry = token_doc.get("subscription_expiry") or token_doc.get("expires_at")
-                if t_expiry and not expiry:
-                    expiry = t_expiry
+            token_doc = token_doc or {}
+            is_admin = bool(token_doc.get("is_admin")) or db._is_owner(user_id)
+            lifetime = bool(token_doc.get("subscription_exempt"))
+            token_str = token_doc.get("token")
 
-            if SettingsManager.current().subscription:
-                if not user_found:
-                    is_expired = True
-                elif sub_status != "active":
-                    is_expired = True
-                elif not expiry:
-                    is_expired = True
-                else:
-                    is_expired = expiry < now
+            #----- Subscription OFF: any token streams. Admin/lifetime always active.
+            if not sub_on or is_admin or lifetime:
+                is_expired = False
+            elif not user_found or sub_status != "active" or not expiry:
+                is_expired = True
             else:
-                is_expired = bool(expiry and expiry < now)
+                is_expired = expiry < now
 
-            token_str = token_doc.get("token") if token_doc else None
-            created = token_doc.get("created_at") if token_doc else (user.get("created_at") if user else None)
+            created = token_doc.get("created_at") or (user.get("created_at") if user else None)
+            limits = token_doc.get("limits") or {}
+            usage = token_doc.get("usage") or {}
 
             return {
                 "token": token_str,
                 "user_id": user_id,
-                "user_name": display_name(user, user_id, token_doc.get("name") if token_doc else None),
+                "user_name": display_name(user, user_id, token_doc.get("name")),
                 "user_found": user_found,
-                "is_admin": bool((token_doc or {}).get("is_admin")) or db._is_owner(user_id),
+                "is_admin": is_admin,
+                "lifetime": lifetime,
                 "has_token": bool(token_str),
                 "created_at": created.isoformat() if created else None,
                 "expires_at": expiry.isoformat() if expiry else None,
                 "is_expired": is_expired,
                 "sub_status": sub_status,
+                "daily_limit_gb": limits.get("daily_limit_gb") or 0,
+                "monthly_limit_gb": limits.get("monthly_limit_gb") or 0,
+                "daily_bytes": (usage.get("daily") or {}).get("bytes", 0),
+                "monthly_bytes": (usage.get("monthly") or {}).get("bytes", 0),
                 "addon_url": (
                     f"{SettingsManager.current().base_url}/stremio/{token_str}/manifest.json"
                     if token_str else None

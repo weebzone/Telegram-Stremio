@@ -404,6 +404,8 @@ class Database:
                 },
                 upsert=True
             )
+            if status == "active":
+                await self.ensure_api_token_for_user(user_id, (user or {}).get("first_name"))
             return True
 
         elif action == "delete":
@@ -445,11 +447,17 @@ class Database:
             },
             upsert=True
         )
+        token_doc = await self.ensure_api_token_for_user(user_id, (user or {}).get("first_name"))
+        token = token_doc.get("token") if token_doc else None
         return {
             "user_id": user_id,
             "subscription_expiry": new_expiry.isoformat(),
             "subscription_status": "active",
             "days_assigned": days,
+            "token": token,
+            "addon_url": (
+                f"{SettingsManager.current().base_url}/stremio/{token}/manifest.json" if token else None
+            ),
         }
 
     #-----
@@ -1938,7 +1946,7 @@ class Database:
     #----- API Token Methods
     #-----
 
-    async def add_api_token(self, name: str, daily_limit_gb: float = None, monthly_limit_gb: float = None, user_id: int = None) -> dict:
+    async def add_api_token(self, name: str, daily_limit_gb: float = None, monthly_limit_gb: float = None, user_id: int = None, subscription_exempt: bool = False) -> dict:
         #----- If a user_id is provided, return existing token if already created
         if user_id:
             existing = await self.dbs["tracking"]["api_tokens"].find_one({"user_id": user_id})
@@ -1947,12 +1955,13 @@ class Database:
 
         alphabet = string.ascii_letters + string.digits
         token = ''.join(secrets.choice(alphabet) for _ in range(32))
-        
+
         token_doc = {
             "name": name,
             "token": token,
             "user_id": user_id,
             "is_admin": self._is_owner(user_id),
+            "subscription_exempt": bool(subscription_exempt),
             "created_at": datetime.utcnow(),
             "limits": {
                 "daily_limit_gb": daily_limit_gb if daily_limit_gb else 0,
@@ -1964,9 +1973,48 @@ class Database:
                 "monthly": {"month": datetime.now(timezone.utc).strftime("%Y-%m"), "bytes": 0}
             }
         }
-        
+
         await self.dbs["tracking"]["api_tokens"].insert_one(token_doc)
         return convert_objectid_to_str(token_doc)
+
+    #----- Return the user's token, creating one if none exists
+    async def ensure_api_token_for_user(self, user_id: int, name: str = None) -> Optional[dict]:
+        if not user_id:
+            return None
+        existing = await self.dbs["tracking"]["api_tokens"].find_one({"user_id": user_id})
+        if existing:
+            return convert_objectid_to_str(existing)
+        return await self.add_api_token(name or f"User {user_id}", user_id=user_id)
+
+    #----- Toggle a token's lifetime (subscription-exempt) flag
+    async def set_token_lifetime(self, token: str, exempt: bool) -> bool:
+        result = await self.dbs["tracking"]["api_tokens"].update_one(
+            {"token": token}, {"$set": {"subscription_exempt": bool(exempt)}}
+        )
+        return result.modified_count > 0
+
+    #----- Mark every token that isn't linked to a user as lifetime
+    async def grant_lifetime_to_unlinked(self) -> int:
+        result = await self.dbs["tracking"]["api_tokens"].update_many(
+            {"$or": [{"user_id": None}, {"user_id": {"$exists": False}}]},
+            {"$set": {"subscription_exempt": True}},
+        )
+        return result.modified_count
+
+    #----- Count tokens that would stop working if subscription mode is enabled
+    async def count_uncovered_tokens(self) -> int:
+        tokens = await self.get_all_api_tokens()
+        count = 0
+        for t in tokens:
+            if t.get("is_admin") or t.get("subscription_exempt"):
+                continue
+            uid = t.get("user_id")
+            if not uid:
+                count += 1
+                continue
+            if not self.is_subscription_active(await self.get_user(int(uid))):
+                count += 1
+        return count
 
     async def get_api_token(self, token: str) -> Optional[dict]:
         doc = await self.dbs["tracking"]["api_tokens"].find_one({"token": token})

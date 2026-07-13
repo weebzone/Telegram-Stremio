@@ -33,8 +33,9 @@ async def verify_token(token: str):
     except (TypeError, ValueError):
         token_data["is_admin"] = bool(token_data.get("is_admin"))
 
-    #----- Subscription expiry check (only when the SUBSCRIPTION feature is enabled)
-    if SettingsManager.current().subscription:
+    #----- Subscription expiry check (only when the SUBSCRIPTION feature is enabled).
+    #----- Admin and lifetime (subscription-exempt) tokens always bypass expiry.
+    if SettingsManager.current().subscription and not token_data["is_admin"] and not token_data.get("subscription_exempt"):
         user_id = token_data.get("user_id")
         if not user_id:
             token_data["subscription_expired"] = True

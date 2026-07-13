@@ -70,10 +70,10 @@ async def send_start_message(client: Client, message: Message):
                 parse_mode=enums.ParseMode.HTML
             )
 
-        #----- Active subscriber: return their existing token link
-        all_tokens = await db.get_all_api_tokens()
-        token_doc = next((t for t in all_tokens if t.get("user_id") == user_id), None)
-        if token_doc and "token" in token_doc:
+        #----- Active subscriber: return their token link, creating one if missing
+        user_name = (user.get("first_name") or user.get("username")) if user else None
+        token_doc = await db.ensure_api_token_for_user(user_id, user_name)
+        if token_doc and token_doc.get("token"):
             addon_url = f"{base_url}/stremio/{token_doc['token']}/manifest.json"
 
         await message.reply_text(

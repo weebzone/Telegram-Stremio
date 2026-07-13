@@ -20,6 +20,9 @@ from Backend.fastapi.routes.api_routes import (
     clear_stream_analytics_api,
     create_custom_catalog_api,
     create_token_api,
+    grant_lifetime_api,
+    set_token_lifetime_api,
+    subscription_preflight_api,
     dbcheck_status_api,
     delete_custom_catalog_api,
     delete_media_api,
@@ -321,6 +324,18 @@ async def link_token_to_user(token: str, payload: dict, _: bool = Depends(requir
     if not user_id:
         raise HTTPException(status_code=400, detail="user_id is required.")
     return await link_token_user_api(token, user_id)
+
+@app.patch("/api/admin/access/tokens/{token}/lifetime")
+async def set_token_lifetime(token: str, payload: dict, _: bool = Depends(require_auth)):
+    return await set_token_lifetime_api(token, payload)
+
+@app.post("/api/admin/access/grant-lifetime")
+async def grant_lifetime(_: bool = Depends(require_auth)):
+    return await grant_lifetime_api()
+
+@app.get("/api/admin/subscriptions/preflight")
+async def subscription_preflight(_: bool = Depends(require_auth)):
+    return await subscription_preflight_api()
 
 
 #----- Public content request page (no auth)

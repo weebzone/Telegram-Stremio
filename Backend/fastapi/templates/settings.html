@@ -747,9 +747,29 @@
 
 <script>
 /* ── Toggle sub-fields visibility ─────────────────────────────────────── */
-function toggleSubFields() {
+async function toggleSubFields() {
     const enabled = document.getElementById('subscription').checked;
     document.getElementById('sub-fields').style.display = enabled ? '' : 'none';
+    if (enabled) await checkSubscriptionImpact();
+}
+
+/* Warn about tokens that would break when subscription mode is enabled */
+async function checkSubscriptionImpact() {
+    try {
+        const resp = await fetch('/api/admin/subscriptions/preflight');
+        if (!resp.ok) return;
+        const n = (await resp.json()).uncovered || 0;
+        if (!n) return;
+        const ok = confirm(
+            `${n} existing token(s) are not tied to an active subscriber and will stop working once subscription mode is enabled.\n\n` +
+            `OK  → mark them as "Lifetime" so they keep working.\n` +
+            `Cancel → leave them (they will be blocked until linked to a subscription).`
+        );
+        if (ok) {
+            const g = await fetch('/api/admin/access/grant-lifetime', { method: 'POST' });
+            if (g.ok) showToast((await g.json()).message || 'Tokens marked lifetime.', 'success', 'Protected');
+        }
+    } catch (e) { /* ignore */ }
 }
 
 function toggleGlobalSearchFields() {

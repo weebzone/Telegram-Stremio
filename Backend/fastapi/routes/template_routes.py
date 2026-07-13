@@ -144,10 +144,6 @@ async def dashboard_page(request: Request, _: bool = Depends(require_auth)):
         }
 
     ctx["system_stats"] = system_stats
-    api_tokens = await db.get_all_api_tokens()
-    for t in api_tokens:
-        t["is_admin"] = bool(t.get("is_admin")) or db._is_owner(t.get("user_id"))
-    ctx["api_tokens"] = api_tokens
     return templates.TemplateResponse("dashboard.html", ctx)
 
 

@@ -10,7 +10,7 @@
                 <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-primary to-accent">
                     System Overview
                 </h1>
-                <p class="text-text-secondary text-xs sm:text-sm mt-1">Real-time performance, live stream activity, and token access management</p>
+                <p class="text-text-secondary text-xs sm:text-sm mt-1">Real-time performance and live stream activity</p>
             </div>
 
             <button onclick="refreshDashboard()"
@@ -129,6 +129,17 @@
                     </div>
                 </a>
             </section>
+
+            <a href="/admin/access" class="glass-panel p-6 rounded-[2rem] hover:bg-primary/5 transition-all group border border-hairline flex items-center gap-4">
+                <div class="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
+                    <i class="fa-solid fa-shield-halved text-2xl"></i>
+                </div>
+                <div>
+                    <h4 class="font-bold text-text">Tokens &amp; Access</h4>
+                    <p class="text-xs text-text-secondary">Create tokens, set data limits, and manage subscriptions</p>
+                </div>
+                <i class="fa-solid fa-chevron-right ml-auto text-muted group-hover:text-primary group-hover:translate-x-1 transition-all"></i>
+            </a>
         </div>
 
         <div class="lg:col-span-1">
@@ -226,213 +237,7 @@
             </div>
         </div>
     </div>
-
-    <section class="mt-12">
-        <div class="glass-panel rounded-[2.5rem] overflow-hidden">
-            <div class="p-5 sm:p-8 border-b border-hairline flex flex-col md:flex-row md:justify-between md:items-center gap-4">
-                <div>
-                    <h3 class="text-lg sm:text-xl font-bold text-text">Access Management</h3>
-                    <p class="text-xs sm:text-sm text-text-secondary">Control API tokens, daily quotas, and monthly quotas</p>
-                </div>
-                <button onclick="toggleCreateForm()" id="create-btn-container"
-                    class="w-full md:w-auto justify-center px-6 py-3 bg-primary text-background font-bold rounded-2xl hover:brightness-110 transition-all flex items-center gap-2">
-                    <i class="fa-solid fa-plus"></i> New Token
-                </button>
-            </div>
-
-            <div id="create-form-container" class="hidden p-5 sm:p-8 bg-surface border-b border-hairline animate-in fade-in slide-in-from-top-4">
-                <form onsubmit="createToken(event)" class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
-                    <div class="md:col-span-2">
-                        <label class="text-[10px] font-bold uppercase text-text-secondary tracking-widest ml-2 mb-1 block">Token Alias</label>
-                        <input type="text" id="token-name" placeholder="E.g., Living Room TV" required
-                            class="w-full px-4 py-3 rounded-xl border border-hairline focus:border-primary outline-none text-sm text-text placeholder:text-text-secondary bg-[color-mix(in_srgb,var(--card)_88%,var(--bg)_12%)]">
-                    </div>
-
-                    <div>
-                        <label class="text-[10px] font-bold uppercase text-text-secondary tracking-widest ml-2 mb-1 block">Daily (GB)</label>
-                        <input type="number" id="daily-limit" value="0" step="0.1" min="0"
-                            class="w-full px-4 py-3 rounded-xl border border-hairline focus:border-primary outline-none text-sm text-text placeholder:text-text-secondary bg-[color-mix(in_srgb,var(--card)_88%,var(--bg)_12%)]">
-                    </div>
-
-                    <div>
-                        <label class="text-[10px] font-bold uppercase text-text-secondary tracking-widest ml-2 mb-1 block">Monthly (GB)</label>
-                        <input type="number" id="monthly-limit" value="0" step="0.1" min="0"
-                            class="w-full px-4 py-3 rounded-xl border border-hairline focus:border-primary outline-none text-sm text-text placeholder:text-text-secondary bg-[color-mix(in_srgb,var(--card)_88%,var(--bg)_12%)]">
-                    </div>
-
-                    <div class="flex gap-2">
-                        <button type="submit" class="flex-1 py-3 bg-primary text-background font-bold rounded-xl text-sm">Create</button>
-                        <button type="button" onclick="toggleCreateForm()" class="px-4 py-3 bg-surface text-text-secondary rounded-xl hover:bg-surface-2 transition-colors">
-                            <i class="fa-solid fa-xmark"></i>
-                        </button>
-                    </div>
-                </form>
-            </div>
-
-            <div class="overflow-x-auto hidden md:block">
-                <table class="w-full text-left">
-                    <thead>
-                        <tr class="bg-surface text-[10px] uppercase tracking-[0.2em] font-bold text-text-secondary">
-                            <th class="py-5 px-8">Client Name</th>
-                            <th class="py-5 px-8">Usage</th>
-                            <th class="py-5 px-8">Limits</th>
-                            <th class="py-5 px-8">Manifest Link</th>
-                            <th class="py-5 px-8 text-right">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-hairline">
-                        {% for token in api_tokens %}
-                        <tr class="group hover:bg-surface transition-colors" id="token-row-{{ loop.index0 }}">
-                            <td class="py-6 px-8">
-                                <div class="flex items-center gap-2 flex-wrap">
-                                    <p class="font-bold text-text">{{ token.name }}</p>
-                                    {% if token.is_admin %}<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold" style="background: color-mix(in srgb, #f5c518 16%, transparent); color: #f5c518;"><i class="fa-solid fa-crown text-[8px]"></i> Admin</span>{% endif %}
-                                </div>
-                                <p class="text-[10px] text-text-secondary uppercase mt-1">
-                                    {{ token.created_at.strftime('%Y-%m-%d') if token.created_at else 'Unknown date' }}
-                                </p>
-                            </td>
-
-                            <td class="py-6 px-8">
-                                <div class="flex flex-col gap-1">
-                                    <span class="text-xs text-text font-medium">
-                                        Daily: <span class="text-primary" data-bytes="{{ token.usage.daily.bytes|default(0) }}"></span>
-                                    </span>
-                                    <span class="text-xs text-text font-medium">
-                                        Monthly: <span class="text-accent" data-bytes="{{ token.usage.monthly.bytes|default(0) }}"></span>
-                                    </span>
-                                </div>
-                            </td>
-
-                            <td class="py-6 px-8">
-                                <div class="flex flex-col gap-1">
-                                    <span class="text-[10px] text-text-secondary uppercase">
-                                        Daily Limit: {{ token.limits.daily_limit_gb or '∞' }} GB
-                                    </span>
-                                    <span class="text-[10px] text-text-secondary uppercase">
-                                        Monthly Limit: {{ token.limits.monthly_limit_gb or '∞' }} GB
-                                    </span>
-                                </div>
-                            </td>
-
-                            <td class="py-6 px-8">
-                                <button onclick='copyUrl({{ ((request.base_url|string).replace("http:", "https:") ~ "stremio/" ~ token.token ~ "/manifest.json")|tojson }})'
-                                    class="flex items-center gap-2 px-3 py-1.5 bg-background/50 rounded-lg border border-hairline text-[10px] font-bold text-text-secondary hover:text-primary hover:border-primary/30 transition-all">
-                                    <i class="fa-solid fa-link text-[8px]"></i> COPY MANIFEST
-                                </button>
-                            </td>
-
-                            <td class="py-6 px-8 text-right">
-                                <div class="flex justify-end gap-2">
-                                    <button onclick='openEditModal({{ token.token|tojson }}, {{ token.limits.daily_limit_gb|default(0)|tojson }}, {{ token.limits.monthly_limit_gb|default(0)|tojson }})'
-                                        class="w-8 h-8 rounded-lg bg-surface flex items-center justify-center text-text-secondary hover:bg-blue-500 hover:text-white transition-all token-action-btn">
-                                        <i class="fa-solid fa-pen-to-square text-xs"></i>
-                                    </button>
-                                    <button onclick='revokeToken({{ token.token|tojson }})'
-                                        class="w-8 h-8 rounded-lg bg-surface flex items-center justify-center text-text-secondary hover:bg-red-500 hover:text-white transition-all token-action-btn">
-                                        <i class="fa-solid fa-trash text-xs"></i>
-                                    </button>
-                                </div>
-                            </td>
-                        </tr>
-                        {% endfor %}
-
-                        {% if not api_tokens %}
-                        <tr>
-                            <td colspan="5" class="py-10 px-8 text-center text-text-secondary">
-                                No tokens found.
-                            </td>
-                        </tr>
-                        {% endif %}
-                    </tbody>
-                </table>
-            </div>
-
-            <div class="md:hidden divide-y divide-hairline">
-                {% for token in api_tokens %}
-                <div class="p-5 space-y-4" id="token-card-{{ loop.index0 }}">
-                    <div class="flex items-start justify-between gap-3">
-                        <div class="min-w-0">
-                            <div class="flex items-center gap-2 flex-wrap">
-                                <p class="font-bold text-text truncate">{{ token.name }}</p>
-                                {% if token.is_admin %}<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold" style="background: color-mix(in srgb, #f5c518 16%, transparent); color: #f5c518;"><i class="fa-solid fa-crown text-[8px]"></i> Admin</span>{% endif %}
-                            </div>
-                            <p class="text-[10px] text-text-secondary uppercase mt-1">
-                                {{ token.created_at.strftime('%Y-%m-%d') if token.created_at else 'Unknown date' }}
-                            </p>
-                        </div>
-                        <div class="flex gap-2 shrink-0">
-                            <button onclick='openEditModal({{ token.token|tojson }}, {{ token.limits.daily_limit_gb|default(0)|tojson }}, {{ token.limits.monthly_limit_gb|default(0)|tojson }})'
-                                class="w-9 h-9 rounded-lg bg-surface flex items-center justify-center text-text-secondary hover:bg-blue-500 hover:text-white transition-all">
-                                <i class="fa-solid fa-pen-to-square text-xs"></i>
-                            </button>
-                            <button onclick='revokeToken({{ token.token|tojson }})'
-                                class="w-9 h-9 rounded-lg bg-surface flex items-center justify-center text-text-secondary hover:bg-red-500 hover:text-white transition-all">
-                                <i class="fa-solid fa-trash text-xs"></i>
-                            </button>
-                        </div>
-                    </div>
-
-                    <div class="grid grid-cols-2 gap-3 pt-3 border-t border-hairline">
-                        <div>
-                            <p class="text-[10px] uppercase font-bold tracking-widest text-text-secondary mb-1">Daily</p>
-                            <p class="text-xs font-medium text-text">
-                                <span class="text-primary" data-bytes="{{ token.usage.daily.bytes|default(0) }}"></span>
-                                <span class="text-text-secondary"> / {{ token.limits.daily_limit_gb or '∞' }} GB</span>
-                            </p>
-                        </div>
-                        <div>
-                            <p class="text-[10px] uppercase font-bold tracking-widest text-text-secondary mb-1">Monthly</p>
-                            <p class="text-xs font-medium text-text">
-                                <span class="text-accent" data-bytes="{{ token.usage.monthly.bytes|default(0) }}"></span>
-                                <span class="text-text-secondary"> / {{ token.limits.monthly_limit_gb or '∞' }} GB</span>
-                            </p>
-                        </div>
-                    </div>
-
-                    <button onclick='copyUrl({{ ((request.base_url|string).replace("http:", "https:") ~ "stremio/" ~ token.token ~ "/manifest.json")|tojson }})'
-                        class="w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-background/50 rounded-xl border border-hairline text-[10px] font-bold text-text-secondary hover:text-primary hover:border-primary/30 transition-all">
-                        <i class="fa-solid fa-link text-[8px]"></i> COPY MANIFEST
-                    </button>
-                </div>
-                {% endfor %}
-
-                {% if not api_tokens %}
-                <div class="p-10 text-center text-text-secondary">
-                    No tokens found.
-                </div>
-                {% endif %}
-            </div>
-        </div>
-    </section>
 </div>
-
-<div id="edit-modal" class="fixed inset-0 bg-background/80 backdrop-blur-md hidden flex items-center justify-center z-50 p-4">
-    <div class="glass-panel rounded-[2rem] p-8 w-full max-w-md border border-hairline shadow-2xl">
-        <h3 class="text-xl font-bold mb-2">Edit Limits</h3>
-        <p class="text-sm text-text-secondary mb-6">Modify daily and monthly data quotas for this token.</p>
-
-        <input type="hidden" id="edit-token-id">
-        <div class="space-y-4">
-            <div>
-                <label class="text-[10px] font-bold uppercase text-text-secondary tracking-widest ml-1 mb-1 block">Daily Limit (GB)</label>
-                <input type="number" id="edit-daily" step="0.1" min="0"
-                    class="w-full px-4 py-3 rounded-xl border border-hairline focus:border-primary outline-none text-text placeholder:text-text-secondary bg-[color-mix(in_srgb,var(--card)_88%,var(--bg)_12%)]">
-            </div>
-            <div>
-                <label class="text-[10px] font-bold uppercase text-text-secondary tracking-widest ml-1 mb-1 block">Monthly Limit (GB)</label>
-                <input type="number" id="edit-monthly" step="0.1" min="0"
-                    class="w-full px-4 py-3 rounded-xl border border-hairline focus:border-primary outline-none text-text placeholder:text-text-secondary bg-[color-mix(in_srgb,var(--card)_88%,var(--bg)_12%)]">
-            </div>
-        </div>
-
-        <div class="mt-8 flex gap-3">
-            <button onclick="closeEditModal()" class="flex-1 py-3 bg-surface hover:bg-surface-2 text-text rounded-xl font-bold transition-all">Cancel</button>
-            <button onclick="saveTokenLimits()" class="flex-1 py-3 bg-primary text-background rounded-xl font-bold transition-all">Save Changes</button>
-        </div>
-    </div>
-</div>
-
 
 <style>
     .shadow-glow {
@@ -454,215 +259,10 @@
         background: color-mix(in srgb, var(--accent) 16%, transparent);
         color: var(--accent);
     }
-
-    input[type="text"],
-    input[type="number"],
-    input[type="email"],
-    input[type="password"],
-    input[type="search"],
-    input[type="url"],
-    textarea,
-    select {
-        color: var(--text) !important;
-        border-color: var(--border) !important;
-        caret-color: var(--primary);
-        background: color-mix(in srgb, var(--card) 88%, var(--bg) 12%);
-    }
-
-    input[type="text"]::placeholder,
-    input[type="number"]::placeholder,
-    input[type="email"]::placeholder,
-    input[type="password"]::placeholder,
-    input[type="search"]::placeholder,
-    input[type="url"]::placeholder,
-    textarea::placeholder {
-        color: var(--text-sec);
-        opacity: 0.95;
-    }
-
-    input:focus,
-    textarea:focus,
-    select:focus {
-        outline: none;
-        border-color: var(--primary) !important;
-        box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent);
-    }
-
-    input:-webkit-autofill,
-    input:-webkit-autofill:hover,
-    input:-webkit-autofill:focus {
-        -webkit-text-fill-color: var(--text) !important;
-        box-shadow: 0 0 0px 1000px color-mix(in srgb, var(--card) 88%, var(--bg) 12%) inset !important;
-        transition: background-color 9999s ease-in-out 0s;
-    }
-
-
 </style>
 
 <script>
-    const streamState = {
-        currentEditToken: null,
-        activeStreams: []
-    };
-
-    function toggleCreateForm() {
-        const formContainer = document.getElementById('create-form-container');
-        const btnContainer = document.getElementById('create-btn-container');
-        if (!formContainer || !btnContainer) return;
-
-        if (formContainer.classList.contains('hidden')) {
-            formContainer.classList.remove('hidden');
-            btnContainer.classList.add('hidden');
-        } else {
-            formContainer.classList.add('hidden');
-            btnContainer.classList.remove('hidden');
-        }
-    }
-
-    function openEditModal(token, daily, monthly) {
-    const tokenStr = String(token || '');
-    streamState.currentEditToken = tokenStr;
-    document.getElementById('edit-token-id').value = tokenStr;
-    document.getElementById('edit-daily').value = (daily === null || daily === undefined) ? 0 : daily;
-    document.getElementById('edit-monthly').value = (monthly === null || monthly === undefined) ? 0 : monthly;
-    const modal = document.getElementById('edit-modal');
-    modal.classList.remove('hidden');
-    }
-
-    function closeEditModal() {
-        document.getElementById('edit-modal').classList.add('hidden');
-        streamState.currentEditToken = null;
-    }
-
-    async function saveTokenLimits() {
-        if (!streamState.currentEditToken) return;
-
-        const daily = Number(document.getElementById('edit-daily').value || 0);
-        const monthly = Number(document.getElementById('edit-monthly').value || 0);
-
-        try {
-            const response = await fetch('/api/tokens/' + encodeURIComponent(streamState.currentEditToken), {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    daily_limit_gb: daily,
-                    monthly_limit_gb: monthly
-                })
-            });
-
-            if (response.ok) {
-                closeEditModal();
-                showToast('Token limits updated successfully.', 'success', 'Updated');
-                setTimeout(() => window.location.reload(), 500);
-                return;
-            }
-
-            let message = 'Failed to update limits';
-            try {
-                const data = await response.json();
-                message = data.detail || data.message || message;
-            } catch (_) {}
-            showToast(message, 'error', 'Update failed');
-        } catch (error) {
-            console.error(error);
-            showToast('Error updating limits', 'error', 'Update failed');
-        }
-    }
-
-    async function createToken(event) {
-        event.preventDefault();
-
-        const nameInput = document.getElementById('token-name');
-        const dailyInput = document.getElementById('daily-limit');
-        const monthlyInput = document.getElementById('monthly-limit');
-
-        const payload = {
-            name: nameInput.value.trim(),
-            daily_limit_gb: Number(dailyInput.value || 0),
-            monthly_limit_gb: Number(monthlyInput.value || 0)
-        };
-
-        if (!payload.name) {
-            showToast('Token alias is required.', 'error', 'Validation');
-            return;
-        }
-
-        try {
-            const response = await fetch('/api/tokens', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-
-            if (response.ok) {
-                showToast('Token created successfully.', 'success', 'Created');
-                setTimeout(() => window.location.reload(), 500);
-                return;
-            }
-
-            let message = 'Error creating token';
-            try {
-                const data = await response.json();
-                message = data.detail || data.message || message;
-            } catch (_) {}
-            showToast(message, 'error', 'Create failed');
-        } catch (error) {
-            console.error(error);
-            showToast('Error creating token', 'error', 'Create failed');
-        }
-    }
-
-    async function revokeToken(token) {
-        if (!confirm('Are you sure you want to revoke this token? The user will lose access immediately.')) return;
-
-        try {
-            const response = await fetch('/api/tokens/' + encodeURIComponent(String(token || '')), {
-                method: 'DELETE'
-            });
-
-            if (response.ok) {
-                showToast('Token deleted successfully.', 'success', 'Deleted');
-                setTimeout(() => window.location.reload(), 500);
-                return;
-            }
-
-            let message = 'Error deleting token';
-            try {
-                const data = await response.json();
-                message = data.detail || data.message || message;
-            } catch (_) {}
-            showToast(message, 'error', 'Delete failed');
-        } catch (error) {
-            console.error(error);
-            showToast('Error deleting token', 'error', 'Delete failed');
-        }
-    }
-
-    async function copyUrl(url) {
-        const text = String(url || '');
-        try {
-            if (navigator.clipboard && window.isSecureContext) {
-                await navigator.clipboard.writeText(text);
-            } else {
-                const temp = document.createElement('textarea');
-                temp.value = text;
-                temp.setAttribute('readonly', '');
-                temp.style.position = 'fixed';
-                temp.style.left = '-9999px';
-                temp.style.top = '0';
-                document.body.appendChild(temp);
-                temp.focus();
-                temp.select();
-                const ok = document.execCommand('copy');
-                document.body.removeChild(temp);
-                if (!ok) throw new Error('copy failed');
-            }
-            showToast('Manifest URL copied to clipboard.', 'success', 'Copied');
-        } catch (error) {
-            console.error(error);
-            showToast('Failed to copy manifest URL.', 'error', 'Copy failed');
-        }
-    }
+    const streamState = { activeStreams: [] };
 
     function escapeHtml(unsafe) {
         if (unsafe === null || unsafe === undefined) return '';
@@ -683,19 +283,12 @@
     }
 
     function formatDuration(seconds) {
-        const value = Math.max(0, Number(seconds || 0));
-        const total = Math.floor(value);
-
+        const total = Math.floor(Math.max(0, Number(seconds || 0)));
         const h = Math.floor(total / 3600);
         const m = Math.floor((total % 3600) / 60);
         const s = total % 60;
-
-        if (h > 0) {
-            return `${h}h ${m}m ${s}s`;
-        }
-        if (m > 0) {
-            return `${m}m ${s}s`;
-        }
+        if (h > 0) return `${h}h ${m}m ${s}s`;
+        if (m > 0) return `${m}m ${s}s`;
         return `${s}s`;
     }
 
@@ -703,8 +296,7 @@
         const value = Number(ts || 0);
         if (!value) return '—';
         const date = new Date(value * 1000);
-        if (Number.isNaN(date.getTime())) return '—';
-        return date.toLocaleString();
+        return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString();
     }
 
     function getStreamTitle(stream) {
@@ -723,32 +315,18 @@
     }
 
     function getStatusBadge(status) {
-        const normalized = String(status || '').toLowerCase();
-
-        if (normalized === 'active') {
-            return { className: 'stream-badge-live', text: 'Live' };
-        }
-        if (normalized === 'cancelled') {
-            return { className: 'bg-yellow-500/15 text-yellow-300', text: 'Cancelled' };
-        }
-        if (normalized === 'completed' || normalized === 'finished') {
-            return { className: 'bg-green-500/15 text-green-300', text: 'Completed' };
-        }
-        if (normalized === 'failed' || normalized === 'error') {
-            return { className: 'bg-red-500/15 text-red-300', text: normalized.charAt(0).toUpperCase() + normalized.slice(1) };
-        }
-
-        return {
-            className: 'stream-badge-recent',
-            text: normalized ? normalized.charAt(0).toUpperCase() + normalized.slice(1) : 'Live'
-        };
+        const n = String(status || '').toLowerCase();
+        if (n === 'active') return { className: 'stream-badge-live', text: 'Live' };
+        if (n === 'cancelled') return { className: 'bg-yellow-500/15 text-yellow-300', text: 'Cancelled' };
+        if (n === 'completed' || n === 'finished') return { className: 'bg-green-500/15 text-green-300', text: 'Completed' };
+        if (n === 'failed' || n === 'error') return { className: 'bg-red-500/15 text-red-300', text: n.charAt(0).toUpperCase() + n.slice(1) };
+        return { className: 'stream-badge-recent', text: n ? n.charAt(0).toUpperCase() + n.slice(1) : 'Live' };
     }
 
     function getLiveDuration(stream) {
         const startTs = Number(stream?.start_ts || 0);
         if (!startTs) return '0s';
-        const now = Date.now() / 1000;
-        return formatDuration(now - startTs);
+        return formatDuration(Date.now() / 1000 - startTs);
     }
 
     function renderStreamCard(stream) {
@@ -758,8 +336,7 @@
         const label = escapeHtml(getClientLabel(stream));
         const totalBytes = formatBytes(stream?.total_bytes || 0);
         const avgSpeed = stream?.avg_mbps !== null && stream?.avg_mbps !== undefined
-            ? Number(stream.avg_mbps).toFixed(3) + ' MB/s'
-            : '—';
+            ? Number(stream.avg_mbps).toFixed(3) + ' MB/s' : '—';
         const started = formatTimestamp(stream?.start_ts);
         const liveDuration = getLiveDuration(stream);
 
@@ -845,32 +422,21 @@
             if (activeContainer) {
                 activeContainer.innerHTML = activeStreams.length
                     ? activeStreams.map(stream => renderStreamCard(stream)).join('')
-                    : renderEmptyState(
-                        'fa-solid fa-satellite-dish',
-                        'No active streams right now',
-                        'The live network is idle at the moment.'
-                    );
+                    : renderEmptyState('fa-solid fa-satellite-dish', 'No active streams right now', 'The live network is idle at the moment.');
             }
         } catch (error) {
             console.error(error);
             if (activeContainer) {
-                activeContainer.innerHTML = renderEmptyState(
-                    'fa-solid fa-triangle-exclamation',
-                    'Unable to load live network',
-                    'Please try refreshing the page.'
-                );
+                activeContainer.innerHTML = renderEmptyState('fa-solid fa-triangle-exclamation', 'Unable to load live network', 'Please try refreshing the page.');
             }
         }
     }
 
     function refreshLiveDurations() {
-        const cards = document.querySelectorAll('#active-streams-container .stream-card');
-        cards.forEach((card, index) => {
+        document.querySelectorAll('#active-streams-container .stream-card').forEach((card, index) => {
             const durationEl = card.querySelector('.live-duration');
             const stream = streamState.activeStreams[index];
-            if (durationEl && stream) {
-                durationEl.textContent = getLiveDuration(stream);
-            }
+            if (durationEl && stream) durationEl.textContent = getLiveDuration(stream);
         });
     }
 
@@ -894,64 +460,6 @@
 
                 const elVersion = document.getElementById('sys-version');
                 if (elVersion) elVersion.innerText = 'v' + (stats.version || '1.0.0');
-
-                if (stats.databases && Array.isArray(stats.databases)) {
-                    stats.databases.forEach((db, index) => {
-                        const elMovies = document.getElementById(`db-movies-${index}`);
-                        if (elMovies) elMovies.innerText = db.movie_count.toLocaleString();
-
-                        const elTv = document.getElementById(`db-tv-${index}`);
-                        if (elTv) elTv.innerText = db.tv_count.toLocaleString();
-
-                        const elStorage = document.getElementById(`db-storage-${index}`);
-                        if (elStorage) {
-                            const mb = db.storageSize / (1024 * 1024);
-                            elStorage.innerText = mb.toFixed(1) + ' MB';
-                        }
-                    });
-                }
-
-                if (stats.api_tokens && Array.isArray(stats.api_tokens)) {
-                    const rows = document.querySelectorAll('tbody tr');
-                    stats.api_tokens.forEach((token, index) => {
-                        const dailyBytes = (token.usage && token.usage.daily) ? (token.usage.daily.bytes || 0) : null;
-                        const monthlyBytes = (token.usage && token.usage.monthly) ? (token.usage.monthly.bytes || 0) : null;
-
-                        if (rows.length > index && !rows[index].querySelector('[colspan]')) {
-                            const row = rows[index];
-
-                            const dailyUsageSpan = row.querySelector('td:nth-child(2) span[data-bytes]');
-                            const monthlyUsageSpan = row.querySelectorAll('td:nth-child(2) span[data-bytes]')[1];
-
-                            if (dailyUsageSpan && dailyBytes !== null) {
-                                dailyUsageSpan.setAttribute('data-bytes', dailyBytes);
-                                dailyUsageSpan.textContent = formatBytes(dailyBytes);
-                            }
-
-                            if (monthlyUsageSpan && monthlyBytes !== null) {
-                                monthlyUsageSpan.setAttribute('data-bytes', monthlyBytes);
-                                monthlyUsageSpan.textContent = formatBytes(monthlyBytes);
-                            }
-                        }
-
-                        // Keep the mobile card view in sync as well
-                        const card = document.getElementById(`token-card-${index}`);
-                        if (card) {
-                            const cardDaily = card.querySelector('span.text-primary[data-bytes]');
-                            const cardMonthly = card.querySelector('span.text-accent[data-bytes]');
-
-                            if (cardDaily && dailyBytes !== null) {
-                                cardDaily.setAttribute('data-bytes', dailyBytes);
-                                cardDaily.textContent = formatBytes(dailyBytes);
-                            }
-
-                            if (cardMonthly && monthlyBytes !== null) {
-                                cardMonthly.setAttribute('data-bytes', monthlyBytes);
-                                cardMonthly.textContent = formatBytes(monthlyBytes);
-                            }
-                        }
-                    });
-                }
             }
 
             await loadStreamStats();
@@ -959,21 +467,11 @@
             console.error('Failed to refresh dashboard:', error);
             showToast('Dashboard refresh failed.', 'error', 'Refresh failed');
         } finally {
-            setTimeout(() => {
-                if (icon) icon.classList.remove('animate-spin');
-            }, 450);
+            setTimeout(() => { if (icon) icon.classList.remove('animate-spin'); }, 450);
         }
     }
 
-    function formatInitialBytes() {
-        document.querySelectorAll('[data-bytes]').forEach(el => {
-            const raw = el.getAttribute('data-bytes');
-            el.textContent = formatBytes(raw);
-        });
-    }
-
     document.addEventListener('DOMContentLoaded', () => {
-        formatInitialBytes();
         loadStreamStats();
         loadSetupStatus();
         setInterval(loadStreamStats, 30000);
