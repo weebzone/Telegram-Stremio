@@ -836,13 +836,21 @@ async def assign_plan_api(user_id: int, days: int) -> dict:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-#----- Link an orphan token to a Telegram user_id
+#----- Link an orphan token to a Telegram user_id (one user_id = one token)
 async def link_token_user_api(token: str, user_id: int) -> dict:
     try:
+        existing = await db.get_api_token_by_user(user_id)
+        if existing and existing.get("token") == token:
+            return {"status": "success", "message": f"Already linked to user {user_id}."}
+        if existing:
+            raise HTTPException(
+                status_code=409,
+                detail=f"User {user_id} is already linked to token '{existing.get('name')}'. Unlink or delete that token first.",
+            )
         success = await db.link_token_user(token, user_id)
         if success:
             return {"status": "success", "message": f"Token linked to user {user_id}."}
-        raise HTTPException(status_code=404, detail="Token not found or already linked.")
+        raise HTTPException(status_code=404, detail="Token not found.")
     except HTTPException:
         raise
     except Exception as e:

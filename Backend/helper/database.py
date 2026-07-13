@@ -2075,6 +2075,11 @@ class Database:
         doc = await self.dbs["tracking"]["api_tokens"].find_one({"token": token})
         return convert_objectid_to_str(doc) if doc else None
 
+    #----- The (single) token linked to a given user_id, if any
+    async def get_api_token_by_user(self, user_id: int) -> Optional[dict]:
+        doc = await self.dbs["tracking"]["api_tokens"].find_one({"user_id": user_id})
+        return convert_objectid_to_str(doc) if doc else None
+
     async def get_all_api_tokens(self) -> List[dict]:
         cursor = self.dbs["tracking"]["api_tokens"].find().sort("created_at", DESCENDING)
         tokens = await cursor.to_list(None)
