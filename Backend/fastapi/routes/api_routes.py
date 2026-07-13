@@ -836,6 +836,20 @@ async def assign_plan_api(user_id: int, days: int) -> dict:
         raise HTTPException(status_code=500, detail=str(e))
 
 
+#----- Look up a Telegram user's display name via the bot (best-effort)
+async def _fetch_tg_name(user_id: int):
+    try:
+        u = await StreamBot.get_users(user_id)
+        if not u:
+            return None
+        name = (u.first_name or "").strip()
+        if getattr(u, "last_name", None):
+            name = f"{name} {u.last_name}".strip()
+        return name or (u.username or None)
+    except Exception:
+        return None
+
+
 #----- Link an orphan token to a Telegram user_id (one user_id = one token)
 async def link_token_user_api(token: str, user_id: int) -> dict:
     try:
@@ -847,9 +861,11 @@ async def link_token_user_api(token: str, user_id: int) -> dict:
                 status_code=409,
                 detail=f"User {user_id} is already linked to token '{existing.get('name')}'. Unlink or delete that token first.",
             )
-        success = await db.link_token_user(token, user_id)
+        #----- Overwrite the token name with the user's real Telegram name when available
+        name = await _fetch_tg_name(user_id)
+        success = await db.link_token_user(token, user_id, name)
         if success:
-            return {"status": "success", "message": f"Token linked to user {user_id}."}
+            return {"status": "success", "message": f"Token linked to {name or user_id}."}
         raise HTTPException(status_code=404, detail="Token not found.")
     except HTTPException:
         raise

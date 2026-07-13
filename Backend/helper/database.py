@@ -2089,12 +2089,14 @@ class Database:
         result = await self.dbs["tracking"]["api_tokens"].delete_one({"token": token})
         return result.deleted_count > 0
 
-    async def link_token_user(self, token: str, user_id: int) -> bool:
+    async def link_token_user(self, token: str, user_id: int, name: str = None) -> bool:
         #----- Link an existing token to a Telegram user_id; elevate to admin when
-        #----- the linked user is the configured owner (else demote a stale flag).
+        #----- the linked user is the configured owner. Optionally overwrite the name.
+        update = {"user_id": user_id, "is_admin": self._is_owner(user_id)}
+        if name:
+            update["name"] = name
         result = await self.dbs["tracking"]["api_tokens"].update_one(
-            {"token": token},
-            {"$set": {"user_id": user_id, "is_admin": self._is_owner(user_id)}}
+            {"token": token}, {"$set": update}
         )
         return result.modified_count > 0
 
