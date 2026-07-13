@@ -401,6 +401,7 @@ async def get_catalog(token: str, media_type: str, id: str, extra: Optional[str]
             ]
             start = (page - 1) * PAGE_SIZE
             items = await db.get_documents(visible_items[start:start + PAGE_SIZE])
+            items = [it for it in items if _token_can_view(it.get("visibility") or "public", it.get("allowed_tokens") or [], token_data)]
         elif search_query:
             search_results = await db.search_documents(
                 query=search_query, page=page, page_size=PAGE_SIZE,

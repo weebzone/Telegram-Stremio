@@ -108,6 +108,8 @@ def _doc_item(doc: dict) -> dict:
         "db_index": db_index,
         "media_type": media_type,
         "added_at": datetime.utcnow(),
+        "visibility": doc.get("visibility") or "public",
+        "allowed_tokens": doc.get("allowed_tokens") or [],
     }
 
 
