@@ -323,7 +323,6 @@ async def get_manifest(token: str, token_data: dict = Depends(verify_token)):
 
         if expiry_obj:
             expiry_str = expiry_obj.strftime("%d %b %Y").lstrip("0")
-            addon_name = f"{ADDON_NAME} — Expires {expiry_str}"
             addon_desc = (
                 f"📅 Access active until {expiry_str}.\n"
                 f"Streams movies and series from your Telegram."
