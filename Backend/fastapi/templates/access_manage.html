@@ -257,7 +257,7 @@
             </div>
             <label class="flex items-center gap-3 text-sm section-title cursor-pointer">
                 <input type="checkbox" id="create-lifetime" class="w-4 h-4" checked>
-                Lifetime access <span class="text-soft text-xs">(works even when subscription mode is ON)</span>
+                Never expires <span class="text-soft text-xs">(no expiry date; works even when subscription mode is ON)</span>
             </label>
         </div>
 
@@ -384,7 +384,6 @@
 
     function statusBadge(t) {
         if (t.is_admin) return `<span class="status-badge status-gold"><i class="fas fa-crown text-[8px]"></i> Owner</span>`;
-        if (t.lifetime) return `<span class="status-badge status-lifetime"><i class="fas fa-infinity text-[8px]"></i> Permanent</span>`;
         return t.is_expired
             ? `<span class="status-badge status-expired"><i class="fas fa-circle text-[8px]"></i> Expired</span>`
             : `<span class="status-badge status-active"><i class="fas fa-circle text-[8px]"></i> Active</span>`;
@@ -392,7 +391,7 @@
 
     function addonHtml(t) {
         if (!t.has_token) return `<div class="addon-box"><span class="status-badge status-warning">No Token</span></div>`;
-        if (t.is_expired && !t.lifetime && !t.is_admin) {
+        if (t.is_expired && !t.never_expires && !t.is_admin) {
             return `<div class="addon-box">
                 <span class="status-badge status-expired">Expired</span>
                 ${t.addon_url ? `<button onclick="copyLink('${escHtml(t.addon_url)}')" class="mt-3 text-xs font-semibold underline opacity-70 hover:opacity-100 transition">Copy URL (admin)</button>` : ''}
@@ -412,13 +411,18 @@
         </div>`;
     }
 
+    function expiryHtml(t) {
+        if (t.never_expires) return `<span class="text-green-300 font-semibold">Never expires</span>`;
+        if (t.expires_at) return `<span class="${t.is_expired ? 'text-red-300 font-semibold' : 'section-title'}">${fmtDate(t.expires_at)}</span>`;
+        return `<span class="text-soft italic">—</span>`;
+    }
+
     function buildActions(t) {
         const safeName = escHtml(t.user_name || String(t.user_id || ''));
         let btns = '';
 
         if (t.has_token) {
             btns += `<button onclick="openLimitsModal('${escHtml(t.token)}', ${t.daily_limit_gb || 0}, ${t.monthly_limit_gb || 0})" class="action-chip glass-btn">Limits</button>`;
-            btns += `<button onclick="toggleLifetime('${escHtml(t.token)}', ${t.lifetime ? 'false' : 'true'})" class="action-chip ${t.lifetime ? 'glass-btn' : 'glass-btn-purple'}">${t.lifetime ? 'Remove Permanent' : 'Make Permanent'}</button>`;
         }
 
         if (t.user_id) {
@@ -443,18 +447,13 @@
         tbody.innerHTML = slice.map(t => {
             const displayName = t.user_name || (t.user_id ? 'Telegram User' : 'Web Token');
             const idHtml = t.user_id ? `<div class="text-xs text-soft mt-1">ID: ${t.user_id}</div>` : `<div class="text-xs text-soft mt-1">No linked user</div>`;
-            const expBad = (t.lifetime && !t.is_admin);
             return `
                 <tr class="${t.is_expired ? 'row-expired' : ''}">
                     <td class="px-4 py-4">${statusBadge(t)}</td>
                     <td class="px-4 py-4"><div class="font-semibold section-title">${escHtml(displayName)}</div>${idHtml}</td>
                     <td class="px-4 py-4">${addonHtml(t)}</td>
                     <td class="px-4 py-4">${usageHtml(t)}</td>
-                    <td class="px-4 py-4 text-xs">
-                        ${expBad ? `<span class="text-purple-300 font-semibold">Permanent</span>`
-                            : t.expires_at ? `<span class="${t.is_expired ? 'text-red-300 font-semibold' : 'section-title'}">${fmtDate(t.expires_at)}</span>`
-                            : `<span class="text-soft italic">—</span>`}
-                    </td>
+                    <td class="px-4 py-4 text-xs">${expiryHtml(t)}</td>
                     <td class="px-4 py-4"><div class="flex flex-wrap gap-2 justify-center">${buildActions(t)}</div></td>
                 </tr>`;
         }).join('');
@@ -466,7 +465,6 @@
 
         wrap.innerHTML = slice.map(t => {
             const displayName = t.user_name || (t.user_id ? 'Telegram User' : 'Web Token');
-            const expBad = (t.lifetime && !t.is_admin);
             return `
                 <div class="mobile-token-card ${t.is_expired ? 'row-expired' : ''}">
                     <div class="flex items-start justify-between gap-3 mb-3">
@@ -487,7 +485,7 @@
                             <div class="rounded-2xl px-4 py-3" style="background: color-mix(in srgb, var(--bg) 55%, transparent); border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);">
                                 <div class="text-[11px] uppercase tracking-[0.14em] text-soft font-bold mb-1">Expires</div>
                                 <div class="text-sm font-semibold ${t.is_expired ? 'text-red-300' : 'section-title'} break-words">
-                                    ${expBad ? 'Permanent' : (t.expires_at ? fmtDate(t.expires_at) : '—')}
+                                    ${t.never_expires ? 'Never expires' : (t.expires_at ? fmtDate(t.expires_at) : '—')}
                                 </div>
                             </div>
                         </div>
@@ -611,17 +609,6 @@
         } catch (err) { showToast('Error: ' + err.message, 'error', 'Network Error'); }
     }
 
-    async function toggleLifetime(token, makeExempt) {
-        try {
-            const resp = await fetch('/api/admin/access/tokens/' + encodeURIComponent(token) + '/lifetime', {
-                method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ subscription_exempt: makeExempt }),
-            });
-            if (resp.ok) { showToast(makeExempt ? 'Marked as permanent.' : 'Permanent removed.', 'success', 'Updated'); loadTokens(); }
-            else { showToast('Failed to update.', 'error', 'Failed'); }
-        } catch (err) { showToast('Error: ' + err.message, 'error', 'Network Error'); }
-    }
-
     async function revokeToken(token) {
         if (!confirm('Delete this token? The user will lose addon access immediately.')) return;
         try {
@@ -653,7 +640,9 @@
         document.getElementById('assign-plan-field').style.display = subEnabled ? '' : 'none';
         document.getElementById('assign-modal-title').textContent = subEnabled ? 'Assign Subscription Plan' : 'Set Expiry';
         document.getElementById('assign-days-label').textContent = subEnabled ? 'Or enter custom days' : 'Expires in (days)';
-        document.getElementById('assign-days-hint').style.display = subEnabled ? '' : 'none';
+        document.getElementById('assign-days-hint').textContent = subEnabled
+            ? 'Custom days override the selected plan. Leave empty or 0 for never expires.'
+            : 'Leave empty or 0 for never expires.';
         openModal('assign-modal');
     }
 
@@ -661,15 +650,14 @@
         const userId = parseInt(document.getElementById('assign-user-id').value);
         const customDays = parseInt(document.getElementById('assign-custom-days').value) || 0;
         const planDays = parseInt(document.getElementById('assign-plan-select').value) || 0;
-        const days = customDays || planDays;
-        if (!days || days < 1) { showToast(subEnabled ? 'Please select a plan or enter custom days.' : 'Please enter number of days.', 'error', 'Validation'); return; }
+        const days = customDays || planDays;  // 0 = never expires
         try {
             const resp = await fetch(`/api/admin/access/users/${userId}/assign-plan`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ days }),
             });
             const data = await resp.json();
-            if (resp.ok) { showToast(`Assigned ${days} days to user ${userId}.`, 'success', 'Plan Assigned'); closeModal('assign-modal'); loadTokens(); }
-            else { showToast(data.detail || 'Failed to assign plan.', 'error', 'Request Failed'); }
+            if (resp.ok) { showToast(days > 0 ? `Expiry set: ${days} days.` : 'Set to never expire.', 'success', 'Updated'); closeModal('assign-modal'); loadTokens(); }
+            else { showToast(data.detail || 'Failed to update.', 'error', 'Request Failed'); }
         } catch (err) { showToast('Error: ' + err.message, 'error', 'Network Error'); }
     }
 

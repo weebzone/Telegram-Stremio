@@ -449,11 +449,39 @@ class Database:
         )
         token_doc = await self.ensure_api_token_for_user(user_id, (user or {}).get("first_name"))
         token = token_doc.get("token") if token_doc else None
+        if token:
+            await self.set_token_lifetime(token, False)
         return {
             "user_id": user_id,
             "subscription_expiry": new_expiry.isoformat(),
             "subscription_status": "active",
             "days_assigned": days,
+            "token": token,
+            "addon_url": (
+                f"{SettingsManager.current().base_url}/stremio/{token}/manifest.json" if token else None
+            ),
+        }
+
+    #----- Give a user's token never-expiring access (clears any expiry date)
+    async def set_user_never_expires(self, user_id: int) -> dict:
+        now = datetime.utcnow()
+        user = await self.get_user(user_id)
+        await self.dbs["tracking"]["users"].update_one(
+            {"_id": user_id},
+            {
+                "$set": {"subscription_status": "active"},
+                "$unset": {"subscription_expiry": ""},
+                "$setOnInsert": {"first_name": f"User {user_id}", "username": None, "created_at": now},
+            },
+            upsert=True,
+        )
+        token_doc = await self.ensure_api_token_for_user(user_id, (user or {}).get("first_name"))
+        token = token_doc.get("token") if token_doc else None
+        if token:
+            await self.set_token_lifetime(token, True)
+        return {
+            "user_id": user_id,
+            "never_expires": True,
             "token": token,
             "addon_url": (
                 f"{SettingsManager.current().base_url}/stremio/{token}/manifest.json" if token else None

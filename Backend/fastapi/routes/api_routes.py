@@ -698,15 +698,19 @@ async def get_all_tokens_api() -> dict:
             except Exception:
                 pass
 
-        #----- Non-empty display name for a user
+        #----- Display name, preferring a real name/alias over the "User <id>" placeholder
         def display_name(user, user_id, token_name=None):
+            placeholder = f"User {user_id}" if user_id is not None else None
+            options = [token_name]
             if user:
-                n = user.get("first_name") or user.get("username")
-                if n:
-                    return n
-            if token_name:
-                return token_name
-            return f"User {user_id}" if user_id else "Telegram User"
+                options += [user.get("first_name"), user.get("username")]
+            for o in options:
+                if o and o != placeholder:
+                    return o
+            for o in options:
+                if o:
+                    return o
+            return placeholder or "Telegram User"
 
         sub_on = SettingsManager.current().subscription
 
@@ -737,6 +741,7 @@ async def get_all_tokens_api() -> dict:
             limits = token_doc.get("limits") or {}
             usage = token_doc.get("usage") or {}
             has_active_sub = user_found and sub_status == "active" and expiry is not None and expiry > now
+            never_expires = not expiry and (is_admin or lifetime or not sub_on)
 
             return {
                 "token": token_str,
@@ -745,6 +750,7 @@ async def get_all_tokens_api() -> dict:
                 "user_found": user_found,
                 "is_admin": is_admin,
                 "lifetime": lifetime,
+                "never_expires": never_expires,
                 "has_token": bool(token_str),
                 "has_active_sub": has_active_sub,
                 "created_at": created.isoformat() if created else None,
@@ -808,9 +814,11 @@ async def revoke_token_api(token: str) -> dict:
 #----- Assign or extend a subscription for any user_id
 async def assign_plan_api(user_id: int, days: int) -> dict:
     try:
-        if days < 1:
-            raise HTTPException(status_code=400, detail="Days must be at least 1.")
-        result = await db.assign_subscription(user_id, days)
+        #----- 0 / empty days means "never expires"
+        if days and days > 0:
+            result = await db.assign_subscription(user_id, days)
+        else:
+            result = await db.set_user_never_expires(user_id)
         return {"status": "success", "data": result}
     except HTTPException:
         raise
