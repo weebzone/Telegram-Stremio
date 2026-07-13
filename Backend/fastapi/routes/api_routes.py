@@ -836,9 +836,22 @@ async def set_token_valid_upto_api(token: str, days) -> dict:
 async def link_token_user_api(token: str, user_id: int) -> dict:
     try:
         success = await db.link_token_user(token, user_id)
-        if success:
-            return {"status": "success", "message": f"Token linked to user {user_id}."}
-        raise HTTPException(status_code=404, detail="Token not found or already linked.")
+        if not success:
+            raise HTTPException(status_code=404, detail="Token not found or already linked.")
+
+        #----- Best-effort: capture the Telegram display name so the UI shows it
+        try:
+            tg_user = await StreamBot.get_users(user_id)
+            if tg_user:
+                await db.update_user_interaction(
+                    user_id,
+                    tg_user.first_name or tg_user.username or f"User {user_id}",
+                    tg_user.username,
+                )
+        except Exception as e:
+            LOGGER.warning(f"Could not resolve Telegram name for linked user {user_id}: {e}")
+
+        return {"status": "success", "message": f"Token linked to user {user_id}."}
     except HTTPException:
         raise
     except Exception as e:
