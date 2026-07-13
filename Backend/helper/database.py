@@ -417,7 +417,7 @@ class Database:
 
         return False
 
-    async def assign_subscription(self, user_id: int, days: int) -> dict:
+    async def assign_subscription(self, user_id: int, days: int, name: str = None) -> dict:
         #----- Upsert a subscription for any user_id, creating a record if it doesn't exist
         now = datetime.utcnow()
 
@@ -431,20 +431,16 @@ class Database:
         else:
             new_expiry = now + timedelta(days=days)
 
+        set_fields = {"subscription_expiry": new_expiry, "subscription_status": "active"}
+        insert_fields = {"_id": user_id, "username": None, "created_at": now}
+        if name:
+            set_fields["first_name"] = name
+        else:
+            insert_fields["first_name"] = f"User {user_id}"
+
         await self.dbs["tracking"]["users"].update_one(
             {"_id": user_id},
-            {
-                "$set": {
-                    "subscription_expiry": new_expiry,
-                    "subscription_status": "active",
-                },
-                "$setOnInsert": {
-                    "_id": user_id,
-                    "first_name": f"User {user_id}",
-                    "username": None,
-                    "created_at": now,
-                }
-            },
+            {"$set": set_fields, "$setOnInsert": insert_fields},
             upsert=True
         )
         token_doc = await self.ensure_api_token_for_user(user_id, (user or {}).get("first_name"))
@@ -463,16 +459,18 @@ class Database:
         }
 
     #----- Give a user's token never-expiring access (clears any expiry date)
-    async def set_user_never_expires(self, user_id: int) -> dict:
+    async def set_user_never_expires(self, user_id: int, name: str = None) -> dict:
         now = datetime.utcnow()
         user = await self.get_user(user_id)
+        set_fields = {"subscription_status": "active"}
+        insert_fields = {"username": None, "created_at": now}
+        if name:
+            set_fields["first_name"] = name
+        else:
+            insert_fields["first_name"] = f"User {user_id}"
         await self.dbs["tracking"]["users"].update_one(
             {"_id": user_id},
-            {
-                "$set": {"subscription_status": "active"},
-                "$unset": {"subscription_expiry": ""},
-                "$setOnInsert": {"first_name": f"User {user_id}", "username": None, "created_at": now},
-            },
+            {"$set": set_fields, "$unset": {"subscription_expiry": ""}, "$setOnInsert": insert_fields},
             upsert=True,
         )
         token_doc = await self.ensure_api_token_for_user(user_id, (user or {}).get("first_name"))
@@ -2059,10 +2057,14 @@ class Database:
     #----- Count tokens that would stop working if subscription mode is enabled
     async def count_uncovered_tokens(self) -> int:
         tokens = await self.get_all_api_tokens()
+        now = datetime.utcnow()
         count = 0
         for t in tokens:
             if t.get("is_admin") or t.get("subscription_exempt"):
                 continue
+            exp = t.get("expires_at")
+            if exp and exp > now:
+                continue  #----- token has its own live expiry (honoured in sub mode)
             uid = t.get("user_id")
             if not uid:
                 count += 1

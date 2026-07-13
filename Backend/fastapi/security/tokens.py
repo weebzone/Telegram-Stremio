@@ -36,6 +36,24 @@ async def verify_token(token: str):
     #----- Subscription expiry check (only when the SUBSCRIPTION feature is enabled).
     #----- Admin and lifetime (subscription-exempt) tokens always bypass expiry.
     if SettingsManager.current().subscription and not token_data["is_admin"] and not token_data.get("subscription_exempt"):
+
+        #----- Compare correctly regardless of timezone awareness
+        def _expired(when):
+            ref = datetime.utcnow()
+            try:
+                if when.tzinfo is not None:
+                    ref = datetime.now(timezone.utc)
+            except AttributeError:
+                pass
+            return when < ref
+
+        #----- An admin-set token expiry is an explicit grant, honoured in every mode
+        token_expiry = token_data.get("expires_at")
+        if token_expiry is not None:
+            if _expired(token_expiry):
+                token_data["subscription_expired"] = True
+            return token_data
+
         user_id = token_data.get("user_id")
         if not user_id:
             token_data["subscription_expired"] = True
@@ -47,18 +65,7 @@ async def verify_token(token: str):
             return token_data
 
         expiry = user.get("subscription_expiry")
-        if not expiry:
-            token_data["subscription_expired"] = True
-            return token_data
-
-        #----- Compare correctly regardless of timezone awareness
-        now = datetime.utcnow()
-        try:
-            if expiry.tzinfo is not None:
-                now = datetime.now(timezone.utc)
-        except AttributeError:
-            pass
-        if expiry < now:
+        if not expiry or _expired(expiry):
             token_data["subscription_expired"] = True
             return token_data
 

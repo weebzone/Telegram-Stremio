@@ -3,6 +3,7 @@ from pyrogram.enums import ChatMemberStatus
 from pyrogram.types import ChatMemberUpdated
 
 from Backend import db
+from Backend.config import Telegram
 from Backend.helper.settings_manager import SettingsManager
 from Backend.logger import LOGGER
 
@@ -20,6 +21,11 @@ async def on_user_join(client: Client, chat_member_updated: ChatMemberUpdated):
         return
 
     user = chat_member_updated.new_chat_member.user
+
+    #----- Never kick the owner or configured approvers
+    if user.id == Telegram.OWNER_ID or user.id in (SettingsManager.current().approver_ids or []):
+        return
+
     db_user = await db.get_user(user.id)
     if db.is_subscription_active(db_user):
         return

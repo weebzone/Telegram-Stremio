@@ -733,24 +733,31 @@ async def get_all_tokens_api() -> dict:
             lifetime = bool(token_doc.get("subscription_exempt"))
             token_str = token_doc.get("token")
 
-            #----- Sub ON: expiry comes from the subscription. Sub OFF: from the token itself.
-            if sub_on:
-                expiry = user.get("subscription_expiry") if user else None
-            else:
-                expiry = token_doc.get("expires_at")
+            token_expiry = token_doc.get("expires_at")
+            user_sub_expiry = user.get("subscription_expiry") if user else None
 
-            #----- Subscription OFF: any token streams. Admin/lifetime always active.
-            if not sub_on or is_admin or lifetime:
+            #----- Sub OFF: token's own expiry (display only). Sub ON: token expiry is an
+            #----- admin grant, otherwise fall back to the subscription's expiry.
+            if not sub_on:
+                expiry = token_expiry
                 is_expired = False
-            elif not user_found or sub_status != "active" or not expiry:
-                is_expired = True
+            elif is_admin or lifetime:
+                expiry = None
+                is_expired = False
+            elif token_expiry is not None:
+                expiry = token_expiry
+                is_expired = token_expiry < now
+            elif user_found and sub_status == "active" and user_sub_expiry:
+                expiry = user_sub_expiry
+                is_expired = user_sub_expiry < now
             else:
-                is_expired = expiry < now
+                expiry = user_sub_expiry
+                is_expired = True
 
             created = token_doc.get("created_at") or (user.get("created_at") if user else None)
             limits = token_doc.get("limits") or {}
             usage = token_doc.get("usage") or {}
-            has_active_sub = sub_on and user_found and sub_status == "active" and expiry is not None and expiry > now
+            has_active_sub = sub_on and user_found and sub_status == "active" and bool(user_sub_expiry) and user_sub_expiry > now
             never_expires = not expiry and (is_admin or lifetime or not sub_on)
 
             return {
@@ -824,11 +831,13 @@ async def revoke_token_api(token: str) -> dict:
 #----- Assign or extend a subscription for any user_id
 async def assign_plan_api(user_id: int, days: int) -> dict:
     try:
+        #----- Use the real Telegram name so the Plans page shows it (not "User <id>")
+        name = await _fetch_tg_name(user_id)
         #----- 0 / empty days means "never expires"
         if days and days > 0:
-            result = await db.assign_subscription(user_id, days)
+            result = await db.assign_subscription(user_id, days, name)
         else:
-            result = await db.set_user_never_expires(user_id)
+            result = await db.set_user_never_expires(user_id, name)
         return {"status": "success", "data": result}
     except HTTPException:
         raise

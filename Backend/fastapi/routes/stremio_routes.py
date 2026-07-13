@@ -309,17 +309,15 @@ async def get_manifest(token: str, token_data: dict = Depends(verify_token)):
     addon_desc = "Streams movies and series from your Telegram."
     addon_version = ADDON_VERSION
 
-    #----- Show expiry info in the addon: from the subscription (sub on) or the token (sub off)
+    #----- Show expiry info in the addon: token's own expiry first, else the subscription
     try:
-        expiry_obj = None
-        if SettingsManager.current().subscription:
+        expiry_obj = token_data.get("expires_at")
+        if expiry_obj is None and SettingsManager.current().subscription:
             user_id = token_data.get("user_id")
             if user_id:
                 user = await db.get_user(int(user_id))
                 if user and user.get("subscription_status") == "active":
                     expiry_obj = user.get("subscription_expiry")
-        else:
-            expiry_obj = token_data.get("expires_at")
 
         if expiry_obj:
             expiry_str = expiry_obj.strftime("%d %b %Y").lstrip("0")
@@ -602,8 +600,12 @@ async def get_streams(
             ]
         }
 
-    #----- Subscription users must currently be members of the configured group
-    if SettingsManager.current().subscription:
+    #----- Subscription users must currently be members of the configured group.
+    #----- Admin, lifetime and admin-set token-expiry grants skip this check.
+    if (SettingsManager.current().subscription
+            and not token_data.get("is_admin")
+            and not token_data.get("subscription_exempt")
+            and not token_data.get("expires_at")):
         user_id = token_data.get("user_id")
         if user_id and not await _is_subscription_member(int(user_id)):
             return {
