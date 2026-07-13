@@ -736,6 +736,7 @@ async def get_all_tokens_api() -> dict:
             created = token_doc.get("created_at") or (user.get("created_at") if user else None)
             limits = token_doc.get("limits") or {}
             usage = token_doc.get("usage") or {}
+            has_active_sub = user_found and sub_status == "active" and expiry is not None and expiry > now
 
             return {
                 "token": token_str,
@@ -745,6 +746,7 @@ async def get_all_tokens_api() -> dict:
                 "is_admin": is_admin,
                 "lifetime": lifetime,
                 "has_token": bool(token_str),
+                "has_active_sub": has_active_sub,
                 "created_at": created.isoformat() if created else None,
                 "expires_at": expiry.isoformat() if expiry else None,
                 "is_expired": is_expired,
@@ -786,7 +788,7 @@ async def get_all_tokens_api() -> dict:
 
         #----- Sort: active-with-token first, active-no-token next, expired last
         result.sort(key=lambda x: (x["is_expired"], not x["has_token"]))
-        return {"tokens": result}
+        return {"tokens": result, "subscription": sub_on}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

@@ -308,29 +308,25 @@ async def get_manifest(token: str, token_data: dict = Depends(verify_token)):
     addon_name = ADDON_NAME
     addon_desc = "Streams movies and series from your Telegram."
     addon_version = ADDON_VERSION
-    expiry_obj = None
 
-    if SettingsManager.current().subscription:
-        user_id = token_data.get("user_id")
-        if user_id:
-            try:
-                user = await db.get_user(int(user_id))
-                if user and user.get("subscription_status") == "active":
-                    expiry_obj = user.get("subscription_expiry")
-                    if expiry_obj:
-                        expiry_str = expiry_obj.strftime("%d %b %Y").lstrip("0")
-                        addon_name = f"{ADDON_NAME} — Expires {expiry_str}"
-                        addon_desc = (
-                            f"📅 Subscription active until {expiry_str}.\n"
-                            f"Streams movies and series from your Telegram."
-                        )
-                        epoch_tag = format(int(expiry_obj.timestamp()) & 0xFFFF, "x")
-                        addon_version = f"{ADDON_VERSION}-{epoch_tag}"
-                    else:
-                        addon_name = f"{ADDON_NAME} — Active"
-                        addon_desc = "✅ Subscription active.\nStreams movies and series from your Telegram."
-            except Exception:
-                pass
+    #----- Show expiry info in the addon whenever the token has one (any mode)
+    user_id = token_data.get("user_id")
+    if user_id:
+        try:
+            user = await db.get_user(int(user_id))
+            if user and user.get("subscription_status") == "active":
+                expiry_obj = user.get("subscription_expiry")
+                if expiry_obj:
+                    expiry_str = expiry_obj.strftime("%d %b %Y").lstrip("0")
+                    addon_name = f"{ADDON_NAME} — Expires {expiry_str}"
+                    addon_desc = (
+                        f"📅 Access active until {expiry_str}.\n"
+                        f"Streams movies and series from your Telegram."
+                    )
+                    epoch_tag = format(int(expiry_obj.timestamp()) & 0xFFFF, "x")
+                    addon_version = f"{ADDON_VERSION}-{epoch_tag}"
+        except Exception:
+            pass
 
     return {
         "id": f"telegram.media.{token[:8]}",

@@ -301,21 +301,21 @@
     <div class="modal-glass">
         <div class="flex items-start justify-between gap-4 mb-5">
             <div>
-                <h3 class="text-xl font-bold section-title">Assign Subscription Plan</h3>
+                <h3 class="text-xl font-bold section-title" id="assign-modal-title">Assign Subscription Plan</h3>
                 <p class="text-sm text-soft mt-1" id="assign-user-label">User: –</p>
             </div>
             <button onclick="closeModal('assign-modal')" class="glass-btn rounded-full w-10 h-10 flex items-center justify-center"><i class="fas fa-xmark"></i></button>
         </div>
         <input type="hidden" id="assign-user-id">
         <div class="space-y-4">
-            <div class="modal-field">
+            <div class="modal-field" id="assign-plan-field">
                 <label>Select a Plan</label>
                 <select id="assign-plan-select" class="glass-select"><option value="">— Select plan —</option></select>
             </div>
             <div class="modal-field">
-                <label>Or enter custom days</label>
+                <label id="assign-days-label">Or enter custom days</label>
                 <input type="number" id="assign-custom-days" placeholder="e.g. 30" min="1" class="glass-input">
-                <p class="text-xs text-soft mt-2">Custom days override selected plan.</p>
+                <p class="text-xs text-soft mt-2" id="assign-days-hint">Custom days override selected plan.</p>
             </div>
         </div>
         <div class="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-6">
@@ -351,6 +351,7 @@
 <script>
     let allTokens = [];
     let currentPage = 1;
+    let subEnabled = true;
 
     function fmtDate(iso) {
         if (!iso) return '—';
@@ -382,8 +383,8 @@
     }
 
     function statusBadge(t) {
-        if (t.is_admin) return `<span class="status-badge status-gold"><i class="fas fa-crown text-[8px]"></i> Admin</span>`;
-        if (t.lifetime) return `<span class="status-badge status-lifetime"><i class="fas fa-infinity text-[8px]"></i> Lifetime</span>`;
+        if (t.is_admin) return `<span class="status-badge status-gold"><i class="fas fa-crown text-[8px]"></i> Owner</span>`;
+        if (t.lifetime) return `<span class="status-badge status-lifetime"><i class="fas fa-infinity text-[8px]"></i> Permanent</span>`;
         return t.is_expired
             ? `<span class="status-badge status-expired"><i class="fas fa-circle text-[8px]"></i> Expired</span>`
             : `<span class="status-badge status-active"><i class="fas fa-circle text-[8px]"></i> Active</span>`;
@@ -417,15 +418,16 @@
 
         if (t.has_token) {
             btns += `<button onclick="openLimitsModal('${escHtml(t.token)}', ${t.daily_limit_gb || 0}, ${t.monthly_limit_gb || 0})" class="action-chip glass-btn">Limits</button>`;
-            btns += `<button onclick="toggleLifetime('${escHtml(t.token)}', ${t.lifetime ? 'false' : 'true'})" class="action-chip ${t.lifetime ? 'glass-btn' : 'glass-btn-purple'}">${t.lifetime ? 'Remove Lifetime' : 'Make Lifetime'}</button>`;
+            btns += `<button onclick="toggleLifetime('${escHtml(t.token)}', ${t.lifetime ? 'false' : 'true'})" class="action-chip ${t.lifetime ? 'glass-btn' : 'glass-btn-purple'}">${t.lifetime ? 'Remove Permanent' : 'Make Permanent'}</button>`;
         }
 
         if (t.user_id) {
-            btns += `
-                <button onclick="openAssignModal(${t.user_id}, '${safeName}')" class="action-chip glass-btn-primary">Assign</button>
-                <button onclick="openSubModal(${t.user_id}, '${safeName}', 'extend')" class="action-chip glass-btn-success">Extend</button>
-                <button onclick="openSubModal(${t.user_id}, '${safeName}', 'reduce')" class="action-chip glass-btn-warning">Reduce</button>
-                <button onclick="openSubModal(${t.user_id}, '${safeName}', 'delete')" class="action-chip glass-btn-danger">Revoke</button>`;
+            btns += `<button onclick="openAssignModal(${t.user_id}, '${safeName}')" class="action-chip glass-btn-primary">${subEnabled ? 'Assign' : 'Set Expiry'}</button>`;
+            btns += `<button onclick="openSubModal(${t.user_id}, '${safeName}', 'extend')" class="action-chip glass-btn-success">Extend</button>`;
+            btns += `<button onclick="openSubModal(${t.user_id}, '${safeName}', 'reduce')" class="action-chip glass-btn-warning">Reduce</button>`;
+            if (subEnabled || t.has_active_sub) {
+                btns += `<button onclick="openSubModal(${t.user_id}, '${safeName}', 'delete')" class="action-chip glass-btn-danger">Revoke</button>`;
+            }
         } else if (t.token) {
             btns += `<button onclick="linkUser('${escHtml(t.token)}')" class="action-chip glass-btn-purple">Link User</button>`;
         }
@@ -449,7 +451,7 @@
                     <td class="px-4 py-4">${addonHtml(t)}</td>
                     <td class="px-4 py-4">${usageHtml(t)}</td>
                     <td class="px-4 py-4 text-xs">
-                        ${expBad ? `<span class="text-purple-300 font-semibold">Lifetime</span>`
+                        ${expBad ? `<span class="text-purple-300 font-semibold">Permanent</span>`
                             : t.expires_at ? `<span class="${t.is_expired ? 'text-red-300 font-semibold' : 'section-title'}">${fmtDate(t.expires_at)}</span>`
                             : `<span class="text-soft italic">—</span>`}
                     </td>
@@ -485,7 +487,7 @@
                             <div class="rounded-2xl px-4 py-3" style="background: color-mix(in srgb, var(--bg) 55%, transparent); border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);">
                                 <div class="text-[11px] uppercase tracking-[0.14em] text-soft font-bold mb-1">Expires</div>
                                 <div class="text-sm font-semibold ${t.is_expired ? 'text-red-300' : 'section-title'} break-words">
-                                    ${expBad ? 'Lifetime' : (t.expires_at ? fmtDate(t.expires_at) : '—')}
+                                    ${expBad ? 'Permanent' : (t.expires_at ? fmtDate(t.expires_at) : '—')}
                                 </div>
                             </div>
                         </div>
@@ -529,6 +531,7 @@
             const resp = await fetch('/api/admin/access/tokens');
             const data = await resp.json();
             allTokens = data.tokens || [];
+            subEnabled = !!data.subscription;
             document.getElementById('stat-total').textContent = allTokens.length;
             document.getElementById('stat-active').textContent = allTokens.filter(t => !t.is_expired).length;
             document.getElementById('stat-expired').textContent = allTokens.filter(t => t.is_expired).length;
@@ -614,7 +617,7 @@
                 method: 'PATCH', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ subscription_exempt: makeExempt }),
             });
-            if (resp.ok) { showToast(makeExempt ? 'Marked as lifetime.' : 'Lifetime removed.', 'success', 'Updated'); loadTokens(); }
+            if (resp.ok) { showToast(makeExempt ? 'Marked as permanent.' : 'Permanent removed.', 'success', 'Updated'); loadTokens(); }
             else { showToast('Failed to update.', 'error', 'Failed'); }
         } catch (err) { showToast('Error: ' + err.message, 'error', 'Network Error'); }
     }
@@ -645,6 +648,12 @@
         document.getElementById('assign-user-label').textContent = `User: ${userName} (ID: ${userId})`;
         document.getElementById('assign-custom-days').value = '';
         document.getElementById('assign-plan-select').value = '';
+
+        //----- With subscription off there are no plans — just set an expiry
+        document.getElementById('assign-plan-field').style.display = subEnabled ? '' : 'none';
+        document.getElementById('assign-modal-title').textContent = subEnabled ? 'Assign Subscription Plan' : 'Set Expiry';
+        document.getElementById('assign-days-label').textContent = subEnabled ? 'Or enter custom days' : 'Expires in (days)';
+        document.getElementById('assign-days-hint').style.display = subEnabled ? '' : 'none';
         openModal('assign-modal');
     }
 
@@ -653,7 +662,7 @@
         const customDays = parseInt(document.getElementById('assign-custom-days').value) || 0;
         const planDays = parseInt(document.getElementById('assign-plan-select').value) || 0;
         const days = customDays || planDays;
-        if (!days || days < 1) { showToast('Please select a plan or enter custom days.', 'error', 'Validation'); return; }
+        if (!days || days < 1) { showToast(subEnabled ? 'Please select a plan or enter custom days.' : 'Please enter number of days.', 'error', 'Validation'); return; }
         try {
             const resp = await fetch(`/api/admin/access/users/${userId}/assign-plan`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ days }),
