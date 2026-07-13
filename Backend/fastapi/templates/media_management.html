@@ -24,7 +24,7 @@
                 <div class="flex flex-wrap gap-2">
                     <a href="/media/manage?media_type=movie"
                        class="inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold transition border
-                              {% if media_type == 'movie' %}
+                              {% if media_type == 'movie' and not custom %}
                               bg-primary text-white border-primary shadow-lg shadow-primary/20
                               {% else %}
                               glass-panel text-text hover:bg-surface-2 border-hairline
@@ -34,13 +34,23 @@
                     </a>
                     <a href="/media/manage?media_type=tv"
                        class="inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold transition border
-                              {% if media_type == 'tv' %}
+                              {% if media_type == 'tv' and not custom %}
                               bg-primary text-white border-primary shadow-lg shadow-primary/20
                               {% else %}
                               glass-panel text-text hover:bg-surface-2 border-hairline
                               {% endif %}">
                         <i class="fa-solid fa-tv"></i>
                         TV Shows
+                    </a>
+                    <a href="/media/manage?media_type={{ media_type }}&custom=1"
+                       class="inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold transition border
+                              {% if custom %}
+                              bg-amber-500 text-white border-amber-500 shadow-lg shadow-amber-500/20
+                              {% else %}
+                              glass-panel text-text hover:bg-surface-2 border-hairline
+                              {% endif %}">
+                        <i class="fa-solid fa-star"></i>
+                        Custom
                     </a>
                     <button type="button" onclick="openManualAdd()"
                        class="inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold transition border bg-emerald-500 text-white border-emerald-500 shadow-lg shadow-emerald-500/20 hover:bg-emerald-500/90">
@@ -53,7 +63,7 @@
             <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div class="rounded-2xl border border-hairline bg-surface px-4 py-3">
                     <p class="text-[11px] uppercase tracking-wider text-text-secondary font-bold">Current view</p>
-                    <p class="mt-1 text-sm font-semibold text-text capitalize">{{ media_type }}</p>
+                    <p class="mt-1 text-sm font-semibold text-text capitalize">{% if custom %}Custom {% endif %}{{ media_type }}</p>
                 </div>
                 <div class="rounded-2xl border border-hairline bg-surface px-4 py-3">
                     <p class="text-[11px] uppercase tracking-wider text-text-secondary font-bold">Actions</p>
@@ -173,6 +183,7 @@
     let currentSearch = '';
     let isLoading = false;
     const mediaType = '{{ media_type }}';
+    const isCustom = {{ 'true' if custom else 'false' }};
 
     function showLoading() {
         isLoading = true;
@@ -208,7 +219,7 @@
         currentSearch = search;
 
         try {
-            const url = `/api/media/list?media_type=${mediaType}&page=${page}&page_size=24&search=${encodeURIComponent(search)}`;
+            const url = `/api/media/list?media_type=${mediaType}&page=${page}&page_size=24&search=${encodeURIComponent(search)}&custom=${isCustom ? 1 : 0}`;
             const response = await fetch(url, {
                 method: 'GET',
                 credentials: 'same-origin',
@@ -275,6 +286,12 @@
                         <i class="fa-solid fa-calendar-days"></i> ${year}
                     </span>
                 </div>
+                ${Number(item.tmdb_id) < 0 ? `
+                <div class="absolute top-3 right-3">
+                    <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-500/90 text-white text-[11px] font-bold border border-amber-400/40">
+                        <i class="fa-solid fa-star"></i> Custom
+                    </span>
+                </div>` : ''}
             </div>
 
             <div class="p-4">

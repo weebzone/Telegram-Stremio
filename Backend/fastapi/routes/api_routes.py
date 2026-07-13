@@ -101,13 +101,19 @@ async def list_media_api(
     media_type: str = Query("movie", regex="^(movie|tv)$"),
     page: int = Query(1, ge=1),
     page_size: int = Query(24, ge=1, le=100),
-    search: str = Query("", max_length=100)
+    search: str = Query("", max_length=100),
+    custom: bool = Query(False)
 ):
     try:
         key = "movies" if media_type == "movie" else "tv_shows"
+        #----- Custom (manually added) titles carry a negative synthetic tmdb_id
+        extra_filter = {"tmdb_id": {"$lt": 0}} if custom else None
         if search:
             result = await db.search_documents(search, page, page_size)
-            filtered_results = [item for item in result['results'] if item.get('media_type') == media_type]
+            filtered_results = [
+                item for item in result['results']
+                if item.get('media_type') == media_type and (not custom or int(item.get('tmdb_id') or 0) < 0)
+            ]
             total_filtered = len(filtered_results)
             start_index = (page - 1) * page_size
             resp = {
@@ -117,9 +123,9 @@ async def list_media_api(
                 key: filtered_results[start_index:start_index + page_size],
             }
         elif media_type == "movie":
-            resp = await db.sort_movies([], page, page_size)
+            resp = await db.sort_movies([], page, page_size, extra_filter=extra_filter)
         else:
-            resp = await db.sort_tv_shows([], page, page_size)
+            resp = await db.sort_tv_shows([], page, page_size, extra_filter=extra_filter)
         _resolve_covers(resp.get(key))
         return resp
     except Exception as e:
