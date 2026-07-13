@@ -429,7 +429,7 @@
             btns += `<button onclick="openAssignModal(${t.user_id}, '${safeName}')" class="action-chip glass-btn-primary">${subEnabled ? 'Assign' : 'Set Expiry'}</button>`;
             btns += `<button onclick="openSubModal(${t.user_id}, '${safeName}', 'extend')" class="action-chip glass-btn-success">Extend</button>`;
             btns += `<button onclick="openSubModal(${t.user_id}, '${safeName}', 'reduce')" class="action-chip glass-btn-warning">Reduce</button>`;
-            if (subEnabled || t.has_active_sub) {
+            if (subEnabled) {
                 btns += `<button onclick="openSubModal(${t.user_id}, '${safeName}', 'delete')" class="action-chip glass-btn-danger">Revoke</button>`;
             }
         } else if (t.token) {
@@ -664,10 +664,12 @@
     function openSubModal(userId, userName, action) {
         document.getElementById('sub-action-user-id').value = userId;
         document.getElementById('sub-action-action').value = action;
-        const titles = { extend: 'Extend Subscription', reduce: 'Reduce Subscription', delete: 'Revoke Subscription' };
+        const noun = subEnabled ? 'Subscription' : 'Expiry';
+        const thing = subEnabled ? 'subscription' : 'access';
+        const titles = { extend: `Extend ${noun}`, reduce: `Reduce ${noun}`, delete: 'Revoke Subscription' };
         const descs = {
-            extend: `Add days to <b>${userName}</b>'s subscription.`,
-            reduce: `Remove days from <b>${userName}</b>'s subscription.`,
+            extend: `Add days to <b>${userName}</b>'s ${thing}.`,
+            reduce: `Remove days from <b>${userName}</b>'s ${thing}.`,
             delete: `<b>Warning:</b> Revoke <b>${userName}</b>'s subscription entirely.`,
         };
         document.getElementById('sub-action-title').textContent = titles[action];
@@ -690,7 +692,7 @@
                 method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, days }),
             });
             const data = await resp.json();
-            if (resp.ok) { showToast(`Subscription updated for user ${userId}.`, 'success', 'Updated'); closeModal('sub-action-modal'); loadTokens(); }
+            if (resp.ok) { showToast(`Updated for user ${userId}.`, 'success', 'Updated'); closeModal('sub-action-modal'); loadTokens(); }
             else { showToast(data.detail || 'Failed.', 'error', 'Update Failed'); }
         } catch (err) { showToast('Error: ' + err.message, 'error', 'Network Error'); }
     }
