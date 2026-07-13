@@ -33,9 +33,8 @@ async def verify_token(token: str):
     except (TypeError, ValueError):
         token_data["is_admin"] = bool(token_data.get("is_admin"))
 
-    #----- Admins (owner-linked tokens) never expire, in either mode
     #----- Subscription expiry check (only when the SUBSCRIPTION feature is enabled)
-    if not token_data["is_admin"] and SettingsManager.current().subscription:
+    if SettingsManager.current().subscription:
         user_id = token_data.get("user_id")
         if not user_id:
             token_data["subscription_expired"] = True
@@ -61,20 +60,6 @@ async def verify_token(token: str):
         if expiry < now:
             token_data["subscription_expired"] = True
             return token_data
-
-    #----- Subscription mode OFF: honour the token's own valid_upto (None = never)
-    elif not token_data["is_admin"]:
-        valid_upto = token_data.get("valid_upto")
-        if valid_upto:
-            now = datetime.utcnow()
-            try:
-                if valid_upto.tzinfo is not None:
-                    now = datetime.now(timezone.utc)
-            except AttributeError:
-                pass
-            if valid_upto < now:
-                token_data["subscription_expired"] = True
-                return token_data
 
     if daily_limit := limits.get("daily_limit_gb"):
         if daily_limit > 0:

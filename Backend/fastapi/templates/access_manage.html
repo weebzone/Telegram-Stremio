@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{% if subscription_enabled %}Access & Subscriptions{% else %}Access{% endif %}{% endblock %}
+{% block title %}Access Management{% endblock %}
 
 {% block content %}
 <style>
@@ -14,7 +14,6 @@
     .table-shell,
     .stat-card,
     .mobile-token-card,
-    .mobile-user-card,
     .empty-state,
     .modal-glass {
         background: color-mix(in srgb, var(--card) 50%, transparent);
@@ -29,7 +28,6 @@
     .table-shell,
     .stat-card,
     .mobile-token-card,
-    .mobile-user-card,
     .empty-state {
         border-radius: 1.5rem;
     }
@@ -146,48 +144,6 @@
         box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 12%, transparent);
     }
 
-    /* Tabs */
-    .tab-bar {
-        display: flex;
-        gap: 0.5rem;
-        flex-wrap: wrap;
-    }
-
-    .tab-btn {
-        padding: 0.6rem 1.15rem;
-        border-radius: 9999px;
-        font-weight: 700;
-        font-size: 0.85rem;
-        color: var(--text-sec);
-        border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
-        background: color-mix(in srgb, var(--card) 70%, transparent);
-        transition: all 0.2s ease;
-        display: inline-flex;
-        align-items: center;
-        gap: 0.5rem;
-    }
-
-    .tab-btn:hover { color: var(--text); transform: translateY(-1px); }
-
-    .tab-btn.active {
-        color: #fff;
-        background: linear-gradient(
-            135deg,
-            color-mix(in srgb, var(--primary) 88%, white 8%),
-            color-mix(in srgb, var(--accent) 82%, var(--primary) 18%)
-        );
-        border-color: color-mix(in srgb, var(--primary) 50%, transparent);
-        box-shadow: 0 10px 26px color-mix(in srgb, var(--primary) 22%, transparent);
-    }
-
-    .tab-count {
-        font-size: 0.7rem;
-        font-weight: 800;
-        padding: 0.1rem 0.5rem;
-        border-radius: 9999px;
-        background: color-mix(in srgb, var(--bg) 45%, transparent);
-    }
-
     .stat-card {
         padding: 1.25rem;
         text-align: center;
@@ -270,8 +226,7 @@
         background: color-mix(in srgb, #ef4444 8%, transparent);
     }
 
-    .status-badge,
-    .metric-badge {
+    .status-badge {
         display: inline-flex;
         align-items: center;
         gap: 0.45rem;
@@ -283,15 +238,13 @@
         border: 1px solid transparent;
     }
 
-    .status-active,
-    .badge-active {
+    .status-active {
         background: color-mix(in srgb, #22c55e 16%, transparent);
         color: #86efac;
         border-color: color-mix(in srgb, #22c55e 28%, transparent);
     }
 
-    .status-expired,
-    .badge-expired {
+    .status-expired {
         background: color-mix(in srgb, #ef4444 14%, transparent);
         color: #fca5a5;
         border-color: color-mix(in srgb, #ef4444 28%, transparent);
@@ -301,12 +254,6 @@
         background: color-mix(in srgb, #f59e0b 16%, transparent);
         color: #fde68a;
         border-color: color-mix(in srgb, #f59e0b 28%, transparent);
-    }
-
-    .badge-admin {
-        background: color-mix(in srgb, #f5c518 18%, transparent);
-        color: #f5c518;
-        border-color: color-mix(in srgb, #f5c518 30%, transparent);
     }
 
     .action-chip {
@@ -330,62 +277,16 @@
         border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
     }
 
-    .mobile-token-card,
-    .mobile-user-card {
+    .mobile-token-card {
         padding: 1rem;
     }
 
-    .mobile-token-card + .mobile-token-card,
-    .mobile-user-card + .mobile-user-card {
+    .mobile-token-card + .mobile-token-card {
         margin-top: 0.9rem;
     }
 
     .mobile-grid {
         display: none;
-    }
-
-    /* Plans */
-    .plan-card {
-        position: relative;
-        overflow: hidden;
-        border-radius: 1.5rem;
-        background: linear-gradient(
-            180deg,
-            color-mix(in srgb, var(--card) 96%, var(--bg)),
-            color-mix(in srgb, var(--card) 88%, var(--bg))
-        );
-        border: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
-        box-shadow: 0 12px 30px rgba(0,0,0,0.18);
-        transition: transform 0.28s ease, border-color 0.28s ease, box-shadow 0.28s ease;
-    }
-
-    .plan-card::before {
-        content: "";
-        position: absolute;
-        inset: -25% auto auto -5%;
-        width: 8rem;
-        height: 8rem;
-        border-radius: 9999px;
-        background: color-mix(in srgb, var(--primary) 18%, transparent);
-        filter: blur(36px);
-        pointer-events: none;
-    }
-
-    .plan-card:hover {
-        transform: translateY(-4px);
-        border-color: color-mix(in srgb, var(--primary) 30%, var(--border));
-        box-shadow: 0 18px 42px rgba(0,0,0,0.24);
-    }
-
-    .plan-actions {
-        opacity: 0;
-        transform: translateY(-4px);
-        transition: all 0.22s ease;
-    }
-
-    .plan-card:hover .plan-actions {
-        opacity: 1;
-        transform: translateY(0);
     }
 
     .pagination-shell {
@@ -472,34 +373,28 @@
         .pagination-btn {
             width: 100%;
         }
-
-        .plan-actions {
-            opacity: 1;
-            transform: none;
-        }
     }
 </style>
 
 <div class="access-shell py-2 sm:py-4">
-    <!-- Hero -->
     <section class="page-hero hero-glow p-5 sm:p-6 lg:p-8">
         <div class="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
             <div>
                 <div class="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-bold tracking-[0.18em] uppercase mb-3"
                      style="border-color: color-mix(in srgb, var(--primary) 28%, var(--border)); color: var(--text-sec); background: color-mix(in srgb, var(--primary) 10%, transparent);">
                     <i class="fas fa-shield-halved text-[11px]" style="color: var(--primary);"></i>
-                    {% if subscription_enabled %}Access &amp; Subscription Hub{% else %}Access Control Hub{% endif %}
+                    Access Control Hub
                 </div>
                 <h1 class="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight section-title">
-                    {% if subscription_enabled %}Access &amp; Subscriptions{% else %}Access{% endif %}
+                    Access Management
                 </h1>
                 <p class="mt-2 text-sm sm:text-base section-muted max-w-2xl">
-                    {% if subscription_enabled %}Manage addon tokens, subscribers, and plans from a single control center.{% else %}Manage addon access tokens and control how long each one stays valid.{% endif %}
+                    Manage addon access tokens, link users, assign plans, and control subscription access.
                 </p>
             </div>
 
             <div class="flex flex-wrap gap-3">
-                <button onclick="refreshAll()" class="glass-btn glass-btn-primary rounded-2xl px-5 py-3 text-sm font-bold inline-flex items-center gap-2">
+                <button onclick="loadTokens()" class="glass-btn glass-btn-primary rounded-2xl px-5 py-3 text-sm font-bold inline-flex items-center gap-2">
                     <i class="fas fa-rotate-right"></i>
                     Refresh
                 </button>
@@ -507,7 +402,6 @@
         </div>
     </section>
 
-    <!-- Stats -->
     <section class="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div class="stat-card stat-primary">
             <div class="stat-value" style="color: var(--primary);" id="stat-total">–</div>
@@ -523,60 +417,32 @@
         </div>
     </section>
 
-    <!-- Tabs + shared toolbar -->
     <section class="section-panel p-4 sm:p-5 lg:p-6">
-        <div class="flex flex-col gap-4">
-            <div class="tab-bar" id="tab-bar">
-                <button class="tab-btn active" data-tab="tokens" onclick="switchTab('tokens')">
-                    <i class="fas fa-key text-[11px]"></i> Tokens
-                    <span class="tab-count" id="count-tokens">0</span>
-                </button>
-                {% if subscription_enabled %}
-                <button class="tab-btn" data-tab="subscribers" onclick="switchTab('subscribers')">
-                    <i class="fas fa-users text-[11px]"></i> Subscribers
-                    <span class="tab-count" id="count-subscribers">0</span>
-                </button>
-                <button class="tab-btn" data-tab="plans" onclick="switchTab('plans')">
-                    <i class="fas fa-layer-group text-[11px]"></i> Plans
-                    <span class="tab-count" id="count-plans">0</span>
-                </button>
-                {% endif %}
+        <div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 mb-5">
+            <div>
+                <h2 class="text-lg sm:text-xl font-bold section-title">Access Tokens</h2>
+                <p class="text-sm section-muted mt-1">Search, filter, manage tokens, and control user access.</p>
             </div>
 
-            <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-                <div id="filters-wrap" class="w-full lg:w-auto grid grid-cols-1 sm:grid-cols-3 gap-3 lg:min-w-[560px]">
-                    <input
-                        id="search-input"
-                        type="text"
-                        placeholder="Search by name or user ID..."
-                        class="glass-input"
-                        oninput="onFilterChange()"
-                    >
-                    <select id="filter-status" class="glass-select" onchange="onFilterChange()">
-                        <option value="all">All Status</option>
-                        <option value="active">Active</option>
-                        <option value="expired">Expired</option>
-                    </select>
-                    <select id="page-size" class="glass-select" onchange="onFilterChange()">
-                        <option value="10">10 / page</option>
-                        <option value="25">25 / page</option>
-                        <option value="50">50 / page</option>
-                    </select>
-                </div>
-
-                <button id="add-plan-btn" onclick="openPlanModal()" class="hidden glass-btn glass-btn-primary rounded-2xl px-5 py-3 text-sm font-bold inline-flex items-center justify-center gap-2">
-                    <i class="fas fa-plus"></i>
-                    Add Plan
-                </button>
+            <div class="w-full lg:w-auto grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <input
+                    id="search-input"
+                    type="text"
+                    placeholder="Search by name or user ID..."
+                    class="glass-input"
+                    oninput="currentPage=1; renderPage()"
+                >
+                <select id="filter-status" class="glass-select" onchange="currentPage=1; renderPage()">
+                    <option value="all">All Status</option>
+                    <option value="active">Active</option>
+                    <option value="expired">Expired</option>
+                </select>
+                <select id="page-size" class="glass-select" onchange="currentPage=1; renderPage()">
+                    <option value="10">10 / page</option>
+                    <option value="25">25 / page</option>
+                    <option value="50">50 / page</option>
+                </select>
             </div>
-        </div>
-    </section>
-
-    <!-- Tokens panel -->
-    <section id="tab-tokens" class="tab-panel section-panel p-4 sm:p-5 lg:p-6">
-        <div class="mb-5">
-            <h2 class="text-lg sm:text-xl font-bold section-title">Access Tokens</h2>
-            <p class="text-sm section-muted mt-1">Search, filter, manage tokens, and control user access.</p>
         </div>
 
         <div class="desktop-table-wrap table-shell">
@@ -620,74 +486,8 @@
             </div>
         </div>
     </section>
-
-    <!-- Subscribers panel -->
-    <section id="tab-subscribers" class="tab-panel section-panel p-4 sm:p-5 lg:p-6 hidden">
-        <div class="mb-5">
-            <h2 class="text-lg sm:text-xl font-bold section-title">User Subscriptions</h2>
-            <p class="text-sm section-muted mt-1">Search, filter, paginate, and manage subscription access.</p>
-        </div>
-
-        <div class="desktop-table-wrap table-shell">
-            <div class="overflow-x-auto no-scrollbar">
-                <table class="access-table min-w-[780px] text-sm">
-                    <thead>
-                        <tr>
-                            <th class="px-6 py-4 text-left font-semibold">User Details</th>
-                            <th class="px-6 py-4 text-center font-semibold">Status</th>
-                            <th class="px-6 py-4 text-center font-semibold">Expiry</th>
-                            <th class="px-6 py-4 text-right font-semibold">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="subscribers-tbody">
-                        <tr>
-                            <td colspan="4" class="px-6 py-8 text-center text-soft">
-                                <i class="fas fa-spinner fa-spin mr-2"></i> Loading...
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <div id="subscribers-mobile" class="mobile-grid mt-1">
-            <div class="empty-state text-center px-4 py-8 text-soft">
-                <i class="fas fa-spinner fa-spin mr-2"></i> Loading...
-            </div>
-        </div>
-
-        <div class="pagination-shell mt-5" id="sub-pagination">
-            <div id="sub-page-info" class="pagination-text text-sm"></div>
-            <div class="controls">
-                <button id="sub-btn-prev" onclick="subChangePage(-1)"
-                    class="glass-btn pagination-btn rounded-xl px-4 py-2.5 text-sm font-semibold">
-                    ‹ Prev
-                </button>
-                <span id="sub-page-num" class="text-sm font-bold text-center section-title px-2"></span>
-                <button id="sub-btn-next" onclick="subChangePage(1)"
-                    class="glass-btn pagination-btn rounded-xl px-4 py-2.5 text-sm font-semibold">
-                    Next ›
-                </button>
-            </div>
-        </div>
-    </section>
-
-    <!-- Plans panel -->
-    <section id="tab-plans" class="tab-panel section-panel p-4 sm:p-5 lg:p-6 hidden">
-        <div class="mb-5">
-            <h2 class="text-lg sm:text-xl font-bold section-title">Subscription Plans</h2>
-            <p class="text-sm section-muted mt-1">Create, edit, and remove subscription plans.</p>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5" id="plans-container">
-            <div class="empty-state col-span-full text-center px-6 py-10 text-soft">
-                <i class="fas fa-spinner fa-spin mr-2"></i> Loading plans...
-            </div>
-        </div>
-    </section>
 </div>
 
-<!-- Assign Plan Modal (shared) -->
 <div id="assign-modal" class="fixed inset-0 hidden z-50 modal-backdrop items-center justify-center p-4">
     <div class="modal-glass">
         <div class="flex items-start justify-between gap-4 mb-5">
@@ -722,13 +522,12 @@
                 Cancel
             </button>
             <button onclick="assignPlan()" class="glass-btn glass-btn-primary rounded-2xl px-5 py-3 text-sm font-bold">
-                Assign &amp; Activate
+                Assign & Activate
             </button>
         </div>
     </div>
 </div>
 
-<!-- Manage Subscription Modal (shared: extend / reduce / revoke) -->
 <div id="sub-action-modal" class="fixed inset-0 hidden z-50 modal-backdrop items-center justify-center p-4">
     <div class="modal-glass">
         <div class="flex items-start justify-between gap-4 mb-5">
@@ -761,103 +560,23 @@
     </div>
 </div>
 
-<!-- Valid Upto Modal (subscription OFF: per-token expiry) -->
-<div id="validupto-modal" class="fixed inset-0 hidden z-50 modal-backdrop items-center justify-center p-4">
-    <div class="modal-glass">
-        <div class="flex items-start justify-between gap-4 mb-5">
-            <div>
-                <h3 class="text-xl font-bold section-title">Token Validity</h3>
-                <p class="text-sm text-soft mt-1">Set how long this token stays valid.</p>
-            </div>
-            <button onclick="closeValidUptoModal()" class="glass-btn rounded-full w-10 h-10 flex items-center justify-center">
-                <i class="fas fa-xmark"></i>
-            </button>
-        </div>
-
-        <input type="hidden" id="validupto-token">
-
-        <div class="modal-field">
-            <label>Valid for (days)</label>
-            <input type="number" id="validupto-days" placeholder="Leave empty = never expires" min="1" class="glass-input">
-            <p class="text-xs text-soft mt-2">Enter the number of days from now. Leave empty to make it never expire.</p>
-        </div>
-
-        <div class="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-6">
-            <button onclick="closeValidUptoModal()" class="glass-btn rounded-2xl px-5 py-3 text-sm font-bold">
-                Cancel
-            </button>
-            <button onclick="saveValidUpto()" class="glass-btn glass-btn-primary rounded-2xl px-5 py-3 text-sm font-bold">
-                Save Validity
-            </button>
-        </div>
-    </div>
-</div>
-
-<!-- Plan Modal -->
-<div id="plan-modal" class="fixed inset-0 hidden z-50 modal-backdrop items-center justify-center p-4">
-    <div class="modal-glass">
-        <div class="flex items-start justify-between gap-4 mb-5">
-            <div>
-                <h3 class="text-xl font-bold section-title" id="plan-modal-title">Add New Plan</h3>
-                <p class="text-sm text-soft mt-1">Create or update a subscription plan.</p>
-            </div>
-            <button onclick="closePlanModal()" class="glass-btn rounded-full w-10 h-10 flex items-center justify-center">
-                <i class="fas fa-xmark"></i>
-            </button>
-        </div>
-
-        <form id="plan-form" onsubmit="submitPlanForm(event)" class="space-y-4">
-            <input type="hidden" id="plan-id">
-
-            <div class="modal-field">
-                <label for="plan-days">Duration (Days)</label>
-                <input type="number" id="plan-days" class="glass-input" required min="1">
-            </div>
-
-            <div class="modal-field">
-                <label for="plan-price">Price (₹)</label>
-                <input type="number" id="plan-price" class="glass-input" required min="0" step="0.01">
-            </div>
-
-            <div class="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-2">
-                <button type="button" onclick="closePlanModal()" class="glass-btn rounded-2xl px-5 py-3 text-sm font-bold">
-                    Cancel
-                </button>
-                <button type="submit" class="glass-btn glass-btn-primary rounded-2xl px-5 py-3 text-sm font-bold">
-                    Save Plan
-                </button>
-            </div>
-        </form>
-    </div>
-</div>
-
 <script>
-    /* ----------------------------------------------------------------
-       Shared state
-    ---------------------------------------------------------------- */
-    const subscriptionEnabled = {{ subscription_enabled|tojson }};
     let allTokens = [];
-    let allUsers = [];
     let currentPage = 1;
-    let subPage = 1;
-    let activeTab = 'tokens';
 
-    /* ----------------------------------------------------------------
-       Helpers
-    ---------------------------------------------------------------- */
     function fmtDate(iso) {
         if (!iso) return '—';
         const d = new Date(iso);
         return d.toLocaleDateString('en-IN', {
-            timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric'
+            timeZone: 'Asia/Kolkata',
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric'
         }) + ' ' + d.toLocaleTimeString('en-IN', {
-            timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit'
+            timeZone: 'Asia/Kolkata',
+            hour: '2-digit',
+            minute: '2-digit'
         });
-    }
-
-    function formatExpiry(v) {
-        if (!v) return 'N/A';
-        return fmtDate(v);
     }
 
     function escHtml(s) {
@@ -869,58 +588,6 @@
             .replace(/'/g, '&#039;');
     }
 
-    /* ----------------------------------------------------------------
-       Tab switching + shared toolbar
-    ---------------------------------------------------------------- */
-    function switchTab(tab) {
-        activeTab = tab;
-
-        document.querySelectorAll('.tab-btn').forEach(b => {
-            b.classList.toggle('active', b.dataset.tab === tab);
-        });
-
-        ['tokens', 'subscribers', 'plans'].forEach(t => {
-            document.getElementById('tab-' + t).classList.toggle('hidden', t !== tab);
-        });
-
-        const isPlans = tab === 'plans';
-        document.getElementById('filters-wrap').classList.toggle('hidden', isPlans);
-        document.getElementById('add-plan-btn').classList.toggle('hidden', !isPlans);
-
-        const search = document.getElementById('search-input');
-        if (tab === 'tokens') {
-            search.placeholder = 'Search by name or user ID...';
-            currentPage = 1;
-            renderPage();
-        } else if (tab === 'subscribers') {
-            search.placeholder = 'Search by name, username or ID...';
-            subPage = 1;
-            renderSubPage();
-        }
-    }
-
-    function onFilterChange() {
-        if (activeTab === 'tokens') {
-            currentPage = 1;
-            renderPage();
-        } else if (activeTab === 'subscribers') {
-            subPage = 1;
-            renderSubPage();
-        }
-    }
-
-    function refreshAll() {
-        loadTokens();
-        if (subscriptionEnabled) {
-            fetchSubscribers();
-            fetchPlans();
-            loadPlans();
-        }
-    }
-
-    /* ----------------------------------------------------------------
-       TOKENS tab
-    ---------------------------------------------------------------- */
     function getFiltered() {
         const q = document.getElementById('search-input').value.toLowerCase().trim();
         const status = document.getElementById('filter-status').value;
@@ -945,9 +612,9 @@
             : `<span class="status-badge status-active"><i class="fas fa-circle text-[8px]"></i> Active</span>`;
     }
 
-    function getAdminBadge(isAdmin) {
-        return isAdmin
-            ? `<span class="status-badge badge-admin"><i class="fas fa-crown text-[8px]"></i> Admin</span>`
+    function getAdminBadge(t) {
+        return t.is_admin
+            ? `<span class="status-badge" style="background: color-mix(in srgb, #f5c518 18%, transparent); color: #f5c518;"><i class="fas fa-crown text-[8px]"></i> Admin</span>`
             : '';
     }
 
@@ -993,41 +660,50 @@
 
     function buildActions(t) {
         const safeName = escHtml(t.user_name || String(t.user_id || ''));
-        const delBtn = t.token
-            ? `<button onclick="revokeToken('${escHtml(t.token)}')" class="action-chip glass-btn">Delete</button>`
-            : '';
-        const linkBtn = (t.token && !t.user_id)
-            ? `<button onclick="linkUser('${escHtml(t.token)}')" class="action-chip glass-btn-purple">Link User ID</button>`
-            : '';
-
-        if (!subscriptionEnabled) {
-            //----- Subscription OFF: per-token validity + optional link + delete
-            const validBtn = t.token
-                ? `<button onclick="openValidUptoModal('${escHtml(t.token)}')" class="action-chip glass-btn-primary">Valid Upto</button>`
-                : '';
-            return validBtn + linkBtn + delBtn;
-        }
-
-        //----- Subscription ON: subscription lifecycle controls
         let actionBtns = '';
+
         if (t.user_id) {
             actionBtns = `
-                <button onclick="openAssignModal(${t.user_id}, '${safeName}')" class="action-chip glass-btn-primary">Assign</button>
-                <button onclick="openSubModal(${t.user_id}, '${safeName}', 'extend')" class="action-chip glass-btn-success">Extend</button>
-                <button onclick="openSubModal(${t.user_id}, '${safeName}', 'reduce')" class="action-chip glass-btn-warning">Reduce</button>
-                <button onclick="openSubModal(${t.user_id}, '${safeName}', 'delete')" class="action-chip glass-btn-danger">Revoke</button>
+                <button onclick="openAssignModal(${t.user_id}, '${safeName}')" class="action-chip glass-btn-primary">
+                    Assign
+                </button>
+                <button onclick="openSubModal(${t.user_id}, '${safeName}', 'extend')" class="action-chip glass-btn-success">
+                    Extend
+                </button>
+                <button onclick="openSubModal(${t.user_id}, '${safeName}', 'reduce')" class="action-chip glass-btn-warning">
+                    Reduce
+                </button>
+                <button onclick="openSubModal(${t.user_id}, '${safeName}', 'delete')" class="action-chip glass-btn-danger">
+                    Revoke
+                </button>
             `;
         } else if (t.token) {
-            actionBtns = linkBtn + `<div class="text-xs text-soft italic w-full mt-1">Link a Telegram user_id to manage subscription.</div>`;
+            actionBtns = `
+                <button onclick="linkUser('${escHtml(t.token)}')" class="action-chip glass-btn-purple">
+                    Link User ID
+                </button>
+                <div class="text-xs text-soft italic w-full mt-1">Enter Telegram user_id to enable management.</div>
+            `;
         }
-        return actionBtns + delBtn;
+
+        const revokeTokenBtn = t.token ? `
+            <button onclick="revokeToken('${escHtml(t.token)}')" class="action-chip glass-btn">
+                Del Token
+            </button>
+        ` : '';
+
+        return actionBtns + revokeTokenBtn;
     }
 
     function renderDesktopRows(slice) {
         const tbody = document.getElementById('token-table-body');
 
         if (!slice.length) {
-            tbody.innerHTML = `<tr><td colspan="6" class="text-center py-10 text-soft">No tokens match your search.</td></tr>`;
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="6" class="text-center py-10 text-soft">No tokens match your search.</td>
+                </tr>
+            `;
             return;
         }
 
@@ -1040,7 +716,7 @@
                 <tr class="${rowCls}">
                     <td class="px-4 py-4">${getStatusBadge(t)}</td>
                     <td class="px-4 py-4">
-                        <div class="font-semibold section-title flex items-center gap-2 flex-wrap">${escHtml(displayName)} ${getAdminBadge(t.is_admin)}</div>
+                        <div class="font-semibold section-title flex items-center gap-2 flex-wrap">${escHtml(displayName)} ${getAdminBadge(t)}</div>
                         ${idHtml}
                     </td>
                     <td class="px-4 py-4">${buildAddonHtml(t)}</td>
@@ -1048,9 +724,8 @@
                     <td class="px-4 py-4 text-xs">
                         ${t.expires_at
                             ? `<span class="${t.is_expired ? 'text-red-300 font-semibold' : 'section-title'}">${fmtDate(t.expires_at)}</span>`
-                            : `<span class="section-title">Never</span>`
+                            : `<span class="text-red-300 italic">No expiry</span>`
                         }
-                        ${t.expiry_reason ? `<div class="text-[11px] text-soft mt-1">${escHtml(t.expiry_reason)}</div>` : ''}
                     </td>
                     <td class="px-4 py-4">
                         <div class="flex flex-wrap gap-2 justify-center">${buildActions(t)}</div>
@@ -1064,7 +739,11 @@
         const mobileWrap = document.getElementById('token-mobile-list');
 
         if (!slice.length) {
-            mobileWrap.innerHTML = `<div class="empty-state text-center px-4 py-8 text-soft">No tokens match your search.</div>`;
+            mobileWrap.innerHTML = `
+                <div class="empty-state text-center px-4 py-8 text-soft">
+                    No tokens match your search.
+                </div>
+            `;
             return;
         }
 
@@ -1075,7 +754,7 @@
                 <div class="mobile-token-card ${t.is_expired ? 'row-expired' : ''}">
                     <div class="flex items-start justify-between gap-3 mb-3">
                         <div class="min-w-0">
-                            <div class="font-semibold section-title break-words flex items-center gap-2 flex-wrap">${escHtml(displayName)} ${getAdminBadge(t.is_admin)}</div>
+                            <div class="font-semibold section-title break-words flex items-center gap-2 flex-wrap">${escHtml(displayName)} ${getAdminBadge(t)}</div>
                             <div class="text-xs text-soft mt-1 break-all">${t.user_id ? 'ID: ' + t.user_id : 'No linked user'}</div>
                         </div>
                         <div class="shrink-0">${getStatusBadge(t)}</div>
@@ -1098,9 +777,8 @@
                                  style="background: color-mix(in srgb, var(--bg) 55%, transparent); border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);">
                                 <div class="text-[11px] uppercase tracking-[0.14em] text-soft font-bold mb-1">Expires</div>
                                 <div class="text-sm font-semibold ${t.is_expired ? 'text-red-300' : 'section-title'} break-words">
-                                    ${t.expires_at ? fmtDate(t.expires_at) : 'Never'}
+                                    ${t.expires_at ? fmtDate(t.expires_at) : 'No expiry'}
                                 </div>
-                                ${t.expiry_reason ? `<div class="text-[11px] text-soft mt-1">${escHtml(t.expiry_reason)}</div>` : ''}
                             </div>
                         </div>
                     </div>
@@ -1124,13 +802,18 @@
         const slice = filtered.slice(start, start + pageSize);
 
         document.getElementById('page-info').textContent =
-            filtered.length ? `Showing ${start + 1}–${Math.min(start + pageSize, filtered.length)} of ${filtered.length}` : 'Showing 0 of 0';
+            filtered.length
+                ? `Showing ${start + 1}–${Math.min(start + pageSize, filtered.length)} of ${filtered.length}`
+                : 'Showing 0 of 0';
+
         document.getElementById('page-num').textContent = `Page ${currentPage} / ${totalPages}`;
 
         const prevBtn = document.getElementById('btn-prev');
         const nextBtn = document.getElementById('btn-next');
+
         prevBtn.disabled = currentPage <= 1;
         nextBtn.disabled = currentPage >= totalPages;
+
         prevBtn.style.opacity = currentPage <= 1 ? '0.45' : '1';
         nextBtn.style.opacity = currentPage >= totalPages ? '0.45' : '1';
 
@@ -1146,12 +829,17 @@
         currentPage += dir;
         if (currentPage < 1) currentPage = 1;
         if (currentPage > totalPages) currentPage = totalPages;
+
         renderPage();
     }
 
     async function loadTokens() {
-        document.getElementById('token-table-body').innerHTML = `<tr><td colspan="6" class="text-center py-10 text-soft">Loading…</td></tr>`;
-        document.getElementById('token-mobile-list').innerHTML = `<div class="empty-state text-center px-4 py-8 text-soft">Loading…</div>`;
+        document.getElementById('token-table-body').innerHTML = `
+            <tr><td colspan="6" class="text-center py-10 text-soft">Loading…</td></tr>
+        `;
+        document.getElementById('token-mobile-list').innerHTML = `
+            <div class="empty-state text-center px-4 py-8 text-soft">Loading…</div>
+        `;
 
         try {
             const resp = await fetch('/api/admin/access/tokens');
@@ -1161,306 +849,40 @@
             document.getElementById('stat-total').textContent = allTokens.length;
             document.getElementById('stat-active').textContent = allTokens.filter(t => !t.is_expired).length;
             document.getElementById('stat-expired').textContent = allTokens.filter(t => t.is_expired).length;
-            document.getElementById('count-tokens').textContent = allTokens.length;
 
-            if (activeTab === 'tokens') { currentPage = 1; renderPage(); }
+            currentPage = 1;
+            renderPage();
         } catch (err) {
-            document.getElementById('token-table-body').innerHTML = `<tr><td colspan="6" class="text-center py-10 text-red-300">Error: ${err.message}</td></tr>`;
-            document.getElementById('token-mobile-list').innerHTML = `<div class="empty-state text-center px-4 py-8 text-red-300">Error: ${err.message}</div>`;
+            document.getElementById('token-table-body').innerHTML = `
+                <tr><td colspan="6" class="text-center py-10 text-red-300">Error: ${err.message}</td></tr>
+            `;
+            document.getElementById('token-mobile-list').innerHTML = `
+                <div class="empty-state text-center px-4 py-8 text-red-300">Error: ${err.message}</div>
+            `;
             showToast('Failed to load access tokens.', 'error', 'Load Error');
         }
     }
 
-    /* ----------------------------------------------------------------
-       SUBSCRIBERS tab
-    ---------------------------------------------------------------- */
-    function getUserDisplayName(u) {
-        let name = u.first_name || '';
-        if (u.username) name += (name ? ' ' : '') + `(@${u.username})`;
-        if (!name) name = `User ${u._id}`;
-        return name;
-    }
-
-    function subStatusBadge(status) {
-        return status === 'active'
-            ? '<span class="metric-badge badge-active"><i class="fas fa-circle text-[8px]"></i> Active</span>'
-            : '<span class="metric-badge badge-expired"><i class="fas fa-circle text-[8px]"></i> Expired</span>';
-    }
-
-    function getSubFiltered() {
-        const q = document.getElementById('search-input').value.toLowerCase().trim();
-        const status = document.getElementById('filter-status').value;
-
-        return allUsers.filter(u => {
-            const name = ((u.first_name || '') + ' ' + (u.username || '') + ' ' + (u._id || '')).toLowerCase();
-            const matchQ = !q || name.includes(q);
-            const matchStatus = status === 'all' || u.subscription_status === status;
-            return matchQ && matchStatus;
-        });
-    }
-
-    function subRenderRows(slice) {
-        const tbody = document.getElementById('subscribers-tbody');
-
-        if (!slice.length) {
-            tbody.innerHTML = `<tr><td colspan="4" class="px-6 py-10 text-center text-soft">No users match your search.</td></tr>`;
-            return;
-        }
-
-        tbody.innerHTML = slice.map(u => {
-            const expiry = formatExpiry(u.subscription_expiry);
-            const name = getUserDisplayName(u);
-            const safeName = escHtml(name).replace(/'/g, "\\'");
-            const statusBadge = subStatusBadge(u.subscription_status);
-
-            return `
-                <tr>
-                    <td class="px-6 py-4">
-                        <div class="font-semibold section-title flex items-center gap-2 flex-wrap">${escHtml(name)} ${getAdminBadge(u.is_admin)}</div>
-                        <div class="text-xs text-soft mt-1">ID: ${u._id}</div>
-                    </td>
-                    <td class="px-6 py-4 text-center">${statusBadge}</td>
-                    <td class="px-6 py-4 text-center text-sm section-title">${expiry}</td>
-                    <td class="px-6 py-4">
-                        <div class="flex justify-end gap-2 flex-wrap">
-                            <button onclick="openAssignModal(${u._id}, '${safeName}')" class="action-chip glass-btn-primary">Assign</button>
-                            <button onclick="openSubModal(${u._id}, '${safeName}', 'extend')" class="action-chip glass-btn-success">Extend</button>
-                            <button onclick="openSubModal(${u._id}, '${safeName}', 'reduce')" class="action-chip glass-btn-warning">Reduce</button>
-                            <button onclick="openSubModal(${u._id}, '${safeName}', 'delete')" class="action-chip glass-btn-danger">Revoke</button>
-                        </div>
-                    </td>
-                </tr>
-            `;
-        }).join('');
-    }
-
-    function subRenderCards(slice) {
-        const mobileWrap = document.getElementById('subscribers-mobile');
-
-        if (!slice.length) {
-            mobileWrap.innerHTML = `<div class="empty-state text-center px-4 py-8 text-soft">No users match your search.</div>`;
-            return;
-        }
-
-        mobileWrap.innerHTML = slice.map(u => {
-            const expiry = formatExpiry(u.subscription_expiry);
-            const name = getUserDisplayName(u);
-            const safeName = escHtml(name).replace(/'/g, "\\'");
-            const statusBadge = subStatusBadge(u.subscription_status);
-
-            return `
-                <div class="mobile-user-card">
-                    <div class="flex items-start justify-between gap-3 mb-3">
-                        <div class="min-w-0">
-                            <div class="font-semibold section-title break-words flex items-center gap-2 flex-wrap">${escHtml(name)} ${getAdminBadge(u.is_admin)}</div>
-                            <div class="text-xs text-soft mt-1 break-all">ID: ${u._id}</div>
-                        </div>
-                        <div class="shrink-0">${statusBadge}</div>
-                    </div>
-
-                    <div class="grid grid-cols-1 gap-3 mb-4">
-                        <div class="rounded-2xl px-4 py-3"
-                             style="background: color-mix(in srgb, var(--bg) 55%, transparent); border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);">
-                            <div class="text-[11px] uppercase tracking-[0.14em] text-soft font-bold mb-1">Expiry</div>
-                            <div class="text-sm font-semibold section-title">${expiry}</div>
-                        </div>
-                    </div>
-
-                    <div class="grid grid-cols-2 gap-2">
-                        <button onclick="openAssignModal(${u._id}, '${safeName}')" class="action-chip glass-btn-primary w-full">Assign</button>
-                        <button onclick="openSubModal(${u._id}, '${safeName}', 'extend')" class="action-chip glass-btn-success w-full">Extend</button>
-                        <button onclick="openSubModal(${u._id}, '${safeName}', 'reduce')" class="action-chip glass-btn-warning w-full">Reduce</button>
-                        <button onclick="openSubModal(${u._id}, '${safeName}', 'delete')" class="action-chip glass-btn-danger w-full">Revoke</button>
-                    </div>
-                </div>
-            `;
-        }).join('');
-    }
-
-    function renderSubPage() {
-        const filtered = getSubFiltered();
-        const pageSize = parseInt(document.getElementById('page-size').value);
-        const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-        if (subPage > totalPages) subPage = totalPages;
-
-        const start = filtered.length ? (subPage - 1) * pageSize : 0;
-        const slice = filtered.slice(start, start + pageSize);
-
-        document.getElementById('sub-page-info').textContent =
-            filtered.length ? `Showing ${start + 1}–${Math.min(start + pageSize, filtered.length)} of ${filtered.length}` : 'Showing 0 of 0';
-        document.getElementById('sub-page-num').textContent = `Page ${subPage} / ${totalPages}`;
-
-        const prevBtn = document.getElementById('sub-btn-prev');
-        const nextBtn = document.getElementById('sub-btn-next');
-        prevBtn.disabled = subPage <= 1;
-        nextBtn.disabled = subPage >= totalPages;
-        prevBtn.style.opacity = subPage <= 1 ? '0.45' : '1';
-        nextBtn.style.opacity = subPage >= totalPages ? '0.45' : '1';
-
-        subRenderRows(slice);
-        subRenderCards(slice);
-    }
-
-    function subChangePage(dir) {
-        const filtered = getSubFiltered();
-        const pageSize = parseInt(document.getElementById('page-size').value);
-        const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-
-        subPage += dir;
-        if (subPage < 1) subPage = 1;
-        if (subPage > totalPages) subPage = totalPages;
-        renderSubPage();
-    }
-
-    async function fetchSubscribers() {
-        document.getElementById('subscribers-tbody').innerHTML = `<tr><td colspan="4" class="px-6 py-8 text-center text-soft"><i class="fas fa-spinner fa-spin mr-2"></i> Loading...</td></tr>`;
-        document.getElementById('subscribers-mobile').innerHTML = `<div class="empty-state text-center px-4 py-8 text-soft"><i class="fas fa-spinner fa-spin mr-2"></i> Loading...</div>`;
-
-        try {
-            const res = await fetch('/api/admin/subscriptions/users');
-            if (!res.ok) throw new Error('Failed to fetch users');
-
-            const data = await res.json();
-            allUsers = data.data || [];
-            document.getElementById('count-subscribers').textContent = allUsers.length;
-            if (activeTab === 'subscribers') { subPage = 1; renderSubPage(); }
-        } catch (err) {
-            console.error(err);
-            document.getElementById('subscribers-tbody').innerHTML = `<tr><td colspan="4" class="px-6 py-8 text-center text-soft"><i class="fas fa-triangle-exclamation mr-2"></i> Failed to load users.</td></tr>`;
-            document.getElementById('subscribers-mobile').innerHTML = `<div class="empty-state text-center px-4 py-8 text-soft"><i class="fas fa-triangle-exclamation mr-2"></i> Failed to load users.</div>`;
-        }
-    }
-
-    /* ----------------------------------------------------------------
-       PLANS tab
-    ---------------------------------------------------------------- */
-    async function fetchPlans() {
-        const container = document.getElementById('plans-container');
-        container.innerHTML = `<div class="empty-state col-span-full text-center px-6 py-10 text-soft"><i class="fas fa-spinner fa-spin mr-2"></i> Loading plans...</div>`;
-        try {
-            const res = await fetch('/api/admin/subscriptions/plans');
-            if (!res.ok) throw new Error('Failed to fetch plans');
-
-            const data = await res.json();
-            const plans = data.data || data.plans || [];
-            document.getElementById('count-plans').textContent = plans.length;
-
-            if (!plans.length) {
-                container.innerHTML = `
-                    <div class="empty-state col-span-full text-center px-6 py-10 text-soft">
-                        <i class="fas fa-box-open text-2xl mb-3"></i>
-                        <div class="font-semibold mb-1">No plans found</div>
-                        <div class="text-sm">Create your first subscription plan.</div>
-                    </div>
-                `;
-                return;
-            }
-
-            container.innerHTML = plans.map(p => `
-                <div class="plan-card p-5 sm:p-6">
-                    <div class="plan-actions absolute right-4 top-4 flex gap-2">
-                        <button onclick="openPlanModal('${p._id}', ${p.days}, ${p.price})"
-                            class="glass-btn rounded-full w-9 h-9 flex items-center justify-center" title="Edit plan">
-                            <i class="fas fa-pen text-sm"></i>
-                        </button>
-                        <button onclick="deletePlan('${p._id}')"
-                            class="glass-btn glass-btn-danger rounded-full w-9 h-9 flex items-center justify-center" title="Delete plan">
-                            <i class="fas fa-trash text-sm"></i>
-                        </button>
-                    </div>
-
-                    <div class="flex items-start gap-4">
-                        <div class="w-14 h-14 rounded-2xl flex items-center justify-center shrink-0"
-                             style="background: color-mix(in srgb, var(--primary) 16%, transparent); border: 1px solid color-mix(in srgb, var(--primary) 24%, transparent);">
-                            <i class="fas fa-calendar-alt text-xl" style="color: var(--primary);"></i>
-                        </div>
-
-                        <div class="min-w-0">
-                            <div class="text-sm font-semibold section-muted">${p.days} Days Plan</div>
-                            <div class="mt-1 text-3xl font-extrabold section-title tracking-tight">₹${p.price}</div>
-                            <div class="mt-3 inline-flex items-center gap-2 text-xs font-bold rounded-full px-3 py-1"
-                                 style="background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--text-sec); border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);">
-                                <i class="fas fa-bolt" style="color: var(--accent);"></i>
-                                Premium Access
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `).join('');
-        } catch (err) {
-            console.error(err);
-            container.innerHTML = `<div class="empty-state col-span-full text-center px-6 py-10 text-soft"><i class="fas fa-triangle-exclamation mr-2"></i> Failed to load plans.</div>`;
-        }
-    }
-
-    // Populate the assign-plan dropdown
     async function loadPlans() {
-        try {
-            const resp = await fetch('/api/admin/subscriptions/plans');
-            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-            const result = await resp.json();
-            const plans = result.data || result.plans || [];
-            const sel = document.getElementById('assign-plan-select');
-            if (!sel) return;
-            sel.innerHTML = '<option value="">— Select a plan —</option>' +
-                plans.map(p => `<option value="${p.days}">${p.days} days${p.price ? ' — ₹' + p.price : ''}</option>`).join('');
-        } catch (e) {
-            console.warn('Could not load plans', e);
-        }
+    try {
+        const resp = await fetch('/api/admin/subscriptions/plans');
+        if (!resp.ok) throw new Error(`HTTP error! status: ${resp.status}`);
+        const result = await resp.json();
+        const plans = result.data || [];
+        const sel = document.getElementById('assign-plan-select');
+        if (!sel) return;
+        sel.innerHTML = '<option value="">— Select a plan —</option>' +
+            plans.map(p => `
+                <option value="${p.days}">
+                    ${p.days} days${p.price ? ' — ₹' + p.price : ''}
+                </option>
+            `).join('');
+
+    } catch (e) {
+        console.warn('Could not load plans', e);
+        showToast('Could not load subscription plans.', 'error', 'Plan Error');
     }
-
-    function openPlanModal(id = '', days = '', price = '') {
-        document.getElementById('plan-id').value = id;
-        document.getElementById('plan-days').value = days;
-        document.getElementById('plan-price').value = price;
-        document.getElementById('plan-modal-title').innerText = id ? 'Edit Plan' : 'Add New Plan';
-        openModal('plan-modal');
-    }
-
-    function closePlanModal() { closeModal('plan-modal'); }
-
-    async function submitPlanForm(e) {
-        e.preventDefault();
-        const id = document.getElementById('plan-id').value;
-        const payload = {
-            days: parseInt(document.getElementById('plan-days').value),
-            price: parseFloat(document.getElementById('plan-price').value)
-        };
-
-        try {
-            const res = await fetch(id ? `/api/admin/subscriptions/plans/${id}` : '/api/admin/subscriptions/plans', {
-                method: id ? 'PUT' : 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-            if (!res.ok) throw new Error('Failed to save plan');
-            closePlanModal();
-            fetchPlans();
-            loadPlans();
-            showToast('Plan saved.', 'success', 'Saved');
-        } catch (err) {
-            console.error(err);
-            showToast('Failed to save plan.', 'error', 'Save Failed');
-        }
-    }
-
-    async function deletePlan(id) {
-        if (!confirm('Delete this plan?')) return;
-        try {
-            const res = await fetch(`/api/admin/subscriptions/plans/${id}`, { method: 'DELETE' });
-            if (!res.ok) throw new Error('Failed');
-            fetchPlans();
-            loadPlans();
-            showToast('Plan deleted.', 'success', 'Deleted');
-        } catch (err) {
-            console.error(err);
-            showToast('Failed to delete plan.', 'error', 'Delete Failed');
-        }
-    }
-
-    /* ----------------------------------------------------------------
-       Shared modals: generic open/close
-    ---------------------------------------------------------------- */
+                }
     function openModal(modalId) {
         const modal = document.getElementById(modalId);
         modal.classList.remove('hidden');
@@ -1475,7 +897,6 @@
         document.body.classList.remove('overflow-hidden');
     }
 
-    /* Assign plan modal */
     function openAssignModal(userId, userName) {
         document.getElementById('assign-user-id').value = userId;
         document.getElementById('assign-user-label').textContent = `User: ${userName} (ID: ${userId})`;
@@ -1484,7 +905,9 @@
         openModal('assign-modal');
     }
 
-    function closeAssignModal() { closeModal('assign-modal'); }
+    function closeAssignModal() {
+        closeModal('assign-modal');
+    }
 
     async function assignPlan() {
         const userId = parseInt(document.getElementById('assign-user-id').value);
@@ -1503,12 +926,13 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ days })
             });
+
             const data = await resp.json();
 
             if (resp.ok) {
                 showToast(`Assigned ${days} days to user ${userId}.`, 'success', 'Plan Assigned');
                 closeAssignModal();
-                refreshAll();
+                loadTokens();
             } else {
                 showToast(data.detail || 'Failed to assign plan.', 'error', 'Request Failed');
             }
@@ -1517,12 +941,61 @@
         }
     }
 
-    /* Manage subscription modal (extend / reduce / revoke) */
+    async function revokeToken(token) {
+        if (!confirm('Delete this token? The user will lose addon access immediately.')) return;
+
+        try {
+            const resp = await fetch(`/api/admin/access/tokens/${encodeURIComponent(token)}`, { method: 'DELETE' });
+            const data = await resp.json();
+
+            if (resp.ok) {
+                showToast('Token deleted.', 'success', 'Access Updated');
+                loadTokens();
+            } else {
+                showToast(data.detail || 'Failed.', 'error', 'Delete Failed');
+            }
+        } catch (err) {
+            showToast('Error: ' + err.message, 'error', 'Network Error');
+        }
+    }
+
+    async function linkUser(token) {
+        const userId = prompt('Enter the Telegram User ID to link this token to:');
+        if (!userId || isNaN(parseInt(userId))) {
+            showToast('Invalid user ID.', 'error', 'Invalid Input');
+            return;
+        }
+
+        try {
+            const resp = await fetch(`/api/admin/access/tokens/${encodeURIComponent(token)}/link-user`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: parseInt(userId) })
+            });
+
+            const data = await resp.json();
+
+            if (resp.ok) {
+                showToast(`Token linked to user ${userId}.`, 'success', 'User Linked');
+                loadTokens();
+            } else {
+                showToast(data.detail || 'Failed to link.', 'error', 'Link Failed');
+            }
+        } catch (err) {
+            showToast('Error: ' + err.message, 'error', 'Network Error');
+        }
+    }
+
     function openSubModal(userId, userName, action) {
         document.getElementById('sub-action-user-id').value = userId;
         document.getElementById('sub-action-action').value = action;
 
-        const titles = { extend: 'Extend Subscription', reduce: 'Reduce Subscription', delete: 'Revoke Subscription' };
+        const titles = {
+            extend: 'Extend Subscription',
+            reduce: 'Reduce Subscription',
+            delete: 'Revoke Subscription'
+        };
+
         const descs = {
             extend: `Add days to <b>${userName}</b>'s subscription.`,
             reduce: `Remove days from <b>${userName}</b>'s subscription.`,
@@ -1550,7 +1023,9 @@
         openModal('sub-action-modal');
     }
 
-    function closeSubModal() { closeModal('sub-action-modal'); }
+    function closeSubModal() {
+        closeModal('sub-action-modal');
+    }
 
     async function submitSubAction() {
         const userId = parseInt(document.getElementById('sub-action-user-id').value);
@@ -1563,93 +1038,15 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action, days })
             });
+
             const data = await resp.json();
 
             if (resp.ok) {
                 showToast(`${action.charAt(0).toUpperCase() + action.slice(1)}d subscription for user ${userId}.`, 'success', 'Subscription Updated');
                 closeSubModal();
-                refreshAll();
+                loadTokens();
             } else {
                 showToast(data.detail || 'Failed.', 'error', 'Update Failed');
-            }
-        } catch (err) {
-            showToast('Error: ' + err.message, 'error', 'Network Error');
-        }
-    }
-
-    /* Token actions */
-    async function revokeToken(token) {
-        if (!confirm('Delete this token? The user will lose addon access immediately.')) return;
-        try {
-            const resp = await fetch(`/api/admin/access/tokens/${encodeURIComponent(token)}`, { method: 'DELETE' });
-            const data = await resp.json();
-            if (resp.ok) {
-                showToast('Token deleted.', 'success', 'Access Updated');
-                loadTokens();
-            } else {
-                showToast(data.detail || 'Failed.', 'error', 'Delete Failed');
-            }
-        } catch (err) {
-            showToast('Error: ' + err.message, 'error', 'Network Error');
-        }
-    }
-
-    async function linkUser(token) {
-        const userId = prompt('Enter the Telegram User ID to link this token to:');
-        if (!userId || isNaN(parseInt(userId))) {
-            showToast('Invalid user ID.', 'error', 'Invalid Input');
-            return;
-        }
-        try {
-            const resp = await fetch(`/api/admin/access/tokens/${encodeURIComponent(token)}/link-user`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ user_id: parseInt(userId) })
-            });
-            const data = await resp.json();
-            if (resp.ok) {
-                showToast(`Token linked to user ${userId}.`, 'success', 'User Linked');
-                refreshAll();
-            } else {
-                showToast(data.detail || 'Failed to link.', 'error', 'Link Failed');
-            }
-        } catch (err) {
-            showToast('Error: ' + err.message, 'error', 'Network Error');
-        }
-    }
-
-    /* Token validity (subscription OFF) */
-    function openValidUptoModal(token) {
-        document.getElementById('validupto-token').value = token;
-        document.getElementById('validupto-days').value = '';
-        openModal('validupto-modal');
-    }
-
-    function closeValidUptoModal() { closeModal('validupto-modal'); }
-
-    async function saveValidUpto() {
-        const token = document.getElementById('validupto-token').value;
-        const raw = document.getElementById('validupto-days').value.trim();
-        const days = raw === '' ? null : parseInt(raw);
-
-        if (days !== null && (isNaN(days) || days < 1)) {
-            showToast('Enter a positive number of days, or leave empty for never.', 'error', 'Validation');
-            return;
-        }
-
-        try {
-            const resp = await fetch(`/api/admin/access/tokens/${encodeURIComponent(token)}/valid-upto`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ days })
-            });
-            const data = await resp.json();
-            if (resp.ok) {
-                showToast(days ? `Token valid for ${days} day(s).` : 'Token set to never expire.', 'success', 'Validity Updated');
-                closeValidUptoModal();
-                loadTokens();
-            } else {
-                showToast(data.detail || 'Failed to update validity.', 'error', 'Update Failed');
             }
         } catch (err) {
             showToast('Error: ' + err.message, 'error', 'Network Error');
@@ -1665,33 +1062,22 @@
         }
     }
 
-    /* ----------------------------------------------------------------
-       Global events + init
-    ---------------------------------------------------------------- */
-    document.addEventListener('click', (e) => {
-        ['assign-modal', 'sub-action-modal', 'plan-modal', 'validupto-modal'].forEach(id => {
-            const modal = document.getElementById(id);
-            if (e.target === modal) closeModal(id);
-        });
+    document.getElementById('assign-modal').addEventListener('click', function (e) {
+        if (e.target === this) closeAssignModal();
     });
 
-    document.addEventListener('keydown', (e) => {
+    document.getElementById('sub-action-modal').addEventListener('click', function (e) {
+        if (e.target === this) closeSubModal();
+    });
+
+    document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape') {
-            closeModal('assign-modal');
-            closeModal('sub-action-modal');
-            closeModal('plan-modal');
-            closeModal('validupto-modal');
+            closeAssignModal();
+            closeSubModal();
         }
     });
 
-    document.addEventListener('DOMContentLoaded', () => {
-        switchTab(subscriptionEnabled ? 'subscribers' : 'tokens');
-        loadTokens();
-        if (subscriptionEnabled) {
-            fetchSubscribers();
-            fetchPlans();
-            loadPlans();
-        }
-    });
+    loadPlans();
+    loadTokens();
 </script>
 {% endblock %}

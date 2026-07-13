@@ -331,21 +331,6 @@ async def get_manifest(token: str, token_data: dict = Depends(verify_token)):
                         addon_desc = "✅ Subscription active.\nStreams movies and series from your Telegram."
             except Exception:
                 pass
-    else:
-        #----- Subscription mode OFF: surface the token's own validity window
-        valid_upto = token_data.get("valid_upto")
-        if not token_data.get("is_admin") and valid_upto:
-            try:
-                expiry_str = valid_upto.strftime("%d %b %Y").lstrip("0")
-                addon_name = f"{ADDON_NAME} — Expires {expiry_str}"
-                addon_desc = (
-                    f"📅 Access valid until {expiry_str}.\n"
-                    f"Streams movies and series from your Telegram."
-                )
-                epoch_tag = format(int(valid_upto.timestamp()) & 0xFFFF, "x")
-                addon_version = f"{ADDON_VERSION}-{epoch_tag}"
-            except Exception:
-                pass
 
     return {
         "id": f"telegram.media.{token[:8]}",

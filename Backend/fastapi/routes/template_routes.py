@@ -147,17 +147,6 @@ async def dashboard_page(request: Request, _: bool = Depends(require_auth)):
     api_tokens = await db.get_all_api_tokens()
     for t in api_tokens:
         t["is_admin"] = bool(t.get("is_admin")) or db._is_owner(t.get("user_id"))
-        #----- Prefer the linked user's Telegram name (keeps the dashboard in sync
-        #----- with the Access page); fall back to the token alias.
-        t["display_name"] = t.get("name")
-        uid = t.get("user_id")
-        if uid:
-            try:
-                u = await db.get_user(int(uid))
-                if u:
-                    t["display_name"] = u.get("first_name") or u.get("username") or t.get("name")
-            except Exception:
-                pass
     ctx["api_tokens"] = api_tokens
     return templates.TemplateResponse("dashboard.html", ctx)
 
@@ -225,16 +214,17 @@ async def stremio_guide_page(request: Request):
     return templates.TemplateResponse("stremio_guide.html", ctx)
 
 
-#----- Subscription management now lives on the merged Access page
+#----- Subscription management shell
 async def admin_subscriptions_page(request: Request, _: bool = Depends(require_auth)):
-    return RedirectResponse(url="/admin/access", status_code=307)
+    ctx = _base_context(request)
+    ctx["current_user"] = get_current_user(request)
+    return templates.TemplateResponse("subscriptions_manage.html", ctx)
 
 
-#----- Access & Subscriptions management shell (merged: tokens, subscribers, plans)
+#----- Access management shell
 async def admin_access_page(request: Request, _: bool = Depends(require_auth)):
     ctx = _base_context(request)
     ctx["current_user"] = get_current_user(request)
-    ctx["subscription_enabled"] = SettingsManager.current().subscription
     return templates.TemplateResponse("access_manage.html", ctx)
 
 
