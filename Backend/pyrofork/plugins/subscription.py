@@ -231,6 +231,7 @@ async def admin_review(client: Client, callback_query: CallbackQuery):
             user_obj = await db.get_user(target_user_id)
             user_name = (user_obj.get("first_name") or user_obj.get("username") or str(target_user_id)) if user_obj else str(target_user_id)
             token_doc = await db.add_api_token(name=user_name, user_id=target_user_id)
+            await db.align_token_with_subscription(target_user_id)
             addon_url = f"{SettingsManager.current().base_url}/stremio/{token_doc.get('token')}/manifest.json"
         except Exception:
             addon_url = None

@@ -406,6 +406,7 @@ class Database:
             )
             if status == "active":
                 await self.ensure_api_token_for_user(user_id, (user or {}).get("first_name"))
+            await self.align_token_with_subscription(user_id)
             return True
 
         elif action == "delete":
@@ -413,6 +414,7 @@ class Database:
                 {"_id": user_id},
                 {"$set": {"subscription_status": "expired", "subscription_expiry": now}}
             )
+            await self.align_token_with_subscription(user_id)
             return True
 
         return False
@@ -445,8 +447,7 @@ class Database:
         )
         token_doc = await self.ensure_api_token_for_user(user_id, (user or {}).get("first_name"))
         token = token_doc.get("token") if token_doc else None
-        if token:
-            await self.set_token_lifetime(token, False)
+        await self.align_token_with_subscription(user_id)
         return {
             "user_id": user_id,
             "subscription_expiry": new_expiry.isoformat(),
@@ -2012,6 +2013,19 @@ class Database:
         if existing:
             return convert_objectid_to_str(existing)
         return await self.add_api_token(name or f"User {user_id}", user_id=user_id)
+
+    #----- Make a user's token follow their subscription: drop any standalone
+    #----- grant (never-expires / token-expiry) so revoke/extend actually apply.
+    #----- No-op when subscription mode is off (token keeps its own expiry there).
+    async def align_token_with_subscription(self, user_id: int) -> None:
+        if not SettingsManager.current().subscription:
+            return
+        doc = await self.dbs["tracking"]["api_tokens"].find_one({"user_id": user_id})
+        if doc:
+            await self.dbs["tracking"]["api_tokens"].update_one(
+                {"_id": doc["_id"]},
+                {"$set": {"subscription_exempt": False, "expires_at": None}},
+            )
 
     #----- Toggle a token's lifetime (subscription-exempt) flag
     async def set_token_lifetime(self, token: str, exempt: bool) -> bool:
