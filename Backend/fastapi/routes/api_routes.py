@@ -5,7 +5,7 @@ import os
 import random
 import secrets
 import shutil
-from datetime import datetime
+from datetime import datetime, timedelta
 from time import time
 
 from fastapi import HTTPException, Query, Request
@@ -689,32 +689,46 @@ async def get_all_tokens_api() -> dict:
                 return token_name
             return f"User {user_id}" if user_id else "Telegram User"
 
+        sub_on = SettingsManager.current().subscription
+
         #----- Unified access entry from optional user + token records
         def build_entry(user_id, user, token_doc):
-            expiry = None
-            sub_status = None
+            sub_status = user.get("subscription_status") if user else None
             user_found = bool(user)
+            is_admin = bool((token_doc or {}).get("is_admin")) or db._is_owner(user_id)
+            valid_upto = token_doc.get("valid_upto") if token_doc else None
 
-            if user:
-                sub_status = user.get("subscription_status")
-                expiry = user.get("subscription_expiry")
-
-            if token_doc:
-                t_expiry = token_doc.get("subscription_expiry") or token_doc.get("expires_at")
-                if t_expiry and not expiry:
-                    expiry = t_expiry
-
-            if SettingsManager.current().subscription:
+            if is_admin:
+                #----- Owner/admin tokens never expire in either mode
+                expiry = None
+                is_expired = False
+                expiry_reason = "Admin - never expires"
+            elif sub_on:
+                #----- Expiry follows the linked subscription
+                expiry = user.get("subscription_expiry") if user else None
+                if not expiry and token_doc:
+                    expiry = token_doc.get("subscription_expiry") or token_doc.get("expires_at")
                 if not user_found:
                     is_expired = True
+                    expiry_reason = "No subscription record"
                 elif sub_status != "active":
                     is_expired = True
+                    expiry_reason = "Subscription inactive"
                 elif not expiry:
                     is_expired = True
+                    expiry_reason = "No plan assigned"
                 else:
                     is_expired = expiry < now
+                    expiry_reason = "Plan expired" if is_expired else "Active plan"
             else:
-                is_expired = bool(expiry and expiry < now)
+                #----- Subscription OFF: token's own valid_upto (None = never)
+                expiry = valid_upto
+                if not valid_upto:
+                    is_expired = False
+                    expiry_reason = "Never expires"
+                else:
+                    is_expired = valid_upto < now
+                    expiry_reason = "Expired" if is_expired else "Valid"
 
             token_str = token_doc.get("token") if token_doc else None
             created = token_doc.get("created_at") if token_doc else (user.get("created_at") if user else None)
@@ -724,7 +738,9 @@ async def get_all_tokens_api() -> dict:
                 "user_id": user_id,
                 "user_name": display_name(user, user_id, token_doc.get("name") if token_doc else None),
                 "user_found": user_found,
-                "is_admin": bool((token_doc or {}).get("is_admin")) or db._is_owner(user_id),
+                "is_admin": is_admin,
+                "valid_upto": valid_upto.isoformat() if valid_upto else None,
+                "expiry_reason": expiry_reason,
                 "has_token": bool(token_str),
                 "created_at": created.isoformat() if created else None,
                 "expires_at": expiry.isoformat() if expiry else None,
@@ -789,6 +805,29 @@ async def assign_plan_api(user_id: int, days: int) -> dict:
         return {"status": "success", "data": result}
     except HTTPException:
         raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+#----- Set a token's own expiry (subscription mode OFF). days>=1 -> now+days; None -> never
+async def set_token_valid_upto_api(token: str, days) -> dict:
+    try:
+        if days in (None, "", 0, "0"):
+            valid_upto = None
+        else:
+            days = int(days)
+            if days < 1:
+                valid_upto = None
+            else:
+                valid_upto = datetime.utcnow() + timedelta(days=days)
+        ok = await db.set_token_valid_upto(token, valid_upto)
+        if not ok:
+            raise HTTPException(status_code=404, detail="Token not found.")
+        return {"status": "success", "valid_upto": valid_upto.isoformat() if valid_upto else None}
+    except HTTPException:
+        raise
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="days must be a whole number.")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

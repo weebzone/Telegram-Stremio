@@ -1953,6 +1953,7 @@ class Database:
             "token": token,
             "user_id": user_id,
             "is_admin": self._is_owner(user_id),
+            "valid_upto": None,
             "created_at": datetime.utcnow(),
             "limits": {
                 "daily_limit_gb": daily_limit_gb if daily_limit_gb else 0,
@@ -1980,6 +1981,14 @@ class Database:
     async def revoke_api_token(self, token: str) -> bool:
         result = await self.dbs["tracking"]["api_tokens"].delete_one({"token": token})
         return result.deleted_count > 0
+
+    async def set_token_valid_upto(self, token: str, valid_upto) -> bool:
+        #----- Per-token expiry used when subscription mode is OFF; None = never expires
+        result = await self.dbs["tracking"]["api_tokens"].update_one(
+            {"token": token},
+            {"$set": {"valid_upto": valid_upto}}
+        )
+        return result.matched_count > 0
 
     async def link_token_user(self, token: str, user_id: int) -> bool:
         #----- Link an existing token to a Telegram user_id; elevate to admin when

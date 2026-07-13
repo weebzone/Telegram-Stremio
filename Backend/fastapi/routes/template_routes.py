@@ -223,6 +223,7 @@ async def admin_subscriptions_page(request: Request, _: bool = Depends(require_a
 async def admin_access_page(request: Request, _: bool = Depends(require_auth)):
     ctx = _base_context(request)
     ctx["current_user"] = get_current_user(request)
+    ctx["subscription_enabled"] = SettingsManager.current().subscription
     return templates.TemplateResponse("access_manage.html", ctx)
 
 

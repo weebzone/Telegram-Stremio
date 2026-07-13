@@ -69,6 +69,7 @@ from Backend.fastapi.routes.api_routes import (
     resolve_telegram_api,
     restart_app_api,
     revoke_token_api,
+    set_token_valid_upto_api,
     scan_status_api,
     search_catalog_media_api,
     set_media_visibility_api,
@@ -321,6 +322,10 @@ async def link_token_to_user(token: str, payload: dict, _: bool = Depends(requir
     if not user_id:
         raise HTTPException(status_code=400, detail="user_id is required.")
     return await link_token_user_api(token, user_id)
+
+@app.patch("/api/admin/access/tokens/{token}/valid-upto")
+async def set_token_validity(token: str, payload: dict, _: bool = Depends(require_auth)):
+    return await set_token_valid_upto_api(token, payload.get("days"))
 
 
 #----- Public content request page (no auth)

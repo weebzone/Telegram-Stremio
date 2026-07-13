@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Access & Subscriptions{% endblock %}
+{% block title %}{% if subscription_enabled %}Access & Subscriptions{% else %}Access{% endif %}{% endblock %}
 
 {% block content %}
 <style>
@@ -488,13 +488,13 @@
                 <div class="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-bold tracking-[0.18em] uppercase mb-3"
                      style="border-color: color-mix(in srgb, var(--primary) 28%, var(--border)); color: var(--text-sec); background: color-mix(in srgb, var(--primary) 10%, transparent);">
                     <i class="fas fa-shield-halved text-[11px]" style="color: var(--primary);"></i>
-                    Access &amp; Subscription Hub
+                    {% if subscription_enabled %}Access &amp; Subscription Hub{% else %}Access Control Hub{% endif %}
                 </div>
                 <h1 class="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight section-title">
-                    Access &amp; Subscriptions
+                    {% if subscription_enabled %}Access &amp; Subscriptions{% else %}Access{% endif %}
                 </h1>
                 <p class="mt-2 text-sm sm:text-base section-muted max-w-2xl">
-                    Manage addon tokens, subscribers, and plans from a single control center.
+                    {% if subscription_enabled %}Manage addon tokens, subscribers, and plans from a single control center.{% else %}Manage addon access tokens and control how long each one stays valid.{% endif %}
                 </p>
             </div>
 
@@ -531,6 +531,7 @@
                     <i class="fas fa-key text-[11px]"></i> Tokens
                     <span class="tab-count" id="count-tokens">0</span>
                 </button>
+                {% if subscription_enabled %}
                 <button class="tab-btn" data-tab="subscribers" onclick="switchTab('subscribers')">
                     <i class="fas fa-users text-[11px]"></i> Subscribers
                     <span class="tab-count" id="count-subscribers">0</span>
@@ -539,6 +540,7 @@
                     <i class="fas fa-layer-group text-[11px]"></i> Plans
                     <span class="tab-count" id="count-plans">0</span>
                 </button>
+                {% endif %}
             </div>
 
             <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
@@ -759,6 +761,38 @@
     </div>
 </div>
 
+<!-- Valid Upto Modal (subscription OFF: per-token expiry) -->
+<div id="validupto-modal" class="fixed inset-0 hidden z-50 modal-backdrop items-center justify-center p-4">
+    <div class="modal-glass">
+        <div class="flex items-start justify-between gap-4 mb-5">
+            <div>
+                <h3 class="text-xl font-bold section-title">Token Validity</h3>
+                <p class="text-sm text-soft mt-1">Set how long this token stays valid.</p>
+            </div>
+            <button onclick="closeValidUptoModal()" class="glass-btn rounded-full w-10 h-10 flex items-center justify-center">
+                <i class="fas fa-xmark"></i>
+            </button>
+        </div>
+
+        <input type="hidden" id="validupto-token">
+
+        <div class="modal-field">
+            <label>Valid for (days)</label>
+            <input type="number" id="validupto-days" placeholder="Leave empty = never expires" min="1" class="glass-input">
+            <p class="text-xs text-soft mt-2">Enter the number of days from now. Leave empty to make it never expire.</p>
+        </div>
+
+        <div class="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-6">
+            <button onclick="closeValidUptoModal()" class="glass-btn rounded-2xl px-5 py-3 text-sm font-bold">
+                Cancel
+            </button>
+            <button onclick="saveValidUpto()" class="glass-btn glass-btn-primary rounded-2xl px-5 py-3 text-sm font-bold">
+                Save Validity
+            </button>
+        </div>
+    </div>
+</div>
+
 <!-- Plan Modal -->
 <div id="plan-modal" class="fixed inset-0 hidden z-50 modal-backdrop items-center justify-center p-4">
     <div class="modal-glass">
@@ -801,6 +835,7 @@
     /* ----------------------------------------------------------------
        Shared state
     ---------------------------------------------------------------- */
+    const subscriptionEnabled = {{ subscription_enabled|tojson }};
     let allTokens = [];
     let allUsers = [];
     let currentPage = 1;
@@ -876,9 +911,11 @@
 
     function refreshAll() {
         loadTokens();
-        fetchSubscribers();
-        fetchPlans();
-        loadPlans();
+        if (subscriptionEnabled) {
+            fetchSubscribers();
+            fetchPlans();
+            loadPlans();
+        }
     }
 
     /* ----------------------------------------------------------------
@@ -956,39 +993,34 @@
 
     function buildActions(t) {
         const safeName = escHtml(t.user_name || String(t.user_id || ''));
-        let actionBtns = '';
+        const delBtn = t.token
+            ? `<button onclick="revokeToken('${escHtml(t.token)}')" class="action-chip glass-btn">Delete</button>`
+            : '';
+        const linkBtn = (t.token && !t.user_id)
+            ? `<button onclick="linkUser('${escHtml(t.token)}')" class="action-chip glass-btn-purple">Link User ID</button>`
+            : '';
 
-        if (t.user_id) {
-            actionBtns = `
-                <button onclick="openAssignModal(${t.user_id}, '${safeName}')" class="action-chip glass-btn-primary">
-                    Assign
-                </button>
-                <button onclick="openSubModal(${t.user_id}, '${safeName}', 'extend')" class="action-chip glass-btn-success">
-                    Extend
-                </button>
-                <button onclick="openSubModal(${t.user_id}, '${safeName}', 'reduce')" class="action-chip glass-btn-warning">
-                    Reduce
-                </button>
-                <button onclick="openSubModal(${t.user_id}, '${safeName}', 'delete')" class="action-chip glass-btn-danger">
-                    Revoke
-                </button>
-            `;
-        } else if (t.token) {
-            actionBtns = `
-                <button onclick="linkUser('${escHtml(t.token)}')" class="action-chip glass-btn-purple">
-                    Link User ID
-                </button>
-                <div class="text-xs text-soft italic w-full mt-1">Enter Telegram user_id to enable management.</div>
-            `;
+        if (!subscriptionEnabled) {
+            //----- Subscription OFF: per-token validity + optional link + delete
+            const validBtn = t.token
+                ? `<button onclick="openValidUptoModal('${escHtml(t.token)}')" class="action-chip glass-btn-primary">Valid Upto</button>`
+                : '';
+            return validBtn + linkBtn + delBtn;
         }
 
-        const revokeTokenBtn = t.token ? `
-            <button onclick="revokeToken('${escHtml(t.token)}')" class="action-chip glass-btn">
-                Del Token
-            </button>
-        ` : '';
-
-        return actionBtns + revokeTokenBtn;
+        //----- Subscription ON: subscription lifecycle controls
+        let actionBtns = '';
+        if (t.user_id) {
+            actionBtns = `
+                <button onclick="openAssignModal(${t.user_id}, '${safeName}')" class="action-chip glass-btn-primary">Assign</button>
+                <button onclick="openSubModal(${t.user_id}, '${safeName}', 'extend')" class="action-chip glass-btn-success">Extend</button>
+                <button onclick="openSubModal(${t.user_id}, '${safeName}', 'reduce')" class="action-chip glass-btn-warning">Reduce</button>
+                <button onclick="openSubModal(${t.user_id}, '${safeName}', 'delete')" class="action-chip glass-btn-danger">Revoke</button>
+            `;
+        } else if (t.token) {
+            actionBtns = linkBtn + `<div class="text-xs text-soft italic w-full mt-1">Link a Telegram user_id to manage subscription.</div>`;
+        }
+        return actionBtns + delBtn;
     }
 
     function renderDesktopRows(slice) {
@@ -1016,8 +1048,9 @@
                     <td class="px-4 py-4 text-xs">
                         ${t.expires_at
                             ? `<span class="${t.is_expired ? 'text-red-300 font-semibold' : 'section-title'}">${fmtDate(t.expires_at)}</span>`
-                            : `<span class="text-red-300 italic">No expiry</span>`
+                            : `<span class="section-title">Never</span>`
                         }
+                        ${t.expiry_reason ? `<div class="text-[11px] text-soft mt-1">${escHtml(t.expiry_reason)}</div>` : ''}
                     </td>
                     <td class="px-4 py-4">
                         <div class="flex flex-wrap gap-2 justify-center">${buildActions(t)}</div>
@@ -1065,8 +1098,9 @@
                                  style="background: color-mix(in srgb, var(--bg) 55%, transparent); border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);">
                                 <div class="text-[11px] uppercase tracking-[0.14em] text-soft font-bold mb-1">Expires</div>
                                 <div class="text-sm font-semibold ${t.is_expired ? 'text-red-300' : 'section-title'} break-words">
-                                    ${t.expires_at ? fmtDate(t.expires_at) : 'No expiry'}
+                                    ${t.expires_at ? fmtDate(t.expires_at) : 'Never'}
                                 </div>
+                                ${t.expiry_reason ? `<div class="text-[11px] text-soft mt-1">${escHtml(t.expiry_reason)}</div>` : ''}
                             </div>
                         </div>
                     </div>
@@ -1584,6 +1618,44 @@
         }
     }
 
+    /* Token validity (subscription OFF) */
+    function openValidUptoModal(token) {
+        document.getElementById('validupto-token').value = token;
+        document.getElementById('validupto-days').value = '';
+        openModal('validupto-modal');
+    }
+
+    function closeValidUptoModal() { closeModal('validupto-modal'); }
+
+    async function saveValidUpto() {
+        const token = document.getElementById('validupto-token').value;
+        const raw = document.getElementById('validupto-days').value.trim();
+        const days = raw === '' ? null : parseInt(raw);
+
+        if (days !== null && (isNaN(days) || days < 1)) {
+            showToast('Enter a positive number of days, or leave empty for never.', 'error', 'Validation');
+            return;
+        }
+
+        try {
+            const resp = await fetch(`/api/admin/access/tokens/${encodeURIComponent(token)}/valid-upto`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ days })
+            });
+            const data = await resp.json();
+            if (resp.ok) {
+                showToast(days ? `Token valid for ${days} day(s).` : 'Token set to never expire.', 'success', 'Validity Updated');
+                closeValidUptoModal();
+                loadTokens();
+            } else {
+                showToast(data.detail || 'Failed to update validity.', 'error', 'Update Failed');
+            }
+        } catch (err) {
+            showToast('Error: ' + err.message, 'error', 'Network Error');
+        }
+    }
+
     async function copyLink(url) {
         try {
             await navigator.clipboard.writeText(url);
@@ -1597,7 +1669,7 @@
        Global events + init
     ---------------------------------------------------------------- */
     document.addEventListener('click', (e) => {
-        ['assign-modal', 'sub-action-modal', 'plan-modal'].forEach(id => {
+        ['assign-modal', 'sub-action-modal', 'plan-modal', 'validupto-modal'].forEach(id => {
             const modal = document.getElementById(id);
             if (e.target === modal) closeModal(id);
         });
@@ -1608,15 +1680,18 @@
             closeModal('assign-modal');
             closeModal('sub-action-modal');
             closeModal('plan-modal');
+            closeModal('validupto-modal');
         }
     });
 
     document.addEventListener('DOMContentLoaded', () => {
-        switchTab('tokens');
+        switchTab(subscriptionEnabled ? 'subscribers' : 'tokens');
         loadTokens();
-        fetchSubscribers();
-        fetchPlans();
-        loadPlans();
+        if (subscriptionEnabled) {
+            fetchSubscribers();
+            fetchPlans();
+            loadPlans();
+        }
     });
 </script>
 {% endblock %}
