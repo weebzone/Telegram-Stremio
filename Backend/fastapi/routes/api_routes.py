@@ -300,6 +300,16 @@ async def set_token_lifetime_api(token: str, payload: dict) -> dict:
     return {"status": "success", "subscription_exempt": exempt}
 
 
+#----- Set/extend/reduce a token's own expiry (subscription-off mode)
+async def set_token_expiry_api(token: str, payload: dict) -> dict:
+    action = str(payload.get("action") or "set")
+    days = int(payload.get("days") or 0)
+    result = await db.update_token_expiry(token, action, days)
+    if not result:
+        raise HTTPException(status_code=404, detail="Token not found.")
+    return {"status": "success", "expires_at": result.get("expires_at").isoformat() if result.get("expires_at") else None}
+
+
 #----- How many tokens would stop working if subscription mode is enabled
 async def subscription_preflight_api() -> dict:
     return {"status": "success", "uncovered": await db.count_uncovered_tokens()}
@@ -716,18 +726,18 @@ async def get_all_tokens_api() -> dict:
 
         #----- Unified access entry from optional user + token records
         def build_entry(user_id, user, token_doc):
-            expiry = None
-            sub_status = None
-            user_found = bool(user)
-
-            if user:
-                sub_status = user.get("subscription_status")
-                expiry = user.get("subscription_expiry")
-
             token_doc = token_doc or {}
+            user_found = bool(user)
+            sub_status = user.get("subscription_status") if user else None
             is_admin = bool(token_doc.get("is_admin")) or db._is_owner(user_id)
             lifetime = bool(token_doc.get("subscription_exempt"))
             token_str = token_doc.get("token")
+
+            #----- Sub ON: expiry comes from the subscription. Sub OFF: from the token itself.
+            if sub_on:
+                expiry = user.get("subscription_expiry") if user else None
+            else:
+                expiry = token_doc.get("expires_at")
 
             #----- Subscription OFF: any token streams. Admin/lifetime always active.
             if not sub_on or is_admin or lifetime:
@@ -740,7 +750,7 @@ async def get_all_tokens_api() -> dict:
             created = token_doc.get("created_at") or (user.get("created_at") if user else None)
             limits = token_doc.get("limits") or {}
             usage = token_doc.get("usage") or {}
-            has_active_sub = user_found and sub_status == "active" and expiry is not None and expiry > now
+            has_active_sub = sub_on and user_found and sub_status == "active" and expiry is not None and expiry > now
             never_expires = not expiry and (is_admin or lifetime or not sub_on)
 
             return {

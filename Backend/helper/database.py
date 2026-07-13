@@ -1990,6 +1990,7 @@ class Database:
             "user_id": user_id,
             "is_admin": self._is_owner(user_id),
             "subscription_exempt": bool(subscription_exempt),
+            "expires_at": None,
             "created_at": datetime.utcnow(),
             "limits": {
                 "daily_limit_gb": daily_limit_gb if daily_limit_gb else 0,
@@ -2020,6 +2021,32 @@ class Database:
             {"token": token}, {"$set": {"subscription_exempt": bool(exempt)}}
         )
         return result.modified_count > 0
+
+    #----- Set/extend/reduce a token's own expiry (used when subscription mode is off).
+    #----- 'set' with 0/None days clears the expiry (never expires).
+    async def update_token_expiry(self, token: str, action: str = "set", days: int = 0) -> Optional[dict]:
+        doc = await self.dbs["tracking"]["api_tokens"].find_one({"token": token})
+        if not doc:
+            return None
+        now = datetime.utcnow()
+        current = doc.get("expires_at")
+        if action == "set":
+            new_expiry = now + timedelta(days=days) if days and days > 0 else None
+        elif action == "extend":
+            base = current if (current and current > now) else now
+            new_expiry = base + timedelta(days=days)
+        elif action == "reduce":
+            base = current if current else now
+            new_expiry = base - timedelta(days=days)
+            if new_expiry < now:
+                new_expiry = now
+        else:
+            return None
+        await self.dbs["tracking"]["api_tokens"].update_one(
+            {"token": token},
+            {"$set": {"expires_at": new_expiry, "subscription_exempt": new_expiry is None}},
+        )
+        return await self.get_api_token(token)
 
     #----- Mark every token that isn't linked to a user as lifetime
     async def grant_lifetime_to_unlinked(self) -> int:

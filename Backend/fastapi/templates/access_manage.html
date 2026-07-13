@@ -307,6 +307,7 @@
             <button onclick="closeModal('assign-modal')" class="glass-btn rounded-full w-10 h-10 flex items-center justify-center"><i class="fas fa-xmark"></i></button>
         </div>
         <input type="hidden" id="assign-user-id">
+        <input type="hidden" id="assign-token">
         <div class="space-y-4">
             <div class="modal-field" id="assign-plan-field">
                 <label>Select a Plan</label>
@@ -336,6 +337,7 @@
             <button onclick="closeModal('sub-action-modal')" class="glass-btn rounded-full w-10 h-10 flex items-center justify-center"><i class="fas fa-xmark"></i></button>
         </div>
         <input type="hidden" id="sub-action-user-id">
+        <input type="hidden" id="sub-action-token">
         <input type="hidden" id="sub-action-action">
         <div id="sub-action-days-group" class="modal-field">
             <label>Number of Days</label>
@@ -421,22 +423,29 @@
         const safeName = escHtml(t.user_name || String(t.user_id || ''));
         let btns = '';
 
+        const tokenArg = t.token ? escHtml(t.token) : '';
+
         if (t.has_token) {
-            btns += `<button onclick="openLimitsModal('${escHtml(t.token)}', ${t.daily_limit_gb || 0}, ${t.monthly_limit_gb || 0})" class="action-chip glass-btn">Limits</button>`;
+            btns += `<button onclick="openLimitsModal('${tokenArg}', ${t.daily_limit_gb || 0}, ${t.monthly_limit_gb || 0})" class="action-chip glass-btn">Limits</button>`;
         }
 
-        if (t.user_id) {
-            btns += `<button onclick="openAssignModal(${t.user_id}, '${safeName}')" class="action-chip glass-btn-primary">${subEnabled ? 'Assign' : 'Set Expiry'}</button>`;
-            btns += `<button onclick="openSubModal(${t.user_id}, '${safeName}', 'extend')" class="action-chip glass-btn-success">Extend</button>`;
-            btns += `<button onclick="openSubModal(${t.user_id}, '${safeName}', 'reduce')" class="action-chip glass-btn-warning">Reduce</button>`;
-            if (subEnabled) {
-                btns += `<button onclick="openSubModal(${t.user_id}, '${safeName}', 'delete')" class="action-chip glass-btn-danger">Revoke</button>`;
+        if (subEnabled) {
+            if (t.user_id) {
+                btns += `<button onclick="openAssignModal(${t.user_id}, '${safeName}', '')" class="action-chip glass-btn-primary">Assign</button>`;
+                btns += `<button onclick="openSubModal(${t.user_id}, '${safeName}', 'extend', '')" class="action-chip glass-btn-success">Extend</button>`;
+                btns += `<button onclick="openSubModal(${t.user_id}, '${safeName}', 'reduce', '')" class="action-chip glass-btn-warning">Reduce</button>`;
+                btns += `<button onclick="openSubModal(${t.user_id}, '${safeName}', 'delete', '')" class="action-chip glass-btn-danger">Revoke</button>`;
+            } else if (t.token) {
+                btns += `<button onclick="linkUser('${tokenArg}')" class="action-chip glass-btn-purple">Link User</button>`;
             }
-        } else if (t.token) {
-            btns += `<button onclick="linkUser('${escHtml(t.token)}')" class="action-chip glass-btn-purple">Link User</button>`;
+        } else if (t.has_token) {
+            btns += `<button onclick="openAssignModal(${t.user_id || null}, '${safeName}', '${tokenArg}')" class="action-chip glass-btn-primary">Set Expiry</button>`;
+            btns += `<button onclick="openSubModal(${t.user_id || null}, '${safeName}', 'extend', '${tokenArg}')" class="action-chip glass-btn-success">Extend</button>`;
+            btns += `<button onclick="openSubModal(${t.user_id || null}, '${safeName}', 'reduce', '${tokenArg}')" class="action-chip glass-btn-warning">Reduce</button>`;
+            if (!t.user_id) btns += `<button onclick="linkUser('${tokenArg}')" class="action-chip glass-btn-purple">Link User</button>`;
         }
 
-        if (t.token) btns += `<button onclick="revokeToken('${escHtml(t.token)}')" class="action-chip glass-btn">Delete</button>`;
+        if (t.token) btns += `<button onclick="revokeToken('${tokenArg}')" class="action-chip glass-btn">Delete</button>`;
         return btns;
     }
 
@@ -630,9 +639,10 @@
         } catch (err) { showToast('Error: ' + err.message, 'error', 'Network Error'); }
     }
 
-    function openAssignModal(userId, userName) {
-        document.getElementById('assign-user-id').value = userId;
-        document.getElementById('assign-user-label').textContent = `User: ${userName} (ID: ${userId})`;
+    function openAssignModal(userId, userName, token) {
+        document.getElementById('assign-user-id').value = userId || '';
+        document.getElementById('assign-token').value = token || '';
+        document.getElementById('assign-user-label').textContent = userId ? `User: ${userName} (ID: ${userId})` : `Token: ${userName}`;
         document.getElementById('assign-custom-days').value = '';
         document.getElementById('assign-plan-select').value = '';
 
@@ -647,22 +657,31 @@
     }
 
     async function assignPlan() {
-        const userId = parseInt(document.getElementById('assign-user-id').value);
         const customDays = parseInt(document.getElementById('assign-custom-days').value) || 0;
         const planDays = parseInt(document.getElementById('assign-plan-select').value) || 0;
         const days = customDays || planDays;  // 0 = never expires
         try {
-            const resp = await fetch(`/api/admin/access/users/${userId}/assign-plan`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ days }),
-            });
+            let resp;
+            if (subEnabled) {
+                const userId = parseInt(document.getElementById('assign-user-id').value);
+                resp = await fetch(`/api/admin/access/users/${userId}/assign-plan`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ days }),
+                });
+            } else {
+                const token = document.getElementById('assign-token').value;
+                resp = await fetch(`/api/admin/access/tokens/${encodeURIComponent(token)}/expiry`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'set', days }),
+                });
+            }
             const data = await resp.json();
             if (resp.ok) { showToast(days > 0 ? `Expiry set: ${days} days.` : 'Set to never expire.', 'success', 'Updated'); closeModal('assign-modal'); loadTokens(); }
             else { showToast(data.detail || 'Failed to update.', 'error', 'Request Failed'); }
         } catch (err) { showToast('Error: ' + err.message, 'error', 'Network Error'); }
     }
 
-    function openSubModal(userId, userName, action) {
-        document.getElementById('sub-action-user-id').value = userId;
+    function openSubModal(userId, userName, action, token) {
+        document.getElementById('sub-action-user-id').value = userId || '';
+        document.getElementById('sub-action-token').value = token || '';
         document.getElementById('sub-action-action').value = action;
         const noun = subEnabled ? 'Subscription' : 'Expiry';
         const thing = subEnabled ? 'subscription' : 'access';
@@ -684,15 +703,23 @@
     }
 
     async function submitSubAction() {
-        const userId = parseInt(document.getElementById('sub-action-user-id').value);
         const action = document.getElementById('sub-action-action').value;
         const days = parseInt(document.getElementById('sub-action-days').value) || 0;
         try {
-            const resp = await fetch(`/api/admin/subscriptions/users/${userId}/manage`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, days }),
-            });
+            let resp;
+            if (subEnabled) {
+                const userId = parseInt(document.getElementById('sub-action-user-id').value);
+                resp = await fetch(`/api/admin/subscriptions/users/${userId}/manage`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, days }),
+                });
+            } else {
+                const token = document.getElementById('sub-action-token').value;
+                resp = await fetch(`/api/admin/access/tokens/${encodeURIComponent(token)}/expiry`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, days }),
+                });
+            }
             const data = await resp.json();
-            if (resp.ok) { showToast(`Updated for user ${userId}.`, 'success', 'Updated'); closeModal('sub-action-modal'); loadTokens(); }
+            if (resp.ok) { showToast('Updated.', 'success', 'Updated'); closeModal('sub-action-modal'); loadTokens(); }
             else { showToast(data.detail || 'Failed.', 'error', 'Update Failed'); }
         } catch (err) { showToast('Error: ' + err.message, 'error', 'Network Error'); }
     }

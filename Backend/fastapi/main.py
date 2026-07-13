@@ -22,6 +22,7 @@ from Backend.fastapi.routes.api_routes import (
     create_token_api,
     grant_lifetime_api,
     set_token_lifetime_api,
+    set_token_expiry_api,
     subscription_preflight_api,
     dbcheck_status_api,
     delete_custom_catalog_api,
@@ -328,6 +329,10 @@ async def link_token_to_user(token: str, payload: dict, _: bool = Depends(requir
 @app.patch("/api/admin/access/tokens/{token}/lifetime")
 async def set_token_lifetime(token: str, payload: dict, _: bool = Depends(require_auth)):
     return await set_token_lifetime_api(token, payload)
+
+@app.post("/api/admin/access/tokens/{token}/expiry")
+async def set_token_expiry(token: str, payload: dict, _: bool = Depends(require_auth)):
+    return await set_token_expiry_api(token, payload)
 
 @app.post("/api/admin/access/grant-lifetime")
 async def grant_lifetime(_: bool = Depends(require_auth)):
