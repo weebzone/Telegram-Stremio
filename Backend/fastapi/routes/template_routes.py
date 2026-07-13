@@ -214,14 +214,12 @@ async def stremio_guide_page(request: Request):
     return templates.TemplateResponse("stremio_guide.html", ctx)
 
 
-#----- Subscription management shell
+#----- Subscription management now lives on the merged Access page
 async def admin_subscriptions_page(request: Request, _: bool = Depends(require_auth)):
-    ctx = _base_context(request)
-    ctx["current_user"] = get_current_user(request)
-    return templates.TemplateResponse("subscriptions_manage.html", ctx)
+    return RedirectResponse(url="/admin/access", status_code=307)
 
 
-#----- Access management shell
+#----- Access & Subscriptions management shell (merged: tokens, subscribers, plans)
 async def admin_access_page(request: Request, _: bool = Depends(require_auth)):
     ctx = _base_context(request)
     ctx["current_user"] = get_current_user(request)
