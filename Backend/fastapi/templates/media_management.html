@@ -21,10 +21,10 @@
                     </p>
                 </div>
 
-                <div class="flex flex-wrap gap-2">
-                    <a href="/media/manage?media_type=movie"
+                <div class="flex flex-wrap items-center gap-2">
+                    <a href="/media/manage?media_type=movie{% if custom %}&custom=1{% endif %}"
                        class="inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold transition border
-                              {% if media_type == 'movie' and not custom %}
+                              {% if media_type == 'movie' %}
                               bg-primary text-white border-primary shadow-lg shadow-primary/20
                               {% else %}
                               glass-panel text-text hover:bg-surface-2 border-hairline
@@ -32,9 +32,9 @@
                         <i class="fa-solid fa-film"></i>
                         Movies
                     </a>
-                    <a href="/media/manage?media_type=tv"
+                    <a href="/media/manage?media_type=tv{% if custom %}&custom=1{% endif %}"
                        class="inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold transition border
-                              {% if media_type == 'tv' and not custom %}
+                              {% if media_type == 'tv' %}
                               bg-primary text-white border-primary shadow-lg shadow-primary/20
                               {% else %}
                               glass-panel text-text hover:bg-surface-2 border-hairline
@@ -42,16 +42,14 @@
                         <i class="fa-solid fa-tv"></i>
                         TV Shows
                     </a>
-                    <a href="/media/manage?media_type={{ media_type }}&custom=1"
-                       class="inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold transition border
-                              {% if custom %}
-                              bg-amber-500 text-white border-amber-500 shadow-lg shadow-amber-500/20
-                              {% else %}
-                              glass-panel text-text hover:bg-surface-2 border-hairline
-                              {% endif %}">
+                    <label class="inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold transition border cursor-pointer select-none
+                                  {% if custom %}bg-amber-500/15 text-amber-300 border-amber-500/40{% else %}glass-panel text-text hover:bg-surface-2 border-hairline{% endif %}">
+                        <input type="checkbox" {% if custom %}checked{% endif %}
+                               onchange="window.location.href='/media/manage?media_type={{ media_type }}' + (this.checked ? '&custom=1' : '')"
+                               class="w-4 h-4 rounded accent-amber-500 cursor-pointer">
                         <i class="fa-solid fa-star"></i>
-                        Custom
-                    </a>
+                        Custom only
+                    </label>
                     <button type="button" onclick="openManualAdd()"
                        class="inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold transition border bg-emerald-500 text-white border-emerald-500 shadow-lg shadow-emerald-500/20 hover:bg-emerald-500/90">
                         <i class="fa-solid fa-plus"></i>
