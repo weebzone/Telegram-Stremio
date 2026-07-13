@@ -399,6 +399,7 @@ async def get_catalog(token: str, media_type: str, id: str, extra: Optional[str]
                 if it.get("media_type") == db_media_type
                 and _token_can_view(*_effective_visibility(catalog, it), token_data)
             ]
+            visible_items.sort(key=lambda it: it.get("updated_on") or it.get("added_at") or datetime.min, reverse=True)
             start = (page - 1) * PAGE_SIZE
             items = await db.get_documents(visible_items[start:start + PAGE_SIZE])
             items = [it for it in items if _token_can_view(it.get("visibility") or "public", it.get("allowed_tokens") or [], token_data)]

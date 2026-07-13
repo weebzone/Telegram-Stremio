@@ -108,6 +108,7 @@ def _doc_item(doc: dict) -> dict:
         "db_index": db_index,
         "media_type": media_type,
         "added_at": datetime.utcnow(),
+        "updated_on": doc.get("updated_on"),
         "visibility": doc.get("visibility") or "public",
         "allowed_tokens": doc.get("allowed_tokens") or [],
     }
@@ -529,6 +530,8 @@ async def _rebuild_auto_catalogs(db, catalog_items: Dict[str, List[dict]], enabl
                 continue
             seen.add(key)
             unique_items.append(item)
+
+        unique_items.sort(key=lambda it: it.get("updated_on") or it.get("added_at") or datetime.min, reverse=True)
 
         await collection.update_one(
             {"auto_key": _catalog_key(name)},
