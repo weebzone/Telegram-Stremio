@@ -367,33 +367,106 @@ All other options — TMDB key, Base URL, channels, subscriptions, proxy, extra 
 
 # 💳 Subscriptions & Access
 
-Turn your server into a paid service. When **Subscription** is enabled in Settings, users must have an active plan to stream.
+This is how you control **who can watch** your library. Two simple ideas power everything:
 
-**Plans** — create/edit them under **Admin → Subscription Management** (name, days, price). Stored in the database, editable anytime.
+- 🔑 **Token** = a *key*. It's the secret inside every install link (`.../stremio/{token}/manifest.json`). One token = one person's Stremio install. Anyone holding a working key can watch.
+- 🗓️ **Subscription** = an optional *rent timer* on a key (a plan with an expiry date, usually paid through your bot).
 
-**Payment flow (via your bot):**
-```
-User → /start → picks a plan → sends payment screenshot
-     → an Approver gets a notification → Approve / Reject
-     → On Approve: subscription saved, a Stremio token is auto-created,
-       and the user gets their install link + group invite
-```
+You can run your server in one of **two modes** — pick the one that fits you.
 
-**Access Management** (`Admin → Access Management`) lets you:
+| | 🆓 **Subscription OFF** (private / free) | 💰 **Subscription ON** (paid) |
+| :--- | :--- | :--- |
+| Who makes keys? | **You** hand them out from the web panel | Your **bot** issues them automatically when a user pays |
+| Do keys expire? | Only if *you* set an expiry (optional) | Yes — a key works while the plan is active |
+| Best for | Family, friends, a private group | Selling access to members |
 
-| Action | What it does |
+Everything lives on **two web pages** (in the top menu):
+
+- 🔑 **Tokens** (`Admin → Tokens`) — the one place to create keys, set data limits, set expiry, link users, and manage access.
+- 🗓️ **Plans** (`Admin → Plans`) — your subscription plans and the list of paying members.
+
+> 💡 The **owner** (you) always has full access — your key never expires and you're never blocked.
+
+---
+
+## 🆓 Mode 1 — Subscription OFF (you hand out keys)
+
+Use this for a private/free server. Turn the **Subscription** toggle **off** in Settings. Now you create and give out keys yourself.
+
+**Create a key:**
+1. Go to **Admin → Tokens** → click **New Token**.
+2. Give it a **name** (e.g. `Living Room TV`, or a friend's name).
+3. *(Optional)* set a **Daily** or **Monthly** data limit in GB — leave `0` for unlimited.
+4. Leave **"Never expires"** ticked for a permanent key (untick only if you plan to set an expiry).
+5. Click **Create** → a new install link is ready to copy and share.
+
+**Manage a key** (buttons on each row):
+
+| Button | What it does |
 | :--- | :--- |
-| 📅 Assign | Give or extend a plan (adds days) |
-| ➕ Extend / ➖ Reduce | Add or remove days |
-| 🚫 Revoke | Cancel a subscription |
-| 🗑️ Del Token | Delete only the addon token |
-| 🔗 Link User ID | Attach an old token to a Telegram user so you can manage it |
+| 📋 **Copy Install Link** | Copies that key's Stremio link to share |
+| 📊 **Limits** | Set/change daily & monthly GB caps (`0` = unlimited) |
+| ⏳ **Set Expiry** | Give the key an expiry date. Type days (e.g. `30`), or **leave blank / `0`** for *never expires*. You can also **link a Telegram User ID** here in the same step |
+| ➕ **Extend** / ➖ **Reduce** | Add or remove days from the key's expiry |
+| 🔗 **Link User** | Attach a Telegram user ID to the key (pulls their real name, and keeps it **one key per user**) |
+| 🗑️ **Delete** | Remove the key — that person loses access immediately |
 
-Each subscriber gets a **personal addon link**:
+> ✅ **Expiry is real here too:** if you give a key a date, it stops working after that date. A key with **no** date simply works forever.
+
+---
+
+## 💰 Mode 2 — Subscription ON (users pay via your bot)
+
+Use this to sell access. Turn the **Subscription** toggle **on** in Settings and fill in the **Subscription Group ID**, **Payment Instructions** (your UPI / bank / PayPal text), an optional **Payment QR image**, and the **Approver IDs** (who can approve payments).
+
+**Step 1 — Make your plans:** go to **Admin → Plans** → **Add Plan** (set the days + price, e.g. `30 days – ₹99`). Add as many as you like.
+
+**Step 2 — Let users buy (all inside your bot):**
+```
+User presses /start  →  picks a plan  →  sends a payment screenshot
+      →  an Approver gets it in the bot  →  taps ✅ Approve (or ❌ Reject)
+      →  On Approve: their plan is saved, a key is created automatically,
+         and they instantly get their install link + a private group invite
+```
+
+**Step 3 — Manage members** from **Tokens** or **Plans**:
+
+| Button | What it does |
+| :--- | :--- |
+| 📅 **Assign** | Give someone a plan / set their days by hand (pulls their real Telegram name) |
+| ➕ **Extend** / ➖ **Reduce** | Add or remove days |
+| 🚫 **Revoke** | Cancel their subscription — access stops right away |
+| 🗑️ **Remove** | Delete their record from the list entirely (also revokes their key) |
+| 🔄 **Sync Names** | (Plans page) fix any `User 12345` rows by fetching their real Telegram names |
+
+> 🛡️ You and your **approvers** are never kicked from the private group, and never lose access.
+
+---
+
+## 🔎 How the server decides "can this person watch?"
+
+In plain English, a key is checked in this order:
+
+1. 👑 **Owner / approver key?** → always allowed.
+2. ♾️ **"Never expires" key?** → always allowed.
+3. ⏳ **Key has its own expiry date?** → allowed until that date (works in *both* modes).
+4. 💰 **Subscription mode ON, and none of the above?** → allowed only while their plan is active *and* they're still in the group.
+5. 📊 **Data limit hit?** → streams pause until the daily/monthly limit resets.
+
+If a key isn't allowed, the person sees a friendly notice in Stremio (e.g. *"Plan Expired — renew from the bot"* or *"Join Required"*) instead of the videos.
+
+---
+
+## 🔗 The personal install link
+
+Every key has its own link:
 ```
 https://your-domain.com/stremio/{token}/manifest.json
 ```
-The addon name even shows their expiry date, and expired/not-joined users see a friendly "renew from the bot" entry instead of streams. A **Configure page** (`/stremio/{token}/configure`) lets them reinstall after you extend their plan.
+- In paid mode the addon's **description** shows the expiry date.
+- There's also a **Configure page** (`/stremio/{token}/configure`) users can open to re-install after you extend their plan.
+
+> 📌 **One person = one key.** Linking a Telegram ID that already belongs to another key is blocked, so a user can never end up with two keys. When that user presses `/start`, the bot reuses their existing key instead of making a new one.
 
 ---
 
