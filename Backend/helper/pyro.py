@@ -172,11 +172,6 @@ def finalize_media_name(title: str, is_split: bool = False) -> str:
     title = _DECORATION_PATTERN.sub(" ", _EMOJI_PATTERN.sub(" ", remove_urls(title)))
     title = re.sub(r"\s+", " ", title).strip().replace(" .", ".")
 
-    #----- Captions are frequently multi-line: the real filename (with its video
-    #----- extension) sits on the first line, followed by promo text like
-    #----- "join the channel @xyz". Newlines have been collapsed to spaces above,
-    #----- so locate the first video extension (optionally trailed by a split-part
-    #----- marker like .001) and drop everything after it.
     ext_match = re.search(
         r"\.(?:mkv|mp4)(?:\.\d{2,3})?(?=$|[^A-Za-z0-9])",
         title,
