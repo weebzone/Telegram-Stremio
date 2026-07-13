@@ -9,8 +9,8 @@ from pyrogram.errors import FloodWait, ChannelPrivate, ChatAdminRequired
 from Backend.logger import LOGGER
 from Backend.helper.encrypt import encode_string, decode_string
 from Backend.helper.metadata import metadata
-from Backend.helper.pyro import clean_filename, get_readable_file_size, remove_urls
-from Backend.helper.split_files import parse_split_info, strip_part_suffix
+from Backend.helper.pyro import clean_filename, finalize_media_name, get_readable_file_size
+from Backend.helper.split_files import parse_split_info
 from Backend.helper.subtitles import ingest_subtitle, is_subtitle_file
 
 SCAN_BATCH_SIZE = 200          
@@ -480,11 +480,7 @@ class ScanManager:
             s["counters"]["skipped_meta"] += 1
             return
 
-        title_clean = remove_urls(title)
-        if metadata_info.get('group_key'):
-            title_clean = strip_part_suffix(title_clean)
-        if not title_clean.endswith(('.mkv', '.mp4')):
-            title_clean += '.mkv'
+        title_clean = finalize_media_name(title, bool(metadata_info.get('group_key')))
 
         try:
             async with self._db_lock:
