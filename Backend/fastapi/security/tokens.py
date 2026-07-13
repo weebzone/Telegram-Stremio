@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from fastapi import HTTPException
 
 from Backend import db
+from Backend.config import Telegram
 from Backend.helper.settings_manager import SettingsManager
 
 DAILY_LIMIT_VIDEO = "https://bit.ly/3YZFKT5"
@@ -22,6 +23,15 @@ async def verify_token(token: str):
     token_data["limit_exceeded"] = None
     token_data["limit_video"] = None
     token_data["subscription_expired"] = False
+
+    #----- Owner-linked tokens are admins (honour persisted flag, else derive)
+    _uid = token_data.get("user_id")
+    try:
+        token_data["is_admin"] = bool(token_data.get("is_admin")) or (
+            _uid is not None and int(_uid) == int(Telegram.OWNER_ID)
+        )
+    except (TypeError, ValueError):
+        token_data["is_admin"] = bool(token_data.get("is_admin"))
 
     #----- Subscription expiry check (only when the SUBSCRIPTION feature is enabled)
     if SettingsManager.current().subscription:

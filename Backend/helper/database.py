@@ -1952,6 +1952,7 @@ class Database:
             "name": name,
             "token": token,
             "user_id": user_id,
+            "is_admin": self._is_owner(user_id),
             "created_at": datetime.utcnow(),
             "limits": {
                 "daily_limit_gb": daily_limit_gb if daily_limit_gb else 0,
@@ -1981,12 +1982,20 @@ class Database:
         return result.deleted_count > 0
 
     async def link_token_user(self, token: str, user_id: int) -> bool:
-        #----- Link an existing token to a Telegram user_id
+        #----- Link an existing token to a Telegram user_id; elevate to admin when
+        #----- the linked user is the configured owner (else demote a stale flag).
         result = await self.dbs["tracking"]["api_tokens"].update_one(
             {"token": token},
-            {"$set": {"user_id": user_id}}
+            {"$set": {"user_id": user_id, "is_admin": self._is_owner(user_id)}}
         )
         return result.modified_count > 0
+
+    @staticmethod
+    def _is_owner(user_id) -> bool:
+        try:
+            return user_id is not None and int(user_id) == int(Telegram.OWNER_ID)
+        except (TypeError, ValueError):
+            return False
 
     async def update_token_usage(self, token: str, bytes_delta: int):
         today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
