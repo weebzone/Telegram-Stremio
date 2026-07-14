@@ -39,6 +39,10 @@ pinned: false
   * [🧩 Split Files (`.001`, `.002` …)](#-split-files-001-002-)
   * [🎞️ Combined / Season-Pack Files](#️-combined--season-pack-files)
 * [🖐️ Adding Files Manually (Goa trip, lectures, One Piece)](#️-adding-files-manually-goa-trip-lectures-one-piece)
+* [💬 Subtitles (filename rules & manual add)](#-subtitles-filename-rules--manual-add)
+  * [🔤 Supported subtitle filenames](#-supported-subtitle-filenames)
+  * [🌍 Language name & code support](#-language-name--code-support)
+  * [🖐️ Adding a subtitle manually](#️-adding-a-subtitle-manually)
 * [📚 Catalogs Explained](#-catalogs-explained)
   * [🤖 Auto Catalogs](#-auto-catalogs)
   * [🎯 Custom Catalogs](#-custom-catalogs)
@@ -229,6 +233,75 @@ One Piece **is** a real TMDb show, but the file has an episode number and **no s
 | Lectures / trip (many) | Session (personal TV) | Season required, Episode optional | Manual only |
 | One Piece (no season) | Session (real TV) | **Fallback season** only | Auth or Manual |
 | Normal `S01E05` files | just forward | auto-detected | Auth |
+
+---
+
+# 💬 Subtitles (filename rules & manual add)
+
+You can attach subtitle files (`.srt`, `.vtt`, `.ass`, `.ssa`, `.sub`) to any movie or episode. They then show up as selectable subtitle tracks in Stremio / Nuvio. A title can have **multiple subtitles** (different languages, or several tracks) — they all appear in the player's subtitle picker.
+
+There are **two ways** to add them: **auto-match by filename** (forward to a scanned channel) or **add by hand** from the web panel (most reliable).
+
+## 🔤 Supported subtitle filenames
+
+For **auto-matching**, the subtitle filename needs two things: something that identifies the **title/episode**, and a **language** at the end.
+
+**✅ Movies** — title + year (or an IMDb id), then the language:
+```
+Wanted 2008 english.srt
+Wanted 2008 ar.srt
+tt3326054 arabic.srt
+tt3326054 eng.srt
+```
+
+**✅ TV episodes** — title (or IMDb id) + `S01E01`, then the language:
+```
+Sniffer S01E01 hindi.srt
+The.Sniffer.S01E01.arabic.srt
+tt3326054 S01E01 eng.srt
+tt3326054 S01E01 ar.srt
+```
+
+| Part | Example | Needed? |
+| :--- | :--- | :---: |
+| Title **or** IMDb id | `Sniffer` / `tt3326054` | ✅ |
+| Season + Episode (TV only) | `S01E01` | ✅ (TV) |
+| Year (movies, helps matching) | `2008` | optional |
+| Language | `english` / `eng` / `en` | ✅ (for the track label) |
+
+> 💡 The language is read from the **end** of the filename. If it's missing or unrecognized, the subtitle is still stored but labelled **Unknown**.
+
+## 🌍 Language name & code support
+
+The language is detected from these forms (Arabic shown as an example):
+
+| Form | Examples | Supported? |
+| :--- | :--- | :---: |
+| Full name | `arabic`, `english`, `hindi` | ✅ |
+| 3-letter code (ISO 639-2) | `ara`, `eng`, `hin` | ✅ |
+| 2-letter code (ISO 639-1) | `ar`, `en`, `hi` | ✅ *(only as the last part of the name)* |
+| Anything else | `xx`, junk, or nothing | ❌ → stored as **Unknown** |
+
+Extra tags like `forced`, `sdh`, `cc`, `dubbed` at the end are ignored, so `Movie 2008 english forced.srt` still detects **English**. The 2-letter form is only matched when it's the final part of the name, so release tags like `WEB-DL` or `HD` are never mistaken for a language.
+
+## 🖐️ Adding a subtitle manually
+
+The most reliable way — no filename guessing, and you can attach several at once. This is ideal for messy release names that don't auto-match.
+
+**One-time setup (recommended):**
+1. Make a dedicated **Subtitles** channel and add your **bot as admin** there.
+2. In **Settings → Manual Add Channels**, add that channel's `-100…` ID. (A Manual channel isn't auto-indexed, so subtitles there won't be mismatched — and deleting a subtitle message later auto-removes it from the library.)
+
+**Add the subtitle:**
+1. Forward/post the subtitle file to that channel, then **copy its message link** (`t.me/c/…`).
+2. Open the title in **Media Management → Edit**.
+3. Scroll to the **Subtitles** panel → click **➕ Add Subtitle**.
+4. Paste the message link. Use **➕ Add another** to add multiple subtitles in one go.
+5. The **language is auto-detected** from the filename — change it from the dropdown if needed (or set it for `Unknown` files).
+6. For a **series**, enter the **Season** and **Episode** the subtitle belongs to.
+7. Click **Add Subtitle**. It appears in the list, and you can **Delete** any entry anytime.
+
+> ⚠️ The file must stay in a channel your bot can read — it's re-fetched from Telegram on demand (never stored on the server), just like your videos. Don't delete the message unless you also want the subtitle gone.
 
 ---
 
