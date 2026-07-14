@@ -209,12 +209,22 @@
         document.getElementById('media-info').classList.add('hidden');
     }
 
+    function syncPageUrl(page, search) {
+        const params = new URLSearchParams();
+        params.set('media_type', mediaType);
+        if (isCustom) params.set('custom', '1');
+        if (page > 1) params.set('page', page);
+        if (search) params.set('search', search);
+        history.replaceState(null, '', `${location.pathname}?${params.toString()}`);
+    }
+
     async function loadMedia(page = 1, search = '') {
         if (isLoading) return;
 
         showLoading();
         currentPage = page;
         currentSearch = search;
+        syncPageUrl(page, search);
 
         try {
             const url = `/api/media/list?media_type=${mediaType}&page=${page}&page_size=24&search=${encodeURIComponent(search)}&custom=${isCustom ? 1 : 0}`;
@@ -300,7 +310,7 @@
                 </div>
 
                 <div class="mt-4 flex gap-2">
-                    <a href="/media/edit?tmdb_id=${encodeURIComponent(item.tmdb_id)}&db_index=${encodeURIComponent(item.db_index)}&media_type=${encodeURIComponent(mediaType)}"
+                    <a href="/media/edit?tmdb_id=${encodeURIComponent(item.tmdb_id)}&db_index=${encodeURIComponent(item.db_index)}&media_type=${encodeURIComponent(mediaType)}&page=${currentPage}${currentSearch ? `&search=${encodeURIComponent(currentSearch)}` : ''}"
                        class="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 rounded-2xl bg-primary hover:bg-primary/90 text-white text-xs font-bold transition shadow-lg shadow-primary/20">
                         <i class="fa-solid fa-pen-to-square"></i> Edit
                     </a>
@@ -459,9 +469,13 @@
 }
 
     document.addEventListener('DOMContentLoaded', () => {
-        loadMedia();
+        const params = new URLSearchParams(location.search);
+        const startPage = Math.max(1, parseInt(params.get('page') || '1', 10) || 1);
+        const startSearch = params.get('search') || '';
 
         const searchInput = document.getElementById('search-input');
+        if (startSearch) searchInput.value = startSearch;
+        loadMedia(startPage, startSearch);
 
         searchInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {

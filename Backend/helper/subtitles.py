@@ -3,6 +3,7 @@ from datetime import datetime
 
 from Backend import db
 from Backend.helper.encrypt import encode_string
+from Backend.helper.manual_add import parse_telegram_link
 from Backend.helper.metadata import (
     extract_default_id,
     fetch_movie_metadata,
@@ -180,6 +181,7 @@ async def ingest_subtitle(name: str, channel: int, msg_id: int) -> bool:
                 "chat_id": int(channel),
                 "msg_id": int(msg_id),
                 "encoded": encoded,
+                "source": "auto",
                 "added_at": datetime.utcnow(),
             }},
             upsert=True,
@@ -189,6 +191,82 @@ async def ingest_subtitle(name: str, channel: int, msg_id: int) -> bool:
     except Exception as e:
         LOGGER.error(f"[SUBTITLE] ingest failed for '{name}': {e}")
         return False
+
+
+def list_languages() -> list:
+    return [{"code": code, "label": label} for code, label, _ in _LANGUAGES]
+
+
+def _label_for(code: str) -> str:
+    code = (code or "und").lower()
+    return next((label for c, label, _ in _LANGUAGES if c == code), "Unknown")
+
+
+async def resolve_subtitle_message(client, url: str = None, chat_id=None, msg_id=None) -> dict:
+    if url:
+        chat_ref, msg_id = parse_telegram_link(url)
+        if chat_ref is None:
+            raise ValueError("Could not read that Telegram link. Use a t.me/c/... or t.me/<channel>/... message link.")
+    elif chat_id and msg_id:
+        chat_ref = int(f"-100{str(chat_id).replace('-100', '')}")
+        msg_id = int(msg_id)
+    else:
+        raise ValueError("Provide a Telegram message link, or a chat id and message id.")
+
+    message = await client.get_messages(chat_ref, msg_id)
+    if not message or getattr(message, "empty", False):
+        raise ValueError("That message was not found. Make sure the bot is in the channel.")
+
+    doc = getattr(message, "document", None)
+    fname = getattr(doc, "file_name", None) if doc else None
+    if not fname or not is_subtitle_file(fname):
+        raise ValueError("That message has no subtitle file (.srt, .vtt, .ass, .ssa, .sub).")
+
+    code, label = detect_language(fname)
+    return {
+        "chat_id": str(message.chat.id).replace("-100", ""),
+        "msg_id": message.id,
+        "name": fname,
+        "ext": subtitle_ext(fname),
+        "lang_code": code,
+        "lang_label": label,
+    }
+
+
+async def manual_ingest_subtitle(imdb_id, media_type, season, episode, lang_code, chat_id, msg_id, name) -> dict:
+    channel = int(str(chat_id).replace("-100", ""))
+    msg_id = int(msg_id)
+    code = (lang_code or "und").lower()
+    doc = {
+        "imdb_id": imdb_id,
+        "media_type": "tv" if media_type in ("tv", "series") else "movie",
+        "season": int(season) if season else None,
+        "episode": int(episode) if episode else None,
+        "lang_code": code,
+        "lang_label": _label_for(code),
+        "name": name,
+        "chat_id": channel,
+        "msg_id": msg_id,
+        "encoded": await encode_string({"chat_id": channel, "msg_id": msg_id}),
+        "source": "manual",
+        "added_at": datetime.utcnow(),
+    }
+    await db.dbs["tracking"]["subtitles"].update_one(
+        {"chat_id": channel, "msg_id": msg_id}, {"$set": doc}, upsert=True
+    )
+    return doc
+
+
+async def list_title_subtitles(imdb_id: str) -> list:
+    out = []
+    cursor = db.dbs["tracking"]["subtitles"].find({"imdb_id": imdb_id}).sort(
+        [("season", 1), ("episode", 1), ("lang_label", 1)]
+    )
+    async for doc in cursor:
+        doc["_id"] = str(doc.get("_id"))
+        doc.pop("encoded", None)
+        out.append(doc)
+    return out
 
 
 async def get_subtitles_for(imdb_id: str, media_type: str, season, episode):
@@ -208,12 +286,24 @@ async def remove_subtitle(channel, msg_id) -> bool:
 
 #----- Shape stored subtitles into Stremio subtitle objects
 def stremio_subtitle_entries(subs: list, token: str, base_url: str) -> list:
+    lang_counts = {}
+    for sub in subs:
+        key = sub.get("lang_label") or sub.get("lang_code") or "Unknown"
+        lang_counts[key] = lang_counts.get(key, 0) + 1
+
+    seen = {}
     entries = []
     for sub in subs:
         ext = subtitle_ext(sub.get("name"))
+        base_label = sub.get("lang_label") or sub.get("lang_code") or "Unknown"
+        if lang_counts.get(base_label, 0) > 1:
+            seen[base_label] = seen.get(base_label, 0) + 1
+            lang = f"{base_label} ({seen[base_label]})"
+        else:
+            lang = base_label
         entries.append({
             "id": f"tg-{sub.get('msg_id')}",
             "url": f"{base_url}/sub/{token}/{sub.get('encoded')}/subtitle{ext}",
-            "lang": sub.get("lang_code") or "und",
+            "lang": lang,
         })
     return entries

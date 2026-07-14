@@ -81,12 +81,32 @@ class Database:
                 await tracking["custom_catalogs"].create_index(
                     [("items.tmdb_id", ASCENDING), ("items.media_type", ASCENDING)]
                 )
+                await self._ensure_subtitle_indexes(tracking)
             except Exception as e:
                 LOGGER.error(f"Failed creating tracking indexes: {e}")
 
         for db_key in list(self.dbs.keys()):
             if db_key.startswith("storage_"):
                 await self._ensure_storage_indexes(db_key)
+
+    async def _ensure_subtitle_indexes(self, tracking) -> None:
+        subs = tracking["subtitles"]
+        try:
+            info = await subs.index_information()
+        except Exception:
+            info = {}
+        for name, spec in info.items():
+            if name == "_id_":
+                continue
+            keys = [k for k, _ in spec.get("key", [])]
+            if keys == ["stream_id"] or (spec.get("unique") and "stream_id" in keys):
+                try:
+                    await subs.drop_index(name)
+                    LOGGER.info(f"Dropped stale subtitle index {name}")
+                except Exception as e:
+                    LOGGER.error(f"Failed dropping subtitle index {name}: {e}")
+        await subs.create_index([("chat_id", ASCENDING), ("msg_id", ASCENDING)], unique=True)
+        await subs.create_index([("imdb_id", ASCENDING), ("season", ASCENDING), ("episode", ASCENDING)])
 
     #----- Ensure per-storage-DB indexes on the movie/tv collections.
     #----- tmdb_id + imdb_id drive catalog hydration and stream lookups.

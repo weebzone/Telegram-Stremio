@@ -72,6 +72,11 @@ from Backend.fastapi.routes.api_routes import (
     purge_dead_links_api,
     remove_custom_catalog_item_api,
     resolve_telegram_api,
+    resolve_subtitle_api,
+    list_subtitle_languages_api,
+    list_subtitles_api,
+    add_subtitles_api,
+    remove_subtitle_api,
     restart_app_api,
     revoke_token_api,
     scan_status_api,
@@ -440,6 +445,28 @@ async def manual_add_catalogs(_: bool = Depends(require_auth)):
 @app.get("/api/media/manual-add/resolve-meta")
 async def manual_add_resolve_meta(media_type: str, selected_id: str, _: bool = Depends(require_auth)):
     return await resolve_manual_metadata_api(media_type, selected_id)
+
+
+#----- Manual subtitle management
+@app.get("/api/media/subtitles/languages")
+async def subtitle_languages(_: bool = Depends(require_auth)):
+    return list_subtitle_languages_api()
+
+@app.get("/api/media/subtitles")
+async def list_subtitles(media_type: str, tmdb_id: int, db_index: int, _: bool = Depends(require_auth)):
+    return await list_subtitles_api(media_type, tmdb_id, db_index)
+
+@app.post("/api/media/subtitles/resolve")
+async def resolve_subtitle(payload: dict, _: bool = Depends(require_auth)):
+    return await resolve_subtitle_api(payload)
+
+@app.post("/api/media/subtitles/add")
+async def add_subtitles(payload: dict, _: bool = Depends(require_auth)):
+    return await add_subtitles_api(payload)
+
+@app.post("/api/media/subtitles/remove")
+async def remove_subtitle_route(payload: dict, _: bool = Depends(require_auth)):
+    return await remove_subtitle_api(payload)
 
 
 #----- Custom catalog management
