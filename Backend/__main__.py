@@ -22,58 +22,67 @@ from Backend.pyrofork.clients import initialize_clients
 loop = asyncio.get_event_loop()
 
 
-#----- Boot every subsystem then idle the bot
-async def start_services():
+#----- Connect backends AFTER the web server is already listening.
+#----- Hugging Face Spaces requires the HTTP port open within ~60 s,
+#----- so we start the web server first and connect DB/Telegram in background.
+async def _connect_backends():
     try:
-        LOGGER.info(f"Initializing Telegram-Stremio v-{__version__}")
-        await asyncio.sleep(1.2)
-
-        await db.connect()
-        await asyncio.sleep(1.2)
+        LOGGER.info("Connecting to MongoDB...")
+        await asyncio.wait_for(db.connect(), timeout=30)
+        LOGGER.info("MongoDB connected.")
 
         await SettingsManager.initialize(db)
         app.add_middleware(SessionMiddleware, secret_key=SettingsManager.current().session_secret or secrets.token_hex(32))
-        await asyncio.sleep(0.5)
 
         await scan_manager.load(db)
         dbcheck_manager.bind_db(db)
         duplicate_manager.bind_db(db)
-        await asyncio.sleep(0.3)
-
         await db.reload_extra_databases(SettingsManager.current().extra_databases)
-        await asyncio.sleep(0.5)
 
-        await StreamBot.start()
+        LOGGER.info("Starting StreamBot...")
+        await asyncio.wait_for(StreamBot.start(), timeout=30)
         StreamBot.username = StreamBot.me.username
         LOGGER.info(f"Bot Client : [@{StreamBot.username}]")
-        await asyncio.sleep(1.2)
 
         if Userbot is not None:
-            await Userbot.start()
+            LOGGER.info("Starting Userbot...")
+            await asyncio.wait_for(Userbot.start(), timeout=30)
             Userbot.username = Userbot.me.username
             LOGGER.info(f"Userbot Client : [@{Userbot.username}]")
         else:
             LOGGER.info("Userbot not configured (USER_SESSION_STRING empty) — running with StreamBot only.")
-        await asyncio.sleep(1.2)
 
         LOGGER.info("Initializing Multi Clients...")
-        await initialize_clients()
-        await asyncio.sleep(2)
+        await asyncio.wait_for(initialize_clients(), timeout=60)
 
         await setup_bot_commands(StreamBot)
-        await asyncio.sleep(2)
-
-        LOGGER.info('Initializing Telegram-Stremio Web Server...')
         await restart_notification()
-        loop.create_task(server.serve())
-        loop.create_task(ping())
 
+        loop.create_task(ping())
         link_checker_task = DeadLinkChecker(db, app, check_interval_hours=24)
         loop.create_task(link_checker_task.start())
 
         await subscription_task_manager.sync(StreamBot)
+        LOGGER.info("All backends connected — Telegram-Stremio is fully ready!")
 
-        LOGGER.info("Telegram-Stremio Started Successfully!")
+    except asyncio.TimeoutError as e:
+        LOGGER.error(f"Backend connection timed out: {e}")
+    except Exception:
+        LOGGER.error("Error during backend connection:\n" + format_exc())
+
+
+#----- Boot: (1) start web server immediately, (2) connect backends in background, (3) idle
+async def start_services():
+    try:
+        LOGGER.info(f"Initializing Telegram-Stremio v-{__version__}")
+
+        LOGGER.info("Starting Web Server (HTTP)...")
+        loop.create_task(server.serve())
+        await asyncio.sleep(1)
+
+        loop.create_task(_connect_backends())
+
+        LOGGER.info("Telegram-Stremio Web Server is live — backends connecting in background.")
         await idle()
     except Exception:
         LOGGER.error("Error during startup:\n" + format_exc())
