@@ -217,12 +217,23 @@
         <div class="space-y-4">
             <label class="toggle-wrap">
                 <input type="checkbox" class="toggle-input" id="replace_mode"
-                    {% if settings.replace_mode %}checked{% endif %}>
+                    {% if settings.replace_mode %}checked{% endif %} onchange="toggleDuplicateProtection()">
                 <span class="toggle-track"></span>
                 <span class="toggle-label">
                     <strong>Replace Mode</strong>
                     <span style="color:var(--text-sec);font-size:0.8rem;display:block">
                         Overwrite existing media entries on re-index
+                    </span>
+                </span>
+            </label>
+            <label class="toggle-wrap" id="dup-protect-wrap">
+                <input type="checkbox" class="toggle-input" id="duplicate_protection"
+                    {% if settings.duplicate_protection %}checked{% endif %}>
+                <span class="toggle-track"></span>
+                <span class="toggle-label">
+                    <strong>Duplicate Protection</strong>
+                    <span style="color:var(--text-sec);font-size:0.8rem;display:block">
+                        Skip re-indexing a file that already exists (same name &amp; size). Only active when Replace Mode is off.
                     </span>
                 </span>
             </label>
@@ -746,6 +757,16 @@
 </div>
 
 <script>
+/* ── Duplicate protection only applies when Replace Mode is off ───────── */
+function toggleDuplicateProtection() {
+    const replaceOn = document.getElementById('replace_mode').checked;
+    const wrap = document.getElementById('dup-protect-wrap');
+    const input = document.getElementById('duplicate_protection');
+    input.disabled = replaceOn;
+    wrap.style.opacity = replaceOn ? '0.5' : '';
+    wrap.style.pointerEvents = replaceOn ? 'none' : '';
+}
+
 /* ── Toggle sub-fields visibility ─────────────────────────────────────── */
 function toggleSubFields() {
     const enabled = document.getElementById('subscription').checked;
@@ -876,6 +897,7 @@ async function saveSettings() {
 
     const payload = {
         replace_mode:                  document.getElementById('replace_mode').checked,
+        duplicate_protection:          document.getElementById('duplicate_protection').checked,
         hide_catalog:                  document.getElementById('hide_catalog').checked,
         admin_username:                document.getElementById('admin_username').value.trim(),
         admin_password:                document.getElementById('admin_password').value,  // blank = keep
@@ -998,6 +1020,8 @@ async function refreshSettingsFromServer() {
 function renderSettings(s) {
     // Toggles
     document.getElementById('replace_mode').checked = !!s.replace_mode;
+    document.getElementById('duplicate_protection').checked = !!s.duplicate_protection;
+    toggleDuplicateProtection();
     document.getElementById('hide_catalog').checked = !!s.hide_catalog;
     document.getElementById('subscription').checked = !!s.subscription;
     document.getElementById('show_proxy_and_non_proxy_both').checked = !!s.show_proxy_and_non_proxy_both;
@@ -1193,6 +1217,7 @@ window.addEventListener('DOMContentLoaded', () => {
         sessionStorage.removeItem('restartSuccess');
         showToast('The app restarted successfully and is back online.', 'success', 'Restart complete', 8000);
     }
+    toggleDuplicateProtection();
     loadDbStats();
     loadLogs();
 });

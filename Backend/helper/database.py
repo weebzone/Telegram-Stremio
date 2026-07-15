@@ -1328,6 +1328,13 @@ class Database:
             result.append(quality_to_update)
         return result
 
+    #----- Identity of a non-split stream for duplicate protection (quality + name + size)
+    @staticmethod
+    def _dup_key(quality: dict) -> tuple:
+        name = re.sub(r"\s+", " ", str(quality.get("name") or "").strip().lower())
+        size = str(quality.get("size") or "").strip().lower()
+        return (quality.get("quality"), name, size)
+
     async def _apply_quality_update(
         self, existing_qualities: List[dict], quality_to_update: dict
     ) -> List[dict]:
@@ -1365,7 +1372,13 @@ class Database:
             existing_qualities.append(quality_to_update)
             return existing_qualities
 
-        #----- REPLACE_MODE off: allow duplicate qualities.
+        #----- REPLACE_MODE off: skip exact duplicates when protection is on, else stack.
+        if SettingsManager.current().duplicate_protection:
+            key = self._dup_key(quality_to_update)
+            for q in existing_qualities:
+                if not q.get("group_key") and self._dup_key(q) == key:
+                    LOGGER.info(f"Duplicate protection: skipped existing stream '{quality_to_update.get('name')}'.")
+                    return existing_qualities
         existing_qualities.append(quality_to_update)
         return existing_qualities
 
@@ -1881,13 +1894,18 @@ class Database:
 
         return None
 
-    async def delete_media_by_stream_id(self, stream_id_hash: str) -> bool:
+    async def delete_media_by_stream_id(self, stream_id_hash: str, delete_file: bool = False) -> bool:
         for i in range(1, self.current_db_index + 1):
             db = self.dbs[f"storage_{i}"]
             
             #----- Check Movies
             movie = await db["movie"].find_one({"telegram.id": stream_id_hash})
             if movie:
+                if delete_file:
+                    for q in movie.get("telegram", []):
+                        if q.get("id") == stream_id_hash:
+                            await self._queue_quality_deletion(q)
+                            break
                 movie["telegram"] = [q for q in movie.get("telegram", []) if q.get("id") != stream_id_hash]
                 if len(movie["telegram"]) == 0:
                     await db["movie"].delete_one({"_id": movie["_id"]})
@@ -1904,6 +1922,8 @@ class Database:
                     for episode in season.get("episodes", []):
                         for q in episode.get("telegram", []):
                             if q.get("id") == stream_id_hash:
+                                if delete_file:
+                                    await self._queue_quality_deletion(q)
                                 episode["telegram"] = [t for t in episode.get("telegram", []) if t.get("id") != stream_id_hash]
                                 if len(episode["telegram"]) == 0:
                                     season["episodes"] = [e for e in season.get("episodes", []) if e.get("episode_number") != episode.get("episode_number")]

@@ -15,6 +15,7 @@ from Backend.fastapi.routes.api_routes import (
     auto_catalog_sync_status_api,
     auto_sync_custom_catalogs_api,
     cancel_dbcheck_api,
+    cancel_duplicate_check_api,
     cancel_scan_api,
     clear_cache_api,
     clear_stream_analytics_api,
@@ -26,6 +27,7 @@ from Backend.fastapi.routes.api_routes import (
     subscription_preflight_api,
     backfill_subscriber_names_api,
     dbcheck_status_api,
+    duplicate_check_status_api,
     delete_custom_catalog_api,
     delete_media_api,
     delete_movie_quality_api,
@@ -70,6 +72,7 @@ from Backend.fastapi.routes.api_routes import (
     list_manual_add_catalogs_api,
     resolve_manual_metadata_api,
     purge_dead_links_api,
+    purge_duplicates_api,
     remove_custom_catalog_item_api,
     resolve_telegram_api,
     resolve_subtitle_api,
@@ -86,6 +89,7 @@ from Backend.fastapi.routes.api_routes import (
     speed_test_api,
     speed_test_stream_api,
     start_dbcheck_api,
+    start_duplicate_check_api,
     start_scan_api,
     update_auto_catalog_settings_api,
     update_custom_catalog_api,
@@ -667,6 +671,22 @@ async def tools_dbcheck_status(_: bool = Depends(require_auth)):
 @app.post("/api/admin/tools/dead-links/purge")
 async def tools_purge_dead_links(payload: dict | None = None, _: bool = Depends(require_auth)):
     return await purge_dead_links_api(payload)
+
+@app.post("/api/admin/tools/duplicates/start")
+async def tools_duplicates_start(_: bool = Depends(require_auth)):
+    return await start_duplicate_check_api()
+
+@app.post("/api/admin/tools/duplicates/cancel")
+async def tools_duplicates_cancel(_: bool = Depends(require_auth)):
+    return await cancel_duplicate_check_api()
+
+@app.get("/api/admin/tools/duplicates/status")
+async def tools_duplicates_status(_: bool = Depends(require_auth)):
+    return await duplicate_check_status_api()
+
+@app.post("/api/admin/tools/duplicates/purge")
+async def tools_duplicates_purge(payload: dict | None = None, _: bool = Depends(require_auth)):
+    return await purge_duplicates_api(payload)
 
 
 @app.exception_handler(401)

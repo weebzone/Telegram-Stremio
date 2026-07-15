@@ -10,6 +10,7 @@ from Backend.logger import LOGGER
 #----- Default values (used when nothing exists in the DB yet)
 _DEFAULTS: Dict[str, Any] = {
     "replace_mode": True,
+    "duplicate_protection": False,
     "hide_catalog": False,
     "auth_channels": [],
     "tmdb_api": "",
@@ -76,6 +77,10 @@ class Settings:
     @property
     def replace_mode(self) -> bool:
         return bool(self._d["replace_mode"])
+
+    @property
+    def duplicate_protection(self) -> bool:
+        return bool(self._d.get("duplicate_protection", False))
 
     @property
     def hide_catalog(self) -> bool:

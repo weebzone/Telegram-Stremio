@@ -46,7 +46,7 @@ from Backend.helper.metadata import (
 )
 from Backend.helper.passwords import hash_password, verify_password
 from Backend.helper.pyro import get_readable_file_size, get_readable_time
-from Backend.helper.scan_manager import dbcheck_manager, scan_manager
+from Backend.helper.scan_manager import dbcheck_manager, duplicate_manager, scan_manager
 from Backend.helper.settings_manager import SettingsManager
 from Backend.helper.split_files import strip_part_suffix
 from Backend.helper.subtitles import (
@@ -1595,7 +1595,7 @@ async def update_settings_api(payload: dict) -> dict:
         del payload["session_secret"]
 
     #----- Type coercion and validation
-    bool_keys = {"replace_mode", "hide_catalog", "subscription", "show_proxy_and_non_proxy_both", "announce_new_content"}
+    bool_keys = {"replace_mode", "duplicate_protection", "hide_catalog", "subscription", "show_proxy_and_non_proxy_both", "announce_new_content"}
     for key in bool_keys:
         if key in payload:
             payload[key] = bool(payload[key])
@@ -1974,6 +1974,34 @@ async def cancel_dbcheck_api() -> dict:
 
 async def dbcheck_status_api() -> dict:
     return {"status": "success", "data": dbcheck_manager.get_status()}
+
+
+#----- ── Duplicate check & cleanup ──
+async def start_duplicate_check_api() -> dict:
+    result = await duplicate_manager.start()
+    if not result.get("ok"):
+        raise HTTPException(status_code=409, detail=result.get("message", "Could not start duplicate scan."))
+    return {"status": "success", **result}
+
+
+async def cancel_duplicate_check_api() -> dict:
+    result = await duplicate_manager.cancel()
+    return {"status": "success" if result.get("ok") else "error", **result}
+
+
+async def duplicate_check_status_api() -> dict:
+    return {"status": "success", "data": duplicate_manager.get_status()}
+
+
+#----- Remove selected duplicate streams, or (delete_all) keep the newest per group
+async def purge_duplicates_api(payload: dict | None = None) -> dict:
+    payload = payload or {}
+    delete_all = bool(payload.get("delete_all"))
+    stream_ids = payload.get("stream_ids")
+    if not delete_all and (not isinstance(stream_ids, list) or not stream_ids):
+        raise HTTPException(status_code=400, detail="Provide 'stream_ids' or set 'delete_all'.")
+    result = await duplicate_manager.purge(stream_ids, delete_all=delete_all)
+    return {"status": "success" if result.get("ok") else "error", **result}
 
 
 #----- Purge dead links (from last dbcheck, flagged in DB, or a specific set)

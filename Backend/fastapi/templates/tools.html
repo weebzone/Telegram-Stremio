@@ -369,6 +369,58 @@
         </div>
     </div>
 
+    <!-- Duplicate check & cleanup -->
+    <div class="tool-card">
+        <div class="flex items-center justify-between flex-wrap gap-2">
+            <h2 style="margin-bottom:0"><i class="fa-solid fa-clone"></i> Duplicate Check &amp; Cleanup</h2>
+            <span id="dup-status-pill" class="status-pill status-idle">Idle</span>
+        </div>
+
+        <p class="hint mt-3 mb-4">
+            Find streams stored more than once (same quality, name &amp; size) within a title or episode.
+            Remove the ones you pick, or keep the newest of each group in a single click. Deleting also
+            removes the backing Telegram file.
+        </p>
+
+        <div class="stat-grid mb-4">
+            <div class="stat-box"><div class="v" id="dup-scanned">0</div><div class="l">Scanned</div></div>
+            <div class="stat-box"><div class="v" id="dup-groups">0</div><div class="l">Groups</div></div>
+            <div class="stat-box"><div class="v" style="color:#f59e0b" id="dup-count">0</div><div class="l">Redundant</div></div>
+            <div class="stat-box"><div class="v" id="dup-purged">0</div><div class="l">Removed</div></div>
+        </div>
+
+        <div class="flex items-center gap-2 flex-wrap mb-2">
+            <button class="btn btn-primary" id="dup-start-btn" onclick="startDuplicateCheck()">
+                <i class="fa-solid fa-magnifying-glass"></i> Scan for duplicates
+            </button>
+            <button class="btn btn-danger" id="dup-cancel-btn" onclick="cancelDuplicateCheck()" disabled>
+                <i class="fa-solid fa-stop"></i> Stop
+            </button>
+        </div>
+        <div id="dup-current" class="text-sm mb-2" style="color:var(--text-sec)">No scan running</div>
+
+        <hr class="divider">
+
+        <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <label class="s-label" style="margin-bottom:0">Duplicate groups</label>
+            <div class="flex items-center gap-2">
+                <button class="btn btn-ghost" type="button" id="dup-selected-btn" onclick="purgeDuplicates(false)" disabled>
+                    <i class="fa-solid fa-trash"></i> Delete selected
+                </button>
+                <button class="btn btn-danger" type="button" id="dup-all-btn" onclick="purgeDuplicates(true)" disabled>
+                    <i class="fa-solid fa-broom"></i> Delete all duplicates
+                </button>
+            </div>
+        </div>
+        <p class="hint mb-3">
+            Each group keeps checkboxes so you can choose which copies to delete.
+            "Delete all duplicates" keeps the newest copy in every group and removes the rest.
+        </p>
+        <div class="dead-list" id="dup-list">
+            <div class="hint">No duplicates to show yet. Run a scan above.</div>
+        </div>
+    </div>
+
 </div>
 
 <script>
@@ -546,6 +598,8 @@ async function loadManualSession() {
 /* ─────────────── State ─────────────── */
 let scanTimer = null;
 let dbcTimer = null;
+let dupTimer = null;
+let dupGroups = [];
 let deadSource = "dbcheck";   // where the current dead list came from
 let purgeIds = [];            // explicit ids to purge when source = flagged
 
@@ -856,6 +910,135 @@ async function purgeDeadLinks() {
     }
 }
 
+/* ─────────────── Duplicate check & cleanup ─────────────── */
+async function startDuplicateCheck() {
+    try {
+        const res = await fetch('/api/admin/tools/duplicates/start', { method: 'POST' });
+        const data = await res.json();
+        if (res.ok) {
+            showToast('Duplicate scan started.', 'success', 'Duplicates');
+            startDupPolling();
+        } else {
+            showToast(data.detail || 'Could not start.', 'error', 'Error');
+        }
+    } catch (e) { showToast('Network error.', 'error', 'Error'); }
+}
+
+async function cancelDuplicateCheck() {
+    try {
+        const res = await fetch('/api/admin/tools/duplicates/cancel', { method: 'POST' });
+        const data = await res.json();
+        showToast(data.message || 'Stop requested.', data.ok ? 'info' : 'error', 'Duplicates');
+    } catch (e) { showToast('Network error.', 'error', 'Error'); }
+}
+
+function startDupPolling() {
+    if (dupTimer) clearInterval(dupTimer);
+    pollDup();
+    dupTimer = setInterval(pollDup, 1500);
+}
+
+async function pollDup() {
+    try {
+        const res = await fetch('/api/admin/tools/duplicates/status');
+        const data = await res.json();
+        renderDup(data.data || {});
+    } catch (e) { /* ignore */ }
+}
+
+function renderDup(s) {
+    const pill = document.getElementById('dup-status-pill');
+    const status = s.status || 'idle';
+    pill.className = 'status-pill status-' + status;
+    pill.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+
+    setText('dup-scanned', s.scanned || 0);
+    setText('dup-groups', s.group_count || 0);
+    setText('dup-count', s.duplicate_count || 0);
+    setText('dup-purged', s.purged || 0);
+
+    const startBtn = document.getElementById('dup-start-btn');
+    const cancelBtn = document.getElementById('dup-cancel-btn');
+    if (s.is_running) {
+        startBtn.disabled = true; cancelBtn.disabled = false;
+        document.getElementById('dup-current').textContent = `Scanning… ${s.scanned || 0} titles checked`;
+    } else {
+        startBtn.disabled = false; cancelBtn.disabled = true;
+        document.getElementById('dup-current').textContent =
+            status === 'completed' ? `Done — ${s.group_count || 0} duplicate group(s) found.` :
+            status === 'cancelled' ? 'Stopped.' :
+            status === 'error' ? 'Scan failed.' : 'No scan running';
+        if (dupTimer && ['completed','cancelled','error','idle'].includes(status)) {
+            clearInterval(dupTimer); dupTimer = null;
+        }
+    }
+
+    dupGroups = s.groups || [];
+    renderDupList();
+}
+
+function renderDupList() {
+    const list = document.getElementById('dup-list');
+    const selBtn = document.getElementById('dup-selected-btn');
+    const allBtn = document.getElementById('dup-all-btn');
+
+    if (!dupGroups.length) {
+        list.innerHTML = `<div class="hint">No duplicates to show.</div>`;
+        selBtn.disabled = true; allBtn.disabled = true;
+        return;
+    }
+    list.innerHTML = dupGroups.map(g => `
+        <div class="dead-row" style="flex-direction:column;align-items:stretch;gap:0.5rem">
+            <div class="min-w-0 truncate font-bold">
+                <i class="fa-solid fa-clone" style="color:#f59e0b"></i>
+                ${escapeHtml(g.title || 'Unknown')}
+                <span class="c-id">· ${escapeHtml(g.quality || '')} · ${g.entries.length} copies</span>
+            </div>
+            ${g.entries.map((e, i) => `
+                <label class="flex items-center gap-2 text-sm" style="padding-left:1.25rem">
+                    <input type="checkbox" class="dup-cb" data-id="${escapeHtmlAttr(e.id)}"
+                        ${i === g.entries.length - 1 ? '' : 'checked'}>
+                    <span class="min-w-0 truncate">${escapeHtml(e.name || 'file')}
+                        <span class="c-id">· ${escapeHtml(e.size || '')}${i === g.entries.length - 1 ? ' · newest' : ''}</span>
+                    </span>
+                </label>
+            `).join('')}
+        </div>
+    `).join('');
+    selBtn.disabled = false; allBtn.disabled = false;
+}
+
+async function purgeDuplicates(deleteAll) {
+    let body;
+    if (deleteAll) {
+        if (!confirm('Keep the newest copy of every group and permanently delete the rest (including the Telegram files)?')) return;
+        body = { delete_all: true };
+    } else {
+        const ids = Array.from(document.querySelectorAll('#dup-list .dup-cb:checked')).map(cb => cb.dataset.id);
+        if (!ids.length) { showToast('Select at least one copy to delete.', 'error', 'Duplicates'); return; }
+        if (!confirm(`Permanently delete ${ids.length} selected cop${ids.length === 1 ? 'y' : 'ies'} (including the Telegram files)?`)) return;
+        body = { stream_ids: ids };
+    }
+    document.getElementById('dup-selected-btn').disabled = true;
+    document.getElementById('dup-all-btn').disabled = true;
+    try {
+        const res = await fetch('/api/admin/tools/duplicates/purge', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        if (res.ok && data.ok) {
+            showToast(data.message || 'Removed.', 'success', 'Duplicates');
+            pollDup();
+        } else {
+            showToast(data.message || data.detail || 'Nothing removed.', 'error', 'Duplicates');
+        }
+    } catch (e) {
+        showToast('Network error.', 'error', 'Error');
+    }
+}
+
 /* ─────────────── Utils ─────────────── */
 function setText(id, val) { const el = document.getElementById(id); if (el) el.textContent = val; }
 function escapeHtml(str) {
@@ -876,6 +1059,10 @@ pollScan().then(() => {
 pollDbc().then(() => {
     const pill = document.getElementById('dbc-status-pill');
     if (pill.classList.contains('status-running')) startDbcPolling();
+});
+pollDup().then(() => {
+    const pill = document.getElementById('dup-status-pill');
+    if (pill.classList.contains('status-running')) startDupPolling();
 });
 </script>
 
