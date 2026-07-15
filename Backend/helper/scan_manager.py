@@ -786,6 +786,7 @@ class DuplicateManager:
     def __init__(self) -> None:
         self._db = None
         self._task: Optional[asyncio.Task] = None
+        self._purge_task: Optional[asyncio.Task] = None
         self._cancel = False
         self._lock = asyncio.Lock()
         self.state: Dict[str, Any] = self._blank_state()
@@ -801,6 +802,11 @@ class DuplicateManager:
             "started_at": 0.0,
             "finished_at": 0.0,
             "error": None,
+            "purge_status": "idle",
+            "purge_total": 0,
+            "purge_done": 0,
+            "purge_started_at": 0.0,
+            "purge_finished_at": 0.0,
         }
 
     def bind_db(self, db) -> None:
@@ -812,6 +818,22 @@ class DuplicateManager:
         if s["started_at"]:
             end = s["finished_at"] or _now()
             elapsed = max(0.0, end - s["started_at"])
+
+        #----- Cleanup (purge) progress + ETA
+        p_total = int(s.get("purge_total", 0) or 0)
+        p_done = int(s.get("purge_done", 0) or 0)
+        p_status = s.get("purge_status", "idle")
+        p_elapsed = 0.0
+        if s.get("purge_started_at"):
+            p_end = s.get("purge_finished_at") or _now()
+            p_elapsed = max(0.0, p_end - s["purge_started_at"])
+        p_progress = round(p_done / p_total * 100) if p_total else 0
+        p_eta = 0
+        if p_status == "running" and p_done and p_elapsed > 0:
+            rate = p_done / p_elapsed
+            if rate > 0:
+                p_eta = int(max(0, (p_total - p_done)) / rate)
+
         return {
             "status": s["status"],
             "is_running": s["status"] == "running",
@@ -823,12 +845,21 @@ class DuplicateManager:
             "elapsed": _fmt_elapsed(elapsed),
             "elapsed_seconds": int(elapsed),
             "error": s["error"],
+            "purge_status": p_status,
+            "purge_running": p_status == "running",
+            "purge_total": p_total,
+            "purge_done": p_done,
+            "purge_progress": p_progress,
+            "purge_elapsed": _fmt_elapsed(p_elapsed),
+            "purge_eta": _fmt_elapsed(p_eta) if p_eta else "—",
         }
 
     async def start(self) -> Dict[str, Any]:
         async with self._lock:
             if self.state["status"] == "running":
                 return {"ok": False, "message": "A duplicate scan is already running."}
+            if self.state.get("purge_status") == "running":
+                return {"ok": False, "message": "A cleanup is currently running."}
             self.state = self._blank_state()
             self.state["status"] = "running"
             self.state["started_at"] = _now()
@@ -907,39 +938,63 @@ class DuplicateManager:
             s["finished_at"] = _now()
             LOGGER.error(f"[Duplicates] Error: {e}")
 
-    #----- Delete duplicates: explicit ids, or (delete_all) keep the newest per group
+    #----- Delete duplicates: explicit ids, or (delete_all) keep the newest per group.
+    #----- Runs in the background so the UI can poll deletion progress.
     async def purge(self, stream_ids: Optional[List[str]] = None, delete_all: bool = False) -> Dict[str, Any]:
+        async with self._lock:
+            if self.state.get("purge_status") == "running":
+                return {"ok": False, "message": "A cleanup is already running."}
+
+            ids: List[str] = []
+            if delete_all:
+                for g in self.state.get("groups", []):
+                    ids.extend(e["id"] for e in g.get("entries", [])[:-1])
+            elif stream_ids:
+                ids = list(stream_ids)
+            ids = [h for h in ids if h]
+            if not ids:
+                return {"ok": False, "message": "No duplicates selected to remove.", "purged": 0}
+
+            self.state["purge_status"] = "running"
+            self.state["purge_total"] = len(ids)
+            self.state["purge_done"] = 0
+            self.state["purge_started_at"] = _now()
+            self.state["purge_finished_at"] = 0.0
+            self._purge_task = asyncio.create_task(self._run_purge(ids))
+            return {"ok": True, "message": f"Removing {len(ids)} duplicate(s)…",
+                    "total": len(ids), "status": self.get_status()}
+
+    async def _run_purge(self, ids: List[str]) -> None:
         db = self._db
-        ids: List[str] = []
-        if delete_all:
-            for g in self.state.get("groups", []):
-                ids.extend(e["id"] for e in g.get("entries", [])[:-1])
-        elif stream_ids:
-            ids = list(stream_ids)
-        ids = [h for h in ids if h]
-        if not ids:
-            return {"ok": False, "message": "No duplicates selected to remove.", "purged": 0}
-
+        s = self.state
         purged = 0
-        for h in ids:
-            try:
-                if await db.delete_media_by_stream_id(h, delete_file=True):
-                    purged += 1
-            except Exception as e:
-                LOGGER.error(f"[Duplicates] purge failed for {h}: {e}")
+        try:
+            for h in ids:
+                try:
+                    if await db.delete_media_by_stream_id(h, delete_file=True):
+                        purged += 1
+                except Exception as e:
+                    LOGGER.error(f"[Duplicates] purge failed for {h}: {e}")
+                s["purge_done"] += 1
 
-        purged_set = set(ids)
-        new_groups = []
-        for g in self.state.get("groups", []):
-            remaining = [e for e in g.get("entries", []) if e["id"] not in purged_set]
-            if len(remaining) >= 2:
-                g["entries"] = remaining
-                new_groups.append(g)
-        self.state["groups"] = new_groups
-        self.state["duplicate_count"] = sum(len(g["entries"]) - 1 for g in new_groups)
-        self.state["purged"] = self.state.get("purged", 0) + purged
-        return {"ok": True, "message": f"Removed {purged} duplicate entr{'y' if purged == 1 else 'ies'}.",
-                "purged": purged}
+            purged_set = set(ids)
+            new_groups = []
+            for g in s.get("groups", []):
+                remaining = [e for e in g.get("entries", []) if e["id"] not in purged_set]
+                if len(remaining) >= 2:
+                    g["entries"] = remaining
+                    new_groups.append(g)
+            s["groups"] = new_groups
+            s["duplicate_count"] = sum(len(g["entries"]) - 1 for g in new_groups)
+            s["purged"] = s.get("purged", 0) + purged
+            s["purge_status"] = "completed"
+            LOGGER.info(f"[Duplicates] cleanup completed — removed {purged}")
+        except Exception as e:
+            s["purge_status"] = "error"
+            s["error"] = str(e)
+            LOGGER.error(f"[Duplicates] cleanup error: {e}")
+        finally:
+            s["purge_finished_at"] = _now()
 
 
 #----- ── Singletons ──────────────────────────────────────────────────────────────

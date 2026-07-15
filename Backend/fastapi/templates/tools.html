@@ -399,6 +399,18 @@
         </div>
         <div id="dup-current" class="text-sm mb-2" style="color:var(--text-sec)">No scan running</div>
 
+        <div id="dup-purge-progress" class="hidden mb-2">
+            <div class="flex items-center justify-between mb-1 text-sm flex-wrap gap-2">
+                <span class="font-bold" id="dup-purge-label"><i class="fa-solid fa-broom"></i> Removing duplicates…</span>
+                <span style="color:var(--text-sec)">
+                    <span id="dup-purge-done">0</span>/<span id="dup-purge-total">0</span> ·
+                    <i class="fa-regular fa-clock"></i> <span id="dup-purge-elapsed">0s</span> ·
+                    ETA <span id="dup-purge-eta">—</span>
+                </span>
+            </div>
+            <div class="progress-track"><div class="progress-fill" id="dup-purge-bar"></div></div>
+        </div>
+
         <hr class="divider">
 
         <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
@@ -599,6 +611,8 @@ async function loadManualSession() {
 let scanTimer = null;
 let dbcTimer = null;
 let dupTimer = null;
+let dupPurgeTimer = null;
+let dupPurgeActive = false;
 let dupGroups = [];
 let deadSource = "dbcheck";   // where the current dead list came from
 let purgeIds = [];            // explicit ids to purge when source = flagged
@@ -973,14 +987,56 @@ function renderDup(s) {
         }
     }
 
+    renderDupPurge(s);
     dupGroups = s.groups || [];
     renderDupList();
+}
+
+/* Cleanup progress bar (poll-driven) */
+function renderDupPurge(s) {
+    const box = document.getElementById('dup-purge-progress');
+    const pStatus = s.purge_status || 'idle';
+    const selBtn = document.getElementById('dup-selected-btn');
+    const allBtn = document.getElementById('dup-all-btn');
+    const startBtn = document.getElementById('dup-start-btn');
+
+    if (pStatus === 'running') {
+        dupPurgeActive = true;
+        box.classList.remove('hidden');
+        setText('dup-purge-done', s.purge_done || 0);
+        setText('dup-purge-total', s.purge_total || 0);
+        setText('dup-purge-elapsed', s.purge_elapsed || '0s');
+        setText('dup-purge-eta', s.purge_eta || '—');
+        document.getElementById('dup-purge-bar').style.width = (s.purge_progress || 0) + '%';
+        selBtn.disabled = true; allBtn.disabled = true; startBtn.disabled = true;
+        if (!dupPurgeTimer) startDupPurgePolling();
+        return;
+    }
+
+    if (dupPurgeActive && (pStatus === 'completed' || pStatus === 'error')) {
+        dupPurgeActive = false;
+        if (dupPurgeTimer) { clearInterval(dupPurgeTimer); dupPurgeTimer = null; }
+        setText('dup-purge-done', s.purge_done || 0);
+        setText('dup-purge-total', s.purge_total || 0);
+        setText('dup-purge-elapsed', s.purge_elapsed || '0s');
+        setText('dup-purge-eta', '—');
+        document.getElementById('dup-purge-bar').style.width = '100%';
+        document.getElementById('dup-purge-label').innerHTML = pStatus === 'completed'
+            ? '<i class="fa-solid fa-check"></i> Cleanup complete'
+            : '<i class="fa-solid fa-triangle-exclamation"></i> Cleanup failed';
+        showToast(
+            pStatus === 'completed' ? `Removed ${s.purge_total || 0} duplicate(s).` : (s.error || 'Cleanup failed.'),
+            pStatus === 'completed' ? 'success' : 'error', 'Duplicates'
+        );
+        setTimeout(() => document.getElementById('dup-purge-progress').classList.add('hidden'), 2500);
+    }
 }
 
 function renderDupList() {
     const list = document.getElementById('dup-list');
     const selBtn = document.getElementById('dup-selected-btn');
     const allBtn = document.getElementById('dup-all-btn');
+    const purging = dupPurgeActive;
 
     if (!dupGroups.length) {
         list.innerHTML = `<div class="hint">No duplicates to show.</div>`;
@@ -1005,7 +1061,7 @@ function renderDupList() {
             `).join('')}
         </div>
     `).join('');
-    selBtn.disabled = false; allBtn.disabled = false;
+    selBtn.disabled = purging; allBtn.disabled = purging;
 }
 
 async function purgeDuplicates(deleteAll) {
@@ -1021,6 +1077,15 @@ async function purgeDuplicates(deleteAll) {
     }
     document.getElementById('dup-selected-btn').disabled = true;
     document.getElementById('dup-all-btn').disabled = true;
+    document.getElementById('dup-start-btn').disabled = true;
+
+    const box = document.getElementById('dup-purge-progress');
+    box.classList.remove('hidden');
+    document.getElementById('dup-purge-label').innerHTML = '<i class="fa-solid fa-broom"></i> Removing duplicates…';
+    document.getElementById('dup-purge-bar').style.width = '0%';
+    setText('dup-purge-done', 0);
+    setText('dup-purge-eta', '—');
+
     try {
         const res = await fetch('/api/admin/tools/duplicates/purge', {
             method: 'POST',
@@ -1029,14 +1094,30 @@ async function purgeDuplicates(deleteAll) {
         });
         const data = await res.json();
         if (res.ok && data.ok) {
-            showToast(data.message || 'Removed.', 'success', 'Duplicates');
-            pollDup();
+            setText('dup-purge-total', data.total || 0);
+            showToast(data.message || 'Cleanup started.', 'info', 'Duplicates');
+            dupPurgeActive = true;
+            startDupPurgePolling();
         } else {
+            box.classList.add('hidden');
             showToast(data.message || data.detail || 'Nothing removed.', 'error', 'Duplicates');
+            document.getElementById('dup-selected-btn').disabled = false;
+            document.getElementById('dup-all-btn').disabled = false;
+            document.getElementById('dup-start-btn').disabled = false;
         }
     } catch (e) {
+        box.classList.add('hidden');
         showToast('Network error.', 'error', 'Error');
+        document.getElementById('dup-selected-btn').disabled = false;
+        document.getElementById('dup-all-btn').disabled = false;
+        document.getElementById('dup-start-btn').disabled = false;
     }
+}
+
+function startDupPurgePolling() {
+    if (dupPurgeTimer) clearInterval(dupPurgeTimer);
+    pollDup();
+    dupPurgeTimer = setInterval(pollDup, 700);
 }
 
 /* ─────────────── Utils ─────────────── */
