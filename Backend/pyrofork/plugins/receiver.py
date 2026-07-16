@@ -182,7 +182,7 @@ async def _handle_personal_session(client: Client, message: Message) -> None:
             where = (f"S{metadata_info['season_number']:02d}E{metadata_info['episode_number']:02d} "
                      if media_type == "tv" else "")
             LOGGER.info(f"[Manual Session] Added {quality} {where}to '{metadata_info.get('title')}' (id {tmdb_id}).")
-            create_task(stamp_caption_with_id(client, message, metadata_info))
+            create_task(stamp_caption_with_id(message, metadata_info))
         else:
             LOGGER.warning(f"[Manual Session] Insert failed for message {message.id}.")
 
@@ -233,7 +233,7 @@ async def file_receive_handler(client: Client, message: Message):
         await file_queue.put((metadata_info, int(channel), msg_id, size, raw_size, title))
 
         if is_real_session:
-            create_task(stamp_caption_with_id(client, message, metadata_info))
+            create_task(stamp_caption_with_id(message, metadata_info))
     except FloodWait as e:
         LOGGER.info(f"Sleeping for {str(e.value)}s")
         await asleep(e.value)

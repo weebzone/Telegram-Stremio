@@ -1,8 +1,6 @@
 import re
 from typing import Optional, Tuple
 
-from pyrogram.errors import FloodWait
-
 from Backend.helper.metadata import caption_with_id, parse_media_name
 from Backend.helper.pyro import clean_filename, finalize_media_name, get_readable_file_size, is_media
 from Backend.helper.split_files import parse_split_info, strip_part_suffix
@@ -93,18 +91,16 @@ async def resolve_telegram_message(client, url: str = None, chat_id=None, msg_id
 
 
 
-async def stamp_caption_with_id(client, message, metadata_info: dict) -> bool:
+async def stamp_caption_with_id(message, metadata_info: dict) -> bool:
     try:
         media = message.video or message.document
         base = (getattr(message, "caption", None) or getattr(media, "file_name", None) or "")
         new_caption = caption_with_id(base, metadata_info)
         if not new_caption:
             return False
-        await client.edit_message_caption(message.chat.id, message.id, new_caption)
+        from Backend.helper.task_manager import edit_message
+        await edit_message(message.chat.id, message.id, new_caption)
         return True
-    except FloodWait as e:
-        LOGGER.warning(f"[Caption] FloodWait {e.value}s while stamping id on message {getattr(message, 'id', '?')}")
-        return False
     except Exception as e:
         LOGGER.warning(f"[Caption] Could not stamp id on message {getattr(message, 'id', '?')}: {e}")
         return False

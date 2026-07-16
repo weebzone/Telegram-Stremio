@@ -376,7 +376,7 @@ class ScanManager:
                     async with sem:
                         if self._cancel:
                             return
-                        await self._process_message(client, msg, chat_id)
+                        await self._process_message(msg, chat_id)
                         s["counters"]["processed"] += 1
 
                 await asyncio.gather(*(_worker(m) for m in to_process))
@@ -428,7 +428,7 @@ class ScanManager:
             )
         return last_id
 
-    async def _process_message(self, client, message, chat_id: int) -> None:
+    async def _process_message(self, message, chat_id: int) -> None:
         s = self.state
         db = self._db
 
@@ -495,7 +495,7 @@ class ScanManager:
                 )
             if updated_id:
                 s["counters"]["indexed"] += 1
-                await stamp_caption_with_id(client, message, metadata_info)
+                asyncio.create_task(stamp_caption_with_id(message, metadata_info))
             else:
                 s["counters"]["skipped_meta"] += 1
         except Exception as e:
