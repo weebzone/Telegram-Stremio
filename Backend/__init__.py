@@ -12,6 +12,7 @@ StartTime = time()
 
 USE_DEFAULT_ID: str = None
 MANUAL_SESSION: dict = None
+SELF_STAMPED_CAPTIONS: dict = {}
 db = Database()
 
 __version__ = "4.7.2"

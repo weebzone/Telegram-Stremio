@@ -1,4 +1,5 @@
 import re
+from time import monotonic
 from typing import Optional, Tuple
 
 from Backend.helper.metadata import caption_with_id, parse_media_name
@@ -98,8 +99,18 @@ async def stamp_caption_with_id(message, metadata_info: dict) -> bool:
         new_caption = caption_with_id(base, metadata_info)
         if not new_caption:
             return False
-        from Backend.helper.task_manager import edit_message
-        await edit_message(message.chat.id, message.id, new_caption)
+
+        #----- Flag this edit as our own so file_edited_handler skips re-indexing it
+        #----- (the file is already indexed; only user caption edits should re-index).
+        import Backend
+        key = (message.chat.id, message.id)
+        Backend.SELF_STAMPED_CAPTIONS[key] = monotonic()
+        try:
+            from Backend.helper.task_manager import edit_message
+            await edit_message(message.chat.id, message.id, new_caption)
+        except Exception:
+            Backend.SELF_STAMPED_CAPTIONS.pop(key, None)
+            raise
         return True
     except Exception as e:
         LOGGER.warning(f"[Caption] Could not stamp id on message {getattr(message, 'id', '?')}: {e}")
