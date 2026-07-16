@@ -875,15 +875,17 @@ def analyze_metadata_failure(filename: str) -> str:
     combined = parse_combined_episodes(parse_target)
     excess = parsed.get("excess")
     if not combined and excess and any("combined" in str(item).lower() for item in excess):
-        return "The caption contains the word 'combined', which is not indexed."
+        return "The caption says 'combined' but no season number could be read from it (e.g. name it 'Show S02 Combined')."
 
     title = parsed.get("title")
     season = parsed.get("season")
     episode = parsed.get("episode")
     quality = parsed.get("quality")
 
-    if isinstance(season, list) or isinstance(episode, list):
-        return "Multiple seasons/episodes were detected in one file, which isn't supported. Keep one episode per file."
+    if not combined and (isinstance(season, list) or isinstance(episode, list)):
+        return ("The name spans multiple seasons (e.g. S01-S03) that can't be filed as one entry. "
+                "Upload one season per file. Combined episode packs within a single season are fine "
+                "when named like 'Show S02 E01-E05' or 'Show S02 Combined'.")
     if not quality:
         return "No video quality/resolution was found. Add one to the caption (e.g. 480p, 720p, 1080p or 2160p)."
     if not title:
