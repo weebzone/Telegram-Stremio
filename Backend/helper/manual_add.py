@@ -1,9 +1,12 @@
 import re
 from typing import Optional, Tuple
 
-from Backend.helper.metadata import parse_media_name
+from pyrogram.errors import FloodWait
+
+from Backend.helper.metadata import caption_with_id, parse_media_name
 from Backend.helper.pyro import clean_filename, finalize_media_name, get_readable_file_size, is_media
 from Backend.helper.split_files import parse_split_info, strip_part_suffix
+from Backend.logger import LOGGER
 
 _PRIVATE_LINK = re.compile(r"t\.me/c/(\d+)(?:/\d+)*/(\d+)")
 _PUBLIC_LINK = re.compile(r"t\.me/([A-Za-z][\w]{3,})/(?:\d+/)?(\d+)")
@@ -87,3 +90,21 @@ async def resolve_telegram_message(client, url: str = None, chat_id=None, msg_id
         "split_key": split_info[0] if split_info else None,
         "part_number": split_info[1] if split_info else None,
     }
+
+
+
+async def stamp_caption_with_id(client, message, metadata_info: dict) -> bool:
+    try:
+        media = message.video or message.document
+        base = (getattr(message, "caption", None) or getattr(media, "file_name", None) or "")
+        new_caption = caption_with_id(base, metadata_info)
+        if not new_caption:
+            return False
+        await client.edit_message_caption(message.chat.id, message.id, new_caption)
+        return True
+    except FloodWait as e:
+        LOGGER.warning(f"[Caption] FloodWait {e.value}s while stamping id on message {getattr(message, 'id', '?')}")
+        return False
+    except Exception as e:
+        LOGGER.warning(f"[Caption] Could not stamp id on message {getattr(message, 'id', '?')}: {e}")
+        return False

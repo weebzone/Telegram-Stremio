@@ -41,6 +41,7 @@ from Backend.helper.metadata import (
     fetch_selected_tv_metadata,
     gradient_cover_path,
     resolve_cover_url,
+    search_any_candidates,
     search_movie_candidates,
     search_tv_candidates,
 )
@@ -1774,19 +1775,24 @@ def _is_personal_media(tmdb_id) -> bool:
 def _session_result(doc: dict) -> dict:
     mt = doc.get("media_type") or doc.get("type") or "movie"
     mt = "tv" if str(mt).lower() in ("tv", "series") else "movie"
+    imdb_id = doc.get("imdb_id") or ""
+    tmdb_id = doc.get("tmdb_id")
+    selected_id = imdb_id if str(imdb_id).startswith("tt") else (str(tmdb_id) if tmdb_id is not None else "")
     return {
-        "tmdb_id": doc.get("tmdb_id"),
+        "tmdb_id": tmdb_id,
         "db_index": doc.get("db_index"),
         "media_type": mt,
         "title": doc.get("title") or "",
         "year": doc.get("release_year") or "",
         "poster": resolve_cover_url(doc.get("poster") or ""),
-        "imdb_id": doc.get("imdb_id") or "",
-        "is_personal": _is_personal_media(doc.get("tmdb_id")),
+        "imdb_id": imdb_id,
+        "selected_id": selected_id,
+        "is_personal": _is_personal_media(tmdb_id),
+        "in_library": True,
     }
 
 
-#----- Search the local library by title or an IMDb/TMDB id/link
+#----- Search the library, then IMDb/Cinemeta + TMDB, by title or an id/link
 async def search_manual_session_api(query: str) -> dict:
     query = (query or "").strip()
     if not query:
@@ -1803,7 +1809,6 @@ async def search_manual_session_api(query: str) -> dict:
         seen.add(key)
         results.append(entry)
 
-    #----- Try an id-based lookup first (imdb tt… or a tmdb id/link)
     default_id = extract_default_id(query)
     if default_id:
         try:
@@ -1822,14 +1827,41 @@ async def search_manual_session_api(query: str) -> dict:
         except Exception as e:
             LOGGER.warning(f"[Manual Session] id lookup failed for '{query}': {e}")
 
-    #----- Fall back to a title search
-    if not results:
+    if not default_id:
         try:
             data = await db.search_documents(query, 1, 20)
             for doc in data.get("results", []):
                 _add(doc)
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Search failed: {e}")
+            LOGGER.warning(f"[Manual Session] library search failed for '{query}': {e}")
+
+    library_ids = {(e.get("imdb_id") or "", str(e.get("tmdb_id") or "")) for e in results}
+    try:
+        online = await search_any_candidates(query)
+    except Exception as e:
+        LOGGER.warning(f"[Manual Session] online search failed for '{query}': {e}")
+        online = []
+
+    for cand in online:
+        if not cand.get("selected_id") or not cand.get("title"):
+            continue
+        imdb_id = cand.get("imdb_id") or ""
+        tmdb_id = cand.get("tmdb_id")
+        if (imdb_id, str(tmdb_id or "")) in library_ids:
+            continue
+        results.append({
+            "tmdb_id": tmdb_id,
+            "db_index": None,
+            "media_type": "tv" if cand.get("media_type") == "tv" else "movie",
+            "title": cand.get("title") or "",
+            "year": cand.get("year") or "",
+            "poster": resolve_cover_url(cand.get("poster") or ""),
+            "imdb_id": imdb_id,
+            "selected_id": str(cand.get("selected_id")),
+            "source": cand.get("source"),
+            "is_personal": False,
+            "in_library": False,
+        })
 
     return {"results": results}
 
@@ -1839,6 +1871,51 @@ async def get_manual_session_api() -> dict:
     return {"session": getattr(Backend, "MANUAL_SESSION", None)}
 
 
+async def _set_online_manual_session(payload: dict, media_type: str, selected_id: str) -> dict:
+    if not selected_id:
+        raise HTTPException(status_code=400, detail="A library title or a selected id is required.")
+
+    meta = await (
+        fetch_selected_movie_metadata(selected_id) if media_type == "movie"
+        else fetch_selected_tv_metadata(selected_id)
+    )
+    if not meta:
+        raise HTTPException(status_code=404, detail="Could not fetch metadata for the selected title.")
+
+    imdb_id = meta.get("imdb_id") or ""
+    default_id = imdb_id if str(imdb_id).startswith("tt") else selected_id
+
+    season = payload.get("season")
+    if media_type == "tv" and season is not None and str(season).strip() != "":
+        try:
+            season = int(season)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="Season must be a number.")
+    else:
+        season = None
+
+    try:
+        display_tmdb = int(meta.get("tmdb_id")) if meta.get("tmdb_id") is not None else 0
+    except (TypeError, ValueError):
+        display_tmdb = 0
+
+    session = {
+        "tmdb_id": display_tmdb,
+        "db_index": None,
+        "media_type": media_type,
+        "title": meta.get("title") or "",
+        "year": meta.get("release_year") or "",
+        "is_personal": False,
+        "kind": "real",
+        "default_id": default_id,
+        "season": season,
+        "episode": None,
+        "quality": None,
+    }
+    Backend.MANUAL_SESSION = session
+    return {"status": "success", "session": session}
+
+
 #----- Activate a manual upload session targeting an existing library title.
 #----- Real (TMDB/IMDb) titles parse season/episode/quality from each file; personal
 #----- (hand-made) titles need a season for TV since their files carry no metadata.
@@ -1846,9 +1923,11 @@ async def set_manual_session_api(payload: dict) -> dict:
     tmdb_id = payload.get("tmdb_id")
     db_index = payload.get("db_index")
     media_type = _normalize_media_type(payload.get("media_type", "movie"))
+    selected_id = str(payload.get("selected_id") or "").strip()
+    in_library = payload.get("in_library", True) and tmdb_id is not None and db_index is not None
 
-    if tmdb_id is None or db_index is None:
-        raise HTTPException(status_code=400, detail="tmdb_id and db_index are required.")
+    if not in_library:
+        return await _set_online_manual_session(payload, media_type, selected_id)
 
     doc = await db.get_document(media_type, int(tmdb_id), int(db_index))
     if not doc:

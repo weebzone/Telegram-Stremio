@@ -140,7 +140,7 @@
 
         <!-- Setup (hidden while a session is active) -->
         <div id="ms-setup">
-            <label class="s-label">Find a title in your library</label>
+            <label class="s-label">Find a title (your library, IMDb / Cinemeta or TMDB)</label>
             <div class="flex flex-col sm:flex-row gap-2">
                 <input id="ms-query" class="flex-1" placeholder="Title (with or without year), IMDb id/link, or TMDB id/link"
                        style="background:color-mix(in srgb,var(--bg) 60%,transparent);border:1px solid var(--border);border-radius:0.9rem;padding:0.7rem 1rem;color:var(--text);outline:none"
@@ -218,7 +218,7 @@
         <div class="hint">
             <div class="text-sm font-bold" style="color:var(--text)"><i class="fa-solid fa-list-ol"></i> How it works</div>
             <ol style="margin:0.6rem 0 0 1.1rem;padding:0;list-style:decimal;display:flex;flex-direction:column;gap:0.35rem">
-                <li>Search your library and select the title.</li>
+                <li>Search by title (with or without year) or an IMDb / TMDB id or link, then select. Titles not yet in your library are added automatically from the forwarded files.</li>
                 <li>Confirm the options for that title (see the two types below).</li>
                 <li>Click <strong>Start session</strong>.</li>
                 <li>Forward the files to the right channel.</li>
@@ -446,7 +446,7 @@ async function searchManualSession() {
     const box = document.getElementById('ms-results');
     if (!q) { showToast('Type a title, IMDb or TMDB id/link.', 'error', 'Search'); return; }
     state.style.display = '';
-    state.textContent = 'Searching your library…';
+    state.textContent = 'Searching your library and IMDb / TMDB…';
     box.style.display = 'none';
     box.innerHTML = '';
     document.getElementById('ms-selected-box').classList.add('hidden');
@@ -457,11 +457,15 @@ async function searchManualSession() {
         if (!res.ok) throw new Error(data.detail || 'Search failed');
         msResults = data.results || [];
         if (!msResults.length) {
-            state.textContent = 'No matching title found in your library. Add it first from Media Management.';
+            state.textContent = 'No matching title found. Try a different name, or an IMDb / TMDB id or link.';
             return;
         }
         state.textContent = `Found ${msResults.length} title${msResults.length > 1 ? 's' : ''}. Select one:`;
-        box.innerHTML = msResults.map((r, i) => `
+        box.innerHTML = msResults.map((r, i) => {
+            const badge = r.in_library
+                ? `<span class="c-id">${escapeHtml(String(r.year || '—'))} · In library · TMDB ${escapeHtml(String(r.tmdb_id))} · DB #${escapeHtml(String(r.db_index))}</span>`
+                : `<span class="c-id">${escapeHtml(String(r.year || '—'))} · New · ${escapeHtml(String(r.source || '').toUpperCase())} · ${escapeHtml(String(r.selected_id || ''))}</span>`;
+            return `
             <label class="chip" onclick="pickManualResult(${i})">
                 <img src="${escapeHtmlAttr(r.poster) || '/static/placeholder.jpg'}" onerror="this.src='/static/placeholder.jpg'"
                      style="width:2.25rem;height:3.25rem;object-fit:cover;border-radius:0.35rem;flex-shrink:0;background:var(--card)">
@@ -469,10 +473,10 @@ async function searchManualSession() {
                     <span class="c-name block truncate">${escapeHtml(r.title)}
                         <span class="status-pill ${r.media_type === 'tv' ? 'status-running' : 'status-idle'}" style="margin-left:.4rem">${r.media_type === 'tv' ? 'TV' : 'Movie'}</span>
                     </span>
-                    <span class="c-id">${escapeHtml(String(r.year || '—'))} · TMDB ${escapeHtml(String(r.tmdb_id))} · DB #${escapeHtml(String(r.db_index))}</span>
+                    ${badge}
                 </span>
-            </label>
-        `).join('');
+            </label>`;
+        }).join('');
         box.style.display = '';
     } catch (e) {
         state.textContent = e.message || 'Search failed.';
@@ -488,8 +492,9 @@ function pickManualResult(i) {
 
     document.getElementById('ms-sel-poster').src = r.poster || '/static/placeholder.jpg';
     document.getElementById('ms-sel-title').textContent = r.title;
+    const locationText = r.in_library ? `TMDB ${r.tmdb_id} · DB #${r.db_index}` : `New · ${String(r.source || '').toUpperCase()} ${r.selected_id || ''}`;
     document.getElementById('ms-sel-sub').textContent =
-        `${isTv ? 'TV Show' : 'Movie'} · ${isPersonal ? 'Personal' : 'TMDB/IMDb'} · ${r.year || '—'} · TMDB ${r.tmdb_id} · DB #${r.db_index}`;
+        `${isTv ? 'TV Show' : 'Movie'} · ${isPersonal ? 'Personal' : 'TMDB/IMDb'} · ${r.year || '—'} · ${locationText}`;
 
     document.getElementById('ms-real-note').classList.toggle('hidden', isPersonal);
     document.getElementById('ms-real-tv-season').classList.toggle('hidden', isPersonal || !isTv);
@@ -510,7 +515,13 @@ async function startManualSession() {
         tmdb_id: msSelected.tmdb_id,
         db_index: msSelected.db_index,
         media_type: msSelected.media_type,
+        selected_id: msSelected.selected_id,
+        in_library: msSelected.in_library !== false,
     };
+    if (!msSelected.in_library && msSelected.media_type === 'tv') {
+        const rs = document.getElementById('ms-real-season').value.trim();
+        if (rs !== '') payload.season = rs;
+    }
     if (msSelected.is_personal) {
         if (msSelected.media_type === 'tv') {
             const s = document.getElementById('ms-season').value.trim();

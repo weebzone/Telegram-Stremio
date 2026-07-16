@@ -11,7 +11,7 @@ from Backend import db
 from Backend.helper.announcer import announce_new_media
 from Backend.helper.auto_catalog import start_single_media_catalog_sync
 from Backend.helper.encrypt import encode_string
-from Backend.helper.manual_add import resolve_telegram_message
+from Backend.helper.manual_add import resolve_telegram_message, stamp_caption_with_id
 from Backend.helper.requests_manager import auto_fulfill
 from Backend.helper.metadata import extract_default_id, metadata
 from Backend.helper.pyro import clean_filename, finalize_media_name, get_readable_file_size
@@ -182,6 +182,7 @@ async def _handle_personal_session(client: Client, message: Message) -> None:
             where = (f"S{metadata_info['season_number']:02d}E{metadata_info['episode_number']:02d} "
                      if media_type == "tv" else "")
             LOGGER.info(f"[Manual Session] Added {quality} {where}to '{metadata_info.get('title')}' (id {tmdb_id}).")
+            create_task(stamp_caption_with_id(client, message, metadata_info))
         else:
             LOGGER.warning(f"[Manual Session] Insert failed for message {message.id}.")
 
@@ -230,6 +231,9 @@ async def file_receive_handler(client: Client, message: Message):
         title = _finalize_title(title, metadata_info)
 
         await file_queue.put((metadata_info, int(channel), msg_id, size, raw_size, title))
+
+        if is_real_session:
+            create_task(stamp_caption_with_id(client, message, metadata_info))
     except FloodWait as e:
         LOGGER.info(f"Sleeping for {str(e.value)}s")
         await asleep(e.value)
