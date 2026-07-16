@@ -51,6 +51,7 @@ pinned: false
   * [🌀 Anime Channel](#-anime-channel)
   * [🔍 Global Search](#-global-search)
   * [📢 Announcement Channel](#-announcement-channel)
+  * [🚑 Skip Channel](#-skip-channel)
 * [🏷️ Fixing Wrong Metadata](#️-fixing-wrong-metadata)
 * [🛠️ Managing Your Server (logs, restart, update)](#️-managing-your-server-logs-restart-update)
 * [💳 Subscriptions & Access](#-subscriptions--access)
@@ -84,6 +85,9 @@ Everything is managed from a friendly **web panel** — no coding, and almost no
 - 🌀 **Anime-aware** metadata for anime channels
 - 🔍 **Global Search** across extra channels
 - 📢 **New-content announcements** to a channel
+- 🔎 **Search by name, IMDb or TMDB id/link** everywhere (manual add, rescan & upload sessions)
+- 🏷️ **Auto-stamps the IMDb/TMDb link** into indexed captions, so forwarding a file again matches instantly
+- 🚑 **Skip Channel** — files that fail to index are set aside with a "what to fix" note
 - 🖥️ **Full web configuration panel** — no restarts for most changes
 - 🗄️ **Multiple databases & bot tokens** for scale and speed
 
@@ -107,8 +111,9 @@ A clean layout many people use:
 | 🧩 **Split TV** | Big episodes split into parts | — |
 | 📁 **Manual** | Personal / hand-added files | set as your **Manual** channel (not Auth) |
 | 📢 **Announcements** | Auto "new content" posts | set as your **Announcement** channel |
+| 🚑 **Skip** | Files that failed to index (for review/fixing) | set as your **Skip** channel |
 
-> 💡 This is just an organizing habit — the app reads each **file's name** to sort it into the right catalog no matter which channel it came from. Separate channels simply keep *your* side tidy. Remember: a channel should have only **one role** (Auth / Manual / Announcement / Global Search); marking an Auth channel as **Anime** is just a checkbox.
+> 💡 This is just an organizing habit — the app reads each **file's name** to sort it into the right catalog no matter which channel it came from. Separate channels simply keep *your* side tidy. Remember: a channel should have only **one role** (Auth / Manual / Announcement / Global Search / Skip); marking an Auth channel as **Anime** is just a checkbox.
 
 ---
 
@@ -191,7 +196,11 @@ Recognized range separators: `-`, `–`, `~`, `+`, `&`, `,`, `to` (e.g. `E01-E04
 Use manual adding for **personal videos** (that TMDb doesn't know) or for **special cases** like anime with no season number. There are two tools:
 
 - **Add Content** → on the **Media Management** page → to *create* a title + add its first file.
-- **Manual Upload Session** → on the **Tools** page → to *bulk-add* many files to a title that already exists (just forward the files, they attach automatically).
+- **Manual Upload Session** → on the **Tools** page → to *bulk-add* many files to a title (just forward the files, they attach automatically).
+
+> 🔎 **Search anywhere:** the search boxes in **Add Content**, **Rescan Metadata** and the **Manual Upload Session** all accept a **title** (with or without a year), an **IMDb** id/link, or a **TMDB** id/link. A name is matched on Cinemeta first and falls back to TMDb; an IMDb link forces Cinemeta and a TMDB link forces TMDb.
+
+> ✨ **Not in your library yet?** The Manual Upload Session can now pick a title straight from **IMDb / TMDB** search results — no need to add it first. Start the session, forward the files, and the title is created automatically. Files added via a session (or a channel scan) also get their **IMDb/TMDb link stamped into the caption**, so forwarding the same file again later matches instantly.
 
 > ⚙️ First make sure a **Manual Channel** is set in **Settings** and your bot is admin there. Personal files must be forwarded **only** to the Manual Channel.
 
@@ -364,7 +373,7 @@ For an **exclusive** catalog you can decide whether its titles show up in **Stre
 
 # 📡 Special Channels
 
-All of these are configured on the **Settings** page. Your bot must be an **admin** in every channel you use. ⚠️ A channel should have **only one role** — don't use the same channel as Auth, Manual, Global Search *and* Announcement at once. (Marking an Auth channel as **Anime** is just a checkbox on that same channel, so that's perfectly fine.)
+All of these are configured on the **Settings** page. Your bot must be an **admin** in every channel you use. ⚠️ A channel should have **only one role** — don't use the same channel as Auth, Manual, Global Search, Announcement *and* Skip at once. (Marking an Auth channel as **Anime** is just a checkbox on that same channel, so that's perfectly fine.)
 
 ## 🌀 Anime Channel
 
@@ -398,6 +407,17 @@ Automatically post a message whenever **new content is added**, so your members/
 2. Set the **Announcement Channel** (ID or `@username`) and add your bot as admin there.
 3. From then on, every newly indexed movie/episode gets announced to that channel.
 
+## 🚑 Skip Channel
+
+Sometimes a forwarded file can't be indexed — the caption has **no title** or **no quality**, or the title just isn't found on Cinemeta/TMDb. Instead of the file silently vanishing, the server can set it aside in a **Skip Channel** so you can fix it.
+
+**How to use:**
+1. In **Settings → Skip Channel**, set **one** channel (ID or `@username`) and make your bot an **admin** there. Files sent to this channel are **never** indexed.
+2. When a file forwarded to an auth channel fails to index, the bot **copies it here** and replies with a short note explaining **what's missing or wrong** (e.g. add a quality like `1080p`, add a clearer title, or add an IMDb/TMDB link/id).
+3. Fix the caption and forward it to your main channel again, or add it manually — your choice.
+
+> 🗑️ **Optional:** the **Delete original on metadata fail** toggle (it appears once a Skip Channel is set) removes the file from the main channel after it's copied into the Skip Channel.
+
 ---
 
 # 🏷️ Fixing Wrong Metadata
@@ -411,7 +431,7 @@ If a title gets matched incorrectly (wrong poster/name) or has no details, fix i
 
 **Method 2 — Fix it from the web panel**
 1. Open the title in **Media Management** → **Edit**.
-2. Click **Scan / Rescan Metadata**, search the correct title, pick the right result, and apply.
+2. Click **Scan / Rescan Metadata**, search the correct title — by **name**, or by pasting an **IMDb**/**TMDB** id or link — pick the right result, and apply.
 
 ✅ The catalog and posters refresh instantly.
 
@@ -635,6 +655,9 @@ Turn on **Announce New Content** and set an **Announcement Channel** to auto-pos
 
 ### 📁 Manual Channel
 Set the channel used for **hand-added / personal files** (these are *not* auto-indexed). Used by the [Manual Upload Session](#️-adding-files-manually-goa-trip-lectures-one-piece).
+
+### 🚑 Skip Channel
+Set **one** channel where files that fail to index are copied, each with a note describing what to fix. Files here are never indexed. Optionally enable **Delete original on metadata fail** (shown once a Skip Channel is set) to remove the failed file from the main channel after it's copied. See [Skip Channel](#-skip-channel).
 
 ### 🌐 Proxy (optional)
 Set an **HTTP Proxy URL** for outbound metadata/API requests, and optionally **show both** proxied and direct stream links.
