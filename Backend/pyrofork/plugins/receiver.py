@@ -1,6 +1,5 @@
 from asyncio import Lock, Queue, create_task
 from asyncio import sleep as asleep
-from time import monotonic
 
 from pyrogram import Client, filters
 from pyrogram.enums.parse_mode import ParseMode
@@ -304,24 +303,9 @@ async def file_receive_handler(client: Client, message: Message):
         )
 
 
-#----- True (once) when this edit was our own caption stamp, so it must not re-index.
-#----- Genuine user caption edits are never in the registry and still re-index.
-def _consume_self_stamped(message: Message) -> bool:
-    store = getattr(Backend, "SELF_STAMPED_CAPTIONS", None)
-    if not store:
-        return False
-    was_ours = store.pop((message.chat.id, message.id), None) is not None
-    cutoff = monotonic() - 600
-    for k in [k for k, t in store.items() if t < cutoff]:
-        store.pop(k, None)
-    return was_ours
-
-
 #----- Re-index an edited channel file only when it carries an override ID
 @Client.on_edited_message(filters.channel & (filters.document | filters.video))
 async def file_edited_handler(client: Client, message: Message):
-    if _consume_self_stamped(message):
-        return
     if str(message.chat.id) not in SettingsManager.current().auth_channels:
         return
     try:
