@@ -232,6 +232,71 @@
       max-height: calc(100dvh - 9.5rem);
     }
   }
+
+  .edit-tabs {
+    position: sticky;
+    top: 0.5rem;
+    z-index: 20;
+    display: flex;
+    gap: 0.4rem;
+    overflow-x: auto;
+    padding: 0.4rem;
+    margin-bottom: 1.5rem;
+    border-radius: 1.25rem;
+    scrollbar-width: none;
+    background: color-mix(in srgb, var(--card) 90%, var(--bg));
+    border: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
+    box-shadow: 0 12px 34px rgba(0, 0, 0, 0.22);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+  }
+
+  .edit-tabs::-webkit-scrollbar { display: none; }
+
+  .edit-tab {
+    flex: 1 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    white-space: nowrap;
+    padding: 0.65rem 1rem;
+    border-radius: 0.95rem;
+    font-size: 0.9rem;
+    font-weight: 800;
+    color: var(--text-sec);
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+  }
+
+  .edit-tab:hover {
+    color: var(--text);
+    background: color-mix(in srgb, var(--bg) 60%, transparent);
+  }
+
+  .edit-tab.active {
+    color: #fff;
+    background: var(--primary);
+    box-shadow: 0 8px 20px color-mix(in srgb, var(--primary) 30%, transparent);
+  }
+
+  .edit-panel {
+    animation: edit-panel-in 0.22s ease;
+  }
+
+  @keyframes edit-panel-in {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @media (max-width: 640px) {
+    .edit-tab {
+      flex: 0 0 auto;
+      font-size: 0.82rem;
+      padding: 0.55rem 0.85rem;
+    }
+  }
 </style>
 
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8">
@@ -316,7 +381,17 @@
     {% endif %}
 
     {% if media_details %}
-    <div class="glass-card rounded-3xl p-5 sm:p-6 lg:p-8 mb-6 sm:mb-8">
+    <div class="edit-tabs" role="tablist" id="edit-tabs">
+        <button type="button" class="edit-tab active" data-tab="details" onclick="switchEditTab('details')">📝 <span>Details</span></button>
+        <button type="button" class="edit-tab" data-tab="content" onclick="switchEditTab('content')">🎬 <span>Content</span></button>
+        <button type="button" class="edit-tab" data-tab="subtitles" onclick="switchEditTab('subtitles')">💬 <span>Subtitles</span></button>
+        <button type="button" class="edit-tab" data-tab="catalog" onclick="switchEditTab('catalog')">📚 <span>Catalog</span></button>
+        <button type="button" class="edit-tab" data-tab="rescan" onclick="switchEditTab('rescan')">🔄 <span>Rescan</span></button>
+    </div>
+    {% endif %}
+
+    {% if media_details %}
+    <div class="glass-card edit-panel hidden rounded-3xl p-5 sm:p-6 lg:p-8 mb-6 sm:mb-8" data-panel="rescan">
         <div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-3 mb-5 sm:mb-6">
             <div>
                 <h3 class="section-title text-xl sm:text-2xl">Rescan Metadata</h3>
@@ -366,7 +441,7 @@
 
 
     {% if media_details %}
-    <div class="glass-card rounded-3xl p-5 sm:p-6 lg:p-8 mb-6 sm:mb-8">
+    <div class="glass-card edit-panel hidden rounded-3xl p-5 sm:p-6 lg:p-8 mb-6 sm:mb-8" data-panel="catalog">
         <div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-3 mb-5 sm:mb-6">
             <div>
                 <h3 class="section-title text-xl sm:text-2xl">Custom Catalog</h3>
@@ -420,7 +495,7 @@
         .me-chip-empty { color: var(--text-sec); background: color-mix(in srgb, var(--bg) 70%, transparent); }
     </style>
 
-    <div class="glass-card rounded-3xl p-5 sm:p-6 lg:p-8 mb-6 sm:mb-8">
+    <div class="glass-card edit-panel rounded-3xl p-5 sm:p-6 lg:p-8 mb-6 sm:mb-8" data-panel="details">
         <div class="flex items-center justify-between gap-3 mb-5 sm:mb-6">
             <h3 class="section-title text-xl sm:text-2xl">Edit Details</h3>
         </div>
@@ -492,7 +567,7 @@
     </div>
 
     {% if media_details %}
-    <div class="glass-card rounded-3xl p-5 sm:p-6 lg:p-8">
+    <div class="glass-card edit-panel hidden rounded-3xl p-5 sm:p-6 lg:p-8" data-panel="content">
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5 sm:mb-6">
             <h3 class="section-title text-xl sm:text-2xl">Available Content</h3>
             <div class="flex items-center gap-2">
@@ -634,7 +709,7 @@
         {% endif %}
     </div>
 
-    <div class="glass-card rounded-3xl p-5 sm:p-6 lg:p-8 mt-6">
+    <div class="glass-card edit-panel hidden rounded-3xl p-5 sm:p-6 lg:p-8" data-panel="subtitles">
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
             <div>
                 <h3 class="section-title text-xl sm:text-2xl">Subtitles</h3>
@@ -2012,6 +2087,35 @@
     function goBackToList() {
         window.location.href = manageListUrl();
     }
+
+    function refreshVisibleSeasonHeights() {
+        document.querySelectorAll('.season-content').forEach(content => {
+            if (!content.classList.contains('season-collapsed')) {
+                content.style.maxHeight = content.scrollHeight + 'px';
+            }
+        });
+    }
+
+    function switchEditTab(name, doScroll = true) {
+        document.querySelectorAll('.edit-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+        document.querySelectorAll('.edit-panel').forEach(p => p.classList.toggle('hidden', p.dataset.panel !== name));
+        if (name === 'content') refreshVisibleSeasonHeights();
+        try { history.replaceState(null, '', '#' + name); } catch (e) {}
+        if (doScroll) {
+            const tabs = document.getElementById('edit-tabs');
+            if (tabs) tabs.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const valid = ['details', 'content', 'subtitles', 'catalog', 'rescan'];
+        const hash = (location.hash || '').replace('#', '');
+        if (valid.includes(hash)) {
+            switchEditTab(hash, false);
+        } else {
+            refreshVisibleSeasonHeights();
+        }
+    });
 
     document.addEventListener('DOMContentLoaded', () => {
         const backLink = document.getElementById('back-to-list');
