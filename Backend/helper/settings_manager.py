@@ -35,6 +35,8 @@ _DEFAULTS: Dict[str, Any] = {
     "manual_channels": [],
     "announce_new_content": False,
     "announcement_channel": "",
+    "skip_channel": "",
+    "delete_on_metadata_fail": False,
 }
 
 
@@ -115,8 +117,16 @@ class Settings:
         return bool(self._d.get("announce_new_content", False))
 
     @property
+    def delete_on_metadata_fail(self) -> bool:
+        return bool(self._d.get("delete_on_metadata_fail", False))
+
+    @property
     def announcement_channel(self) -> str:
         return str(self._d.get("announcement_channel") or "").strip()
+
+    @property
+    def skip_channel(self) -> str:
+        return str(self._d.get("skip_channel") or "").strip()
 
     #----- Strings
     @property

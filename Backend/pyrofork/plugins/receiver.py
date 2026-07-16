@@ -13,7 +13,7 @@ from Backend.helper.auto_catalog import start_single_media_catalog_sync
 from Backend.helper.encrypt import encode_string
 from Backend.helper.manual_add import resolve_telegram_message, stamp_caption_with_id
 from Backend.helper.requests_manager import auto_fulfill
-from Backend.helper.metadata import extract_default_id, metadata
+from Backend.helper.metadata import analyze_metadata_failure, extract_default_id, metadata
 from Backend.helper.pyro import clean_filename, finalize_media_name, get_readable_file_size
 from Backend.helper.settings_manager import SettingsManager
 from Backend.helper.split_files import parse_split_info
@@ -43,6 +43,60 @@ def _is_supported_media(message: Message) -> bool:
 def _is_manual_channel(chat_id) -> bool:
     target = str(chat_id).replace("-100", "")
     return any(str(c).strip().replace("-100", "") == target for c in SettingsManager.current().manual_channels)
+
+
+#----- True when a message belongs to the skip channel (never indexed)
+def _is_skip_channel(message: Message) -> bool:
+    skip = SettingsManager.current().skip_channel
+    if not skip:
+        return False
+    ref = str(skip).strip()
+    if ref.lstrip("@-").replace("-100", "").isdigit():
+        return ref.replace("-100", "").lstrip("@") == str(message.chat.id).replace("-100", "")
+    username = (getattr(message.chat, "username", None) or "").lower()
+    return bool(username) and ref.lstrip("@").lower() == username
+
+
+#----- Copy a file that failed to index into the skip channel with a fix-it note,
+#----- then optionally delete the original from the source channel.
+async def _route_to_skip_channel(client: Client, message: Message, reason: str) -> None:
+    settings = SettingsManager.current()
+    skip = settings.skip_channel
+    if not skip:
+        return
+
+    skip_chat = int(skip) if str(skip).lstrip("-").replace("-100", "").isdigit() else skip
+
+    try:
+        copied = await message.copy(skip_chat)
+    except FloodWait as e:
+        await asleep(e.value)
+        try:
+            copied = await message.copy(skip_chat)
+        except Exception as e2:
+            LOGGER.error(f"[SkipChannel] Copy failed for message {message.id}: {e2}")
+            return
+    except Exception as e:
+        LOGGER.error(f"[SkipChannel] Could not copy message {message.id} to skip channel: {e}")
+        return
+
+    note = (
+        "⚠️ Not indexed — metadata check failed\n\n"
+        f"Reason: {reason}\n\n"
+        "Fix the caption (a clear title, a quality like 1080p, or an IMDb / TMDB link or id) and "
+        "forward it to the main channel again, or add it manually from the panel."
+    )
+    try:
+        await client.send_message(skip_chat, note, reply_to_message_id=copied.id, disable_web_page_preview=True)
+    except Exception as e:
+        LOGGER.warning(f"[SkipChannel] Could not post note for message {message.id}: {e}")
+
+    if settings.delete_on_metadata_fail:
+        try:
+            from Backend.helper.task_manager import delete_message
+            await delete_message(message.chat.id, message.id)
+        except Exception as e:
+            LOGGER.warning(f"[SkipChannel] Could not delete original message {message.id}: {e}")
 
 
 #----- Common message field extraction shared by the channel handlers
@@ -190,6 +244,9 @@ async def _handle_personal_session(client: Client, message: Message) -> None:
 #----- Ingest new channel media into the queue after building metadata
 @Client.on_message(filters.channel & (filters.document | filters.video))
 async def file_receive_handler(client: Client, message: Message):
+    if _is_skip_channel(message):
+        return
+
     session = Backend.MANUAL_SESSION
     is_manual = _is_manual_channel(message.chat.id)
 
@@ -226,6 +283,8 @@ async def file_receive_handler(client: Client, message: Message):
         metadata_info = await metadata(clean_filename(title), int(channel), msg_id, override_id=override_id, season_hint=season_hint)
         if metadata_info is None:
             LOGGER.warning(f"Metadata failed for file: {title} (ID: {msg_id})")
+            reason = analyze_metadata_failure(clean_filename(title))
+            await _route_to_skip_channel(client, message, reason)
             return
 
         title = _finalize_title(title, metadata_info)

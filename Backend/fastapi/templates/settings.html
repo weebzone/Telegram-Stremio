@@ -594,6 +594,33 @@
 </div>
 
 
+    <!-- ── Skip Channel (metadata failures) ────────────────────────────── -->
+    <div class="settings-card">
+        <h2><i class="fa-solid fa-inbox"></i> Skip Channel</h2>
+        <label class="s-label" for="skip_channel">SKIP CHANNEL
+            <span style="font-weight:400;text-transform:none;letter-spacing:0">
+                — when a file forwarded to an auth channel fails to index (title, quality or a
+                match is missing/wrong), the bot copies it here with a note describing what to fix.
+                Files sent to this channel are <strong>not</strong> indexed. Only one channel is
+                allowed and the bot must be an <strong>admin</strong> here.</span>
+        </label>
+        <input type="text" id="skip_channel" class="s-input"
+            value="{{ settings.skip_channel }}"
+            placeholder="-100xxxxxxxxxx or @channel">
+
+        <label class="toggle-wrap" style="margin-top:1.25rem">
+            <input type="checkbox" class="toggle-input" id="delete_on_metadata_fail"
+                {% if settings.delete_on_metadata_fail %}checked{% endif %}>
+            <span class="toggle-track"></span>
+            <span class="toggle-label">
+                <strong>Delete original on metadata fail</strong>
+                <span style="color:var(--text-sec);font-size:0.8rem;display:block">
+                    After a failed file is copied to the skip channel, remove it from the main channel.
+                </span>
+            </span>
+        </label>
+    </div>
+
     <!-- ── Proxy ───────────────────────────────────────────────────────── -->
     <div class="settings-card">
         <h2><i class="fa-solid fa-network-wired"></i> Proxy Settings</h2>
@@ -922,6 +949,8 @@ async function saveSettings() {
         manual_channels:               collectList('manual_channels'),
         announce_new_content:          document.getElementById('announce_new_content').checked,
         announcement_channel:          document.getElementById('announcement_channel').value.trim(),
+        skip_channel:                  document.getElementById('skip_channel').value.trim(),
+        delete_on_metadata_fail:       document.getElementById('delete_on_metadata_fail').checked,
     };
 
     try {
@@ -1027,6 +1056,7 @@ function renderSettings(s) {
     document.getElementById('show_proxy_and_non_proxy_both').checked = !!s.show_proxy_and_non_proxy_both;
     document.getElementById('global_search').checked = !!s.global_search;
     document.getElementById('announce_new_content').checked = !!s.announce_new_content;
+    document.getElementById('delete_on_metadata_fail').checked = !!s.delete_on_metadata_fail;
     toggleSubFields();
     toggleGlobalSearchFields();
     toggleAnnouncementFields();
@@ -1041,6 +1071,7 @@ function renderSettings(s) {
     document.getElementById('subscription_group_id').value = s.subscription_group_id || 0;
     document.getElementById('http_proxy_url').value = s.http_proxy_url || '';
     document.getElementById('announcement_channel').value = s.announcement_channel || '';
+    document.getElementById('skip_channel').value = s.skip_channel || '';
 
     // Auth channels (with per-channel anime checkbox) + other multi-value lists
     rebuildAuthChannels(s.auth_channels, s.anime_channels);

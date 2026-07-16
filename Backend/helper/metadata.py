@@ -860,6 +860,39 @@ def _resolve_default_id(override_id, filename) -> str | None:
     return None
 
 
+def analyze_metadata_failure(filename: str) -> str:
+    if _MULTIPART_RE.search(filename or ""):
+        return "Looks like a multi-part video split (e.g. part1 / cd1) that can't be combined for streaming."
+
+    split_info = parse_split_info(filename or "")
+    parse_target = strip_part_suffix(filename) if split_info else (filename or "")
+
+    try:
+        parsed = parse_media_name(parse_target)
+    except Exception:
+        return "The file name / caption could not be parsed. Give it a clear name like 'Movie Name (2021) 1080p'."
+
+    combined = parse_combined_episodes(parse_target)
+    excess = parsed.get("excess")
+    if not combined and excess and any("combined" in str(item).lower() for item in excess):
+        return "The caption contains the word 'combined', which is not indexed."
+
+    title = parsed.get("title")
+    season = parsed.get("season")
+    episode = parsed.get("episode")
+    quality = parsed.get("quality")
+
+    if isinstance(season, list) or isinstance(episode, list):
+        return "Multiple seasons/episodes were detected in one file, which isn't supported. Keep one episode per file."
+    if not quality:
+        return "No video quality/resolution was found. Add one to the caption (e.g. 480p, 720p, 1080p or 2160p)."
+    if not title:
+        return "No title could be detected. Rename or caption the file with a clear title."
+
+    return ("Could not match this title on Cinemeta / TMDB. Fix the title/year in the caption, "
+            "or add an IMDb link/id (tt...) or a TMDB link/id, then forward it again.")
+
+
 #----- ── Candidate search (/set command UI) ──────────────────────────────────────
 def _candidate_entry(source, title, year, imdb_id, tmdb_id, poster, backdrop, subtitle, media_type=None) -> dict:
     selected_id = imdb_id if (source == "imdb" and imdb_id) else (str(tmdb_id) if tmdb_id else (imdb_id or None))
