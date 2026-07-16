@@ -494,6 +494,7 @@ class ScanManager:
 
         title_clean = finalize_media_name(title, bool(metadata_info.get('group_key')))
 
+        insert_status: dict = {}
         try:
             async with self._db_lock:
                 updated_id = await db.insert_media(
@@ -503,9 +504,13 @@ class ScanManager:
                     size=size,
                     name=title_clean,
                     raw_size=raw_size,
+                    status=insert_status,
                 )
             if updated_id:
-                s["counters"]["indexed"] += 1
+                if insert_status.get("duplicate_skipped"):
+                    s["counters"]["skipped_dup"] += 1
+                else:
+                    s["counters"]["indexed"] += 1
             else:
                 s["counters"]["skipped_meta"] += 1
         except Exception as e:

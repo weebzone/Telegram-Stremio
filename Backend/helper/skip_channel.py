@@ -28,27 +28,17 @@ async def route_to_skip_channel(client: Client, message: Message) -> None:
     skip_chat = int(skip) if str(skip).lstrip("-").replace("-100", "").isdigit() else skip
 
     try:
-        copied = await message.copy(skip_chat)
+        await message.copy(skip_chat)
     except FloodWait as e:
         await asleep(e.value)
         try:
-            copied = await message.copy(skip_chat)
+            await message.copy(skip_chat)
         except Exception as e2:
             LOGGER.error(f"[SkipChannel] Copy failed for message {message.id}: {e2}")
             return
     except Exception as e:
         LOGGER.error(f"[SkipChannel] Could not copy message {message.id} to skip channel: {e}")
         return
-
-    note = (
-        "⚠️ Not indexed — metadata check failed\n\n"
-        "Fix the caption (a clear title, a quality like 1080p, or an IMDb / TMDB link or id) and "
-        "forward it to the main channel again, or add it manually from the panel."
-    )
-    try:
-        await client.send_message(skip_chat, note, reply_to_message_id=copied.id, disable_web_page_preview=True)
-    except Exception as e:
-        LOGGER.warning(f"[SkipChannel] Could not post note for message {message.id}: {e}")
 
     if settings.delete_on_metadata_fail:
         try:
