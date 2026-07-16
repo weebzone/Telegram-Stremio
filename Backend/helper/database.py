@@ -1363,8 +1363,15 @@ class Database:
         size = str(quality.get("size") or "").strip().lower()
         return (quality.get("quality"), name, size)
 
+    @staticmethod
+    def _is_personal_tmdb(tmdb_id) -> bool:
+        try:
+            return int(tmdb_id) < 0
+        except (TypeError, ValueError):
+            return False
+
     async def _apply_quality_update(
-        self, existing_qualities: List[dict], quality_to_update: dict
+        self, existing_qualities: List[dict], quality_to_update: dict, is_personal: bool = False
     ) -> List[dict]:
         target_quality = quality_to_update.get("quality")
         incoming_group_key = quality_to_update.get("group_key")
@@ -1401,7 +1408,7 @@ class Database:
             return existing_qualities
 
         #----- REPLACE_MODE off: skip exact duplicates when protection is on, else stack.
-        if SettingsManager.current().duplicate_protection:
+        if SettingsManager.current().duplicate_protection and not is_personal:
             key = self._dup_key(quality_to_update)
             for q in existing_qualities:
                 if not q.get("group_key") and self._dup_key(q) == key:
@@ -1455,7 +1462,9 @@ class Database:
 
         existing_qualities = existing_movie.get("telegram", [])
 
-        existing_qualities = await self._apply_quality_update(existing_qualities, quality_to_update)
+        existing_qualities = await self._apply_quality_update(
+            existing_qualities, quality_to_update, self._is_personal_tmdb(tmdb_id)
+        )
 
         existing_movie["telegram"] = existing_qualities
         existing_movie["updated_on"] = datetime.utcnow()
@@ -1544,7 +1553,7 @@ class Database:
 
                 for quality in episode["telegram"]:
                     existing_episode["telegram"] = await self._apply_quality_update(
-                        existing_episode["telegram"], quality
+                        existing_episode["telegram"], quality, self._is_personal_tmdb(tmdb_id)
                     )
 
         existing_tv["updated_on"] = datetime.utcnow()

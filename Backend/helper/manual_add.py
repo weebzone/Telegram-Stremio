@@ -105,3 +105,15 @@ async def stamp_caption_with_id(message, metadata_info: dict) -> bool:
     except Exception as e:
         LOGGER.warning(f"[Caption] Could not stamp id on message {getattr(message, 'id', '?')}: {e}")
         return False
+
+
+async def stamp_caption_by_ref(client, chat_id, msg_id, metadata_info: dict) -> bool:
+    try:
+        chat_ref = int(f"-100{str(chat_id).replace('-100', '')}")
+        message = await client.get_messages(chat_ref, int(msg_id))
+        if not message or getattr(message, "empty", False):
+            return False
+        return await stamp_caption_with_id(message, metadata_info)
+    except Exception as e:
+        LOGGER.warning(f"[Caption] Could not stamp id on message {msg_id}: {e}")
+        return False

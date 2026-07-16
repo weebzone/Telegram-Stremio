@@ -13,7 +13,7 @@ from Backend.helper.auto_catalog import start_single_media_catalog_sync
 from Backend.helper.encrypt import encode_string
 from Backend.helper.manual_add import resolve_telegram_message, stamp_caption_with_id
 from Backend.helper.requests_manager import auto_fulfill
-from Backend.helper.metadata import analyze_metadata_failure, extract_default_id, metadata
+from Backend.helper.metadata import extract_default_id, metadata
 from Backend.helper.pyro import clean_filename, finalize_media_name, get_readable_file_size
 from Backend.helper.settings_manager import SettingsManager
 from Backend.helper.skip_channel import is_skip_channel, route_to_skip_channel
@@ -224,11 +224,10 @@ async def file_receive_handler(client: Client, message: Message):
 
         _, title, msg_id, raw_size, size, channel = _extract_fields(message)
 
-        metadata_info = await metadata(clean_filename(title), int(channel), msg_id, override_id=override_id, season_hint=season_hint)
+        metadata_info = await metadata(clean_filename(title), int(channel), msg_id, override_id=override_id or extract_default_id(message.caption or ""), season_hint=season_hint)
         if metadata_info is None:
             LOGGER.warning(f"Metadata failed for file: {title} (ID: {msg_id})")
-            reason = analyze_metadata_failure(clean_filename(title))
-            await route_to_skip_channel(client, message, reason)
+            await route_to_skip_channel(client, message)
             return
 
         title = _finalize_title(title, metadata_info)

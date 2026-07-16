@@ -26,7 +26,7 @@ from Backend.helper.backup import export_config, import_config
 from Backend.helper.custom_dl import ByteStreamer, _speed_test_single_client, run_speed_test
 from Backend.helper.encrypt import decode_string, encode_string
 from Backend.helper.health import run_health_checks
-from Backend.helper.manual_add import resolve_telegram_message
+from Backend.helper.manual_add import resolve_telegram_message, stamp_caption_by_ref
 from Backend.helper.requests_manager import (
     delete_request,
     list_requests,
@@ -1267,6 +1267,7 @@ async def manual_add_media_api(payload: dict) -> dict:
         )
         if not updated_id:
             raise HTTPException(status_code=500, detail="Failed to add media (validation error).")
+        await stamp_caption_by_ref(client, p_channel, p_msg, metadata_info)
 
     result_tmdb_id = base["tmdb_id"]
     location = await db.find_media_doc(media_type, result_tmdb_id)

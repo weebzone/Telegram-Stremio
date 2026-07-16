@@ -19,7 +19,7 @@ def is_skip_channel(message: Message) -> bool:
     return bool(username) and ref.lstrip("@").lower() == username
 
 
-async def route_to_skip_channel(client: Client, message: Message, reason: str) -> None:
+async def route_to_skip_channel(client: Client, message: Message) -> None:
     settings = SettingsManager.current()
     skip = settings.skip_channel
     if not skip:
@@ -42,7 +42,6 @@ async def route_to_skip_channel(client: Client, message: Message, reason: str) -
 
     note = (
         "⚠️ Not indexed — metadata check failed\n\n"
-        f"Reason: {reason}\n\n"
         "Fix the caption (a clear title, a quality like 1080p, or an IMDb / TMDB link or id) and "
         "forward it to the main channel again, or add it manually from the panel."
     )
