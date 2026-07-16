@@ -1126,10 +1126,6 @@ class Database:
     async def get_media_ids_by_part(
         self, channel: int, msg_id: int
     ) -> Optional[Tuple[Optional[str], Optional[int]]]:
-        #----- Read-only lookup: return (imdb_id, tmdb_id) of the media doc currently
-        #----- indexing this (channel, msg_id) part, or None if the part is not indexed.
-        #----- Mirrors the match logic of remove_media_part (non-split streams are found
-        #----- by their encoded stream id, split streams by their parts array).
         try:
             legacy_hash = await encode_string({"chat_id": channel, "msg_id": msg_id})
         except Exception:
@@ -1761,10 +1757,6 @@ class Database:
         document = await self.dbs[db_key][collection_name].find_one({"tmdb_id": int(tmdb_id)})
         return convert_objectid_to_str(document) if document else None
 
-    #----- Batch-hydrate media docs for a list of catalog item refs.
-    #----- Groups lookups by (db_index, collection) into a single $in query
-    #----- each, then returns docs in the same order as `refs`. Missing docs
-    #----- are skipped. Replaces N sequential get_document() round-trips.
     async def get_documents(self, refs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         if not refs:
             return []
@@ -2096,9 +2088,6 @@ class Database:
             return convert_objectid_to_str(existing)
         return await self.add_api_token(name or f"User {user_id}", user_id=user_id)
 
-    #----- Make a user's token follow their subscription: drop any standalone
-    #----- grant (never-expires / token-expiry) so revoke/extend actually apply.
-    #----- No-op when subscription mode is off (token keeps its own expiry there).
     async def align_token_with_subscription(self, user_id: int) -> None:
         if not SettingsManager.current().subscription:
             return
