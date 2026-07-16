@@ -57,8 +57,6 @@ def _is_skip_channel(message: Message) -> bool:
     return bool(username) and ref.lstrip("@").lower() == username
 
 
-#----- Copy a file that failed to index into the skip channel with a fix-it note,
-#----- then optionally delete the original from the source channel.
 async def _route_to_skip_channel(client: Client, message: Message, reason: str) -> None:
     settings = SettingsManager.current()
     skip = settings.skip_channel
@@ -169,9 +167,6 @@ def _max_episode(doc: dict, season_number: int) -> int:
     return 0
 
 
-#----- Add a forwarded file as a stream on a personal-session title.
-#----- Personal files carry no metadata, so season/episode come from the session and
-#----- the quality is auto-detected from the video (falling back to the session value).
 async def _handle_personal_session(client: Client, message: Message) -> None:
     session = Backend.MANUAL_SESSION
     if not session:
@@ -303,9 +298,6 @@ async def file_receive_handler(client: Client, message: Message):
         )
 
 
-#----- True when the caption's override ID already matches what is indexed for this
-#----- message. extract_default_id yields either an imdb id ("tt...") or a bare tmdb
-#----- numeric id; compare against the doc's stored imdb_id / tmdb_id accordingly.
 def _override_matches_indexed(override_id: str, imdb_id, tmdb_id) -> bool:
     oid = str(override_id).strip().lower()
     if oid.startswith("tt"):
@@ -329,12 +321,6 @@ async def file_edited_handler(client: Client, message: Message):
         if not override_id:
             return
 
-        #----- Skip when the caption's ID already matches what is indexed for this
-        #----- message: this is our own caption stamp (or a no-op edit), not a genuine
-        #----- override. Re-indexing it would needlessly remove + re-add the file
-        #----- (racing with real inserts during scans and defeating duplicate
-        #----- protection). Edits that actually change/correct the ID still fall
-        #----- through and re-index below.
         existing_ids = await db.get_media_ids_by_part(int(channel), msg_id)
         if existing_ids and _override_matches_indexed(override_id, existing_ids[0], existing_ids[1]):
             return
