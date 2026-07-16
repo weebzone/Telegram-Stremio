@@ -5,6 +5,7 @@ from Backend.helper.metadata import caption_with_id, parse_media_name
 from Backend.helper.pyro import clean_filename, finalize_media_name, get_readable_file_size, is_media
 from Backend.helper.split_files import parse_split_info, strip_part_suffix
 from Backend.logger import LOGGER
+from Backend.helper.task_manager import edit_message
 
 _PRIVATE_LINK = re.compile(r"t\.me/c/(\d+)(?:/\d+)*/(\d+)")
 _PUBLIC_LINK = re.compile(r"t\.me/([A-Za-z][\w]{3,})/(?:\d+/)?(\d+)")
@@ -98,7 +99,7 @@ async def stamp_caption_with_id(message, metadata_info: dict) -> bool:
         new_caption = caption_with_id(base, metadata_info)
         if not new_caption:
             return False
-        from Backend.helper.task_manager import edit_message
+        
         await edit_message(message.chat.id, message.id, new_caption)
         return True
     except Exception as e:
