@@ -606,9 +606,10 @@
         </label>
         <input type="text" id="skip_channel" class="s-input"
             value="{{ settings.skip_channel }}"
-            placeholder="-100xxxxxxxxxx or @channel">
+            placeholder="-100xxxxxxxxxx or @channel"
+            oninput="toggleSkipDeleteField()">
 
-        <label class="toggle-wrap" style="margin-top:1.25rem">
+        <label class="toggle-wrap" id="delete_on_metadata_fail_wrap" style="margin-top:1.25rem;{% if not settings.skip_channel %}display:none{% endif %}">
             <input type="checkbox" class="toggle-input" id="delete_on_metadata_fail"
                 {% if settings.delete_on_metadata_fail %}checked{% endif %}>
             <span class="toggle-track"></span>
@@ -814,6 +815,17 @@ function toggleAnnouncementFields() {
     const fields = document.getElementById('announcement-fields');
     if (fields) {
         fields.style.display = enabled ? '' : 'none';
+    }
+}
+
+function toggleSkipDeleteField() {
+    const hasChannel = document.getElementById('skip_channel').value.trim() !== '';
+    const wrap = document.getElementById('delete_on_metadata_fail_wrap');
+    if (wrap) {
+        wrap.style.display = hasChannel ? '' : 'none';
+    }
+    if (!hasChannel) {
+        document.getElementById('delete_on_metadata_fail').checked = false;
     }
 }
 
@@ -1072,6 +1084,7 @@ function renderSettings(s) {
     document.getElementById('http_proxy_url').value = s.http_proxy_url || '';
     document.getElementById('announcement_channel').value = s.announcement_channel || '';
     document.getElementById('skip_channel').value = s.skip_channel || '';
+    toggleSkipDeleteField();
 
     // Auth channels (with per-channel anime checkbox) + other multi-value lists
     rebuildAuthChannels(s.auth_channels, s.anime_channels);
