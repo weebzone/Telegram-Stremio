@@ -1123,6 +1123,38 @@ class Database:
         size_str = get_readable_file_size(total_bytes)
         return encoded, size_str
 
+    async def get_media_ids_by_part(
+        self, channel: int, msg_id: int
+    ) -> Optional[Tuple[Optional[str], Optional[int]]]:
+        #----- Read-only lookup: return (imdb_id, tmdb_id) of the media doc currently
+        #----- indexing this (channel, msg_id) part, or None if the part is not indexed.
+        #----- Mirrors the match logic of remove_media_part (non-split streams are found
+        #----- by their encoded stream id, split streams by their parts array).
+        try:
+            legacy_hash = await encode_string({"chat_id": channel, "msg_id": msg_id})
+        except Exception:
+            legacy_hash = None
+
+        part_match = {"$elemMatch": {"chat_id": channel, "msg_id": msg_id}}
+        projection = {"imdb_id": 1, "tmdb_id": 1}
+
+        for i in range(1, self.current_db_index + 1):
+            db = self.dbs[f"storage_{i}"]
+
+            movie_or = [{"telegram.parts": part_match}]
+            tv_or = [{"seasons.episodes.telegram.parts": part_match}]
+            if legacy_hash:
+                movie_or.append({"telegram.id": legacy_hash})
+                tv_or.append({"seasons.episodes.telegram.id": legacy_hash})
+
+            doc = await db["movie"].find_one({"$or": movie_or}, projection)
+            if not doc:
+                doc = await db["tv"].find_one({"$or": tv_or}, projection)
+            if doc:
+                return doc.get("imdb_id"), doc.get("tmdb_id")
+
+        return None
+
     async def remove_media_part(self, channel: int, msg_id: int) -> bool:
         try:
             legacy_hash = await encode_string({"chat_id": channel, "msg_id": msg_id})

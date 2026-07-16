@@ -303,6 +303,18 @@ async def file_receive_handler(client: Client, message: Message):
         )
 
 
+#----- True when the caption's override ID already matches what is indexed for this
+#----- message. extract_default_id yields either an imdb id ("tt...") or a bare tmdb
+#----- numeric id; compare against the doc's stored imdb_id / tmdb_id accordingly.
+def _override_matches_indexed(override_id: str, imdb_id, tmdb_id) -> bool:
+    oid = str(override_id).strip().lower()
+    if oid.startswith("tt"):
+        return bool(imdb_id) and oid == str(imdb_id).strip().lower()
+    if oid.isdigit():
+        return tmdb_id not in (None, "") and oid == str(tmdb_id).strip()
+    return False
+
+
 #----- Re-index an edited channel file only when it carries an override ID
 @Client.on_edited_message(filters.channel & (filters.document | filters.video))
 async def file_edited_handler(client: Client, message: Message):
@@ -315,6 +327,16 @@ async def file_edited_handler(client: Client, message: Message):
         _, title, msg_id, raw_size, size, channel = _extract_fields(message)
         override_id = extract_default_id(message.caption) if message.caption else None
         if not override_id:
+            return
+
+        #----- Skip when the caption's ID already matches what is indexed for this
+        #----- message: this is our own caption stamp (or a no-op edit), not a genuine
+        #----- override. Re-indexing it would needlessly remove + re-add the file
+        #----- (racing with real inserts during scans and defeating duplicate
+        #----- protection). Edits that actually change/correct the ID still fall
+        #----- through and re-index below.
+        existing_ids = await db.get_media_ids_by_part(int(channel), msg_id)
+        if existing_ids and _override_matches_indexed(override_id, existing_ids[0], existing_ids[1]):
             return
 
         LOGGER.info(f"Detected override ID '{override_id}' in edited message {msg_id}")
