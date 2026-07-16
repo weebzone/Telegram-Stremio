@@ -5,7 +5,7 @@ import secrets
 import time
 from collections import deque
 from typing import Dict
-from urllib.parse import unquote
+from urllib.parse import quote, unquote
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -146,11 +146,16 @@ def _resolve_filename_mime(file_id):
     return file_name, mime_type
 
 
+def _content_disposition(file_name, disposition="inline"):
+    ascii_fallback = file_name.encode("ascii", "ignore").decode("ascii").replace('"', "").strip() or "file"
+    return f"{disposition}; filename=\"{ascii_fallback}\"; filename*=UTF-8''{quote(file_name, safe='')}"
+
+
 #----- Build the shared streaming response headers and status code
 def _build_stream_headers(mime_type, file_name, req_length, range_header, start, end, file_size):
     headers = {
         "Content-Type": mime_type,
-        "Content-Disposition": f'inline; filename="{file_name}"',
+        "Content-Disposition": _content_disposition(file_name),
         "Accept-Ranges": "bytes",
         "Content-Length": str(req_length),
         "Cache-Control": "public, max-age=3600",
