@@ -16,7 +16,8 @@ from Backend.fastapi.security.tokens import verify_token
 from Backend.fastapi.themes import DEFAULT_THEME, get_theme
 from Backend.helper.global_search import global_search, is_global_search_enabled
 from Backend.helper.imdb import get_detail, get_season
-from Backend.helper.metadata import resolve_cover_url
+from Backend.helper.metadata import resolve_cover_url, COMBINED_SEASON, COMBINED_EPISODE_BASE
+from Backend.helper.split_files import parse_combined_episodes
 from Backend.helper.settings_manager import SettingsManager
 from Backend.helper.subtitles import get_subtitles_for, stremio_subtitle_entries
 from Backend.logger import LOGGER
@@ -656,6 +657,8 @@ async def get_streams(
 
     streams = []
 
+    is_combined = season_num == COMBINED_SEASON and episode_num is not None and episode_num >= COMBINED_EPISODE_BASE
+
     if media_details and "telegram" in media_details:
         for quality in media_details.get("telegram", []):
             if quality.get("id"):
@@ -663,6 +666,9 @@ async def get_streams(
                 quality_str = quality.get("quality", "HD")
                 size = quality.get("size", "")
                 size_bytes = parse_size_to_bytes(size)
+
+                combined = parse_combined_episodes(filename) if is_combined else None
+                episode_start = combined.get("start") or 0 if combined else 0
 
                 stream_name, stream_title = format_stream_details(
                     filename, quality_str, size, is_split=bool(quality.get("group_key"))
@@ -672,32 +678,12 @@ async def get_streams(
                 proxy_url = f"{SettingsManager.current().http_proxy_url}{original_url}" if SettingsManager.current().http_proxy_url else None
 
                 if SettingsManager.current().show_proxy_and_non_proxy_both and proxy_url:
-                    streams.append({
-                        "name": f"{stream_name} (Proxy)",
-                        "title": stream_title,
-                        "url": proxy_url,
-                        "size_bytes": size_bytes
-                    })
-                    streams.append({
-                        "name": f"{stream_name} (Direct)",
-                        "title": stream_title,
-                        "url": original_url,
-                        "size_bytes": size_bytes
-                    })
+                    streams.append({"name": f"{stream_name} (Proxy)", "title": stream_title, "url": proxy_url, "size_bytes": size_bytes, "episode_start": episode_start})
+                    streams.append({"name": f"{stream_name} (Direct)", "title": stream_title, "url": original_url, "size_bytes": size_bytes, "episode_start": episode_start})
                 elif proxy_url:
-                    streams.append({
-                        "name": stream_name,
-                        "title": stream_title,
-                        "url": proxy_url,
-                        "size_bytes": size_bytes
-                    })
+                    streams.append({"name": stream_name, "title": stream_title, "url": proxy_url, "size_bytes": size_bytes, "episode_start": episode_start})
                 else:
-                    streams.append({
-                        "name": stream_name,
-                        "title": stream_title,
-                        "url": original_url,
-                        "size_bytes": size_bytes
-                    })
+                    streams.append({"name": stream_name, "title": stream_title, "url": original_url, "size_bytes": size_bytes, "episode_start": episode_start})
     elif is_global_search_enabled():
         try:
             streams.extend(
@@ -710,7 +696,7 @@ async def get_streams(
         return {"streams": []}
 
     streams.sort(
-        key=lambda s: (get_resolution_priority(s.get("name", "")), s.get("size_bytes", 0)),
+        key=lambda s: (-s.get("episode_start", 0), get_resolution_priority(s.get("name", "")), s.get("size_bytes", 0)),
         reverse=True
     )
     name_count: dict = {}
