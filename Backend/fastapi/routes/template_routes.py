@@ -12,7 +12,7 @@ from Backend.helper.custom_dl import ACTIVE_STREAMS, RECENT_STREAMS
 from Backend.helper.metadata import resolve_cover_url
 from Backend.helper.pyro import get_readable_time
 from Backend.helper.settings_manager import SettingsManager
-from Backend.pyrofork.bot import StreamBot, multi_clients, work_loads_summary
+from Backend.pyrofork.bot import StreamBot, Userbot, multi_clients, work_loads_summary
 
 templates = Jinja2Templates(directory="Backend/fastapi/templates")
 templates.env.globals["cover_url"] = resolve_cover_url
@@ -249,6 +249,9 @@ async def custom_catalogs_page(request: Request, _: bool = Depends(require_auth)
 async def tools_page(request: Request, _: bool = Depends(require_auth)):
     ctx = _base_context(request)
     ctx["current_user"] = get_current_user(request)
+    #----- Bot Admin Manager needs a session string AND more than one bot token
+    ctx["userbot_configured"] = Userbot is not None
+    ctx["multi_token_available"] = len(multi_clients) > 1
     return templates.TemplateResponse("tools.html", ctx)
 
 
