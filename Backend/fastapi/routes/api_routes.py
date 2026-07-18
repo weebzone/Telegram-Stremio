@@ -2257,11 +2257,17 @@ async def restart_app_api() -> dict:
 
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Tools — Bot Admin Manager (promote multi-token bots into channels via session)
-# ─────────────────────────────────────────────────────────────────────────────
+_bot_admin_apply_state: dict = {
+    "running": False,
+    "status": "idle",
+    "total": 0,
+    "done": 0,
+    "results": [],
+    "error": "",
+    "task": None,
+}
 
-#----- Normalize a stored channel id into an int (numeric) or username string
+
 def _norm_chat_id(ch):
     s = str(ch).strip()
     if not s:
@@ -2269,8 +2275,6 @@ def _norm_chat_id(ch):
     return int(s) if s.lstrip("-").isdigit() else s
 
 
-#----- Every bot we manage: main StreamBot (client 0) + each multi-token bot.
-#----- Keyed by the bot's real Telegram user id so token reordering never confuses it.
 async def _managed_bots() -> list[dict]:
     bots: list[dict] = []
     for cid in sorted(multi_clients.keys()):
@@ -2296,9 +2300,6 @@ async def _managed_bots() -> list[dict]:
     return bots
 
 
-#----- Channels the BOTS serve (auth/manual/anime/announce/skip), de-duplicated with
-#----- role labels. Global-search channels are excluded — the session account reads
-#----- those directly, so the bots never need admin there.
 def _bot_served_channels() -> list[dict]:
     s = SettingsManager.current()
     order: list[str] = []
@@ -2328,8 +2329,6 @@ def _bot_served_channels() -> list[dict]:
     return [mapping[k] for k in order]
 
 
-#----- Safe admin rights for a streaming bot: manage/post/edit/delete/invite only.
-#----- Deliberately NOT granting can_promote_members or can_change_info.
 def _bot_admin_privileges() -> ChatPrivileges:
     return ChatPrivileges(
         can_manage_chat=True,
@@ -2346,7 +2345,6 @@ def _bot_admin_privileges() -> ChatPrivileges:
     )
 
 
-#----- Empty privileges = revoke admin (used to demote orphan bots)
 def _no_privileges() -> ChatPrivileges:
     return ChatPrivileges(
         can_manage_chat=False,
@@ -2363,7 +2361,6 @@ def _no_privileges() -> ChatPrivileges:
     )
 
 
-#----- A bot's current standing in a channel, as seen by the session account
 async def _bot_member_status(chat_id, bot_user_id) -> str:
     try:
         m = await Userbot.get_chat_member(chat_id, bot_user_id)
@@ -2378,11 +2375,9 @@ async def _bot_member_status(chat_id, bot_user_id) -> str:
             return "member"
         return "missing"
     except Exception:
-        #----- UserNotParticipant / left / never joined
         return "missing"
 
 
-#----- Turn a Pyrogram promotion error into a short, human-readable reason
 def _friendly_promote_error(exc) -> str:
     msg = str(exc)
     up = msg.upper()
@@ -2399,7 +2394,6 @@ def _friendly_promote_error(exc) -> str:
     return msg
 
 
-#----- Read the session account's own standing/rights in a channel
 async def _session_rights(chat_id) -> dict:
     try:
         me = await Userbot.get_chat_member(chat_id, "me")
@@ -2418,8 +2412,6 @@ async def _session_rights(chat_id) -> dict:
     return {"manageable": False, "status": "not_admin", "reason": "Your session account is not an admin here."}
 
 
-#----- Scan: which bots are admin in which bot-served channels, plus session rights
-#----- and any orphan bot-admins that are no longer in your token list.
 async def bot_admin_scan_api() -> dict:
     if Userbot is None:
         return {"status": "error", "reason": "no_session",
@@ -2475,7 +2467,6 @@ async def bot_admin_scan_api() -> dict:
     return {"status": "success", "data": {"bots": bots, "channels": out}}
 
 
-#----- Promote one bot into a channel (idempotent; adds first if not a participant)
 async def _promote_one(chat_id, bot: dict, privileges: ChatPrivileges, _retry: bool = True) -> dict:
     label = bot.get("name") or (f"@{bot['username']}" if bot.get("username") else str(bot["user_id"]))
     bid = bot["user_id"]
@@ -2506,7 +2497,6 @@ async def _promote_one(chat_id, bot: dict, privileges: ChatPrivileges, _retry: b
         return {"bot": label, "user_id": bid, "status": "error", "message": _friendly_promote_error(e)}
 
 
-#----- Revoke admin from an orphan bot (kept as a plain member, not banned)
 async def _demote_one(chat_id, user) -> dict:
     label = getattr(user, "first_name", None) or (f"@{user.username}" if getattr(user, "username", None) else str(user.id))
     try:
@@ -2516,11 +2506,65 @@ async def _demote_one(chat_id, user) -> dict:
         return {"bot": label, "user_id": user.id, "status": "error", "message": _friendly_promote_error(e)}
 
 
-#----- Apply: promote selected bots as admins in selected channels (and optionally
-#----- demote orphan bot-admins). Returns a per-channel, per-bot result report.
+async def _run_bot_admin_apply(channel_ids, selected, demote_orphans, managed_ids) -> None:
+    state = _bot_admin_apply_state
+    privileges = _bot_admin_privileges()
+    try:
+        for raw in channel_ids:
+            cid = _norm_chat_id(raw)
+            ch_result = {"id": str(cid), "name": str(cid), "items": []}
+
+            try:
+                chat = await Userbot.get_chat(cid)
+                ch_result["name"] = getattr(chat, "title", None) or getattr(chat, "first_name", None) or str(cid)
+            except Exception as e:
+                ch_result["items"].append({"bot": "—", "status": "error", "message": f"Channel not accessible: {e}"})
+                state["results"].append(ch_result)
+                state["done"] += 1
+                continue
+
+            rights = await _session_rights(cid)
+            if not rights["manageable"]:
+                ch_result["items"].append({
+                    "bot": "—", "status": "skipped",
+                    "message": rights["reason"] or "Your session account can't add admins here.",
+                })
+                state["results"].append(ch_result)
+                state["done"] += 1
+                continue
+
+            for b in selected:
+                ch_result["items"].append(await _promote_one(cid, b, privileges))
+                await asyncio.sleep(0.3)
+
+            if demote_orphans:
+                try:
+                    async for m in Userbot.get_chat_members(cid, filter=ChatMembersFilter.ADMINISTRATORS):
+                        u = getattr(m, "user", None)
+                        if u and getattr(u, "is_bot", False) and u.id not in managed_ids:
+                            ch_result["items"].append(await _demote_one(cid, u))
+                            await asyncio.sleep(0.3)
+                except Exception as e:
+                    ch_result["items"].append({"bot": "orphans", "status": "error", "message": f"Couldn't scan orphans: {e}"})
+
+            state["results"].append(ch_result)
+            state["done"] += 1
+
+        state["status"] = "completed"
+    except Exception as e:
+        LOGGER.error(f"[BotAdmin] Apply run failed: {e}")
+        state["status"] = "error"
+        state["error"] = str(e)
+    finally:
+        state["running"] = False
+
+
 async def bot_admin_apply_api(payload: dict | None = None) -> dict:
     if Userbot is None:
         raise HTTPException(status_code=503, detail="No session string configured.")
+
+    if _bot_admin_apply_state["running"]:
+        raise HTTPException(status_code=409, detail="An apply run is already in progress.")
 
     payload = payload or {}
     channel_ids = payload.get("channel_ids") or []
@@ -2542,44 +2586,31 @@ async def bot_admin_apply_api(payload: dict | None = None) -> dict:
 
     demote_orphans = bool(payload.get("demote_orphans"))
     managed_ids = {b["user_id"] for b in bots}
-    privileges = _bot_admin_privileges()
-    results: list[dict] = []
 
-    for raw in channel_ids:
-        cid = _norm_chat_id(raw)
-        ch_result = {"id": str(cid), "name": str(cid), "items": []}
+    _bot_admin_apply_state.update({
+        "running": True,
+        "status": "running",
+        "total": len(channel_ids),
+        "done": 0,
+        "results": [],
+        "error": "",
+    })
+    _bot_admin_apply_state["task"] = asyncio.create_task(
+        _run_bot_admin_apply(channel_ids, selected, demote_orphans, managed_ids)
+    )
+    return {"status": "started", "total": len(channel_ids)}
 
-        try:
-            chat = await Userbot.get_chat(cid)
-            ch_result["name"] = getattr(chat, "title", None) or getattr(chat, "first_name", None) or str(cid)
-        except Exception as e:
-            ch_result["items"].append({"bot": "—", "status": "error", "message": f"Channel not accessible: {e}"})
-            results.append(ch_result)
-            continue
 
-        rights = await _session_rights(cid)
-        if not rights["manageable"]:
-            ch_result["items"].append({
-                "bot": "—", "status": "skipped",
-                "message": rights["reason"] or "Your session account can't add admins here.",
-            })
-            results.append(ch_result)
-            continue
-
-        for b in selected:
-            ch_result["items"].append(await _promote_one(cid, b, privileges))
-            await asyncio.sleep(0.3)
-
-        if demote_orphans:
-            try:
-                async for m in Userbot.get_chat_members(cid, filter=ChatMembersFilter.ADMINISTRATORS):
-                    u = getattr(m, "user", None)
-                    if u and getattr(u, "is_bot", False) and u.id not in managed_ids:
-                        ch_result["items"].append(await _demote_one(cid, u))
-                        await asyncio.sleep(0.3)
-            except Exception as e:
-                ch_result["items"].append({"bot": "orphans", "status": "error", "message": f"Couldn't scan orphans: {e}"})
-
-        results.append(ch_result)
-
-    return {"status": "success", "data": results}
+async def bot_admin_apply_status_api() -> dict:
+    st = _bot_admin_apply_state
+    return {
+        "status": "success",
+        "data": {
+            "running": st["running"],
+            "state": st["status"],
+            "total": st["total"],
+            "done": st["done"],
+            "results": st["results"],
+            "error": st["error"],
+        },
+    }

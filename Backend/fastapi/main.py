@@ -60,6 +60,7 @@ from Backend.fastapi.routes.api_routes import (
     get_tools_channels_api,
     bot_admin_scan_api,
     bot_admin_apply_api,
+    bot_admin_apply_status_api,
     clear_manual_session_api,
     search_manual_session_api,
     set_manual_session_api,
@@ -637,6 +638,10 @@ async def tools_bot_admin_scan(_: bool = Depends(require_auth)):
 @app.post("/api/admin/tools/bot-admin/apply")
 async def tools_bot_admin_apply(payload: dict, _: bool = Depends(require_auth)):
     return await bot_admin_apply_api(payload)
+
+@app.get("/api/admin/tools/bot-admin/apply/status")
+async def tools_bot_admin_apply_status(_: bool = Depends(require_auth)):
+    return await bot_admin_apply_status_api()
 
 @app.get("/api/admin/tools/manual-session")
 async def tools_manual_session_get(_: bool = Depends(require_auth)):

@@ -98,36 +98,48 @@
 .divider { border: none; border-top: 1px solid var(--border); margin: 1.25rem 0; }
 .hint { font-size: 0.78rem; color: var(--text-sec); }
 
-/* Bot Admin Manager grid */
-.ba-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 0.9rem; }
-.ba-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
-.ba-table th, .ba-table td {
-    padding: 0.55rem 0.7rem; border-bottom: 1px solid var(--border);
-    text-align: left; vertical-align: middle; white-space: nowrap;
-}
-.ba-table tr:last-child td { border-bottom: none; }
-.ba-table th {
-    font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.04em;
-    color: var(--text-sec); background: color-mix(in srgb, var(--bg) 55%, transparent);
-}
-.ba-table td.ba-chname { white-space: normal; min-width: 180px; }
 .ba-cell { display: inline-flex; align-items: center; gap: 0.3rem; font-weight: 800; font-size: 0.75rem; }
 .ba-ok { color: #22c55e; }
 .ba-no { color: #ef4444; }
 .ba-warn { color: #f59e0b; }
 .ba-muted { color: var(--text-sec); }
-.ba-locked { opacity: 0.55; }
-.ba-roles { display: inline-flex; gap: 0.25rem; flex-wrap: wrap; margin-top: 0.2rem; }
+.ba-locked { opacity: 0.6; }
+.ba-roles { display: inline-flex; gap: 0.25rem; flex-wrap: wrap; }
 .ba-role {
     font-size: 0.6rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em;
     padding: 0.05rem 0.4rem; border-radius: 9999px;
     background: color-mix(in srgb, var(--primary) 14%, transparent); color: var(--primary);
 }
-.ba-bot-chip input { width: 1.05rem; height: 1.05rem; accent-color: var(--primary); }
+.ba-bot-chip input { width: 1.05rem; height: 1.05rem; accent-color: var(--primary); flex-shrink: 0; }
+
+.ba-ch-list { display: flex; flex-direction: column; gap: 0.6rem; }
+.ba-ch-card {
+    border: 1px solid var(--border); border-radius: 0.9rem;
+    padding: 0.85rem 1rem; background: color-mix(in srgb, var(--bg) 55%, transparent);
+}
+.ba-ch-card.selected { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 10%, transparent); }
+.ba-ch-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.6rem; flex-wrap: wrap; }
+.ba-ch-sel { display: flex; align-items: flex-start; gap: 0.6rem; cursor: pointer; min-width: 0; flex: 1; }
+.ba-ch-sel input { width: 1.15rem; height: 1.15rem; accent-color: var(--primary); flex-shrink: 0; margin-top: 0.15rem; }
+.ba-ch-name { font-weight: 800; font-size: 0.9rem; word-break: break-word; }
+.ba-ch-id { font-size: 0.7rem; color: var(--text-sec); word-break: break-all; }
+.ba-bot-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 0.4rem 0.9rem; margin-top: 0.7rem;
+}
+.ba-bstat { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; font-size: 0.78rem; }
+.ba-bstat .n { font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ba-res-row {
-    display: flex; align-items: flex-start; gap: 0.6rem;
-    padding: 0.5rem 0.9rem; border-radius: 0.75rem;
+    display: flex; flex-direction: column; align-items: stretch; gap: 0.4rem;
+    padding: 0.6rem 0.9rem; border-radius: 0.75rem;
     border: 1px solid var(--border); background: color-mix(in srgb, var(--bg) 55%, transparent);
+}
+
+@media (max-width: 640px) {
+    .tool-card { padding: 1.1rem 1rem; border-radius: 1.1rem; }
+    .ba-bot-grid { grid-template-columns: 1fr; }
+    #ba-bots .chip { width: 100%; }
+    .ba-actions .btn { width: 100%; justify-content: center; }
 }
 </style>
 
@@ -388,20 +400,16 @@
             <label class="s-label">Bots to add</label>
             <div id="ba-bots" class="flex items-center gap-2 flex-wrap mb-4"></div>
 
-            <label class="s-label">Channels</label>
-            <div class="ba-wrap">
-                <table class="ba-table" id="ba-table">
-                    <thead id="ba-thead"></thead>
-                    <tbody id="ba-tbody"></tbody>
-                </table>
+            <div class="flex items-center justify-between gap-2 flex-wrap mb-2">
+                <label class="s-label" style="margin-bottom:0">Channels</label>
+                <div class="flex items-center gap-2">
+                    <button class="btn btn-ghost" type="button" onclick="selectAllBaChannels(true)"><i class="fa-solid fa-check-double"></i> All</button>
+                    <button class="btn btn-ghost" type="button" onclick="selectAllBaChannels(false)"><i class="fa-solid fa-xmark"></i> Clear</button>
+                </div>
             </div>
+            <div id="ba-channels" class="ba-ch-list"></div>
 
-            <div class="flex items-center gap-2 mt-3 mb-4">
-                <button class="btn btn-ghost" type="button" onclick="selectAllBaChannels(true)"><i class="fa-solid fa-check-double"></i> Select all</button>
-                <button class="btn btn-ghost" type="button" onclick="selectAllBaChannels(false)"><i class="fa-solid fa-xmark"></i> Clear</button>
-            </div>
-
-            <label class="chip" style="cursor:pointer">
+            <label class="chip mt-4" style="cursor:pointer">
                 <input type="checkbox" id="ba-demote-orphans">
                 <span class="min-w-0">
                     <span class="c-name block">Also remove orphan bot-admins</span>
@@ -409,7 +417,15 @@
                 </span>
             </label>
 
-            <div class="flex items-center gap-2 flex-wrap mt-4">
+            <div id="ba-progress" class="mt-4" style="display:none">
+                <div class="flex items-center justify-between mb-2 text-sm flex-wrap gap-2">
+                    <span class="font-bold"><i class="fa-solid fa-user-shield"></i> Applying…</span>
+                    <span style="color:var(--text-sec)"><span id="ba-prog-done">0</span>/<span id="ba-prog-total">0</span> channels</span>
+                </div>
+                <div class="progress-track"><div class="progress-fill" id="ba-prog-bar"></div></div>
+            </div>
+
+            <div class="ba-actions flex items-center gap-2 flex-wrap mt-4">
                 <button class="btn btn-primary" id="ba-apply-btn" onclick="applyBotAdmin()">
                     <i class="fa-solid fa-user-plus"></i> Add selected bots as admin
                 </button>
@@ -1245,10 +1261,10 @@ function startDupPurgePolling() {
     dupPurgeTimer = setInterval(pollDup, 700);
 }
 
-/* ─────────────── Bot Admin Manager ─────────────── */
 let baData = null;
+let baApplyTimer = null;
 
-const BA_CELL = {
+const BA_STAT = {
     admin:      '<span class="ba-cell ba-ok"><i class="fa-solid fa-circle-check"></i> Admin</span>',
     member:     '<span class="ba-cell ba-warn"><i class="fa-solid fa-circle"></i> Member</span>',
     restricted: '<span class="ba-cell ba-warn"><i class="fa-solid fa-ban"></i> Restricted</span>',
@@ -1258,7 +1274,7 @@ const BA_CELL = {
 const BA_SESSION = {
     owner:             '<span class="ba-cell ba-ok"><i class="fa-solid fa-crown"></i> Owner</span>',
     admin_can_promote: '<span class="ba-cell ba-ok"><i class="fa-solid fa-user-shield"></i> Admin · can add</span>',
-    admin_no_promote:  '<span class="ba-cell ba-warn"><i class="fa-solid fa-user-shield"></i> Admin · no add-admin</span>',
+    admin_no_promote:  '<span class="ba-cell ba-warn"><i class="fa-solid fa-user-shield"></i> No add-admin</span>',
     not_admin:         '<span class="ba-cell ba-no"><i class="fa-solid fa-lock"></i> Not admin</span>',
     unknown:           '<span class="ba-cell ba-muted"><i class="fa-solid fa-question"></i> Unknown</span>',
 };
@@ -1295,7 +1311,6 @@ function renderBotAdmin() {
     const bots = (baData && baData.bots) || [];
     const channels = (baData && baData.channels) || [];
 
-    // Bot selection chips
     document.getElementById('ba-bots').innerHTML = bots.map(b => `
         <label class="chip ba-bot-chip" style="width:auto">
             <input type="checkbox" class="ba-bot-cb" value="${escapeHtmlAttr(String(b.user_id))}" checked>
@@ -1306,55 +1321,58 @@ function renderBotAdmin() {
         </label>
     `).join('') || '<span class="hint">No bots detected.</span>';
 
-    // Header: checkbox | Channel | each bot | Your access | Orphans
-    document.getElementById('ba-thead').innerHTML = `
-        <tr>
-            <th style="width:1.5rem"></th>
-            <th>Channel</th>
-            ${bots.map(b => `<th>${escapeHtml(b.name)}</th>`).join('')}
-            <th>Your access</th>
-            <th>Orphan admins</th>
-        </tr>`;
-
+    const wrap = document.getElementById('ba-channels');
     if (!channels.length) {
-        document.getElementById('ba-tbody').innerHTML = `
-            <tr><td colspan="${bots.length + 4}" class="hint" style="padding:1rem">
-                No bot-served channels configured. Add auth / manual / anime / announce / skip channels in
-                <a href="/admin/settings" style="color:var(--primary)">Settings</a>.
-            </td></tr>`;
+        wrap.innerHTML = `<div class="hint" style="padding:0.5rem 0">
+            No bot-served channels configured. Add auth / manual / anime / announce / skip channels in
+            <a href="/admin/settings" style="color:var(--primary)">Settings</a>.</div>`;
         return;
     }
 
-    document.getElementById('ba-tbody').innerHTML = channels.map(ch => {
+    wrap.innerHTML = channels.map(ch => {
         const roles = (ch.roles || []).map(r => `<span class="ba-role">${escapeHtml(r)}</span>`).join('');
-        const cells = bots.map(b => `<td>${BA_CELL[ch.bots[String(b.user_id)]] || BA_CELL.missing}</td>`).join('');
         const session = BA_SESSION[ch.session_status] || BA_SESSION.unknown;
-        const orphans = (ch.orphans || []).length
-            ? ch.orphans.map(o => `<span class="ba-cell ba-warn" title="No longer in your token list">${escapeHtml(o.name || String(o.user_id))}</span>`).join(' ')
-            : '<span class="hint">—</span>';
         const disabled = ch.manageable ? '' : 'disabled';
-        const reason = (!ch.manageable && ch.reason) ? `<div class="hint" style="color:#f59e0b;margin-top:0.2rem"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(ch.reason)}</div>` : '';
+        const reason = (!ch.manageable && ch.reason)
+            ? `<div class="hint" style="color:#f59e0b;margin-top:0.5rem"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(ch.reason)}</div>` : '';
+        const botStats = bots.map(b => `
+            <div class="ba-bstat">
+                <span class="n">${escapeHtml(b.name)}</span>
+                ${BA_STAT[ch.bots[String(b.user_id)]] || BA_STAT.missing}
+            </div>`).join('');
+        const orphans = (ch.orphans || []).length
+            ? `<div class="hint" style="margin-top:0.5rem"><i class="fa-solid fa-user-slash ba-warn"></i> Orphan admins: ${
+                ch.orphans.map(o => escapeHtml(o.name || String(o.user_id))).join(', ')}</div>` : '';
         return `
-        <tr class="${ch.manageable ? '' : 'ba-locked'}">
-            <td><input type="checkbox" class="ba-ch-cb" value="${escapeHtmlAttr(ch.id)}" ${disabled}></td>
-            <td class="ba-chname">
-                <span class="font-bold">${escapeHtml(ch.name)}</span>
-                <span class="c-id block">${escapeHtml(ch.id)}</span>
-                <span class="ba-roles">${roles}</span>
-                ${reason}
-            </td>
-            ${cells}
-            <td>${session}</td>
-            <td>${orphans}</td>
-        </tr>`;
+        <div class="ba-ch-card${ch.manageable ? '' : ' ba-locked'}">
+            <div class="ba-ch-top">
+                <label class="ba-ch-sel">
+                    <input type="checkbox" class="ba-ch-cb" value="${escapeHtmlAttr(ch.id)}" ${disabled} onchange="onBaChipChange(this)">
+                    <span class="min-w-0">
+                        <span class="ba-ch-name">${escapeHtml(ch.name)}</span>
+                        <span class="ba-ch-id block">${escapeHtml(ch.id)}</span>
+                    </span>
+                </label>
+                <span style="flex-shrink:0">${session}</span>
+            </div>
+            <div class="ba-roles" style="margin-top:0.5rem">${roles}</div>
+            <div class="ba-bot-grid">${botStats}</div>
+            ${orphans}
+            ${reason}
+        </div>`;
     }).join('');
 }
 
+function onBaChipChange(input) {
+    input.closest('.ba-ch-card').classList.toggle('selected', input.checked);
+}
 function selectAllBaChannels(state) {
-    document.querySelectorAll('#ba-tbody .ba-ch-cb:not([disabled])').forEach(cb => { cb.checked = state; });
+    document.querySelectorAll('#ba-channels .ba-ch-cb:not([disabled])').forEach(cb => {
+        cb.checked = state; onBaChipChange(cb);
+    });
 }
 function getSelectedBaChannels() {
-    return [...document.querySelectorAll('#ba-tbody .ba-ch-cb:checked')].map(cb => cb.value);
+    return [...document.querySelectorAll('#ba-channels .ba-ch-cb:checked')].map(cb => cb.value);
 }
 function getSelectedBaBots() {
     return [...document.querySelectorAll('#ba-bots .ba-bot-cb:checked')].map(cb => cb.value);
@@ -1375,6 +1393,7 @@ async function applyBotAdmin() {
     const btn = document.getElementById('ba-apply-btn');
     btn.disabled = true;
     btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Applying…';
+    document.getElementById('ba-results').style.display = 'none';
     try {
         const res = await fetch('/api/admin/tools/bot-admin/apply', {
             method: 'POST',
@@ -1382,27 +1401,72 @@ async function applyBotAdmin() {
             body: JSON.stringify({ channel_ids: channels, bot_ids: botIds, demote_orphans: demote })
         });
         const data = await res.json();
-        if (!res.ok || data.status !== 'success') {
-            showToast(data.detail || data.message || 'Could not apply.', 'error', 'Bot Admin');
-        } else {
-            renderBotAdminResults(data.data || []);
-            showToast('Done. See the report below.', 'success', 'Bot Admin');
-            await loadBotAdmin();
+        if (!res.ok || (data.status !== 'started' && data.status !== 'success')) {
+            showToast(data.detail || data.message || 'Could not start.', 'error', 'Bot Admin');
+            resetBaApplyBtn();
+            return;
         }
+        const total = data.total || channels.length;
+        const prog = document.getElementById('ba-progress');
+        prog.style.display = '';
+        setText('ba-prog-total', total);
+        setText('ba-prog-done', 0);
+        document.getElementById('ba-prog-bar').style.width = '0%';
+        startBaApplyPolling();
     } catch (e) {
-        showToast('Network error.', 'error', 'Bot Admin');
-    } finally {
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fa-solid fa-user-plus"></i> Add selected bots as admin';
+        showToast('Could not reach the server.', 'error', 'Bot Admin');
+        resetBaApplyBtn();
     }
+}
+
+function resetBaApplyBtn() {
+    const btn = document.getElementById('ba-apply-btn');
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa-solid fa-user-plus"></i> Add selected bots as admin';
+}
+
+function startBaApplyPolling() {
+    if (baApplyTimer) clearInterval(baApplyTimer);
+    pollBaApply();
+    baApplyTimer = setInterval(pollBaApply, 1500);
+}
+
+async function pollBaApply() {
+    let data;
+    try {
+        const res = await fetch('/api/admin/tools/bot-admin/apply/status');
+        data = (await res.json()).data;
+    } catch (e) { return; }
+    if (!data) return;
+
+    const total = data.total || 0;
+    const done = data.done || 0;
+    setText('ba-prog-total', total);
+    setText('ba-prog-done', done);
+    document.getElementById('ba-prog-bar').style.width = (total ? Math.round((done / total) * 100) : 0) + '%';
+
+    if (data.running) return;
+
+    if (baApplyTimer) { clearInterval(baApplyTimer); baApplyTimer = null; }
+    setTimeout(() => { document.getElementById('ba-progress').style.display = 'none'; }, 1200);
+    resetBaApplyBtn();
+
+    if (data.state === 'error') {
+        showToast(data.error || 'Apply failed.', 'error', 'Bot Admin');
+    } else {
+        showToast('Done. See the report below.', 'success', 'Bot Admin');
+    }
+    renderBotAdminResults(data.results || []);
+    loadBotAdmin();
 }
 
 function renderBotAdminResults(results) {
     const box = document.getElementById('ba-results');
+    if (!results.length) { box.style.display = 'none'; return; }
     const icon = { added: '<i class="fa-solid fa-circle-check ba-ok"></i>', already: '<i class="fa-solid fa-circle-check ba-muted"></i>', demoted: '<i class="fa-solid fa-user-minus ba-warn"></i>', skipped: '<i class="fa-solid fa-forward ba-warn"></i>', error: '<i class="fa-solid fa-circle-xmark ba-no"></i>' };
     box.style.display = '';
     box.innerHTML = results.map(ch => `
-        <div class="ba-res-row" style="flex-direction:column;align-items:stretch;gap:0.4rem">
+        <div class="ba-res-row">
             <div class="font-bold"><i class="fa-solid fa-hashtag ba-muted"></i> ${escapeHtml(ch.name)}</div>
             ${(ch.items || []).map(it => `
                 <div style="display:flex;gap:0.5rem;align-items:flex-start;padding-left:1rem">
