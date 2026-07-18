@@ -674,6 +674,11 @@ async def get_streams(
                     filename, quality_str, size, is_split=bool(quality.get("group_key"))
                 )
 
+                if combined:
+                    label = "Full" if combined.get("start") is None else f"E{combined['start']:02d}-E{combined['end']:02d}"
+                    if label.lower() not in stream_name.lower():
+                        stream_name = f"{stream_name} {label}"
+
                 original_url = f"{SettingsManager.current().base_url}/dl/{token}/{quality.get('id')}/video.mkv"
                 proxy_url = f"{SettingsManager.current().http_proxy_url}{original_url}" if SettingsManager.current().http_proxy_url else None
 
@@ -696,7 +701,7 @@ async def get_streams(
         return {"streams": []}
 
     streams.sort(
-        key=lambda s: (-s.get("episode_start", 0), get_resolution_priority(s.get("name", "")), s.get("size_bytes", 0)),
+        key=lambda s: (get_resolution_priority(s.get("name", "")), -s.get("episode_start", 0), s.get("size_bytes", 0)),
         reverse=True
     )
     name_count: dict = {}
