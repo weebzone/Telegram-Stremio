@@ -67,6 +67,15 @@ def parse_combined_episodes(filename: str) -> Optional[dict]:
     return None
 
 
+#----- Stable grouping key for combined files (episode range/keyword removed)
+def combined_name_key(filename: str) -> str:
+    if not filename:
+        return ""
+    name = _COMBINED_EPISODES_RE.sub("", filename)
+    name = _COMBINED_KEYWORD_RE.sub("", name)
+    return re.sub(r"[\s._-]+", " ", name).strip().lower()
+
+
 #----- Remove a trailing split-part suffix from a filename
 def strip_part_suffix(filename: str) -> str:
     if not filename:
