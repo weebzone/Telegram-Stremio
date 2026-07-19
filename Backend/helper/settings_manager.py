@@ -37,6 +37,7 @@ _DEFAULTS: Dict[str, Any] = {
     "announcement_channel": "",
     "skip_channel": "",
     "delete_on_metadata_fail": False,
+    "better_poster": "",
 }
 
 
@@ -168,6 +169,10 @@ class Settings:
     @property
     def payment_qr_url(self) -> str:
         return str(self._d.get("payment_qr_url") or "")
+
+    @property
+    def better_poster(self) -> str:
+        return str(self._d.get("better_poster") or "").strip()
 
     #----- Integers
     @property

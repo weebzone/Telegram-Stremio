@@ -348,6 +348,12 @@
                     value="{{ settings.base_url }}"
                     placeholder="https://your-domain.com">
             </div>
+            <div>
+                <label class="s-label" for="better_poster">Better Poster URL</label>
+                <input type="text" id="better_poster" class="s-input"
+                    value="{{ settings.better_poster }}" autocomplete="off" spellcheck="false"
+                    placeholder="https://btttr.cc/poster-a/imdb/poster-default/{imdb_id}.jpg">
+            </div>
         </div>
         <hr class="divider">
         <div class="grid-2">
@@ -943,6 +949,7 @@ async function saveSettings() {
         session_secret:                document.getElementById('session_secret').value,  // blank = keep
         tmdb_api:                      document.getElementById('tmdb_api').value.trim(),
         base_url:                      document.getElementById('base_url').value.trim(),
+        better_poster:                 document.getElementById('better_poster').value.trim(),
         upstream_repo:                 document.getElementById('upstream_repo').value.trim(),
         upstream_branch:               document.getElementById('upstream_branch').value.trim(),
         auth_channels:                 collectList('auth_channels'),
@@ -1078,6 +1085,7 @@ function renderSettings(s) {
     document.getElementById('admin_password').value = '';  // never re-fill password
     document.getElementById('tmdb_api').value = s.tmdb_api || '';
     document.getElementById('base_url').value = s.base_url || '';
+    document.getElementById('better_poster').value = s.better_poster || '';
     document.getElementById('upstream_repo').value = s.upstream_repo || '';
     document.getElementById('upstream_branch').value = s.upstream_branch || '';
     document.getElementById('subscription_group_id').value = s.subscription_group_id || 0;

@@ -125,6 +125,13 @@ def _abs_media_url(value: str) -> str:
     return f"{SettingsManager.current().base_url}{value[idx:]}" if idx != -1 else value
 
 
+def _poster_url(imdb_id: str, fallback: str) -> str:
+    template = SettingsManager.current().better_poster
+    if template and imdb_id:
+        return template.replace("{imdb_id}", str(imdb_id))
+    return _abs_media_url(fallback)
+
+
 #----- Map an internal media item into a Stremio meta object
 def convert_to_stremio_meta(item: dict) -> dict:
     media_type = "series" if item.get("media_type") == "tv" else "movie"
@@ -133,7 +140,7 @@ def convert_to_stremio_meta(item: dict) -> dict:
         "id": item.get('imdb_id'),
         "type": media_type,
         "name": item.get("title"),
-        "poster": _abs_media_url(item.get("poster")),
+        "poster": _poster_url(item.get("imdb_id"), item.get("poster")),
         "logo": item.get("logo") or "",
         "year": item.get("release_year"),
         "releaseInfo": str(item.get("release_year", "")),
@@ -455,7 +462,7 @@ async def get_meta(token: str, media_type: str, id: str, token_data: dict = Depe
         "year": str(media.get("release_year", "")),
         "imdbRating": str(media.get("rating", "")),
         "genres": media.get("genres", []),
-        "poster": _abs_media_url(media.get("poster")),
+        "poster": _poster_url(media.get("imdb_id") or imdb_id, media.get("poster")),
         "logo": media.get("logo", ""),
         "background": _abs_media_url(media.get("backdrop")),
         "imdb_id": media.get("imdb_id", ""),

@@ -1613,6 +1613,11 @@ async def update_settings_api(payload: dict) -> dict:
                 raise HTTPException(status_code=400, detail=f"'{key}' must be a list.")
             payload[key] = [str(v).strip() for v in payload[key] if str(v).strip()]
 
+    if "better_poster" in payload:
+        payload["better_poster"] = str(payload["better_poster"] or "").strip()
+        if payload["better_poster"] and "{imdb_id}" not in payload["better_poster"]:
+            raise HTTPException(status_code=400, detail="wrong betterposter url")
+
     if "extra_databases" in payload:
         for uri in payload["extra_databases"]:
             if not uri.startswith(("mongodb://", "mongodb+srv://")):
