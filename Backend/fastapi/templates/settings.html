@@ -635,8 +635,40 @@
             <label class="s-label" for="http_proxy_url">HTTP Proxy URL</label>
             <input type="url" id="http_proxy_url" class="s-input"
                 value="{{ settings.http_proxy_url }}"
-                placeholder="http://user:pass@host:port or leave empty">
+                placeholder="http://user:pass@host:port or leave empty"
+                oninput="toggleMediaflowFields()">
         </div>
+
+        <div id="mediaflow-wrap" style="{% if not settings.http_proxy_url %}display:none{% endif %}">
+            <label class="toggle-wrap" style="margin-bottom:1rem">
+                <input type="checkbox" class="toggle-input" id="mediaflow_proxy"
+                    {% if settings.mediaflow_proxy %}checked{% endif %}
+                    onchange="toggleMediaflowFields()">
+                <span class="toggle-track"></span>
+                <span class="toggle-label">
+                    <strong>MediaFlow Proxy</strong>
+                    <span style="color:var(--text-sec);font-size:0.8rem;display:block">
+                        Wrap streams as <code>/proxy/stream?d=&lt;url&gt;&amp;api_password=&lt;pass&gt;</code>
+                    </span>
+                </span>
+            </label>
+            <div id="mediaflow-password-wrap"
+                 style="margin-bottom:1rem;{% if not settings.mediaflow_proxy %}display:none{% endif %}">
+                <label class="s-label" for="mediaflow_password">MediaFlow API Password</label>
+                <div style="position:relative">
+                    <input type="password" id="mediaflow_password" class="s-input"
+                        value="{{ settings.mediaflow_password }}"
+                        placeholder="api_password" style="padding-right:2.5rem"
+                        autocomplete="off" spellcheck="false">
+                    <button type="button" onclick="toggleMfPwdVisibility()"
+                        style="position:absolute;right:0.75rem;top:50%;transform:translateY(-50%);
+                               background:none;border:none;color:var(--text-sec);cursor:pointer">
+                        <i class="fa-solid fa-eye" id="mf-eye-icon"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
         <label class="toggle-wrap">
             <input type="checkbox" class="toggle-input" id="show_proxy_and_non_proxy_both"
                 {% if settings.show_proxy_and_non_proxy_both %}checked{% endif %}>
@@ -824,6 +856,28 @@ function toggleAnnouncementFields() {
     }
 }
 
+function toggleMediaflowFields() {
+    const hasProxy = document.getElementById('http_proxy_url').value.trim() !== '';
+    const wrap = document.getElementById('mediaflow-wrap');
+    const toggle = document.getElementById('mediaflow_proxy');
+    if (wrap) wrap.style.display = hasProxy ? '' : 'none';
+    if (!hasProxy && toggle) toggle.checked = false;
+    const pwdWrap = document.getElementById('mediaflow-password-wrap');
+    if (pwdWrap) pwdWrap.style.display = (hasProxy && toggle.checked) ? '' : 'none';
+}
+
+function toggleMfPwdVisibility() {
+    const input = document.getElementById('mediaflow_password');
+    const icon = document.getElementById('mf-eye-icon');
+    if (input.type === 'password') {
+        input.type = 'text';
+        icon.className = 'fa-solid fa-eye-slash';
+    } else {
+        input.type = 'password';
+        icon.className = 'fa-solid fa-eye';
+    }
+}
+
 function toggleSkipDeleteField() {
     const hasChannel = document.getElementById('skip_channel').value.trim() !== '';
     const wrap = document.getElementById('delete_on_metadata_fail_wrap');
@@ -961,6 +1015,8 @@ async function saveSettings() {
         approver_ids:                  collectList('approver_ids').map(Number),
         http_proxy_url:                document.getElementById('http_proxy_url').value.trim(),
         show_proxy_and_non_proxy_both: document.getElementById('show_proxy_and_non_proxy_both').checked,
+        mediaflow_proxy:               document.getElementById('mediaflow_proxy').checked,
+        mediaflow_password:            document.getElementById('mediaflow_password').value,
         multi_tokens:                  collectList('multi_tokens'),
         extra_databases:               collectList('extra_databases'),
         global_search:                 document.getElementById('global_search').checked,
@@ -1090,6 +1146,9 @@ function renderSettings(s) {
     document.getElementById('upstream_branch').value = s.upstream_branch || '';
     document.getElementById('subscription_group_id').value = s.subscription_group_id || 0;
     document.getElementById('http_proxy_url').value = s.http_proxy_url || '';
+    document.getElementById('mediaflow_proxy').checked = !!s.mediaflow_proxy;
+    document.getElementById('mediaflow_password').value = s.mediaflow_password || '';
+    toggleMediaflowFields();
     document.getElementById('announcement_channel').value = s.announcement_channel || '';
     document.getElementById('skip_channel').value = s.skip_channel || '';
     toggleSkipDeleteField();
@@ -1270,6 +1329,7 @@ window.addEventListener('DOMContentLoaded', () => {
         showToast('The app restarted successfully and is back online.', 'success', 'Restart complete', 8000);
     }
     toggleDuplicateProtection();
+    toggleMediaflowFields();
     loadDbStats();
     loadLogs();
 });

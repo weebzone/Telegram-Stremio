@@ -27,6 +27,8 @@ _DEFAULTS: Dict[str, Any] = {
     "payment_qr_url": "",
     "http_proxy_url": "",
     "show_proxy_and_non_proxy_both": False,
+    "mediaflow_proxy": False,
+    "mediaflow_password": "",
     "multi_tokens": [],
     "extra_databases": [],
     "global_search": False,
@@ -98,6 +100,10 @@ class Settings:
         return bool(self._d["show_proxy_and_non_proxy_both"])
 
     @property
+    def mediaflow_proxy(self) -> bool:
+        return bool(self._d.get("mediaflow_proxy", False))
+
+    @property
     def global_search(self) -> bool:
         return bool(self._d.get("global_search", False))
 
@@ -161,6 +167,10 @@ class Settings:
     @property
     def http_proxy_url(self) -> str:
         return str(self._d.get("http_proxy_url") or "")
+
+    @property
+    def mediaflow_password(self) -> str:
+        return str(self._d.get("mediaflow_password") or "")
 
     @property
     def payment_instructions(self) -> str:
@@ -304,7 +314,7 @@ class SettingsManager:
             results["auth_channels"] = f"{len(new_channels)} channel(s) saved"
 
         #----- Proxy settings changed
-        proxy_keys = {"http_proxy_url", "show_proxy_and_non_proxy_both"}
+        proxy_keys = {"http_proxy_url", "show_proxy_and_non_proxy_both", "mediaflow_proxy", "mediaflow_password"}
         if any(old.get(k) != new.get(k) for k in proxy_keys):
             results["proxy"] = "updated — applies to next outbound request"
 

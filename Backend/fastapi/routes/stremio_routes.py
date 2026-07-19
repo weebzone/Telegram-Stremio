@@ -31,6 +31,20 @@ ADDON_NAME = "Telegram"
 ADDON_VERSION = __version__
 PAGE_SIZE = 15
 
+
+#----- Wrap a direct stream URL with the configured proxy (plain prepend or MediaFlow)
+def build_proxy_url(original_url: str) -> str | None:
+    settings = SettingsManager.current()
+    base = settings.http_proxy_url
+    if not base:
+        return None
+    if settings.mediaflow_proxy:
+        url = f"{base.rstrip('/')}/proxy/stream?d={quote(original_url, safe='')}"
+        if settings.mediaflow_password:
+            url += f"&api_password={quote(settings.mediaflow_password, safe='')}"
+        return url
+    return f"{base}{original_url}"
+
 _membership_cache: dict = {}
 _MEMBERSHIP_TTL = 60
 _MEMBERSHIP_CACHE_MAX = 5000
@@ -688,7 +702,7 @@ async def get_streams(
                         stream_name = f"{stream_name} {label}"
 
                 original_url = f"{SettingsManager.current().base_url}/dl/{token}/{quality.get('id')}/video.mkv"
-                proxy_url = f"{SettingsManager.current().http_proxy_url}{original_url}" if SettingsManager.current().http_proxy_url else None
+                proxy_url = build_proxy_url(original_url)
 
                 if SettingsManager.current().show_proxy_and_non_proxy_both and proxy_url:
                     streams.append({"name": f"{stream_name} (Proxy)", "title": stream_title, "url": proxy_url, "size_bytes": size_bytes, "episode_start": episode_start, "name_key": name_key})

@@ -1601,7 +1601,7 @@ async def update_settings_api(payload: dict) -> dict:
         del payload["session_secret"]
 
     #----- Type coercion and validation
-    bool_keys = {"replace_mode", "duplicate_protection", "hide_catalog", "subscription", "show_proxy_and_non_proxy_both", "announce_new_content", "delete_on_metadata_fail"}
+    bool_keys = {"replace_mode", "duplicate_protection", "hide_catalog", "subscription", "show_proxy_and_non_proxy_both", "mediaflow_proxy", "announce_new_content", "delete_on_metadata_fail"}
     for key in bool_keys:
         if key in payload:
             payload[key] = bool(payload[key])
@@ -1723,7 +1723,8 @@ async def update_settings_api(payload: dict) -> dict:
     #----- Strip whitespace from string fields
     for key in ("tmdb_api", "base_url", "upstream_repo", "upstream_branch",
                 "admin_username", "admin_password", "session_secret", "http_proxy_url",
-                "payment_instructions", "payment_qr_url", "announcement_channel", "skip_channel"):
+                "mediaflow_password", "payment_instructions", "payment_qr_url",
+                "announcement_channel", "skip_channel"):
         if key in payload and isinstance(payload[key], str):
             payload[key] = payload[key].strip()
 
