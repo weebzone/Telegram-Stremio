@@ -1601,7 +1601,7 @@ async def update_settings_api(payload: dict) -> dict:
         del payload["session_secret"]
 
     #----- Type coercion and validation
-    bool_keys = {"replace_mode", "duplicate_protection", "hide_catalog", "subscription", "show_proxy_and_non_proxy_both", "mediaflow_proxy", "announce_new_content", "delete_on_metadata_fail", "better_poster_enabled", "rpdb_enabled"}
+    bool_keys = {"replace_mode", "duplicate_protection", "hide_catalog", "subscription", "show_proxy_and_non_proxy_both", "mediaflow_proxy", "announce_new_content", "delete_on_metadata_fail", "better_poster_enabled", "rpdb_enabled", "fanart_enabled", "fanart_shuffle"}
     for key in bool_keys:
         if key in payload:
             payload[key] = bool(payload[key])
@@ -1621,8 +1621,14 @@ async def update_settings_api(payload: dict) -> dict:
     if "rpdb_api_key" in payload:
         payload["rpdb_api_key"] = str(payload["rpdb_api_key"] or "").strip()
 
-    if payload.get("better_poster_enabled") and payload.get("rpdb_enabled"):
+    if "fanart_api_key" in payload:
+        payload["fanart_api_key"] = str(payload["fanart_api_key"] or "").strip()
+
+    if len([k for k in ("better_poster_enabled", "rpdb_enabled", "fanart_enabled") if payload.get(k)]) > 1:
         raise HTTPException(status_code=400, detail="Enable only one poster provider at a time")
+
+    if payload.get("fanart_enabled") and not str(payload.get("fanart_api_key") or "").strip():
+        raise HTTPException(status_code=400, detail="Fanart.tv API key is required")
 
     if "extra_databases" in payload:
         for uri in payload["extra_databases"]:

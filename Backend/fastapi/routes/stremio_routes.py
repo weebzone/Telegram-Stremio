@@ -1,3 +1,4 @@
+import asyncio
 import re
 import time
 from datetime import datetime, timedelta, timezone
@@ -14,6 +15,7 @@ from Backend import __version__, db
 from Backend.config import Telegram
 from Backend.fastapi.security.tokens import verify_token
 from Backend.fastapi.themes import DEFAULT_THEME, get_theme
+from Backend.helper.fanart import fanart_artwork
 from Backend.helper.global_search import global_search, is_global_search_enabled
 from Backend.helper.imdb import get_detail, get_season
 from Backend.helper.metadata import resolve_cover_url, COMBINED_SEASON, COMBINED_EPISODE_BASE
@@ -157,6 +159,22 @@ def _poster_url(imdb_id: str, fallback: str) -> str:
             )
             return template.replace("{imdb_id}", str(imdb_id))
     return _abs_media_url(fallback)
+
+
+async def _apply_fanart(meta: dict, item: dict) -> None:
+    if not SettingsManager.current().fanart_enabled:
+        return
+    try:
+        art = await fanart_artwork(item.get("imdb_id"), item.get("tmdb_id"), item.get("media_type"))
+    except Exception as e:
+        LOGGER.warning(f"[FANART] artwork lookup failed for {item.get('imdb_id')}: {e}")
+        return
+    if art.get("poster"):
+        meta["poster"] = art["poster"]
+    if art.get("logo"):
+        meta["logo"] = art["logo"]
+    if art.get("background"):
+        meta["background"] = art["background"]
 
 
 #----- Map an internal media item into a Stremio meta object
@@ -463,6 +481,8 @@ async def get_catalog(token: str, media_type: str, id: str, extra: Optional[str]
         return {"metas": []}
 
     metas = [convert_to_stremio_meta(item) for item in items]
+    if SettingsManager.current().fanart_enabled:
+        await asyncio.gather(*(_apply_fanart(m, it) for m, it in zip(metas, items)))
     return {"metas": metas}
 
 
@@ -498,6 +518,8 @@ async def get_meta(token: str, media_type: str, id: str, token_data: dict = Depe
         "cast": media.get("cast") or [],
         "runtime": media.get("runtime") or "",
     }
+
+    await _apply_fanart(meta_obj, media)
 
     if media.get("media_type") == "movie":
         released_date = format_released_date(media)

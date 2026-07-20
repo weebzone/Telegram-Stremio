@@ -404,11 +404,41 @@
                 </span>
             </span>
         </label>
-        <div id="rpdb-wrap" style="{% if not settings.rpdb_enabled %}display:none{% endif %}">
+        <div id="rpdb-wrap" style="margin-bottom:1.25rem;{% if not settings.rpdb_enabled %}display:none{% endif %}">
             <label class="s-label" for="rpdb_api_key">RPDB API Key <span style="font-weight:400;text-transform:none">(optional)</span></label>
             <input type="text" id="rpdb_api_key" class="s-input"
                 value="{{ settings.rpdb_api_key }}" autocomplete="off" spellcheck="false"
                 placeholder="Leave empty for free tier (t0-free-rpdb)">
+        </div>
+
+        <label class="toggle-wrap" style="margin-bottom:0.75rem">
+            <input type="checkbox" class="toggle-input" id="fanart_enabled"
+                {% if settings.fanart_enabled %}checked{% endif %}
+                onchange="togglePosterProvider('fanart')">
+            <span class="toggle-track"></span>
+            <span class="toggle-label">
+                <strong>Fanart.tv</strong>
+                <span style="color:var(--text-sec);font-size:0.8rem;display:block">
+                    Poster, logo and backdrop from fanart.tv. An API key is required.
+                </span>
+            </span>
+        </label>
+        <div id="fanart-wrap" style="{% if not settings.fanart_enabled %}display:none{% endif %}">
+            <label class="s-label" for="fanart_api_key">Fanart.tv API Key</label>
+            <input type="text" id="fanart_api_key" class="s-input"
+                value="{{ settings.fanart_api_key }}" autocomplete="off" spellcheck="false"
+                placeholder="Your fanart.tv project API key">
+            <label class="toggle-wrap" style="margin-top:0.85rem">
+                <input type="checkbox" class="toggle-input" id="fanart_shuffle"
+                    {% if settings.fanart_shuffle %}checked{% endif %}>
+                <span class="toggle-track"></span>
+                <span class="toggle-label">
+                    <strong>Shuffle artwork</strong>
+                    <span style="color:var(--text-sec);font-size:0.8rem;display:block">
+                        Pick a random English artwork instead of the most liked one. Missing types fall back to the stored artwork.
+                    </span>
+                </span>
+            </label>
         </div>
     </div>
 
@@ -930,12 +960,17 @@ function toggleSkipDeleteField() {
 }
 
 function togglePosterProvider(which) {
-    const bp = document.getElementById('better_poster_enabled');
-    const rp = document.getElementById('rpdb_enabled');
-    if (which === 'better' && bp.checked) rp.checked = false;
-    if (which === 'rpdb' && rp.checked) bp.checked = false;
-    document.getElementById('better-poster-wrap').style.display = bp.checked ? '' : 'none';
-    document.getElementById('rpdb-wrap').style.display = rp.checked ? '' : 'none';
+    const els = {
+        better: document.getElementById('better_poster_enabled'),
+        rpdb: document.getElementById('rpdb_enabled'),
+        fanart: document.getElementById('fanart_enabled'),
+    };
+    if (which && els[which] && els[which].checked) {
+        for (const k in els) if (k !== which) els[k].checked = false;
+    }
+    document.getElementById('better-poster-wrap').style.display = els.better.checked ? '' : 'none';
+    document.getElementById('rpdb-wrap').style.display = els.rpdb.checked ? '' : 'none';
+    document.getElementById('fanart-wrap').style.display = els.fanart.checked ? '' : 'none';
 }
 
 /* ── Password visibility ──────────────────────────────────────────────── */
@@ -1056,6 +1091,9 @@ async function saveSettings() {
         better_poster:                 document.getElementById('better_poster').value.trim(),
         rpdb_enabled:                  document.getElementById('rpdb_enabled').checked,
         rpdb_api_key:                  document.getElementById('rpdb_api_key').value.trim(),
+        fanart_enabled:                document.getElementById('fanart_enabled').checked,
+        fanart_api_key:                document.getElementById('fanart_api_key').value.trim(),
+        fanart_shuffle:                document.getElementById('fanart_shuffle').checked,
         upstream_repo:                 document.getElementById('upstream_repo').value.trim(),
         upstream_branch:               document.getElementById('upstream_branch').value.trim(),
         auth_channels:                 collectList('auth_channels'),
@@ -1197,6 +1235,9 @@ function renderSettings(s) {
     document.getElementById('better_poster').value = s.better_poster || '';
     document.getElementById('rpdb_enabled').checked = !!s.rpdb_enabled;
     document.getElementById('rpdb_api_key').value = s.rpdb_api_key || '';
+    document.getElementById('fanart_enabled').checked = !!s.fanart_enabled;
+    document.getElementById('fanart_api_key').value = s.fanart_api_key || '';
+    document.getElementById('fanart_shuffle').checked = !!s.fanart_shuffle;
     togglePosterProvider();
     document.getElementById('upstream_repo').value = s.upstream_repo || '';
     document.getElementById('upstream_branch').value = s.upstream_branch || '';
