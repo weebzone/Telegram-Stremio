@@ -2,6 +2,7 @@ import asyncio
 import random
 import time
 from typing import Optional
+from urllib.parse import quote
 
 import httpx
 
@@ -26,6 +27,10 @@ _TV_FIELDS = {
 
 def _preview(url: str) -> str:
     return url.replace("/fanart/", "/preview/", 1) if url else url
+
+
+def _medium(url: str) -> str:
+    return f"https://wsrv.nl/?url={quote(url, safe='')}&w=1280&output=jpg&q=80" if url else url
 
 
 _CACHE_TTL = 6 * 3600
@@ -110,7 +115,7 @@ async def fanart_artwork(imdb_id, tmdb_id, media_type) -> dict:
 
     shuffle = settings.fanart_shuffle
     interval = settings.fanart_shuffle_interval
-    low_res_poster = settings.fanart_low_res_poster
+    optimize = settings.fanart_low_res_poster
     out = {}
     for target, keys in fields.items():
         items = []
@@ -119,6 +124,12 @@ async def fanart_artwork(imdb_id, tmdb_id, media_type) -> dict:
             if items:
                 break
         url = _pick(items, shuffle, interval, f"{lookup_id}:{target}")
-        if url:
-            out[target] = _preview(url) if low_res_poster and target == "poster" else url
+        if not url:
+            continue
+        if optimize:
+            if target in ("poster", "logo"):
+                url = _preview(url)
+            elif target == "background":
+                url = _medium(url)
+        out[target] = url
     return out
