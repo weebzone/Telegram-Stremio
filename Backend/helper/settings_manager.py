@@ -47,6 +47,7 @@ _DEFAULTS: Dict[str, Any] = {
     "fanart_api_key": "",
     "fanart_shuffle": False,
     "fanart_shuffle_interval": 5,
+    "fanart_low_res_poster": True,
 }
 
 
@@ -214,6 +215,10 @@ class Settings:
     @property
     def fanart_shuffle(self) -> bool:
         return bool(self._d.get("fanart_shuffle", False))
+
+    @property
+    def fanart_low_res_poster(self) -> bool:
+        return bool(self._d.get("fanart_low_res_poster", True))
 
     #----- Integers
     @property

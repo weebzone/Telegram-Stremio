@@ -1601,7 +1601,7 @@ async def update_settings_api(payload: dict) -> dict:
         del payload["session_secret"]
 
     #----- Type coercion and validation
-    bool_keys = {"replace_mode", "duplicate_protection", "hide_catalog", "subscription", "show_proxy_and_non_proxy_both", "mediaflow_proxy", "announce_new_content", "delete_on_metadata_fail", "better_poster_enabled", "rpdb_enabled", "fanart_enabled", "fanart_shuffle"}
+    bool_keys = {"replace_mode", "duplicate_protection", "hide_catalog", "subscription", "show_proxy_and_non_proxy_both", "mediaflow_proxy", "announce_new_content", "delete_on_metadata_fail", "better_poster_enabled", "rpdb_enabled", "fanart_enabled", "fanart_shuffle", "fanart_low_res_poster"}
     for key in bool_keys:
         if key in payload:
             payload[key] = bool(payload[key])

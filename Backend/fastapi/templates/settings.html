@@ -429,6 +429,17 @@
                 value="{{ settings.fanart_api_key }}" autocomplete="off" spellcheck="false"
                 placeholder="Your fanart.tv project API key">
             <label class="toggle-wrap" style="margin-top:0.85rem">
+                <input type="checkbox" class="toggle-input" id="fanart_low_res_poster"
+                    {% if settings.fanart_low_res_poster %}checked{% endif %}>
+                <span class="toggle-track"></span>
+                <span class="toggle-label">
+                    <strong>Faster posters</strong>
+                    <span style="color:var(--text-sec);font-size:0.8rem;display:block">
+                        Use lower-resolution posters for quicker loading, ideal for phones. Backdrops stay full quality.
+                    </span>
+                </span>
+            </label>
+            <label class="toggle-wrap" style="margin-top:0.85rem">
                 <input type="checkbox" class="toggle-input" id="fanart_shuffle"
                     {% if settings.fanart_shuffle %}checked{% endif %}
                     onchange="toggleFanartShuffle()">
@@ -1110,6 +1121,7 @@ async function saveSettings() {
         fanart_api_key:                document.getElementById('fanart_api_key').value.trim(),
         fanart_shuffle:                document.getElementById('fanart_shuffle').checked,
         fanart_shuffle_interval:       parseInt(document.getElementById('fanart_shuffle_interval').value, 10) || 0,
+        fanart_low_res_poster:         document.getElementById('fanart_low_res_poster').checked,
         upstream_repo:                 document.getElementById('upstream_repo').value.trim(),
         upstream_branch:               document.getElementById('upstream_branch').value.trim(),
         auth_channels:                 collectList('auth_channels'),
@@ -1255,6 +1267,7 @@ function renderSettings(s) {
     document.getElementById('fanart_api_key').value = s.fanart_api_key || '';
     document.getElementById('fanart_shuffle').checked = !!s.fanart_shuffle;
     document.getElementById('fanart_shuffle_interval').value = (s.fanart_shuffle_interval ?? 5);
+    document.getElementById('fanart_low_res_poster').checked = (s.fanart_low_res_poster ?? true);
     togglePosterProvider();
     toggleFanartShuffle();
     document.getElementById('upstream_repo').value = s.upstream_repo || '';

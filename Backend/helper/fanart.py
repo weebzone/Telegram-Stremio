@@ -24,6 +24,10 @@ _TV_FIELDS = {
     "background": ["showbackground"],
 }
 
+def _preview(url: str) -> str:
+    return url.replace("/fanart/", "/preview/", 1) if url else url
+
+
 _CACHE_TTL = 6 * 3600
 _cache: dict = {}
 _tvdb_cache: dict = {}
@@ -106,6 +110,7 @@ async def fanart_artwork(imdb_id, tmdb_id, media_type) -> dict:
 
     shuffle = settings.fanart_shuffle
     interval = settings.fanart_shuffle_interval
+    low_res_poster = settings.fanart_low_res_poster
     out = {}
     for target, keys in fields.items():
         items = []
@@ -115,5 +120,5 @@ async def fanart_artwork(imdb_id, tmdb_id, media_type) -> dict:
                 break
         url = _pick(items, shuffle, interval, f"{lookup_id}:{target}")
         if url:
-            out[target] = url
+            out[target] = _preview(url) if low_res_poster and target == "poster" else url
     return out
