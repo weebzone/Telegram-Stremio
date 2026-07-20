@@ -46,6 +46,7 @@ _DEFAULTS: Dict[str, Any] = {
     "fanart_enabled": False,
     "fanart_api_key": "",
     "fanart_shuffle": False,
+    "fanart_shuffle_interval": 5,
 }
 
 
@@ -218,6 +219,13 @@ class Settings:
     @property
     def subscription_group_id(self) -> int:
         return int(self._d.get("subscription_group_id") or 0)
+
+    @property
+    def fanart_shuffle_interval(self) -> int:
+        try:
+            return max(0, int(self._d.get("fanart_shuffle_interval", 5)))
+        except (ValueError, TypeError):
+            return 5
 
     #----- Lists
     @property

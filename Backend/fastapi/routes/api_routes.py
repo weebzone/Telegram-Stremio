@@ -1624,6 +1624,12 @@ async def update_settings_api(payload: dict) -> dict:
     if "fanart_api_key" in payload:
         payload["fanart_api_key"] = str(payload["fanart_api_key"] or "").strip()
 
+    if "fanart_shuffle_interval" in payload:
+        try:
+            payload["fanart_shuffle_interval"] = max(0, int(payload["fanart_shuffle_interval"]))
+        except (ValueError, TypeError):
+            payload["fanart_shuffle_interval"] = 5
+
     if len([k for k in ("better_poster_enabled", "rpdb_enabled", "fanart_enabled") if payload.get(k)]) > 1:
         raise HTTPException(status_code=400, detail="Enable only one poster provider at a time")
 

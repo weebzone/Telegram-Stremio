@@ -430,7 +430,8 @@
                 placeholder="Your fanart.tv project API key">
             <label class="toggle-wrap" style="margin-top:0.85rem">
                 <input type="checkbox" class="toggle-input" id="fanart_shuffle"
-                    {% if settings.fanart_shuffle %}checked{% endif %}>
+                    {% if settings.fanart_shuffle %}checked{% endif %}
+                    onchange="toggleFanartShuffle()">
                 <span class="toggle-track"></span>
                 <span class="toggle-label">
                     <strong>Shuffle artwork</strong>
@@ -439,6 +440,15 @@
                     </span>
                 </span>
             </label>
+            <div id="fanart-shuffle-wrap" style="margin-top:0.85rem;{% if not settings.fanart_shuffle %}display:none{% endif %}">
+                <label class="s-label" for="fanart_shuffle_interval">Shuffle interval (minutes)</label>
+                <input type="number" id="fanart_shuffle_interval" class="s-input" min="0" step="1"
+                    value="{{ settings.fanart_shuffle_interval }}"
+                    placeholder="5">
+                <span style="color:var(--text-sec);font-size:0.8rem;display:block;margin-top:0.35rem">
+                    How often the artwork changes. Use 0 for a fresh random pick on every load.
+                </span>
+            </div>
         </div>
     </div>
 
@@ -973,6 +983,11 @@ function togglePosterProvider(which) {
     document.getElementById('fanart-wrap').style.display = els.fanart.checked ? '' : 'none';
 }
 
+function toggleFanartShuffle() {
+    const on = document.getElementById('fanart_shuffle').checked;
+    document.getElementById('fanart-shuffle-wrap').style.display = on ? '' : 'none';
+}
+
 /* ── Password visibility ──────────────────────────────────────────────── */
 function togglePwdVisibility() {
     const input = document.getElementById('admin_password');
@@ -1094,6 +1109,7 @@ async function saveSettings() {
         fanart_enabled:                document.getElementById('fanart_enabled').checked,
         fanart_api_key:                document.getElementById('fanart_api_key').value.trim(),
         fanart_shuffle:                document.getElementById('fanart_shuffle').checked,
+        fanart_shuffle_interval:       parseInt(document.getElementById('fanart_shuffle_interval').value, 10) || 0,
         upstream_repo:                 document.getElementById('upstream_repo').value.trim(),
         upstream_branch:               document.getElementById('upstream_branch').value.trim(),
         auth_channels:                 collectList('auth_channels'),
@@ -1238,7 +1254,9 @@ function renderSettings(s) {
     document.getElementById('fanart_enabled').checked = !!s.fanart_enabled;
     document.getElementById('fanart_api_key').value = s.fanart_api_key || '';
     document.getElementById('fanart_shuffle').checked = !!s.fanart_shuffle;
+    document.getElementById('fanart_shuffle_interval').value = (s.fanart_shuffle_interval ?? 5);
     togglePosterProvider();
+    toggleFanartShuffle();
     document.getElementById('upstream_repo').value = s.upstream_repo || '';
     document.getElementById('upstream_branch').value = s.upstream_branch || '';
     document.getElementById('subscription_group_id').value = s.subscription_group_id || 0;

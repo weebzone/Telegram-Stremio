@@ -70,15 +70,18 @@ async def _resolve_tvdb(tmdb_id) -> Optional[int]:
     return tvdb
 
 
-def _pick(items, shuffle: bool) -> str:
+def _pick(items, shuffle: bool, interval: int, seed_key: str) -> str:
     items = [i for i in (items or []) if i.get("url")]
     if not items:
         return ""
     english = [i for i in items if (i.get("lang") or "").lower() == "en"]
     pool = english or items
-    if shuffle:
+    if not shuffle:
+        return max(pool, key=lambda i: int(i.get("likes") or 0)).get("url", "")
+    if interval <= 0:
         return random.choice(pool).get("url", "")
-    return max(pool, key=lambda i: int(i.get("likes") or 0)).get("url", "")
+    bucket = int(time.time() // (interval * 60))
+    return random.Random(f"{seed_key}:{bucket}").choice(pool).get("url", "")
 
 
 async def fanart_artwork(imdb_id, tmdb_id, media_type) -> dict:
@@ -102,6 +105,7 @@ async def fanart_artwork(imdb_id, tmdb_id, media_type) -> dict:
         return {}
 
     shuffle = settings.fanart_shuffle
+    interval = settings.fanart_shuffle_interval
     out = {}
     for target, keys in fields.items():
         items = []
@@ -109,7 +113,7 @@ async def fanart_artwork(imdb_id, tmdb_id, media_type) -> dict:
             items = data.get(k) or []
             if items:
                 break
-        url = _pick(items, shuffle)
+        url = _pick(items, shuffle, interval, f"{lookup_id}:{target}")
         if url:
             out[target] = url
     return out
