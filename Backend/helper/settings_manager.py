@@ -39,7 +39,10 @@ _DEFAULTS: Dict[str, Any] = {
     "announcement_channel": "",
     "skip_channel": "",
     "delete_on_metadata_fail": False,
+    "better_poster_enabled": False,
     "better_poster": "",
+    "rpdb_enabled": False,
+    "rpdb_api_key": "",
 }
 
 
@@ -181,8 +184,20 @@ class Settings:
         return str(self._d.get("payment_qr_url") or "")
 
     @property
+    def better_poster_enabled(self) -> bool:
+        return bool(self._d.get("better_poster_enabled", False))
+
+    @property
     def better_poster(self) -> str:
         return str(self._d.get("better_poster") or "").strip()
+
+    @property
+    def rpdb_enabled(self) -> bool:
+        return bool(self._d.get("rpdb_enabled", False))
+
+    @property
+    def rpdb_api_key(self) -> str:
+        return str(self._d.get("rpdb_api_key") or "").strip()
 
     #----- Integers
     @property

@@ -139,10 +139,23 @@ def _abs_media_url(value: str) -> str:
     return f"{SettingsManager.current().base_url}{value[idx:]}" if idx != -1 else value
 
 
+BETTERPOSTER_DEFAULT = "https://btttr.cc/poster/imdb/poster-default/{imdb_id}.jpg"
+RPDB_FREE = "https://api.ratingposterdb.com/t0-free-rpdb/imdb/poster-default/{imdb_id}.jpg"
+
+
 def _poster_url(imdb_id: str, fallback: str) -> str:
-    template = SettingsManager.current().better_poster
-    if template and imdb_id:
-        return template.replace("{imdb_id}", str(imdb_id))
+    settings = SettingsManager.current()
+    if imdb_id:
+        if settings.better_poster_enabled:
+            template = settings.better_poster or BETTERPOSTER_DEFAULT
+            return template.replace("{imdb_id}", str(imdb_id))
+        if settings.rpdb_enabled:
+            key = settings.rpdb_api_key
+            template = (
+                f"https://api.ratingposterdb.com/{key}/imdb/poster-default/{{imdb_id}}.jpg"
+                if key else RPDB_FREE
+            )
+            return template.replace("{imdb_id}", str(imdb_id))
     return _abs_media_url(fallback)
 
 
