@@ -1402,6 +1402,28 @@ class Database:
         #----- Incoming is a normal (non-split) file.
         if replace_mode:
             stale = [q for q in existing_qualities if q.get("quality") == target_quality]
+
+            #----- Quality Hierarchy System: only replace if the new file is an actual
+            #----- upgrade (or same quality + smaller size). Prevents e.g. a BluRay/HEVC
+            #----- file being silently deleted and replaced by a weaker x264 re-upload
+            #----- just because both are tagged with the same resolution label.
+            if stale:
+                existing_entry = stale[0]
+                should_replace, reason = QualityChecker.should_replace_quality(
+                    existing_quality_label=existing_entry.get("quality", ""),
+                    existing_quality_name=existing_entry.get("name", ""),
+                    existing_quality_size=existing_entry.get("size", ""),
+                    new_quality_label=quality_to_update.get("quality", ""),
+                    new_quality_name=quality_to_update.get("name", ""),
+                    new_quality_size=quality_to_update.get("size", ""),
+                )
+                if not should_replace:
+                    LOGGER.warning(f"Quality replacement blocked: {reason}")
+                    if status is not None:
+                        status["quality_downgrade_blocked"] = True
+                    return existing_qualities
+                LOGGER.info(f"Quality replacement approved: {reason}")
+
             for q in stale:
                 await self._queue_quality_deletion(q)
             existing_qualities = [
