@@ -16,6 +16,7 @@ from Backend.helper.modal import Episode, MovieSchema, QualityDetail, QualityPar
 from Backend.helper.settings_manager import SettingsManager
 from Backend.helper.task_manager import delete_message
 from Backend.logger import LOGGER
+from Backend.helper.quality_checker import QualityChecker
 
 
 
