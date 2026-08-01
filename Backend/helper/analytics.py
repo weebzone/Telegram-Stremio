@@ -1,5 +1,5 @@
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import httpx
 
@@ -102,17 +102,17 @@ def parse_device(user_agent: str) -> str:
 
 async def lookup_ip(ip: str) -> dict:
     if not ip or ip.startswith(("127.", "10.", "192.168.", "172.")) or ip in ("::1", "localhost"):
-        return {"country": "Local", "city": "", "isp": "", "proxy": False}
+        return {"country": "Local", "city": "", "isp": "", "proxy": False, "mobile": False}
     now = time.time()
     cached = _IP_CACHE.get(ip)
     if cached and now - cached[1] < _IP_TTL:
         return cached[0]
-    data = {"country": "", "city": "", "isp": "", "proxy": False}
+    data = {"country": "", "city": "", "isp": "", "proxy": False, "mobile": False}
     try:
         async with httpx.AsyncClient(timeout=6) as client:
             resp = await client.get(
                 f"http://ip-api.com/json/{ip}",
-                params={"fields": "status,country,city,isp,proxy,hosting"},
+                params={"fields": "status,country,city,isp,proxy,hosting,mobile"},
             )
             if resp.status_code == 200:
                 j = resp.json()
@@ -122,6 +122,7 @@ async def lookup_ip(ip: str) -> dict:
                         "city": j.get("city") or "",
                         "isp": j.get("isp") or "",
                         "proxy": bool(j.get("proxy") or j.get("hosting")),
+                        "mobile": bool(j.get("mobile")),
                     }
     except Exception as e:
         LOGGER.warning(f"[ANALYTICS] IP lookup failed for {ip}: {e}")
@@ -132,42 +133,54 @@ async def lookup_ip(ip: str) -> dict:
 async def record_stream_start(token: str, name: str, ip: str, user_agent: str) -> None:
     if not token:
         return
+    coll = db.dbs["tracking"]["user_activity"]
+    device = parse_device(user_agent)
+
+    #----- Always refresh the cheap, device-identifying fields (no network) so the
+    #----- most recent device/app is shown immediately.
+    base = {
+        "last_active": datetime.utcnow(),
+        "ip": ip or "",
+        "app": parse_app(user_agent),
+        "device": device,
+        "user_agent": user_agent or "",
+    }
     try:
-        await db.dbs["tracking"]["user_activity"].update_one(
+        await coll.update_one(
             {"_id": token},
-            {"$set": {"last_active": datetime.utcnow()}, "$setOnInsert": {"name": name or "Unknown"}},
+            {"$set": base, "$setOnInsert": {"name": name or "Unknown"}},
             upsert=True,
         )
     except Exception as e:
         LOGGER.warning(f"[ANALYTICS] activity ping failed: {e}")
         return
 
+    #----- The IP geo/ISP/VPN lookup is the only slow part — throttle it per token.
     now_ts = time.time()
     if now_ts - _LAST_FULL.get(token, 0) < _FULL_INTERVAL:
         return
     _LAST_FULL[token] = now_ts
 
     geo = await lookup_ip(ip)
-    doc = {
-        "name": name or "Unknown",
-        "ip": ip or "",
-        "app": parse_app(user_agent),
-        "device": parse_device(user_agent),
-        "user_agent": user_agent or "",
+    upd = {
         "country": geo.get("country"),
         "city": geo.get("city"),
         "isp": geo.get("isp"),
         "proxy": geo.get("proxy", False),
-        "last_active": datetime.utcnow(),
     }
+    if not device and geo.get("mobile"):
+        upd["device"] = "Mobile"
     try:
-        await db.dbs["tracking"]["user_activity"].update_one({"_id": token}, {"$set": doc}, upsert=True)
+        await coll.update_one({"_id": token}, {"$set": upd})
     except Exception as e:
-        LOGGER.warning(f"[ANALYTICS] record failed: {e}")
+        LOGGER.warning(f"[ANALYTICS] geo update failed: {e}")
 
 
 async def get_activity_overview(page: int = 1, per_page: int = 12) -> dict:
     now = datetime.utcnow()
+    cutoff = now - timedelta(seconds=ONLINE_WINDOW)
+    coll = db.dbs["tracking"]["user_activity"]
+
     playing = {}
     for info in ACTIVE_STREAMS.values():
         meta = info.get("meta", {}) or {}
@@ -176,7 +189,19 @@ async def get_activity_overview(page: int = 1, per_page: int = 12) -> dict:
             playing[tok] = meta.get("title") or "Streaming"
 
     try:
-        docs = await db.dbs["tracking"]["user_activity"].find().sort("last_active", -1).to_list(None)
+        total = await coll.count_documents({})
+        online_count = await coll.count_documents({"last_active": {"$gte": cutoff}})
+    except Exception:
+        total, online_count = 0, 0
+    online_count = max(online_count, len(playing))
+
+    per_page = max(1, min(int(per_page or 12), 60))
+    total_pages = max(1, (total + per_page - 1) // per_page)
+    page = max(1, min(int(page or 1), total_pages))
+    offset = (page - 1) * per_page
+
+    try:
+        docs = await coll.find().sort("last_active", -1).skip(offset).limit(per_page).to_list(per_page)
     except Exception:
         docs = []
 
@@ -187,7 +212,7 @@ async def get_activity_overview(page: int = 1, per_page: int = 12) -> dict:
         online = token in playing
         if not online and last:
             try:
-                online = (now - last).total_seconds() < ONLINE_WINDOW
+                online = last >= cutoff
             except Exception:
                 online = False
         rows.append({
@@ -208,14 +233,8 @@ async def get_activity_overview(page: int = 1, per_page: int = 12) -> dict:
         })
 
     rows.sort(key=lambda r: 0 if r["online"] else 1)
-    total = len(rows)
-    online_count = sum(1 for r in rows if r["online"])
-    per_page = max(1, min(int(per_page or 12), 60))
-    total_pages = max(1, (total + per_page - 1) // per_page)
-    page = max(1, min(int(page or 1), total_pages))
-    offset = (page - 1) * per_page
     return {
-        "users": rows[offset:offset + per_page],
+        "users": rows,
         "online_count": online_count,
         "total": total,
         "page": page,
