@@ -137,19 +137,25 @@
                     }).join('');
                     renderUaPagination(data);
                 }
-                function uaSkeleton(n) { let s = ''; for (let i = 0; i < (n || 6); i++) s += '<div class="ua-skel"></div>'; return s; }
+                function uaSkeleton() { return '<div class="ua-skel"></div>'; }
                 async function loadUserActivity(page, silent) {
                     if (page) uaPage = page;
-                    if (!silent) document.getElementById('ua-list').innerHTML = uaSkeleton(6);
+                    const box = document.getElementById('ua-list');
+                    if (!box) return;
+                    if (!silent) box.innerHTML = uaSkeleton();
                     try {
                         const res = await fetch(`/api/admin/user-activity?page=${uaPage}&per_page=${uaPerPage}`);
                         renderUserActivity(await res.json());
                     } catch (e) {
-                        document.getElementById('ua-list').innerHTML = '<p class="text-text-secondary text-sm">Unable to load user activity.</p>';
+                        box.innerHTML = '<p class="text-text-secondary text-sm">Unable to load user activity.</p>';
                     }
                 }
-                if (window.__UA_INITIAL__ && (window.__UA_INITIAL__.users || []).length) { renderUserActivity(window.__UA_INITIAL__); } else { loadUserActivity(); }
-                setInterval(() => loadUserActivity(null, true), 15000);
+                function uaInit() {
+                    if (window.__UA_INITIAL__ && (window.__UA_INITIAL__.users || []).length) renderUserActivity(window.__UA_INITIAL__);
+                    else loadUserActivity();
+                    setInterval(() => loadUserActivity(null, true), 15000);
+                }
+                if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', uaInit); else uaInit();
             </script>
 
             <section>
@@ -241,8 +247,7 @@
                 </div>
                 <div class="p-6">
                     <div id="ua-list" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-                        <div class="ua-skel"></div><div class="ua-skel"></div><div class="ua-skel"></div>
-                        <div class="ua-skel"></div><div class="ua-skel"></div><div class="ua-skel"></div>
+                        <div class="ua-skel"></div>
                     </div>
                     <div id="ua-pagination" class="flex items-center justify-center gap-3 mt-6"></div>
                 </div>
