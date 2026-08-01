@@ -399,7 +399,7 @@ Normally Stremio only searches titles already in your library. **Global Search**
 **Requirements:** a connected **Telegram user session**. The easy way is to log in right from the web panel — no `config.env` edit or restart needed.
 
 **How to use:**
-1. Go to **Settings → Telegram User Session** and **log in** with your phone number (enter the code Telegram sends, plus your 2FA password if you have one). The session is encrypted and stored automatically. *(Advanced alternative: you can still set `USER_SESSION_STRING` in `config.env` and restart once.)*
+1. Go to **Settings → Telegram User Session** and **log in** with your phone number (enter the code Telegram sends, plus your 2FA password if you have one). The session is encrypted and stored automatically.
 2. In **Settings**, enable the **Global Search** toggle.
 3. Add the **channel IDs** you want it to search.
 4. Now when a user searches in Stremio and the title isn't in your local catalog, matching results from those channels appear — tagged **🌐 GLOBAL**. Split and `.zip` split files in those channels stream as one file too.
@@ -460,7 +460,7 @@ Everything here is on the **Settings** page (`/admin/settings`) — no terminal 
 - So to update: make sure *Upstream Repo* = `https://github.com/weebzone/Telegram-Stremio` (and branch, e.g. `master`) in Settings → click **Restart**. Done. 🎉
 
 ### ⚙️ Everything else
-All other options — TMDB key, Base URL, channels, subscriptions, proxy, extra databases, multi-token bots, replace mode, hide catalog, etc. — live on the **Settings** page and apply **instantly, without a restart**. Even the **Telegram user session** (for Global Search) can now be connected from **Settings → Telegram User Session** without a restart — a `config.env` `USER_SESSION_STRING` is only needed if you prefer that older method.
+All other options — TMDB key, Base URL, channels, subscriptions, proxy, extra databases, multi-token bots, replace mode, hide catalog, etc. — live on the **Settings** page and apply **instantly, without a restart**. That includes the **Telegram user session** for Global Search (**Settings → Telegram User Session**).
 
 ---
 
@@ -586,14 +586,12 @@ nano config.env
 | `OWNER_ID` | ✅ | Your numeric Telegram user ID (from @userinfobot) |
 | `DATABASE` | ✅ | **Two** MongoDB URIs, separated by a comma |
 | `PORT` | ✅ | Web server port (keep `8000`) |
-| `USER_SESSION_STRING` | ⬜ | Optional — only for **Global Search** |
 
 **Example:**
 ```env
 API_ID="1234567"
 API_HASH="abc123def456ghi789jkl012mno345pq"
 BOT_TOKEN="1234567890:AAEabcdEFGhijkLMnOPqrsTUVwxyz12345"
-USER_SESSION_STRING=""
 OWNER_ID="987654321"
 DATABASE="mongodb+srv://user:pass@cluster0.xxxx.mongodb.net/tracking,mongodb+srv://user:pass@cluster0.xxxx.mongodb.net/storage1"
 PORT="8000"
@@ -606,26 +604,8 @@ PORT="8000"
 - **DATABASE** — two free MongoDB databases from [MongoDB Atlas](https://www.mongodb.com/atlas). Create a cluster, add a DB user, allow network access `0.0.0.0/0`, copy the connection string, and append a name to each (`/tracking` and `/storage1`). You can reuse one cluster with two different DB names.
 - **PORT** — leave `8000` unless it's busy.
 
-### (Optional) Generate USER_SESSION_STRING — only for Global Search
-> 💡 **Easiest way:** skip this entirely and just log in from **Settings → Telegram User Session** after the server is up (phone → code → 2FA). The steps below are only for people who prefer putting the string in `config.env`.
-
-Run this in [Google Colab](https://colab.new) (safe — it's just a "stay logged in" token for *your* account; revoke anytime from Telegram → Settings → Devices):
-```python
-!pip install pyrogram tgcrypto
-import asyncio
-from pyrogram import Client
-api_id = int(input("API ID: "))
-api_hash = input("API HASH: ")
-async def main():
-    async with Client("temp_session", api_id, api_hash) as app:
-        print("\nYour USER_SESSION_STRING is:\n")
-        print(await app.export_session_string())
-await main()
-```
-Copy the printed string into `config.env`. 🔒 Keep it private.
-
 ### Then finish in the web panel
-Open your server → log in with default **`admin` / `admin`** → go to **Settings**. **Change the admin password first**, then fill in the rest below. Everything on this page is saved to the database and applied **instantly — no restart**. That includes the **Telegram user session** for Global Search (**Settings → Telegram User Session**), so the optional `USER_SESSION_STRING` below is only for people who prefer setting it in `config.env`.
+Open your server → log in with default **`admin` / `admin`** → go to **Settings**. **Change the admin password first**, then fill in the rest below. Everything on this page is saved to the database and applied **instantly — no restart** — including connecting your **Telegram user session** for Global Search right from **Settings → Telegram User Session** (phone number → verification code → 2FA).
 
 ---
 
@@ -819,7 +799,6 @@ On your **Hugging Face Space → Settings → Variables and secrets**, add the s
 | `BOT_TOKEN` | ✅ | [@BotFather](https://t.me/BotFather) |
 | `OWNER_ID` | ✅ | your numeric Telegram ID |
 | `DATABASE` | ✅ | two comma-separated MongoDB URIs |
-| `USER_SESSION_STRING` | ⬜ | optional (Global Search) |
 
 > ℹ️ No `config.env` needed on Hugging Face — these secrets are read as environment variables. The `Dockerfile` already listens on the right port (`app_port: 8000` is preset in this README).
 
