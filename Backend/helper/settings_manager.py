@@ -3,6 +3,7 @@ from __future__ import annotations
 import secrets
 from typing import Any, Dict, List
 
+import Backend.pyrofork.bot as botmod
 from Backend.config import Telegram
 from Backend.helper.passwords import hash_password
 from Backend.logger import LOGGER
@@ -306,7 +307,6 @@ class SettingsManager:
 
         #----- Global Search requires a Userbot session; enforce it server-side
         if merged.get("global_search"):
-            import Backend.pyrofork.bot as botmod
             if not Telegram.USER_SESSION_STRING and botmod.Userbot is None:
                 merged["global_search"] = False
                 LOGGER.warning(

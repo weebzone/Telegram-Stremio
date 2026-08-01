@@ -15,6 +15,7 @@ from pyrogram.errors import (
 import Backend.pyrofork.bot as botmod
 from Backend import db
 from Backend.config import Telegram
+from Backend.helper import global_search, task_manager
 from Backend.helper.encrypt import decode_string, encode_string
 from Backend.logger import LOGGER
 
@@ -81,10 +82,9 @@ async def _activate(session_string: str) -> None:
             await botmod.Userbot.start()
             botmod.Userbot.username = getattr(botmod.Userbot.me, "username", None)
             LOGGER.info("Userbot session activated live from stored session.")
-        for mod in ("Backend.helper.global_search", "Backend.helper.task_manager"):
+        for mod in (global_search, task_manager):
             try:
-                import importlib
-                setattr(importlib.import_module(mod), "_userbot_session_dead", False)
+                mod._userbot_session_dead = False
             except Exception:
                 pass
     except Exception as e:

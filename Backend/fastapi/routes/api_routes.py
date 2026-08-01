@@ -18,6 +18,7 @@ import Backend
 from Backend import StartTime, __version__, db
 from Backend.fastapi.routes.stream_routes import _streamer_by_client
 from Backend.fastapi.routes.stremio_routes import invalidate_membership_cache
+from Backend.helper.analytics import get_activity_overview
 from Backend.helper.auto_catalog import (
     get_auto_catalog_settings,
     get_auto_catalog_sync_status,
@@ -51,6 +52,15 @@ from Backend.helper.metadata import (
 from Backend.helper.passwords import hash_password, verify_password
 from Backend.helper.pyro import get_readable_file_size, get_readable_time
 from Backend.helper.scan_manager import dbcheck_manager, duplicate_manager, scan_manager
+from Backend.helper.session_auth import (
+    disconnect_session,
+    get_session_status,
+    reconnect_session,
+    remove_session,
+    start_login,
+    submit_code,
+    submit_password,
+)
 from Backend.helper.settings_manager import SettingsManager
 from Backend.helper.split_files import strip_part_suffix
 from Backend.helper.subtitles import (
@@ -1611,14 +1621,12 @@ async def update_catalog_order_api(payload: dict):
 
 async def get_user_activity_api():
     try:
-        from Backend.helper.analytics import get_activity_overview
         return await get_activity_overview()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 async def session_send_code_api(payload: dict):
-    from Backend.helper.session_auth import start_login
     try:
         return await start_login(payload.get("phone"))
     except ValueError as e:
@@ -1628,7 +1636,6 @@ async def session_send_code_api(payload: dict):
 
 
 async def session_verify_code_api(payload: dict):
-    from Backend.helper.session_auth import submit_code
     try:
         return await submit_code(payload.get("login_id"), payload.get("code"))
     except ValueError as e:
@@ -1638,7 +1645,6 @@ async def session_verify_code_api(payload: dict):
 
 
 async def session_verify_password_api(payload: dict):
-    from Backend.helper.session_auth import submit_password
     try:
         return await submit_password(payload.get("login_id"), payload.get("password"))
     except ValueError as e:
@@ -1648,17 +1654,14 @@ async def session_verify_password_api(payload: dict):
 
 
 async def session_status_api():
-    from Backend.helper.session_auth import get_session_status
     return await get_session_status()
 
 
 async def session_disconnect_api():
-    from Backend.helper.session_auth import disconnect_session
     return await disconnect_session()
 
 
 async def session_reconnect_api():
-    from Backend.helper.session_auth import reconnect_session
     try:
         return await reconnect_session()
     except ValueError as e:
@@ -1666,7 +1669,6 @@ async def session_reconnect_api():
 
 
 async def session_remove_api():
-    from Backend.helper.session_auth import remove_session
     return await remove_session()
 
 

@@ -4,6 +4,7 @@ from datetime import datetime
 import httpx
 
 from Backend import db
+from Backend.helper.custom_dl import ACTIVE_STREAMS
 from Backend.logger import LOGGER
 
 _IP_CACHE = {}
@@ -112,8 +113,6 @@ async def record_stream_start(token: str, name: str, ip: str, user_agent: str) -
 
 
 async def get_activity_overview() -> dict:
-    from Backend.helper.custom_dl import ACTIVE_STREAMS
-
     now = datetime.utcnow()
     playing = {}
     for info in ACTIVE_STREAMS.values():
