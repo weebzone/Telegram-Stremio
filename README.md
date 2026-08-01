@@ -81,10 +81,13 @@ Everything is managed from a friendly **web panel** — no coding, and almost no
 - 📚 **Auto & custom catalogs** (organize by language, platform, or your own lists)
 - 🔐 **Private / exclusive catalogs** for premium content
 - 💳 **Subscriptions & access control** built in
-- 🧩 **Split-file & multi-part playback** as one stream
+- 🧩 **Split-file & multi-part playback** as one stream (incl. `.zip.001` split archives)
 - 🌀 **Anime-aware** metadata for anime channels
-- 🔍 **Global Search** across extra channels
-- 📢 **New-content announcements** to a channel
+- 🔍 **Global Search** across extra channels (now streams split & `.zip` archives too)
+- 🔐 **In-app Telegram login** — connect your user session from the Settings page (phone → code → 2FA), no manual session string needed
+- 🎚️ **Per-user addon settings** — each token can pick quality sort order, filter qualities, and hide/reorder catalogs
+- 📊 **User activity dashboard** — see who's online, what's now-playing, plus location, ISP, device/app & VPN
+- 📢 **New-content announcements** with one-tap **Stremio / Nuvio deep-link** buttons that open the exact title
 - 🔎 **Search by name, IMDb or TMDB id/link** everywhere (manual add, rescan & upload sessions)
 - 🏷️ **Auto-stamps the IMDb/TMDb link** into indexed captions, so forwarding a file again matches instantly
 - 🚑 **Skip Channel** — files that fail to index are set aside with a "what to fix" note
@@ -172,6 +175,9 @@ Avatar.2009.2160p.BluRay.mkv.002
 Avatar.2009.2160p.BluRay.mkv.003
 ```
 Forward **all parts** to the channel — they play as one file, in order.
+
+**📦 Split ZIP archives (`.zip.001`, `.zip.002` …) are supported too.** Large titles packed as a multi-volume zip (e.g. `Movie 2160p REMUX.zip.001/.002/…`) are joined and streamed as their inner video — with full seeking — both when forwarded to an AUTH channel and via Global Search. The Scan Manager (Tools page) also indexes them.
+> ⚠️ Only **stored (uncompressed)** zip volumes are seek-streamable — that's how large media zips are almost always packed. A *compressed* zip will index but won't seek properly. All volumes must share the same base name.
 
 **❓ Why only the `.001 / .002` style?**
 Those numbered volumes are **true byte-splits of one single video** (like what `split`, 7-Zip, or WinRAR create). They *must* be re-joined to play, so the server treats them as one stream.
@@ -390,13 +396,13 @@ Anime often needs special handling (correct titles, posters and episode numbers)
 
 Normally Stremio only searches titles already in your library. **Global Search** lets it also search **live inside extra Telegram channels** that you haven't indexed — great for pulling in results on demand.
 
-**Requirements:** a `USER_SESSION_STRING` in `config.env` (a userbot login) + **one app restart** to unlock the feature.
+**Requirements:** a connected **Telegram user session**. The easy way is to log in right from the web panel — no `config.env` edit or restart needed.
 
 **How to use:**
-1. Add `USER_SESSION_STRING` in `config.env` (see [setup](#-first-time-setup-configenv)) and restart once.
+1. Go to **Settings → Telegram User Session** and **log in** with your phone number (enter the code Telegram sends, plus your 2FA password if you have one). The session is encrypted and stored automatically. *(Advanced alternative: you can still set `USER_SESSION_STRING` in `config.env` and restart once.)*
 2. In **Settings**, enable the **Global Search** toggle.
 3. Add the **channel IDs** you want it to search.
-4. Now when a user searches in Stremio and the title isn't in your local catalog, matching results from those channels appear — tagged **🌐 GLOBAL**.
+4. Now when a user searches in Stremio and the title isn't in your local catalog, matching results from those channels appear — tagged **🌐 GLOBAL**. Split and `.zip` split files in those channels stream as one file too.
 
 ## 📢 Announcement Channel
 
@@ -405,7 +411,7 @@ Automatically post a message whenever **new content is added**, so your members/
 **How to use:**
 1. In **Settings**, turn on **Announce New Content**.
 2. Set the **Announcement Channel** (ID or `@username`) and add your bot as admin there.
-3. From then on, every newly indexed movie/episode gets announced to that channel.
+3. From then on, every newly indexed movie/episode gets announced to that channel — each post includes one-tap **▶️ Stremio** and **📱 Nuvio** buttons that deep-link straight to that exact title (plus a **Get Addon** button). *(Deep-link buttons require your **Base URL** to be set.)*
 
 ## 🚑 Skip Channel
 
@@ -454,7 +460,7 @@ Everything here is on the **Settings** page (`/admin/settings`) — no terminal 
 - So to update: make sure *Upstream Repo* = `https://github.com/weebzone/Telegram-Stremio` (and branch, e.g. `master`) in Settings → click **Restart**. Done. 🎉
 
 ### ⚙️ Everything else
-All other options — TMDB key, Base URL, channels, subscriptions, proxy, extra databases, multi-token bots, replace mode, hide catalog, etc. — live on the **Settings** page and apply **instantly, without a restart** (the only value that needs a restart is `USER_SESSION_STRING`, because it lives in `config.env`).
+All other options — TMDB key, Base URL, channels, subscriptions, proxy, extra databases, multi-token bots, replace mode, hide catalog, etc. — live on the **Settings** page and apply **instantly, without a restart**. Even the **Telegram user session** (for Global Search) can now be connected from **Settings → Telegram User Session** without a restart — a `config.env` `USER_SESSION_STRING` is only needed if you prefer that older method.
 
 ---
 
@@ -601,6 +607,8 @@ PORT="8000"
 - **PORT** — leave `8000` unless it's busy.
 
 ### (Optional) Generate USER_SESSION_STRING — only for Global Search
+> 💡 **Easiest way:** skip this entirely and just log in from **Settings → Telegram User Session** after the server is up (phone → code → 2FA). The steps below are only for people who prefer putting the string in `config.env`.
+
 Run this in [Google Colab](https://colab.new) (safe — it's just a "stay logged in" token for *your* account; revoke anytime from Telegram → Settings → Devices):
 ```python
 !pip install pyrogram tgcrypto
@@ -617,7 +625,7 @@ await main()
 Copy the printed string into `config.env`. 🔒 Keep it private.
 
 ### Then finish in the web panel
-Open your server → log in with default **`admin` / `admin`** → go to **Settings**. **Change the admin password first**, then fill in the rest below. Everything on this page is saved to the database and applied **instantly — no restart** (the only value that needs a restart is `USER_SESSION_STRING`, which lives in `config.env`).
+Open your server → log in with default **`admin` / `admin`** → go to **Settings**. **Change the admin password first**, then fill in the rest below. Everything on this page is saved to the database and applied **instantly — no restart**. That includes the **Telegram user session** for Global Search (**Settings → Telegram User Session**), so the optional `USER_SESSION_STRING` below is only for people who prefer setting it in `config.env`.
 
 ---
 
@@ -647,8 +655,14 @@ Open **Settings** (`/admin/settings`) after logging in. Here's what each card do
 ### 💳 Subscription (optional)
 Turn this on to monetise access. Set the **Subscription Group ID**, **Payment Instructions** (your UPI / bank / PayPal text), an optional **Payment QR image URL**, and the **Approver IDs** (who can approve payments). Renewal and "join the channel" prompts in Stremio point users back to **your bot automatically** — no URL to configure. Full flow in [Subscriptions & Access](#-subscriptions--access).
 
+### 🔐 Telegram User Session (optional)
+Log in with your **phone number** (verification code + 2FA password if set) to generate a user session **in-app** — no manual session string, no `config.env` edit, no restart. It's encrypted and stored, powers **Global Search**, and shows your Telegram name, username, phone, ID and connection status, with **Disconnect / Reconnect / Remove** controls. Only one active session is kept.
+
 ### 🌐 Global Search (optional)
-Requires `USER_SESSION_STRING` in `config.env` plus one app restart. Then enable the toggle and add the **channel IDs** to search live. Results not in your local catalog are tagged **🌐 GLOBAL** in Stremio. See [Global Search](#-global-search).
+Connect a **Telegram User Session** (card above), then enable the toggle and add the **channel IDs** to search live. Results not in your local catalog are tagged **🌐 GLOBAL** in Stremio. See [Global Search](#-global-search).
+
+### 🎬 Addon Configuration (per install/token)
+Each install link has a **Configure page** (`/stremio/{token}/configure`) where the user can set their **stream quality sort order**, **filter which qualities** appear, and **hide or reorder catalogs** for their own token — all without affecting anyone else.
 
 ### 📢 Announcements (optional)
 Turn on **Announce New Content** and set an **Announcement Channel** to auto-post whenever new media is indexed. See [Announcement Channel](#-announcement-channel).
