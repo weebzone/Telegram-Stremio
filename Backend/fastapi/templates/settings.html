@@ -18,6 +18,8 @@
 .bk-import .bk-ic { background: #22c55e22; color: #22c55e; }
 .bk-txt { display: flex; flex-direction: column; line-height: 1.25; }
 .bk-txt b { font-size: 0.95rem; color: var(--text); }
+.bk-chips { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.9rem; }
+.bk-chip { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.72rem; font-weight: 700; padding: 0.35rem 0.75rem; border-radius: 9999px; color: var(--text-sec); border: 1px solid var(--border); background: color-mix(in srgb, var(--card) 92%, var(--bg)); }
 .bk-txt small { font-size: 0.75rem; color: var(--text-sec); }
 .bk-status { margin-top: 0.9rem; font-size: 0.85rem; color: var(--text-sec); display: flex; align-items: center; gap: 0.5rem; }
 .bk-warn { color: var(--text-sec); font-size: 0.78rem; margin-top: 0.85rem; }
@@ -564,6 +566,203 @@
 
 
 
+<!-- ── Telegram User Session ──────────────────────────────────────── -->
+<div class="settings-card">
+    <h2><i class="fa-solid fa-user-lock"></i> Telegram User Session</h2>
+    <p class="bk-desc">
+        Log in with your phone number to generate the User Session automatically — no manual
+        session string needed. It's encrypted and stored securely, and powers Global Search.
+    </p>
+
+    <div id="sess-loading" style="color:var(--text-sec);font-size:0.85rem">
+        <i class="fa-solid fa-spinner fa-spin"></i> Checking session…
+    </div>
+
+    <!-- Connected view -->
+    <div id="sess-connected" style="display:none">
+        <div class="sess-profile">
+            <div class="sess-avatar"><i class="fa-solid fa-user-astronaut"></i></div>
+            <div style="min-width:0;flex:1">
+                <div class="flex items-center gap-2 flex-wrap">
+                    <span id="sess-name" style="font-weight:800"></span>
+                    <span id="sess-live" class="sess-pill"></span>
+                </div>
+                <div id="sess-username" style="color:var(--text-sec);font-size:0.82rem"></div>
+            </div>
+        </div>
+        <div class="sess-grid">
+            <div><span class="sess-k">Phone</span><span id="sess-phone" class="sess-v">—</span></div>
+            <div><span class="sess-k">Telegram ID</span><span id="sess-id" class="sess-v">—</span></div>
+        </div>
+        <div class="flex flex-wrap gap-2 mt-4">
+            <button type="button" class="sess-btn" onclick="sessAction('reconnect')"><i class="fa-solid fa-rotate"></i> Reconnect</button>
+            <button type="button" class="sess-btn warn" onclick="sessAction('disconnect')"><i class="fa-solid fa-plug-circle-xmark"></i> Disconnect</button>
+            <button type="button" class="sess-btn danger" onclick="sessRemove()"><i class="fa-solid fa-trash"></i> Remove</button>
+        </div>
+    </div>
+
+    <!-- Login flow -->
+    <div id="sess-login" style="display:none">
+        <div id="sess-step-phone">
+            <label class="s-label">Phone number (with country code)</label>
+            <div class="flex flex-col sm:flex-row gap-2">
+                <input id="sess-phone-input" class="s-input" placeholder="+12025550123" style="flex:1">
+                <button type="button" class="sess-btn primary" onclick="sessSendCode()"><i class="fa-solid fa-paper-plane"></i> Send code</button>
+            </div>
+        </div>
+        <div id="sess-step-code" style="display:none;margin-top:0.85rem">
+            <label class="s-label">Login code (sent on Telegram)</label>
+            <div class="flex flex-col sm:flex-row gap-2">
+                <input id="sess-code-input" class="s-input" inputmode="numeric" placeholder="1 2 3 4 5" style="flex:1">
+                <button type="button" class="sess-btn primary" onclick="sessVerifyCode()"><i class="fa-solid fa-check"></i> Verify</button>
+            </div>
+        </div>
+        <div id="sess-step-pass" style="display:none;margin-top:0.85rem">
+            <label class="s-label">Two-step verification password</label>
+            <div class="flex flex-col sm:flex-row gap-2">
+                <input id="sess-pass-input" type="password" class="s-input" placeholder="Your 2FA password" style="flex:1">
+                <button type="button" class="sess-btn primary" onclick="sessVerifyPassword()"><i class="fa-solid fa-lock-open"></i> Confirm</button>
+            </div>
+        </div>
+        <p id="sess-msg" style="font-size:0.8rem;margin-top:0.7rem;display:none"></p>
+    </div>
+</div>
+
+<style>
+.sess-profile { display:flex; align-items:center; gap:0.9rem; padding:1rem; border-radius:0.9rem; border:1px solid var(--border); background:color-mix(in srgb,var(--card) 90%,var(--bg)); }
+.sess-avatar { width:3rem; height:3rem; border-radius:9999px; display:flex; align-items:center; justify-content:center; font-size:1.2rem; background:color-mix(in srgb,var(--primary) 18%,transparent); color:var(--primary); flex-shrink:0; }
+.sess-grid { display:grid; grid-template-columns:1fr 1fr; gap:0.75rem; margin-top:0.85rem; }
+@media (max-width:520px){ .sess-grid { grid-template-columns:1fr; } }
+.sess-grid > div { padding:0.7rem 0.9rem; border-radius:0.8rem; border:1px solid var(--border); background:color-mix(in srgb,var(--card) 92%,var(--bg)); }
+.sess-k { display:block; font-size:0.68rem; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-sec); font-weight:700; }
+.sess-v { display:block; font-weight:700; margin-top:0.2rem; word-break:break-all; }
+.sess-pill { font-size:0.62rem; font-weight:900; text-transform:uppercase; letter-spacing:0.05em; padding:0.15rem 0.55rem; border-radius:9999px; }
+.sess-pill.on { background:#22c55e22; color:#22c55e; }
+.sess-pill.off { background:#f59e0b22; color:#f59e0b; }
+.sess-btn { display:inline-flex; align-items:center; gap:0.5rem; padding:0.6rem 1.1rem; border-radius:9999px; font-weight:800; font-size:0.82rem; cursor:pointer; border:1px solid var(--border); background:color-mix(in srgb,var(--card) 92%,var(--bg)); color:var(--text); transition:all .15s; }
+.sess-btn:hover { border-color:var(--primary); }
+.sess-btn.primary { background:var(--primary); color:#fff; border-color:transparent; }
+.sess-btn.warn { color:#f59e0b; }
+.sess-btn.danger { color:#ef4444; }
+</style>
+
+<script>
+let sessLoginId = null;
+
+async function sessLoadStatus() {
+    try {
+        const res = await fetch('/api/admin/settings/session');
+        const data = await res.json();
+        document.getElementById('sess-loading').style.display = 'none';
+        if (data.connected && data.profile) {
+            const p = data.profile;
+            document.getElementById('sess-name').textContent = p.name || 'Telegram User';
+            document.getElementById('sess-username').textContent = p.username ? '@' + p.username : 'No username';
+            document.getElementById('sess-phone').textContent = p.phone || '—';
+            document.getElementById('sess-id').textContent = p.user_id || '—';
+            const live = document.getElementById('sess-live');
+            live.className = 'sess-pill ' + (data.live ? 'on' : 'off');
+            live.textContent = data.live ? 'Connected' : 'Stored (restart to activate)';
+            document.getElementById('sess-connected').style.display = '';
+            document.getElementById('sess-login').style.display = 'none';
+        } else {
+            document.getElementById('sess-connected').style.display = 'none';
+            document.getElementById('sess-login').style.display = '';
+            sessShowStep('phone');
+        }
+    } catch (e) {
+        document.getElementById('sess-loading').textContent = 'Unable to load session status.';
+    }
+}
+
+function sessShowStep(step) {
+    document.getElementById('sess-step-phone').style.display = step === 'phone' ? '' : 'none';
+    document.getElementById('sess-step-code').style.display = step === 'code' ? '' : 'none';
+    document.getElementById('sess-step-pass').style.display = step === 'pass' ? '' : 'none';
+}
+
+function sessMsg(text, ok) {
+    const el = document.getElementById('sess-msg');
+    el.style.display = '';
+    el.style.color = ok ? '#22c55e' : '#ef4444';
+    el.textContent = text;
+}
+
+async function sessSendCode() {
+    const phone = document.getElementById('sess-phone-input').value.trim();
+    if (!phone) return sessMsg('Enter your phone number.', false);
+    sessMsg('Sending code…', true);
+    try {
+        const res = await fetch('/api/admin/settings/session/send-code', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Failed to send code');
+        sessLoginId = data.login_id;
+        sessShowStep('code');
+        sessMsg('Code sent. Check your Telegram app.', true);
+    } catch (e) { sessMsg(e.message, false); }
+}
+
+async function sessVerifyCode() {
+    const code = document.getElementById('sess-code-input').value.trim();
+    if (!code) return sessMsg('Enter the login code.', false);
+    sessMsg('Verifying…', true);
+    try {
+        const res = await fetch('/api/admin/settings/session/verify-code', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ login_id: sessLoginId, code })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Verification failed');
+        if (data.status === 'password_needed') {
+            sessShowStep('pass');
+            sessMsg('This account has two-step verification. Enter your password.', true);
+            return;
+        }
+        showToast('Session created successfully.', 'success', 'Telegram');
+        sessLoadStatus();
+    } catch (e) { sessMsg(e.message, false); }
+}
+
+async function sessVerifyPassword() {
+    const password = document.getElementById('sess-pass-input').value;
+    if (!password) return sessMsg('Enter your 2FA password.', false);
+    sessMsg('Confirming…', true);
+    try {
+        const res = await fetch('/api/admin/settings/session/verify-password', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ login_id: sessLoginId, password })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Verification failed');
+        showToast('Session created successfully.', 'success', 'Telegram');
+        sessLoadStatus();
+    } catch (e) { sessMsg(e.message, false); }
+}
+
+async function sessAction(kind) {
+    try {
+        const res = await fetch('/api/admin/settings/session/' + kind, { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Action failed');
+        showToast(kind === 'reconnect' ? 'Reconnected.' : 'Disconnected.', 'info', 'Telegram');
+        sessLoadStatus();
+    } catch (e) { showToast(e.message, 'error', 'Telegram'); }
+}
+
+async function sessRemove() {
+    if (!confirm('Remove the stored Telegram session? Global Search will stop working until you log in again.')) return;
+    try {
+        const res = await fetch('/api/admin/settings/session', { method: 'DELETE' });
+        if (!res.ok) throw new Error();
+        showToast('Session removed.', 'info', 'Telegram');
+        sessLoadStatus();
+    } catch (e) { showToast('Failed to remove session.', 'error', 'Telegram'); }
+}
+
+document.addEventListener('DOMContentLoaded', sessLoadStatus);
+</script>
+
+
 <!-- ── Global Search (Userbot) ────────────────────────────────────── -->
 <div class="settings-card">
     <h2><i class="fa-solid fa-globe"></i> Global Search</h2>
@@ -883,6 +1082,13 @@
         </div>
 
         <div id="restore-status" class="bk-status" style="display:none"></div>
+
+        <div class="bk-chips">
+            <span class="bk-chip"><i class="fa-solid fa-gear"></i> Settings</span>
+            <span class="bk-chip"><i class="fa-solid fa-layer-group"></i> Custom catalogs</span>
+            <span class="bk-chip"><i class="fa-solid fa-credit-card"></i> Plans</span>
+            <span class="bk-chip"><i class="fa-solid fa-key"></i> Access tokens</span>
+        </div>
 
         <p class="bk-warn">
             <i class="fa-solid fa-triangle-exclamation"></i>

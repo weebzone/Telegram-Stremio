@@ -179,6 +179,140 @@ h1 { font-size: 1.15rem; font-weight: 700; color: var(--text); margin-bottom: 6p
     <button onclick="copyUrl()" class="btn-copy"><i class="fa-solid fa-copy"></i> Copy URL</button>
 </div>
 
+<div class="card" style="margin-top:16px;text-align:left">
+    <h1 style="text-align:center"><i class="fa-solid fa-sliders"></i> Personalize</h1>
+    <p class="sub-title" style="text-align:center">Tune quality and catalogs for your install. Re-install after saving.</p>
+
+    <div class="cfg-block">
+        <div class="cfg-title">Stream quality order</div>
+        <div class="seg" id="cfg-sort">
+            <button type="button" data-val="desc" class="seg-btn active" onclick="setSort('desc')">Highest first</button>
+            <button type="button" data-val="asc" class="seg-btn" onclick="setSort('asc')">Lowest first</button>
+        </div>
+    </div>
+
+    <div class="cfg-block">
+        <div class="cfg-title">Show only these qualities</div>
+        <div class="chips" id="cfg-quality"></div>
+        <p class="cfg-hint">Leave all off to show every quality.</p>
+    </div>
+
+    <div class="cfg-block">
+        <div class="cfg-title">Catalogs</div>
+        <div id="cfg-catalogs" class="cfg-catalogs"></div>
+        <p class="cfg-hint">Toggle to hide a catalog; use arrows to reorder.</p>
+    </div>
+
+    <button onclick="saveConfig()" class="btn-install" id="cfg-save" style="margin-top:8px">
+        <i class="fa-solid fa-floppy-disk"></i> Save preferences
+    </button>
+    <p id="cfg-state" class="cfg-hint" style="text-align:center"></p>
+</div>
+
+<style>
+.cfg-block { margin: 14px 0; }
+.cfg-title { font-size: .8rem; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--text-sec); margin-bottom: 8px; }
+.cfg-hint { font-size: .72rem; color: var(--text-sec); margin-top: 6px; }
+.seg { display: flex; gap: 6px; background: var(--surface); border: 1px solid var(--hairline); border-radius: .8rem; padding: 4px; }
+.seg-btn { flex: 1; padding: 9px; border-radius: .6rem; border: none; background: transparent; color: var(--text-sec); font-weight: 700; font-size: .82rem; cursor: pointer; }
+.seg-btn.active { background: var(--primary); color: #fff; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.qchip { padding: 7px 14px; border-radius: 9999px; border: 1px solid var(--hairline); background: var(--surface); color: var(--text); font-weight: 800; font-size: .8rem; cursor: pointer; }
+.qchip.on { background: linear-gradient(135deg, var(--primary), var(--accent)); color: #fff; border-color: transparent; }
+.cfg-catalogs { display: flex; flex-direction: column; gap: 6px; }
+.cfg-cat { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--hairline); border-radius: .7rem; background: var(--surface); }
+.cfg-cat.hidden-cat { opacity: .5; }
+.cfg-cat .nm { flex: 1; min-width: 0; font-weight: 700; font-size: .85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cfg-eye, .cfg-arr { width: 30px; height: 26px; border-radius: .5rem; border: 1px solid var(--hairline); background: var(--bg); color: var(--text); cursor: pointer; font-size: .72rem; }
+.cfg-arr:disabled { opacity: .35; cursor: not-allowed; }
+</style>
+
+<script>
+const QUALITIES = ['480p', '720p', '1080p', '4K'];
+let cfg = { quality_sort: 'desc', quality_filter: [], hidden_catalogs: [], catalog_order: [] };
+let cfgCatalogs = [];
+
+function setSort(v) {
+    cfg.quality_sort = v;
+    document.querySelectorAll('#cfg-sort .seg-btn').forEach(b => b.classList.toggle('active', b.dataset.val === v));
+}
+
+function renderQuality() {
+    document.getElementById('cfg-quality').innerHTML = QUALITIES.map(q =>
+        `<button type="button" class="qchip ${cfg.quality_filter.includes(q) ? 'on' : ''}" onclick="toggleQuality('${q}')">${q}</button>`
+    ).join('');
+}
+
+function toggleQuality(q) {
+    const i = cfg.quality_filter.indexOf(q);
+    if (i >= 0) cfg.quality_filter.splice(i, 1); else cfg.quality_filter.push(q);
+    renderQuality();
+}
+
+function renderCatalogs() {
+    document.getElementById('cfg-catalogs').innerHTML = cfgCatalogs.map((c, i) => {
+        const hidden = cfg.hidden_catalogs.includes(c.id);
+        return `<div class="cfg-cat ${hidden ? 'hidden-cat' : ''}">
+            <button class="cfg-eye" title="Show/hide" onclick="toggleHide('${c.id}')"><i class="fa-solid fa-eye${hidden ? '-slash' : ''}"></i></button>
+            <span class="nm">${escapeCfg(c.name)}</span>
+            <button class="cfg-arr" ${i === 0 ? 'disabled' : ''} onclick="moveCat(${i}, -1)">▲</button>
+            <button class="cfg-arr" ${i === cfgCatalogs.length - 1 ? 'disabled' : ''} onclick="moveCat(${i}, 1)">▼</button>
+        </div>`;
+    }).join('') || '<p class="cfg-hint">No catalogs available.</p>';
+}
+
+function toggleHide(id) {
+    const i = cfg.hidden_catalogs.indexOf(id);
+    if (i >= 0) cfg.hidden_catalogs.splice(i, 1); else cfg.hidden_catalogs.push(id);
+    renderCatalogs();
+}
+
+function moveCat(i, dir) {
+    const j = i + dir;
+    if (j < 0 || j >= cfgCatalogs.length) return;
+    [cfgCatalogs[i], cfgCatalogs[j]] = [cfgCatalogs[j], cfgCatalogs[i]];
+    renderCatalogs();
+}
+
+function escapeCfg(s) {
+    return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+async function loadConfig() {
+    try {
+        const res = await fetch('addon-config');
+        const data = await res.json();
+        cfg = Object.assign(cfg, data.config || {});
+        cfgCatalogs = data.catalogs || [];
+        if (!Array.isArray(cfg.quality_filter)) cfg.quality_filter = [];
+        if (!Array.isArray(cfg.hidden_catalogs)) cfg.hidden_catalogs = [];
+        setSort(cfg.quality_sort || 'desc');
+        renderQuality();
+        renderCatalogs();
+    } catch (e) {}
+}
+
+async function saveConfig() {
+    const btn = document.getElementById('cfg-save');
+    const state = document.getElementById('cfg-state');
+    btn.disabled = true;
+    cfg.catalog_order = cfgCatalogs.map(c => c.id);
+    try {
+        const res = await fetch('addon-config', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cfg)
+        });
+        if (!res.ok) throw new Error();
+        state.textContent = 'Saved! Re-install the addon to apply changes.';
+    } catch (e) {
+        state.textContent = 'Could not save. Please try again.';
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+loadConfig();
+</script>
+
 <script>
 function copyUrl() {
     const url = document.getElementById('murl').textContent.trim();

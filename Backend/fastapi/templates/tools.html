@@ -143,14 +143,9 @@
 }
 </style>
 
-<!-- Page header -->
-<div class="flex items-center justify-between mb-8 flex-wrap gap-3">
-    <div>
-        <h1 class="text-3xl font-extrabold">Tools</h1>
-        <p class="mt-1 text-sm" style="color:var(--text-sec)">
-            Scan your channels, verify the database, and clean up dead links — all from here.
-        </p>
-    </div>
+<div class="mb-6">
+    <h1 class="text-3xl font-extrabold">Tools</h1>
+    <p class="mt-1 text-sm" style="color:var(--text-sec)">Scan, index, and maintain your library.</p>
 </div>
 
 <div class="space-y-6">
@@ -163,9 +158,7 @@
         </div>
 
         <p class="hint mt-3 mb-4">
-            Bulk-add files to a title without filling a form for each one. Pick a title from your
-            library, start a session, then simply forward the files to a channel — each file is
-            attached to that title automatically. Great for adding extra qualities or whole seasons.
+            Pick a title, start a session, then forward files — each one attaches automatically.
         </p>
 
         <!-- Active session banner -->
@@ -257,35 +250,6 @@
             </div>
         </div>
 
-        <hr class="divider">
-
-        <div class="hint">
-            <div class="text-sm font-bold" style="color:var(--text)"><i class="fa-solid fa-list-ol"></i> How it works</div>
-            <ol style="margin:0.6rem 0 0 1.1rem;padding:0;list-style:decimal;display:flex;flex-direction:column;gap:0.35rem">
-                <li>Search by title (with or without year) or an IMDb / TMDB id or link, then select. Titles not yet in your library are added automatically from the forwarded files.</li>
-                <li>Confirm the options for that title (see the two types below).</li>
-                <li>Click <strong>Start session</strong>.</li>
-                <li>Forward the files to the right channel.</li>
-                <li>Click <strong>End session</strong> when you're done.</li>
-            </ol>
-
-            <div class="text-sm font-bold mt-4" style="color:var(--text)"><i class="fa-solid fa-clapperboard"></i> TMDB / IMDb titles</div>
-            <p class="mt-1">
-                Nothing to fill in — season, episode and quality are read from each file's name/caption.
-                Forward to your <strong>auth</strong> or <strong>manual</strong> channel. If your files use absolute
-                episode numbers with no season (e.g. anime), set the optional <strong>Fallback season</strong>.
-            </p>
-
-            <div class="text-sm font-bold mt-4" style="color:var(--text)"><i class="fa-solid fa-file-circle-plus"></i> Personal titles (hand-made)</div>
-            <p class="mt-1">
-                These files have no metadata, so you set it here: <strong>season is required</strong> for TV
-                (episode &amp; quality optional). Forward to your <strong>manual channel only</strong>.
-                With an episode set, every file joins that one episode as a new quality; leave episode empty and
-                each file becomes the next episode.
-            </p>
-
-            <p class="mt-3">Configure your auth and manual channels in <a href="/admin/settings" style="color:var(--primary)">Settings</a>.</p>
-        </div>
     </div>
 
     <!-- ══ Channel Scanner ══════════════════════════════════════════════ -->
@@ -296,10 +260,7 @@
         </div>
 
         <p class="hint mt-3 mb-4">
-            Index existing files from your AUTH channels into the database. A scan
-            <strong>resumes from where it left off</strong> if the server restarts or you
-            stop it — it only restarts from scratch when you choose <strong>Rescan</strong>.
-            The bot must be an admin in each channel.
+            Index files from your AUTH channels. Scans resume automatically; use Rescan to re-index from scratch.
         </p>
 
         <label class="s-label">Select channels</label>
@@ -358,12 +319,7 @@
         </div>
 
         <p class="hint mt-3 mb-4">
-            Add all your bots as admins to the channels they serve — using your session account.
-            It shows which bot is already an admin in each channel, checks whether your session
-            account is allowed to add admins there, then promotes the ones that are missing with a
-            safe permission set (post / edit / delete / invite — never "add admins" or "change info").
-            Global-search channels are intentionally left out — your session account reads those directly,
-            so the bots don't need admin there.
+            Promote your bots to admin in the channels they serve, using your session account.
         </p>
 
         {% if not userbot_configured or not multi_token_available %}
@@ -444,8 +400,7 @@
         </div>
 
         <p class="hint mt-3 mb-4">
-            Verify that every indexed file still exists on Telegram. Dead entries
-            found here can be purged below. Runs are throttled to respect Telegram limits.
+            Verify indexed files still exist on Telegram, then purge dead entries below.
         </p>
 
         <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
@@ -490,10 +445,7 @@
                 </button>
             </div>
         </div>
-        <p class="hint mb-3">
-            "Load flagged" shows dead links detected automatically by the background checker.
-            Running a DB Check above also fills this list. Purging removes those entries from the database.
-        </p>
+        <p class="hint mb-3">"Load flagged" lists links the background checker found. Purging removes them.</p>
         <div class="dead-list" id="dead-list">
             <div class="hint">No dead links to show yet. Run a DB Check or load flagged links.</div>
         </div>
@@ -507,9 +459,7 @@
         </div>
 
         <p class="hint mt-3 mb-4">
-            Find streams stored more than once (same quality, name &amp; size) within a title or episode.
-            Remove the ones you pick, or keep the newest of each group in a single click. Deleting also
-            removes the backing Telegram file.
+            Find and remove streams stored more than once. Deleting also removes the Telegram file.
         </p>
 
         <div class="stat-grid mb-4">
@@ -554,10 +504,7 @@
                 </button>
             </div>
         </div>
-        <p class="hint mb-3">
-            Each group keeps checkboxes so you can choose which copies to delete.
-            "Delete all duplicates" keeps the newest copy in every group and removes the rest.
-        </p>
+        <p class="hint mb-3">Pick copies to delete, or "Delete all" to keep only the newest of each group.</p>
         <div class="dead-list" id="dup-list">
             <div class="hint">No duplicates to show yet. Run a scan above.</div>
         </div>

@@ -44,6 +44,16 @@ from Backend.fastapi.routes.api_routes import (
     get_all_subscribers_api,
     get_all_tokens_api,
     get_auto_catalog_settings_api,
+    get_catalog_order_api,
+    update_catalog_order_api,
+    get_user_activity_api,
+    session_send_code_api,
+    session_verify_code_api,
+    session_verify_password_api,
+    session_status_api,
+    session_disconnect_api,
+    session_reconnect_api,
+    session_remove_api,
     get_custom_catalog_items_api,
     get_dead_links_api,
     get_media_visibility_api,
@@ -185,6 +195,28 @@ async def public_status(request: Request):
 async def stremio_guide(request: Request):
     return await stremio_guide_page(request)
 
+@app.get("/open/{app_name}/{media_type}/{content_id}", response_class=HTMLResponse)
+async def open_in_app(app_name: str, media_type: str, content_id: str):
+    stremio_type = "series" if media_type in ("series", "tv") else "movie"
+    web = f"https://web.stremio.com/#/detail/{stremio_type}/{content_id}/{content_id}"
+    schemes = {
+        "nuvio": f"nuvio://metadata/{stremio_type}/{content_id}",
+        "stremio": f"stremio:///detail/{stremio_type}/{content_id}/{content_id}",
+    }
+    scheme = schemes.get(app_name, schemes["stremio"])
+    label = "Nuvio" if app_name == "nuvio" else "Stremio"
+    html = f"""<!doctype html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Opening {label}…</title>
+<style>body{{font-family:system-ui,-apple-system,sans-serif;background:#0f172a;color:#f8fafc;display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0;text-align:center}}a{{color:#60a5fa}}.b{{display:inline-block;margin-top:16px;padding:12px 22px;background:#3b82f6;color:#fff;border-radius:12px;text-decoration:none;font-weight:700}}</style>
+</head><body><div><h2>Opening in {label}…</h2>
+<p>If nothing happens, use the buttons below.</p>
+<a class="b" href="{scheme}">Open {label}</a><br>
+<a class="b" style="background:#334155" href="{web}">Open Stremio Web</a></div>
+<script>setTimeout(function(){{window.location.href="{scheme}";}},200);</script>
+</body></html>"""
+    return HTMLResponse(html)
+
 
 #----- Protected routes (authentication required)
 @app.get("/", response_class=HTMLResponse)
@@ -280,6 +312,10 @@ async def get_dead_links(_: bool = Depends(require_auth)):
 @app.get("/api/admin/stream-analytics")
 async def get_stream_analytics(_: bool = Depends(require_auth)):
     return await get_stream_analytics_api()
+
+@app.get("/api/admin/user-activity")
+async def get_user_activity(_: bool = Depends(require_auth)):
+    return await get_user_activity_api()
 
 @app.post("/api/admin/clear-analytics")
 async def clear_analytics(_: bool = Depends(require_auth)):
@@ -532,6 +568,14 @@ async def auto_sync_custom_catalogs(
 async def auto_catalog_sync_status(_: bool = Depends(require_auth)):
     return await auto_catalog_sync_status_api()
 
+@app.get("/api/custom-catalogs-order")
+async def get_catalog_order_route(_: bool = Depends(require_auth)):
+    return await get_catalog_order_api()
+
+@app.put("/api/custom-catalogs-order")
+async def update_catalog_order_route(payload: dict, _: bool = Depends(require_auth)):
+    return await update_catalog_order_api(payload)
+
 @app.get("/api/custom-catalogs/auto-sync/settings")
 async def get_auto_catalog_settings_route(_: bool = Depends(require_auth)):
     return await get_auto_catalog_settings_api()
@@ -577,6 +621,36 @@ async def get_settings(_: bool = Depends(require_auth)):
 @app.put("/api/admin/settings")
 async def update_settings(payload: dict, _: bool = Depends(require_auth)):
     return await update_settings_api(payload)
+
+
+#----- Telegram user session login (replaces manual USER_SESSION_STRING)
+@app.get("/api/admin/settings/session")
+async def session_status(_: bool = Depends(require_auth)):
+    return await session_status_api()
+
+@app.post("/api/admin/settings/session/send-code")
+async def session_send_code(payload: dict, _: bool = Depends(require_auth)):
+    return await session_send_code_api(payload)
+
+@app.post("/api/admin/settings/session/verify-code")
+async def session_verify_code(payload: dict, _: bool = Depends(require_auth)):
+    return await session_verify_code_api(payload)
+
+@app.post("/api/admin/settings/session/verify-password")
+async def session_verify_password(payload: dict, _: bool = Depends(require_auth)):
+    return await session_verify_password_api(payload)
+
+@app.post("/api/admin/settings/session/disconnect")
+async def session_disconnect(_: bool = Depends(require_auth)):
+    return await session_disconnect_api()
+
+@app.post("/api/admin/settings/session/reconnect")
+async def session_reconnect(_: bool = Depends(require_auth)):
+    return await session_reconnect_api()
+
+@app.delete("/api/admin/settings/session")
+async def session_remove(_: bool = Depends(require_auth)):
+    return await session_remove_api()
 
 
 #----- System & Maintenance (WebUI replacement for /stats, /log, /restart bot commands)

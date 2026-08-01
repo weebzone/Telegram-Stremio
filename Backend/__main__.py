@@ -16,7 +16,8 @@ from Backend.helper.pyro import restart_notification, setup_bot_commands
 from Backend.helper.scan_manager import dbcheck_manager, duplicate_manager, scan_manager
 from Backend.helper.settings_manager import SettingsManager
 from Backend.logger import LOGGER
-from Backend.pyrofork.bot import StreamBot, Userbot
+import Backend.pyrofork.bot as botmod
+from Backend.pyrofork.bot import StreamBot
 from Backend.pyrofork.clients import initialize_clients
 
 loop = asyncio.get_event_loop()
@@ -48,12 +49,21 @@ async def start_services():
         LOGGER.info(f"Bot Client : [@{StreamBot.username}]")
         await asyncio.sleep(1.2)
 
-        if Userbot is not None:
-            await Userbot.start()
-            Userbot.username = Userbot.me.username
-            LOGGER.info(f"Userbot Client : [@{Userbot.username}]")
+        if botmod.Userbot is None:
+            from Backend.helper.session_auth import get_active_session_string
+            stored_session = await get_active_session_string()
+            if stored_session:
+                from Backend.config import Telegram
+                Telegram.USER_SESSION_STRING = stored_session
+                botmod.build_userbot(stored_session)
+                LOGGER.info("Loaded Userbot session from encrypted storage.")
+
+        if botmod.Userbot is not None:
+            await botmod.Userbot.start()
+            botmod.Userbot.username = botmod.Userbot.me.username
+            LOGGER.info(f"Userbot Client : [@{botmod.Userbot.username}]")
         else:
-            LOGGER.info("Userbot not configured (USER_SESSION_STRING empty) — running with StreamBot only.")
+            LOGGER.info("Userbot not configured — running with StreamBot only.")
         await asyncio.sleep(1.2)
 
         LOGGER.info("Initializing Multi Clients...")
@@ -90,8 +100,8 @@ async def stop_services():
         await asyncio.gather(*pending_tasks, return_exceptions=True)
 
         await StreamBot.stop()
-        if Userbot is not None:
-            await Userbot.stop()
+        if botmod.Userbot is not None:
+            await botmod.Userbot.stop()
 
         await db.disconnect()
         LOGGER.info("Services stopped successfully.")

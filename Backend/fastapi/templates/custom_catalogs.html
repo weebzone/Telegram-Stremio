@@ -346,6 +346,41 @@
   .vis-tokens { color: rgb(96 165 250); background: color-mix(in srgb, rgb(59 130 246) 14%, transparent); border-color: color-mix(in srgb, rgb(59 130 246) 30%, transparent); }
   .vis-owner  { color: rgb(248 113 113); background: color-mix(in srgb, rgb(239 68 68) 14%, transparent); border-color: color-mix(in srgb, rgb(239 68 68) 30%, transparent); }
 
+  .auto-chip {
+    display: inline-flex; align-items: center; gap: .45rem;
+    padding: .5rem .85rem; border-radius: 9999px; font-weight: 800; font-size: .82rem;
+    border: 1px solid var(--line); color: var(--text-sec);
+    background: color-mix(in srgb, var(--bg) 60%, transparent);
+    cursor: pointer; transition: all .15s ease;
+  }
+  .auto-chip .dot { width: .6rem; height: .6rem; border-radius: 9999px; background: var(--border); transition: all .15s ease; }
+  .auto-chip:hover { border-color: color-mix(in srgb, var(--primary) 45%, var(--border)); }
+  .auto-chip.on {
+    color: var(--bg); border-color: transparent;
+    background: linear-gradient(135deg, var(--primary), var(--accent));
+  }
+  .auto-chip.on .dot { background: var(--bg); box-shadow: 0 0 8px color-mix(in srgb, var(--bg) 60%, transparent); }
+
+  .order-row {
+    display: flex; align-items: center; gap: .85rem;
+    border-radius: 1rem; padding: .7rem .9rem;
+    background: color-mix(in srgb, var(--bg) 66%, transparent);
+    border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  }
+  .drag-idx {
+    width: 1.9rem; height: 1.9rem; flex-shrink: 0;
+    display: grid; place-items: center; border-radius: 9999px;
+    font-weight: 900; font-size: .8rem; color: var(--text-sec);
+    background: color-mix(in srgb, var(--primary) 12%, transparent);
+  }
+  .order-arrow {
+    width: 1.9rem; height: 1.5rem; border-radius: .55rem; font-size: .7rem; font-weight: 900;
+    border: 1px solid var(--line); background: color-mix(in srgb, var(--bg) 60%, transparent);
+    color: var(--text); cursor: pointer; transition: all .15s ease;
+  }
+  .order-arrow:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); }
+  .order-arrow:disabled { opacity: .35; cursor: not-allowed; }
+
   @media (max-width: 640px) {
     .hero-card { min-height: 13rem; }
     .btn-ui { width: 100%; }
@@ -361,10 +396,7 @@
           <div class="flex flex-wrap items-center gap-2 mb-3">
             <span class="pill">Custom Stremio sections</span>
           </div>
-          <h1 class="section-title text-2xl sm:text-4xl lg:text-5xl">Custom Catalogs</h1>
-          <p class="muted mt-3 max-w-2xl text-sm sm:text-base leading-7">
-            Curate your own Stremio rows — Anime, 4K, or private lists — from your Telegram media.
-          </p>
+          <h1 class="section-title text-2xl sm:text-4xl lg:text-5xl">Catalogs</h1>
         </div>
       </div>
 
@@ -395,28 +427,32 @@
           <span id="auto-sync-status" class="pill">Checking status...</span>
         </div>
         <h2 class="section-title text-xl sm:text-3xl">Auto Catalogs</h2>
-        <p class="muted text-sm sm:text-base mt-2 leading-7 max-w-3xl">
-          Auto-build rows by language & OTT provider. Enable the ones you want, then sync.
-        </p>
+        <p class="muted text-sm mt-2">Toggles save instantly. Sync rebuilds them across your library.</p>
       </div>
       <div class="flex flex-col sm:flex-row gap-3">
         <button id="auto-sync-btn" onclick="runAutoSync()" class="btn-ui btn-primary lg:w-auto">⚡ Sync</button>
       </div>
     </div>
 
-    <div class="mt-5 pt-5 border-t" style="border-color: color-mix(in srgb, var(--border) 80%, transparent);">
-      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
-        <div>
-          <h3 class="section-title text-xl">Choose Auto Catalogs</h3>
-          <p class="muted text-sm mt-1">Save your selection, then press Sync to apply.</p>
-        </div>
-        <button id="save-auto-settings-btn" onclick="saveAutoCatalogSettings()" class="btn-ui btn-ghost md:w-auto">💾 Save Selection</button>
+    <div id="auto-settings-list" class="mt-5 pt-5 border-t grid grid-cols-1 lg:grid-cols-3 gap-4" style="border-color: color-mix(in srgb, var(--border) 80%, transparent);">
+      <div class="skeleton"></div>
+      <div class="skeleton"></div>
+      <div class="skeleton"></div>
+    </div>
+  </div>
+
+  <div class="glass-card rounded-3xl p-5 sm:p-6">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+      <div>
+        <div class="flex flex-wrap gap-2 mb-2"><span class="pill">↕ Ordering</span></div>
+        <h2 class="section-title text-xl sm:text-2xl">Catalog Order</h2>
+        <p class="muted text-sm mt-1">Arrange how catalogs appear in Stremio.</p>
       </div>
-      <div id="auto-settings-list" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        <div class="skeleton"></div>
-        <div class="skeleton"></div>
-        <div class="skeleton"></div>
-      </div>
+      <button id="save-order-btn" onclick="saveCatalogOrder()" class="btn-ui btn-primary sm:w-auto hidden">💾 Save Order</button>
+    </div>
+    <div id="catalog-order-list" class="space-y-2">
+      <div class="skeleton"></div>
+      <div class="skeleton"></div>
     </div>
   </div>
 
@@ -976,34 +1012,21 @@ async function loadAutoCatalogSettings() {
       box.innerHTML = `<div class="empty-state p-4 muted">No auto catalog options found.</div>`;
       return;
     }
-
     const groups = {};
-    defs.forEach(def => {
-      if (!groups[def.group]) groups[def.group] = [];
-      groups[def.group].push(def);
-    });
-
+    defs.forEach(def => { (groups[def.group] = groups[def.group] || []).push(def); });
     box.innerHTML = Object.entries(groups).map(([group, items]) => `
-      <div class="catalog-card p-4 auto-group-card">
-        <button type="button" class="group-card-header" onclick="toggleAutoGroup(this.closest('.auto-group-card'))">
-          <div class="flex items-center gap-2">
-            <h4 class="section-title text-base">${escapeHtml(group)}</h4>
-            <span class="pill text-[0.65rem] px-2 py-0.5">${items.length}</span>
-          </div>
-          <svg class="group-chevron" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M6 4l4 4-4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-        </button>
-        <div class="group-items">
-          <div class="group-items-inner space-y-2 pt-3">
-            ${items.map(item => `
-              <label class="flex items-center justify-between gap-3 rounded-2xl p-3 cursor-pointer" style="background: color-mix(in srgb, var(--bg) 64%, transparent); border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);">
-                <span class="font-bold text-sm">${escapeHtml(item.name)}</span>
-                <input type="checkbox" class="auto-setting-checkbox switch-input hidden" value="${escapeHtml(item.key)}" ${item.enabled ? 'checked' : ''}>
-                <span class="switch"></span>
-              </label>
-            `).join('')}
-          </div>
+      <div class="catalog-card p-4">
+        <div class="flex items-center gap-2 mb-3">
+          <h4 class="section-title text-base">${escapeHtml(group)}</h4>
+          <span class="pill text-[0.65rem] px-2 py-0.5">${items.length}</span>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          ${items.map(item => `
+            <button type="button" class="auto-chip ${item.enabled ? 'on' : ''}"
+                    data-key="${escapeHtml(item.key)}" aria-pressed="${item.enabled}"
+                    onclick="toggleAutoCatalog(this)">
+              <span class="dot"></span>${escapeHtml(item.name)}
+            </button>`).join('')}
         </div>
       </div>
     `).join('');
@@ -1012,25 +1035,94 @@ async function loadAutoCatalogSettings() {
   }
 }
 
-async function saveAutoCatalogSettings() {
-  const btn = document.getElementById('save-auto-settings-btn');
-  const old = btn ? btn.textContent : '';
-  const enabledKeys = Array.from(document.querySelectorAll('.auto-setting-checkbox:checked')).map(el => el.value);
+let autoSaveTimer = null;
+async function toggleAutoCatalog(btn) {
+  const on = !btn.classList.contains('on');
+  btn.classList.toggle('on', on);
+  btn.setAttribute('aria-pressed', on);
+  clearTimeout(autoSaveTimer);
+  autoSaveTimer = setTimeout(persistAutoCatalogs, 400);
+}
+
+async function persistAutoCatalogs() {
+  const enabledKeys = Array.from(document.querySelectorAll('.auto-chip.on')).map(el => el.dataset.key);
   try {
-    if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
     const res = await fetch('/api/custom-catalogs/auto-sync/settings', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ enabled_keys: enabledKeys })
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.detail || 'Failed to save settings');
-    showToast('Auto catalog selection saved. Press Sync to apply the changes.', 'success', 'Saved');
-    await loadAutoCatalogSettings();
+    showToast('Saved. Press Sync to rebuild catalogs.', 'success', 'Auto catalogs');
   } catch (error) {
     showToast(error.message || 'Failed to save settings', 'error', 'Error');
+    loadAutoCatalogSettings();
+  }
+}
+
+let catalogOrder = [];
+async function loadCatalogOrder() {
+  const box = document.getElementById('catalog-order-list');
+  if (!box) return;
+  try {
+    const res = await fetch('/api/custom-catalogs-order');
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || 'Failed to load order');
+    catalogOrder = data.entries || [];
+    renderCatalogOrder();
+  } catch (error) {
+    box.innerHTML = `<div class="empty-state p-4 text-red-400">${escapeHtml(error.message || 'Failed to load order')}</div>`;
+  }
+}
+
+const ORDER_GROUP_CLASS = { 'Default Movies': 'vis-tokens', 'Default TV': 'vis-tokens', 'Auto': 'vis-public', 'Custom': 'vis-owner' };
+
+function renderCatalogOrder() {
+  const box = document.getElementById('catalog-order-list');
+  if (!catalogOrder.length) { box.innerHTML = emptyState('📚', 'No catalogs', 'Create catalogs to reorder them.'); return; }
+  box.innerHTML = catalogOrder.map((e, i) => {
+    const types = (e.types || []).map(t => t === 'series' ? 'TV' : 'Movie').join(' · ');
+    return `<div class="order-row">
+      <span class="drag-idx">${i + 1}</span>
+      <span class="min-w-0 flex-1">
+        <span class="font-black truncate block">${escapeHtml(e.name)}</span>
+        <span class="flex items-center gap-2 mt-1">
+          <span class="vis-chip ${ORDER_GROUP_CLASS[e.group] || 'vis-tokens'}">${escapeHtml(e.group)}</span>
+          <span class="muted text-xs">${escapeHtml(types)}</span>
+        </span>
+      </span>
+      <span class="flex flex-col gap-1">
+        <button class="order-arrow" ${i === 0 ? 'disabled' : ''} onclick="moveCatalogOrder(${i}, -1)">▲</button>
+        <button class="order-arrow" ${i === catalogOrder.length - 1 ? 'disabled' : ''} onclick="moveCatalogOrder(${i}, 1)">▼</button>
+      </span>
+    </div>`;
+  }).join('');
+}
+
+function moveCatalogOrder(i, dir) {
+  const j = i + dir;
+  if (j < 0 || j >= catalogOrder.length) return;
+  [catalogOrder[i], catalogOrder[j]] = [catalogOrder[j], catalogOrder[i]];
+  renderCatalogOrder();
+  document.getElementById('save-order-btn').classList.remove('hidden');
+}
+
+async function saveCatalogOrder() {
+  const btn = document.getElementById('save-order-btn');
+  btn.disabled = true;
+  try {
+    const res = await fetch('/api/custom-catalogs-order', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order: catalogOrder.map(e => e.id) })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || 'Failed to save order');
+    showToast('Catalog order saved.', 'success', 'Order');
+    btn.classList.add('hidden');
+  } catch (error) {
+    showToast(error.message || 'Failed to save order', 'error', 'Error');
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = old; }
+    btn.disabled = false;
   }
 }
 
@@ -1108,6 +1200,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   loadCatalogs();
   loadAutoSyncStatus();
   loadAutoCatalogSettings();
+  loadCatalogOrder();
 });
 </script>
 {% endblock %}

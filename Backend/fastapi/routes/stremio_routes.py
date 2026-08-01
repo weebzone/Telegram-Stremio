@@ -272,6 +272,13 @@ def get_resolution_priority(stream_name: str) -> int:
     return 1
 
 
+#----- Canonical quality label used by per-token quality filtering
+def stream_res_label(stream_name: str) -> str:
+    return {2160: "4K", 1080: "1080p", 720: "720p", 480: "480p", 360: "360p"}.get(
+        get_resolution_priority(stream_name), "other"
+    )
+
+
 #----- Manifest describing the addon's catalogs/resources for this token
 @router.get("/{token}/manifest.json")
 async def get_manifest(token: str, token_data: dict = Depends(verify_token)):
@@ -354,6 +361,19 @@ async def get_manifest(token: str, token_data: dict = Depends(verify_token)):
                         "extra": [{"name": "skip"}],
                         "extraSupported": ["skip"],
                     })
+        except Exception:
+            pass
+
+        try:
+            order = await db.get_catalog_order()
+            token_order = (token_data.get("config") or {}).get("catalog_order") or []
+            effective = token_order or order
+            if effective:
+                rank = {cid: i for i, cid in enumerate(effective)}
+                catalogs.sort(key=lambda c: rank.get(c.get("id"), len(effective) + 1))
+            hidden = set((token_data.get("config") or {}).get("hidden_catalogs") or [])
+            if hidden:
+                catalogs = [c for c in catalogs if c.get("id") not in hidden]
         except Exception:
             pass
 
@@ -754,17 +774,26 @@ async def get_streams(
         except Exception as e:
             LOGGER.error(f"[GLOBAL SEARCH] stream search failed for {imdb_id}: {e}")
 
+    #----- Per-token quality filter (fall back to all if it would hide everything)
+    config = token_data.get("config") or {}
+    quality_filter = set(config.get("quality_filter") or [])
+    if quality_filter and streams:
+        filtered = [s for s in streams if stream_res_label(s.get("name", "")) in quality_filter]
+        if filtered:
+            streams = filtered
+
     if not streams:
         return {"streams": []}
 
+    ascending = config.get("quality_sort") == "asc"
     if is_combined:
         streams.sort(key=lambda s: s.get("episode_start", 0))
         streams.sort(key=lambda s: s.get("name_key", ""))
-        streams.sort(key=lambda s: get_resolution_priority(s.get("name", "")), reverse=True)
+        streams.sort(key=lambda s: get_resolution_priority(s.get("name", "")), reverse=not ascending)
     else:
         streams.sort(
             key=lambda s: (get_resolution_priority(s.get("name", "")), s.get("size_bytes", 0)),
-            reverse=True
+            reverse=not ascending
         )
     name_count: dict = {}
     for s in streams:
@@ -816,3 +845,54 @@ async def configure_addon(token: str, request: Request):
         "status_text": status_text,
         "status_color": status_color,
     })
+
+
+#----- Catalogs this token can see, in effective (token or global) order
+async def _addon_catalogs_for_token(token_data: dict) -> list:
+    entries = [
+        {"id": "latest_movies", "name": "Latest Movies"},
+        {"id": "top_movies", "name": "Popular Movies"},
+        {"id": "latest_series", "name": "Latest Series"},
+        {"id": "top_series", "name": "Popular Series"},
+    ]
+    try:
+        for c in await db.get_custom_catalogs():
+            items = [i for i in (c.get("items") or []) if _token_can_view(*_effective_visibility(c, i), token_data)]
+            if not items:
+                continue
+            entries.append({"id": f"custom_{c['_id']}", "name": c.get("name") or "Catalog"})
+    except Exception:
+        pass
+    order = await db.get_catalog_order()
+    tconf = token_data.get("config") or {}
+    effective = tconf.get("catalog_order") or order
+    if effective:
+        rank = {cid: i for i, cid in enumerate(effective)}
+        entries.sort(key=lambda e: rank.get(e["id"], len(effective) + 1))
+    return entries
+
+
+#----- Read this token's addon config + catalog list (public, used by configure page)
+@router.get("/{token}/addon-config")
+async def get_addon_config(token: str):
+    doc = await db.get_api_token(token)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Invalid token")
+    return {"config": doc.get("config") or {}, "catalogs": await _addon_catalogs_for_token(doc)}
+
+
+#----- Persist this token's addon config (public, used by configure page)
+@router.post("/{token}/addon-config")
+async def save_addon_config(token: str, payload: dict):
+    doc = await db.get_api_token(token)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Invalid token")
+    valid_q = {"480p", "720p", "1080p", "4K"}
+    config = {
+        "quality_sort": "asc" if payload.get("quality_sort") == "asc" else "desc",
+        "quality_filter": [q for q in (payload.get("quality_filter") or []) if q in valid_q],
+        "hidden_catalogs": [str(x) for x in (payload.get("hidden_catalogs") or [])],
+        "catalog_order": [str(x) for x in (payload.get("catalog_order") or [])],
+    }
+    await db.set_token_config(token, config)
+    return {"ok": True, "config": config}

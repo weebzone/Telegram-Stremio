@@ -14,14 +14,15 @@ from fastapi.responses import StreamingResponse
 
 from Backend import db
 from Backend.fastapi.security.tokens import verify_token
+from Backend.helper.analytics import client_ip_from, record_stream_start
 from Backend.helper.custom_dl import ACTIVE_STREAMS, RECENT_STREAMS, ByteStreamer
 from Backend.helper.encrypt import decode_string
 from Backend.helper.utils import track_usage
 from Backend.helper.virtual_dl import resolve_virtual_parts, virtual_stream_generator
 from Backend.logger import LOGGER
+import Backend.pyrofork.bot as botmod
 from Backend.pyrofork.bot import (
     USERBOT_CLIENT_INDEX,
-    Userbot,
     client_dc_map,
     client_failures,
     multi_clients,
@@ -255,6 +256,13 @@ async def subtitle_handler(token: str, id: str, name: str, token_data: dict = De
 @router.get("/dl/{token}/{id}/{name}")
 @router.head("/dl/{token}/{id}/{name}")
 async def stream_handler(request: Request, token: str, id: str, name: str, token_data: dict = Depends(verify_token)):
+    if request.method != "HEAD":
+        asyncio.create_task(record_stream_start(
+            token,
+            token_data.get("name") if token_data else None,
+            client_ip_from(request),
+            request.headers.get("user-agent", ""),
+        ))
     decoded = await decode_string(id)
 
     if decoded.get("global"):
@@ -404,10 +412,10 @@ _userbot_streamer: ByteStreamer = None
 #----- Lazily build and cache the ByteStreamer for the Userbot (None if unconfigured)
 def _get_userbot_streamer() -> ByteStreamer:
     global _userbot_streamer
-    if Userbot is None:
+    if botmod.Userbot is None:
         return None
-    if _userbot_streamer is None:
-        _userbot_streamer = ByteStreamer(Userbot, USERBOT_CLIENT_INDEX)
+    if _userbot_streamer is None or _userbot_streamer.client is not botmod.Userbot:
+        _userbot_streamer = ByteStreamer(botmod.Userbot, USERBOT_CLIENT_INDEX)
     return _userbot_streamer
 
 

@@ -1568,6 +1568,108 @@ async def update_auto_catalog_settings_api(payload: dict):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+_DEFAULT_CATALOG_ENTRIES = [
+    {"id": "latest_movies", "name": "Latest Movies", "group": "Default Movies", "types": ["movie"]},
+    {"id": "top_movies", "name": "Popular Movies", "group": "Default Movies", "types": ["movie"]},
+    {"id": "latest_series", "name": "Latest Series", "group": "Default TV", "types": ["series"]},
+    {"id": "top_series", "name": "Popular Series", "group": "Default TV", "types": ["series"]},
+]
+
+
+async def get_catalog_order_api():
+    try:
+        catalogs = await db.get_custom_catalogs()
+        entries = [dict(e) for e in _DEFAULT_CATALOG_ENTRIES]
+        for c in catalogs:
+            items = c.get("items") or []
+            types = []
+            if any(i.get("media_type") == "movie" for i in items):
+                types.append("movie")
+            if any(i.get("media_type") == "tv" for i in items):
+                types.append("series")
+            entries.append({
+                "id": f"custom_{c['_id']}",
+                "name": c.get("name") or "Catalog",
+                "group": "Auto" if c.get("auto") else "Custom",
+                "types": types or ["movie"],
+            })
+        order = await db.get_catalog_order()
+        rank = {cid: i for i, cid in enumerate(order)}
+        entries.sort(key=lambda e: rank.get(e["id"], len(order) + 1))
+        return {"entries": entries, "order": order}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+async def update_catalog_order_api(payload: dict):
+    order = payload.get("order")
+    if not isinstance(order, list):
+        raise HTTPException(status_code=400, detail="order must be a list.")
+    await db.save_catalog_order(order)
+    return {"ok": True, "message": "Catalog order saved."}
+
+
+async def get_user_activity_api():
+    try:
+        from Backend.helper.analytics import get_activity_overview
+        return await get_activity_overview()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+async def session_send_code_api(payload: dict):
+    from Backend.helper.session_auth import start_login
+    try:
+        return await start_login(payload.get("phone"))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+async def session_verify_code_api(payload: dict):
+    from Backend.helper.session_auth import submit_code
+    try:
+        return await submit_code(payload.get("login_id"), payload.get("code"))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+async def session_verify_password_api(payload: dict):
+    from Backend.helper.session_auth import submit_password
+    try:
+        return await submit_password(payload.get("login_id"), payload.get("password"))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+async def session_status_api():
+    from Backend.helper.session_auth import get_session_status
+    return await get_session_status()
+
+
+async def session_disconnect_api():
+    from Backend.helper.session_auth import disconnect_session
+    return await disconnect_session()
+
+
+async def session_reconnect_api():
+    from Backend.helper.session_auth import reconnect_session
+    try:
+        return await reconnect_session()
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+async def session_remove_api():
+    from Backend.helper.session_auth import remove_session
+    return await remove_session()
+
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -4,99 +4,48 @@
 
 {% block content %}
 <div class="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-    <!-- Header -->
-    <section class="glass-panel rounded-3xl p-5 sm:p-6 lg:p-8 mb-6 sm:mb-8">
-        <div class="flex flex-col gap-5">
-            <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
-                <div>
-                    <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-hairline bg-surface text-xs font-semibold text-text-secondary mb-3">
-                        <i class="fa-solid fa-clapperboard text-primary"></i>
-                        Library Control
-                    </div>
-                    <h1 class="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-text">
-                        Media Management
-                    </h1>
-                    <p class="mt-2 text-sm sm:text-base text-text-secondary max-w-2xl">
-                        Manage your movie and TV show collections with search, filters, edit, and delete controls.
-                    </p>
-                </div>
+    <!-- Unified toolbar -->
+    <section class="glass-panel rounded-3xl p-4 sm:p-5 mb-6 sm:mb-8">
+        <div class="flex flex-col xl:flex-row xl:items-center gap-4">
+            <h1 class="text-xl sm:text-2xl font-extrabold tracking-tight text-text shrink-0">
+                <i class="fa-solid fa-clapperboard text-primary mr-2"></i>Media Library
+            </h1>
 
-                <div class="flex flex-wrap items-center gap-2">
-                    <a href="/media/manage?media_type=movie{% if custom %}&custom=1{% endif %}"
-                       class="inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold transition border
-                              {% if media_type == 'movie' %}
-                              bg-primary text-white border-primary shadow-lg shadow-primary/20
-                              {% else %}
-                              glass-panel text-text hover:bg-surface-2 border-hairline
-                              {% endif %}">
-                        <i class="fa-solid fa-film"></i>
-                        Movies
-                    </a>
-                    <a href="/media/manage?media_type=tv{% if custom %}&custom=1{% endif %}"
-                       class="inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold transition border
-                              {% if media_type == 'tv' %}
-                              bg-primary text-white border-primary shadow-lg shadow-primary/20
-                              {% else %}
-                              glass-panel text-text hover:bg-surface-2 border-hairline
-                              {% endif %}">
-                        <i class="fa-solid fa-tv"></i>
-                        TV Shows
-                    </a>
-                    <label class="inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold transition border cursor-pointer select-none
-                                  {% if custom %}bg-amber-500/15 text-amber-300 border-amber-500/40{% else %}glass-panel text-text hover:bg-surface-2 border-hairline{% endif %}">
-                        <input type="checkbox" {% if custom %}checked{% endif %}
-                               onchange="window.location.href='/media/manage?media_type={{ media_type }}' + (this.checked ? '&custom=1' : '')"
-                               class="w-4 h-4 rounded accent-amber-500 cursor-pointer">
-                        <i class="fa-solid fa-star"></i>
-                        Custom only
-                    </label>
-                    <button type="button" onclick="openManualAdd()"
-                       class="inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-bold transition border bg-emerald-500 text-white border-emerald-500 shadow-lg shadow-emerald-500/20 hover:bg-emerald-500/90">
-                        <i class="fa-solid fa-plus"></i>
-                        Add Content
+            <div class="relative flex-1 min-w-0">
+                <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-text-secondary text-sm"></i>
+                <input type="text" id="search-input"
+                       placeholder="Search {{ media_type }}s by title..."
+                       class="w-full pl-11 pr-24 py-3 rounded-2xl bg-background text-text placeholder:text-text-secondary border border-border focus:outline-none focus:ring-2 focus:ring-primary/60 focus:border-primary transition">
+                <div class="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                    <button onclick="clearSearch()" title="Clear"
+                            class="w-9 h-9 inline-flex items-center justify-center rounded-xl text-text-secondary hover:bg-surface-2 transition">
+                        <i class="fa-solid fa-rotate-left"></i>
+                    </button>
+                    <button onclick="searchMedia()" title="Search"
+                            class="w-9 h-9 inline-flex items-center justify-center rounded-xl bg-primary text-white shadow-lg shadow-primary/20">
+                        <i class="fa-solid fa-magnifying-glass"></i>
                     </button>
                 </div>
             </div>
 
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div class="rounded-2xl border border-hairline bg-surface px-4 py-3">
-                    <p class="text-[11px] uppercase tracking-wider text-text-secondary font-bold">Current view</p>
-                    <p class="mt-1 text-sm font-semibold text-text capitalize">{% if custom %}Custom {% endif %}{{ media_type }}</p>
-                </div>
-                <div class="rounded-2xl border border-hairline bg-surface px-4 py-3">
-                    <p class="text-[11px] uppercase tracking-wider text-text-secondary font-bold">Actions</p>
-                    <p class="mt-1 text-sm font-semibold text-text">Search, Edit, Delete</p>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- Search and Filters -->
-    <section class="glass-panel rounded-3xl p-4 sm:p-6 mb-6 sm:mb-8">
-        <div class="flex flex-col lg:flex-row gap-4 lg:items-center">
-            <div class="flex-1">
-                <label for="search-input" class="block text-xs font-bold uppercase tracking-wider text-text-secondary mb-2">
-                    Search {{ media_type|title }}
+            <div class="flex flex-wrap items-center gap-2">
+                <a href="/media/manage?media_type=movie{% if custom %}&custom=1{% endif %}"
+                   class="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-full text-sm font-bold transition border {% if media_type == 'movie' %}bg-primary text-white border-primary shadow-lg shadow-primary/20{% else %}glass-panel text-text hover:bg-surface-2 border-hairline{% endif %}">
+                    <i class="fa-solid fa-film"></i> Movies
+                </a>
+                <a href="/media/manage?media_type=tv{% if custom %}&custom=1{% endif %}"
+                   class="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-full text-sm font-bold transition border {% if media_type == 'tv' %}bg-primary text-white border-primary shadow-lg shadow-primary/20{% else %}glass-panel text-text hover:bg-surface-2 border-hairline{% endif %}">
+                    <i class="fa-solid fa-tv"></i> TV
+                </a>
+                <label class="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-full text-sm font-bold transition border cursor-pointer select-none {% if custom %}bg-amber-500/15 text-amber-300 border-amber-500/40{% else %}glass-panel text-text hover:bg-surface-2 border-hairline{% endif %}">
+                    <input type="checkbox" {% if custom %}checked{% endif %}
+                           onchange="window.location.href='/media/manage?media_type={{ media_type }}' + (this.checked ? '&custom=1' : '')"
+                           class="w-4 h-4 rounded accent-amber-500 cursor-pointer">
+                    <i class="fa-solid fa-star"></i> Custom
                 </label>
-                <div class="relative">
-                    <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-text-secondary text-sm"></i>
-                    <input type="text"
-                           id="search-input"
-                           placeholder="Search {{ media_type }}s by title..."
-                           class="w-full pl-11 pr-4 py-3 rounded-2xl bg-background text-text placeholder:text-text-secondary border border-border focus:outline-none focus:ring-2 focus:ring-primary/60 focus:border-primary transition shadow-sm">
-                </div>
-            </div>
-
-            <div class="flex flex-col sm:flex-row gap-3 lg:pt-7">
-                <button onclick="searchMedia()"
-                        class="inline-flex justify-center items-center gap-2 bg-primary hover:bg-primary/90 text-white px-5 py-3 rounded-2xl transition font-bold shadow-lg shadow-primary/20">
-                    <i class="fa-solid fa-magnifying-glass"></i>
-                    Search
-                </button>
-                <button onclick="clearSearch()"
-                        class="inline-flex justify-center items-center gap-2 glass-panel hover:bg-surface-2 text-text px-5 py-3 rounded-2xl transition font-bold border border-hairline">
-                    <i class="fa-solid fa-rotate-left"></i>
-                    Clear
+                <button type="button" onclick="openManualAdd()"
+                   class="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-full text-sm font-bold transition border bg-emerald-500 text-white border-emerald-500 shadow-lg shadow-emerald-500/20 hover:bg-emerald-500/90">
+                    <i class="fa-solid fa-plus"></i> Add
                 </button>
             </div>
         </div>
@@ -274,6 +223,60 @@
     }
 
 
+    function collectQualities(item) {
+        const out = [];
+        (item.telegram || []).forEach(q => out.push(q));
+        (item.seasons || []).forEach(s => (s.episodes || []).forEach(e => (e.telegram || []).forEach(q => out.push(q))));
+        return out;
+    }
+
+    function sizeToBytes(str) {
+        if (!str) return 0;
+        const m = String(str).trim().match(/([\d.]+)\s*([A-Za-z]+)/);
+        if (!m) return 0;
+        const mult = { B: 1, KB: 1024, MB: 1024 ** 2, GB: 1024 ** 3, TB: 1024 ** 4 };
+        return parseFloat(m[1]) * (mult[m[2].toUpperCase()] || 1);
+    }
+
+    function bytesToSize(bytes) {
+        if (!bytes) return '';
+        const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+        let i = 0, v = bytes;
+        while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+        return `${v.toFixed(v >= 100 || i === 0 ? 0 : 1)} ${units[i]}`;
+    }
+
+    function topQualityLabel(qualities) {
+        const rank = { '2160p': 5, '4k': 5, '1080p': 4, '720p': 3, '480p': 2, '360p': 1 };
+        const norm = { '2160p': '4K', '4k': '4K', '1080p': '1080p', '720p': '720p', '480p': '480p', '360p': '360p' };
+        let best = '', bestRank = 0;
+        qualities.forEach(q => {
+            const key = String(q.quality || '').toLowerCase();
+            const r = rank[key] || 0;
+            if (r > bestRank) { bestRank = r; best = norm[key] || q.quality; }
+        });
+        return best;
+    }
+
+    function mediaBadges(item) {
+        const qs = collectQualities(item);
+        if (!qs.length) return '';
+        const isSplit = qs.some(q => q.group_key || (q.parts && q.parts.length));
+        const totalBytes = qs.reduce((sum, q) => sum + sizeToBytes(q.size), 0);
+        const quality = topQualityLabel(qs);
+        const size = bytesToSize(totalBytes);
+        const badge = (icon, text, cls) => text
+            ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md ${cls} text-white text-[10px] font-extrabold shadow">${icon}${text}</span>` : '';
+        return `
+            <div class="absolute bottom-2 left-2 right-2 flex items-center justify-between gap-1 flex-wrap">
+                <span class="flex items-center gap-1">
+                    ${badge('', quality, 'bg-primary/90')}
+                    ${isSplit ? badge('<i class="fa-solid fa-puzzle-piece"></i>', 'Split', 'bg-purple-600/90') : ''}
+                </span>
+                ${badge('<i class="fa-solid fa-hard-drive"></i>', size, 'bg-black/70 border border-hairline')}
+            </div>`;
+    }
+
     function createMediaCard(item) {
     const title = item.title || item.name || 'Unknown Title';
     const year = item.release_year || 'Unknown Year';
@@ -300,6 +303,7 @@
                         <i class="fa-solid fa-star"></i> Custom
                     </span>
                 </div>` : ''}
+                ${mediaBadges(item)}
             </div>
 
             <div class="p-4">

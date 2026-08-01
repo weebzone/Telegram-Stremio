@@ -61,6 +61,22 @@ def _build_caption(info: dict) -> str:
     return "\n".join(lines)
 
 
+def _build_markup(info: dict):
+    rows = []
+    base = SettingsManager.current().base_url
+    imdb_id = str(info.get("imdb_id") or "").strip()
+    stremio_type = "series" if info.get("media_type") == "tv" else "movie"
+    if base and imdb_id:
+        rows.append([
+            InlineKeyboardButton("▶️ Stremio", url=f"{base}/open/stremio/{stremio_type}/{imdb_id}"),
+            InlineKeyboardButton("📱 Nuvio", url=f"{base}/open/nuvio/{stremio_type}/{imdb_id}"),
+        ])
+    bot_url = get_streambot_url()
+    if bot_url and bot_url != "https://t.me/":
+        rows.append([InlineKeyboardButton("🤖 Get Addon", url=bot_url)])
+    return InlineKeyboardMarkup(rows) if rows else None
+
+
 async def _announce(info: dict) -> None:
     settings = SettingsManager.current()
     chat = _resolve_chat(settings.announcement_channel)
@@ -71,10 +87,7 @@ async def _announce(info: dict) -> None:
 
     caption = _build_caption(info)
     poster = info.get("backdrop") or info.get("poster")
-    markup = None
-    bot_url = get_streambot_url()
-    if bot_url and bot_url != "https://t.me/":
-        markup = InlineKeyboardMarkup([[InlineKeyboardButton("▶️ Watch on Stremio", url=bot_url)]])
+    markup = _build_markup(info)
 
     try:
         if poster:
