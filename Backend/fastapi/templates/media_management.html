@@ -261,16 +261,19 @@
         const totalBytes = qs.reduce((sum, q) => sum + sizeToBytes(q.size), 0);
         const labels = allQualityLabels(qs);
         const size = bytesToSize(totalBytes);
-        const badge = (icon, text, cls) => text
-            ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md ${cls} text-white text-[10px] font-extrabold shadow">${icon}${text}</span>` : '';
-        const qualityBadges = labels.map(l => badge('', l, 'bg-primary/90')).join('');
+        const qpills = labels.map((l, i) =>
+            `<span class="px-1.5 py-[3px] rounded-md ${i === 0 ? 'bg-primary text-white' : 'bg-white/20 text-white'} text-[10px] font-extrabold leading-none backdrop-blur-sm">${l}</span>`
+        ).join('');
+        const split = isSplit
+            ? `<span class="px-1.5 py-[3px] rounded-md bg-purple-600/90 text-white text-[10px] font-extrabold leading-none"><i class="fa-solid fa-puzzle-piece"></i></span>` : '';
+        const sizeTag = size
+            ? `<span class="px-1.5 py-[3px] rounded-md bg-black/70 text-white text-[10px] font-bold leading-none whitespace-nowrap"><i class="fa-solid fa-hard-drive mr-1 opacity-70"></i>${size}</span>` : '';
         return `
-            <div class="absolute bottom-2 left-2 right-2 flex items-end justify-between gap-1">
-                <span class="flex items-center gap-1 flex-wrap">
-                    ${qualityBadges}
-                    ${isSplit ? badge('<i class="fa-solid fa-puzzle-piece"></i>', 'Split', 'bg-purple-600/90') : ''}
-                </span>
-                ${badge('<i class="fa-solid fa-hard-drive"></i>', size, 'bg-black/70 border border-hairline')}
+            <div class="absolute inset-x-0 bottom-0 px-2 pb-2 pt-10 bg-gradient-to-t from-black/85 via-black/40 to-transparent pointer-events-none">
+                <div class="flex items-end justify-between gap-2">
+                    <span class="flex items-center gap-1 flex-wrap">${qpills}${split}</span>
+                    ${sizeTag}
+                </div>
             </div>`;
     }
 

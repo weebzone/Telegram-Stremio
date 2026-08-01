@@ -200,8 +200,8 @@ async def open_in_app(app_name: str, media_type: str, content_id: str):
     stremio_type = "series" if media_type in ("series", "tv") else "movie"
     web = f"https://web.stremio.com/#/detail/{stremio_type}/{content_id}/{content_id}"
     schemes = {
-        "nuvio": f"nuvio://metadata/{stremio_type}/{content_id}",
-        "stremio": f"stremio:///detail/{stremio_type}/{content_id}/{content_id}",
+        "nuvio": f"nuvio://meta?type={stremio_type}&id={content_id}",
+        "stremio": f"stremio:///detail/{stremio_type}/{content_id}",
     }
     scheme = schemes.get(app_name, schemes["stremio"])
     label = "Nuvio" if app_name == "nuvio" else "Stremio"

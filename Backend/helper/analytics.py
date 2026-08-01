@@ -19,14 +19,57 @@ _APP_MAP = [
     ("vlc", "VLC"),
     ("infuse", "Infuse"),
     ("outplayer", "Outplayer"),
-    ("mpv", "mpv"),
+    ("iina", "IINA"),
+    ("potplayer", "PotPlayer"),
+    ("mxplayer", "MX Player"),
+    ("mxtech", "MX Player"),
+    ("vimu", "Vimu"),
+    ("justplayer", "Just Player"),
+    ("splayer", "SPlayer"),
     ("kodi", "Kodi"),
+    ("xbmc", "Kodi"),
+    ("crkey", "Chromecast"),
+    ("mpv", "mpv"),
     ("exoplayer", "ExoPlayer"),
-    ("android tv", "Android TV"),
-    ("smarttv", "Smart TV"),
+    ("media3", "ExoPlayer"),
+    ("applecoremedia", "Apple Player"),
+    ("lavf", "FFmpeg"),
+    ("ffmpeg", "FFmpeg"),
+    ("libav", "FFmpeg"),
+    ("edg", "Edge"),
+    ("opr", "Opera"),
+    ("firefox", "Firefox"),
+    ("chrome", "Chrome"),
+    ("safari", "Safari"),
     ("okhttp", "Android App"),
+    ("dalvik", "Android App"),
     ("cfnetwork", "iOS App"),
     ("mozilla", "Browser"),
+]
+
+_DEVICE_MAP = [
+    ("android tv", "Android TV"),
+    ("googletv", "Android TV"),
+    ("bravia", "Android TV"),
+    ("aft", "Fire TV"),
+    ("appletv", "Apple TV"),
+    ("apple tv", "Apple TV"),
+    ("tvos", "Apple TV"),
+    ("tizen", "Samsung TV"),
+    ("web0s", "LG TV"),
+    ("webos", "LG TV"),
+    ("roku", "Roku"),
+    ("smarttv", "Smart TV"),
+    ("smart-tv", "Smart TV"),
+    ("ipad", "iPad"),
+    ("iphone", "iPhone"),
+    ("ipod", "iPhone"),
+    ("android", "Android"),
+    ("windows nt", "Windows"),
+    ("macintosh", "macOS"),
+    ("mac os x", "macOS"),
+    ("cros", "ChromeOS"),
+    ("linux", "Linux"),
 ]
 
 
@@ -45,6 +88,16 @@ def parse_app(user_agent: str) -> str:
         if needle in low:
             return name
     return "Unknown"
+
+
+def parse_device(user_agent: str) -> str:
+    if not user_agent:
+        return ""
+    low = user_agent.lower()
+    for needle, name in _DEVICE_MAP:
+        if needle in low:
+            return name
+    return ""
 
 
 async def lookup_ip(ip: str) -> dict:
@@ -99,6 +152,7 @@ async def record_stream_start(token: str, name: str, ip: str, user_agent: str) -
         "name": name or "Unknown",
         "ip": ip or "",
         "app": parse_app(user_agent),
+        "device": parse_device(user_agent),
         "user_agent": user_agent or "",
         "country": geo.get("country"),
         "city": geo.get("city"),
@@ -147,6 +201,7 @@ async def get_activity_overview(page: int = 1, per_page: int = 12) -> dict:
             "city": d.get("city") or "",
             "isp": d.get("isp") or "",
             "app": d.get("app") or "Unknown",
+            "device": d.get("device") or "",
             "proxy": bool(d.get("proxy")),
             "streams": int(d.get("streams") or 0),
             "last_active": last.isoformat() if last else None,

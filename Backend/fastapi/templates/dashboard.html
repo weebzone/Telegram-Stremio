@@ -23,22 +23,6 @@
 
     <div id="setup-card" class="mb-8"></div>
 
-    <section class="mb-8">
-        <div class="flex items-center justify-between gap-3 mb-4">
-            <h3 class="flex items-center gap-2 text-lg font-bold">
-                <i class="fa-solid fa-users text-primary"></i> User Activity
-                <span id="ua-online" class="text-xs font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary">0 online</span>
-            </h3>
-            <button onclick="loadUserActivity()" class="text-sm font-semibold text-text-secondary hover:text-primary transition">
-                <i class="fa-solid fa-rotate"></i> Refresh
-            </button>
-        </div>
-        <div id="ua-list" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-            <p class="text-text-secondary text-sm">Loading…</p>
-        </div>
-        <div id="ua-pagination" class="flex items-center justify-center gap-3 mt-4"></div>
-    </section>
-
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <div class="glass-panel p-5 rounded-[2rem] flex items-center gap-4">
             <div class="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary shadow-glow">
@@ -78,6 +62,27 @@
                 <p class="text-[10px] uppercase font-bold text-text-secondary tracking-widest">Version</p>
                 <p id="sys-version" class="text-lg font-bold text-text">v{{ system_stats.version or '1.0.0' }}</p>
             </div>
+        </div>
+    </div>
+
+    <div class="glass-panel rounded-[2.5rem] overflow-hidden mb-8">
+        <div class="p-6 border-b border-hairline">
+            <div class="flex items-center justify-between gap-3 mb-2">
+                <h3 class="flex items-center gap-2 text-lg font-bold">
+                    <i class="fa-solid fa-users text-primary"></i> User Activity
+                    <span id="ua-online" class="text-[10px] font-bold uppercase tracking-[0.2em] text-primary bg-primary/10 px-3 py-1 rounded-full">0 online</span>
+                </h3>
+                <button onclick="loadUserActivity()" class="text-sm font-semibold text-text-secondary hover:text-primary transition">
+                    <i class="fa-solid fa-rotate"></i> Refresh
+                </button>
+            </div>
+            <p class="text-sm text-text-secondary">Who's watching, where from, and on what</p>
+        </div>
+        <div class="p-6">
+            <div id="ua-list" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                <p class="text-text-secondary text-sm">Loading…</p>
+            </div>
+            <div id="ua-pagination" class="flex items-center justify-center gap-3 mt-6"></div>
         </div>
     </div>
 
@@ -143,7 +148,7 @@
                                     <span><i class="fas fa-signal"></i> <span>${u.online ? 'Online' : uaAgo(u.last_active)}</span></span>
                                     <span><i class="fas fa-location-dot"></i> <span>${uaEsc(loc)}</span></span>
                                     <span><i class="fas fa-network-wired"></i> <span>${uaEsc(u.isp || '—')}</span></span>
-                                    <span><i class="fas fa-mobile-screen-button"></i> <span>${uaEsc(u.app)}</span></span>
+                                    <span><i class="fas fa-mobile-screen-button"></i> <span>${uaEsc(u.app)}${u.device ? ' · ' + uaEsc(u.device) : ''}</span></span>
                                     <span><i class="fas fa-globe"></i> <span>${uaEsc(u.ip || '—')}</span></span>
                                     <span><i class="fas fa-film"></i> <span>${u.streams} streams</span></span>
                                 </div>
