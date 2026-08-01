@@ -65,27 +65,6 @@
         </div>
     </div>
 
-    <div class="glass-panel rounded-[2.5rem] overflow-hidden mb-8">
-        <div class="p-6 border-b border-hairline">
-            <div class="flex items-center justify-between gap-3 mb-2">
-                <h3 class="flex items-center gap-2 text-lg font-bold">
-                    <i class="fa-solid fa-users text-primary"></i> User Activity
-                    <span id="ua-online" class="text-[10px] font-bold uppercase tracking-[0.2em] text-primary bg-primary/10 px-3 py-1 rounded-full">0 online</span>
-                </h3>
-                <button onclick="loadUserActivity()" class="text-sm font-semibold text-text-secondary hover:text-primary transition">
-                    <i class="fa-solid fa-rotate"></i> Refresh
-                </button>
-            </div>
-            <p class="text-sm text-text-secondary">Who's watching, where from, and on what</p>
-        </div>
-        <div class="p-6">
-            <div id="ua-list" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                <p class="text-text-secondary text-sm">Loading…</p>
-            </div>
-            <div id="ua-pagination" class="flex items-center justify-center gap-3 mt-6"></div>
-        </div>
-    </div>
-
     <div class="grid lg:grid-cols-3 gap-8">
         <div class="lg:col-span-2 space-y-8">
             <style>
@@ -236,6 +215,27 @@
                 </div>
                 <i class="fa-solid fa-chevron-right ml-auto text-muted group-hover:text-primary group-hover:translate-x-1 transition-all"></i>
             </a>
+
+            <div class="glass-panel rounded-[2.5rem] overflow-hidden">
+                <div class="p-6 border-b border-hairline">
+                    <div class="flex items-center justify-between gap-3 mb-2">
+                        <h3 class="flex items-center gap-2 text-lg font-bold">
+                            <i class="fa-solid fa-users text-primary"></i> User Activity
+                            <span id="ua-online" class="text-[10px] font-bold uppercase tracking-[0.2em] text-primary bg-primary/10 px-3 py-1 rounded-full">0 online</span>
+                        </h3>
+                        <button onclick="loadUserActivity()" class="text-sm font-semibold text-text-secondary hover:text-primary transition">
+                            <i class="fa-solid fa-rotate"></i> Refresh
+                        </button>
+                    </div>
+                    <p class="text-sm text-text-secondary">Who's watching, where from, and on what</p>
+                </div>
+                <div class="p-6">
+                    <div id="ua-list" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                        <p class="text-text-secondary text-sm">Loading…</p>
+                    </div>
+                    <div id="ua-pagination" class="flex items-center justify-center gap-3 mt-6"></div>
+                </div>
+            </div>
         </div>
 
         <div class="lg:col-span-1">
