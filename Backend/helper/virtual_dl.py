@@ -11,11 +11,13 @@ from Backend.logger import LOGGER
 async def resolve_virtual_parts(
     parts_payload: List[dict],
     streamer: ByteStreamer,
+    prefix_100: bool = True,
 ) -> Tuple[List[Dict], int]:
     parts: List[Dict] = []
     cum = 0
     for idx, p in enumerate(parts_payload):
-        chat_id = int(f"-100{p['chat_id']}")
+        raw_chat = int(p["chat_id"])
+        chat_id = int(f"-100{raw_chat}") if prefix_100 and raw_chat > 0 else raw_chat
         msg_id = int(p["msg_id"])
         file_id = await streamer.get_file_properties(chat_id=chat_id, message_id=msg_id)
         size = file_id.file_size

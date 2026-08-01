@@ -266,6 +266,11 @@ async def stream_handler(request: Request, token: str, id: str, name: str, token
     decoded = await decode_string(id)
 
     if decoded.get("global"):
+        if "parts" in decoded:
+            return await global_virtual_media_streamer(
+                request=request, parts_payload=decoded["parts"],
+                token=token, token_data=token_data, stream_id_hash=id,
+            )
         return await global_media_streamer(
             request=request, chat_id=int(decoded["chat_id"]), msg_id=int(decoded["msg_id"]),
             token=token, token_data=token_data, stream_id_hash=id,
@@ -475,6 +480,50 @@ async def global_media_streamer(request: Request, chat_id: int, msg_id: int, tok
         request=request,
         chat_id=chat_id,
         message_id=msg_id,
+    )
+    return StreamingResponse(body_gen, headers=headers, status_code=status, media_type=mime_type)
+
+
+#----- Stream a split Global Search file (multiple parts) through the Userbot session
+async def global_virtual_media_streamer(request: Request, parts_payload: list, token: str, token_data: dict = None, stream_id_hash: str = None):
+    streamer = _get_userbot_streamer()
+    if streamer is None:
+        raise HTTPException(status_code=503, detail="Global Search streaming is unavailable (no Userbot connected)")
+
+    parts, file_size = await resolve_virtual_parts(parts_payload, streamer, prefix_100=False)
+    if not parts or file_size <= 0:
+        raise HTTPException(status_code=404, detail="Split media parts not accessible via Global Search")
+
+    range_header = request.headers.get("Range", "")
+    start, end = parse_range_header(range_header, file_size)
+    req_length = end - start + 1
+    chunk_size = 1024 * 1024
+    stream_id = secrets.token_hex(8)
+    decoded_name = unquote(request.path_params.get("name", ""))
+    final_title = await _lookup_title(stream_id_hash, decoded_name)
+
+    meta = {
+        "request_path": str(request.url.path),
+        "client_host": request.client.host if request.client else None,
+        "title": final_title,
+        "user_name": token_data.get("name", "Unknown") if token_data else "Unknown",
+        "token": token,
+        "global_search": True,
+        "split_parts": len(parts),
+    }
+
+    asyncio.create_task(track_usage(stream_id, token, token_data))
+
+    file_name, mime_type = _resolve_filename_mime(parts[0]["file_id"])
+    headers, status = _build_stream_headers(mime_type, file_name, req_length, range_header, start, end, file_size)
+
+    if request.method == "HEAD":
+        return PlainResponse(status_code=status, headers=headers)
+
+    body_gen = virtual_stream_generator(
+        parts=parts, start=start, end=end, chunk_size=chunk_size,
+        streamer=streamer, client_index=USERBOT_CLIENT_INDEX, request=request, meta=meta,
+        stream_id=stream_id, parallelism=1, prefetch_count=1,
     )
     return StreamingResponse(body_gen, headers=headers, status_code=status, media_type=mime_type)
 

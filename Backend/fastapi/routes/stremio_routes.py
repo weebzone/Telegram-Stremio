@@ -617,9 +617,12 @@ async def _global_streams_for(token: str, imdb_id: str, media_type: str, season_
 
     streams = []
     for r in global_results:
-        _, stream_title = format_stream_details(r["title"], r["quality"], r["size"], is_split=False)
+        is_split = bool(r.get("is_split"))
+        _, stream_title = format_stream_details(r["title"], r["quality"], r["size"], is_split=is_split)
         stream_name = f"🌐 GLOBAL {r['quality']}"
         stream_title = f"{stream_title}\n📡 {r['source_chat']}"
+        if is_split:
+            stream_title += f" · 📦 {r.get('part_count', 0)} parts"
         url = f"{SettingsManager.current().base_url}/dl/{token}/{r['token']}/{quote(r['title'])}"
         size_bytes = parse_size_to_bytes(r.get("size", ""))
         streams.append({"name": stream_name, "title": stream_title, "url": url, "size_bytes": size_bytes})

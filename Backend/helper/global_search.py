@@ -20,6 +20,7 @@ from Backend.logger import LOGGER
 from Backend.helper.settings_manager import SettingsManager
 from Backend.helper.encrypt import encode_string
 from Backend.helper.pyro import get_readable_file_size
+from Backend.helper.split_files import parse_split_info, strip_part_suffix
 import Backend.pyrofork.bot as botmod
 
 MAX_RESULTS = 50
@@ -36,7 +37,9 @@ _chat_title_cache: Dict[int, str] = {}
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 _MULTIPART_RE = re.compile(r"(?:part|cd|disc|disk)[s._-]*\d+(?=\.\w+$)", re.IGNORECASE)
+_ALT_PART_RE = re.compile(r"^(.*?)[\s._-]*(?:part|cd|disc|disk|pt)[\s._-]*0*(\d{1,3})(?=\.\w+$|$)", re.IGNORECASE)
 _VIDEO_EXTS = (".mkv", ".mp4", ".avi", ".ts", ".m4v", ".mov", ".wmv", ".webm", ".flv")
+SPLIT_SCAN_WINDOW = 60
 
 
 def is_userbot_available() -> bool:
@@ -74,25 +77,44 @@ def _matches_episode(parsed: dict, season: Optional[int], episode: Optional[int]
     return True
 
 
-def _parse_and_validate(filename: str, expected_title: str, season: Optional[int], episode: Optional[int]) -> Optional[dict]:
-    if _MULTIPART_RE.search(filename):
-        LOGGER.info(f"Skipping {filename}: seems to be a split video file")
-        return None
-
+def _validate_name(filename: str, expected_title: str, season: Optional[int], episode: Optional[int]) -> Optional[dict]:
     try:
         parsed = PTN.parse(filename)
     except Exception:
         return None
-
     if "excess" in parsed and any("combined" in item.lower() for item in parsed["excess"]):
         LOGGER.info(f"Skipping {filename}: contains 'combined'")
         return None
-
     if not _matches_episode(parsed, season, episode):
         return None
     if _title_score(parsed.get("title", ""), expected_title) < MIN_TITLE_SCORE:
         return None
     return parsed
+
+
+def _parse_and_validate(filename: str, expected_title: str, season: Optional[int], episode: Optional[int]) -> Optional[dict]:
+    if _MULTIPART_RE.search(filename):
+        return None
+    return _validate_name(filename, expected_title, season, episode)
+
+
+#----- Detect a split part -> (group_base, part_number, display_name) or None
+def _split_part_info(filename: str) -> Optional[tuple]:
+    if not filename:
+        return None
+    info = parse_split_info(filename)
+    if info:
+        return info[0], info[1], strip_part_suffix(filename)
+    m = _ALT_PART_RE.match(filename)
+    if m and m.group(1).strip(" ._-"):
+        ext_m = re.search(r"(\.\w+)$", filename)
+        display = m.group(1).strip(" ._-") + (ext_m.group(1) if ext_m else ".mkv")
+        base = _NORMALIZE_ALT_RE.sub(".", m.group(1)).strip(".").lower()
+        return base, int(m.group(2)), display
+    return None
+
+
+_NORMALIZE_ALT_RE = re.compile(r"[\s._-]+")
 
 
 def _video_filename(message) -> Optional[str]:
@@ -104,6 +126,37 @@ def _video_filename(message) -> Optional[str]:
         if mime.startswith("video/") or (name and name.lower().endswith(_VIDEO_EXTS)):
             return (message.caption or "").strip() or name or "video.mkv"
     return None
+
+
+#----- Filename for any video/document message (so split parts like ".001" are seen)
+def _raw_media_name(message) -> Optional[str]:
+    media = message.video or message.document
+    if not media:
+        return None
+    return (message.caption or "").strip() or getattr(media, "file_name", None)
+
+
+#----- Scan messages around a matched split part to collect all sibling parts
+async def _gather_split_parts(client, chat_id: int, seed_id: int, base: str) -> Dict[int, dict]:
+    ids = list(range(max(1, seed_id - SPLIT_SCAN_WINDOW), seed_id + SPLIT_SCAN_WINDOW + 1))
+    parts: Dict[int, dict] = {}
+    try:
+        messages = await client.get_messages(chat_id, ids)
+    except Exception as e:
+        LOGGER.warning(f"[GLOBAL SEARCH] Could not gather split parts near {seed_id}: {e}")
+        return parts
+    for msg in (messages or []):
+        if not msg or getattr(msg, "empty", False):
+            continue
+        raw = _raw_media_name(msg)
+        if not raw:
+            continue
+        info = _split_part_info(raw)
+        if not info or info[0] != base:
+            continue
+        media = msg.video or msg.document
+        parts[info[1]] = {"msg_id": msg.id, "size_bytes": getattr(media, "file_size", 0) or 0}
+    return parts
 
 
 def _resolve_channel_ids(channel_ids: List[str]) -> List[int]:
@@ -147,6 +200,7 @@ async def _search_channel(
 ) -> List[Dict]:
     global _userbot_session_dead
     results: List[Dict] = []
+    split_groups: Dict[str, dict] = {}
     seen_msg_ids: set = set()
 
     for msg_filter in (enums.MessagesFilter.VIDEO, enums.MessagesFilter.DOCUMENT):
@@ -163,10 +217,32 @@ async def _search_channel(
                     continue
                 seen_msg_ids.add(message.id)
 
+                raw_name = _raw_media_name(message)
+                if not raw_name:
+                    continue
+
+                #----- Split part: gather siblings once per group into one combined stream
+                split = _split_part_info(raw_name)
+                if split:
+                    base, _part_num, display = split
+                    if base in split_groups:
+                        continue
+                    parsed = _validate_name(display, expected_title, season, episode)
+                    if parsed is None:
+                        continue
+                    parts = await _gather_split_parts(client, chat_id, message.id, base)
+                    if len(parts) < 2:
+                        continue
+                    split_groups[base] = {
+                        "parts": parts,
+                        "display": display,
+                        "quality": parsed.get("resolution") or "HD",
+                    }
+                    continue
+
                 filename = _video_filename(message)
                 if not filename:
                     continue
-
                 parsed = _parse_and_validate(filename, expected_title, season, episode)
                 if parsed is None:
                     continue
@@ -209,6 +285,30 @@ async def _search_channel(
             break
         except RPCError as e:
             LOGGER.warning(f"[USERBOT] RPC error in {chat_title} ({msg_filter}): {e}")
+
+    #----- Emit one combined stream per gathered split group
+    for group in split_groups.values():
+        ordered = [group["parts"][pn] for pn in sorted(group["parts"])]
+        total_bytes = sum(p["size_bytes"] for p in ordered)
+        size = get_readable_file_size(total_bytes)
+        token = await encode_string({
+            "global": True,
+            "parts": [{"chat_id": chat_id, "msg_id": p["msg_id"]} for p in ordered],
+            "title": group["display"],
+            "size": size,
+            "quality": group["quality"],
+            "source": chat_title,
+        })
+        results.append({
+            "token": token,
+            "title": group["display"],
+            "size": size,
+            "source_chat": chat_title,
+            "quality": group["quality"],
+            "is_split": True,
+            "part_count": len(ordered),
+        })
+        LOGGER.info(f"[GLOBAL SEARCH] Split stream: {group['display']} ({len(ordered)} parts) in {chat_title}")
 
     return results
 
