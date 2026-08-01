@@ -23,6 +23,22 @@
 
     <div id="setup-card" class="mb-8"></div>
 
+    <section class="mb-8">
+        <div class="flex items-center justify-between gap-3 mb-4">
+            <h3 class="flex items-center gap-2 text-lg font-bold">
+                <i class="fa-solid fa-users text-primary"></i> User Activity
+                <span id="ua-online" class="text-xs font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary">0 online</span>
+            </h3>
+            <button onclick="loadUserActivity()" class="text-sm font-semibold text-text-secondary hover:text-primary transition">
+                <i class="fa-solid fa-rotate"></i> Refresh
+            </button>
+        </div>
+        <div id="ua-list" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+            <p class="text-text-secondary text-sm">Loading…</p>
+        </div>
+        <div id="ua-pagination" class="flex items-center justify-center gap-3 mt-4"></div>
+    </section>
+
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <div class="glass-panel p-5 rounded-[2rem] flex items-center gap-4">
             <div class="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary shadow-glow">
@@ -67,21 +83,6 @@
 
     <div class="grid lg:grid-cols-3 gap-8">
         <div class="lg:col-span-2 space-y-8">
-            <section>
-                <div class="flex items-center justify-between gap-3 mb-4 ml-2">
-                    <h3 class="flex items-center gap-2 text-lg font-bold">
-                        <i class="fa-solid fa-users text-primary"></i> User Activity
-                        <span id="ua-online" class="text-xs font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary">0 online</span>
-                    </h3>
-                    <button onclick="loadUserActivity()" class="text-sm font-semibold text-text-secondary hover:text-primary transition">
-                        <i class="fa-solid fa-rotate"></i> Refresh
-                    </button>
-                </div>
-                <div id="ua-list" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <p class="text-text-secondary text-sm ml-2">Loading…</p>
-                </div>
-            </section>
-
             <style>
                 .ua-dot { width:.7rem;height:.7rem;border-radius:9999px;background:var(--text-secondary);flex-shrink:0; }
                 .ua-dot.on { background:#22c55e;box-shadow:0 0 8px #22c55e; }
@@ -103,14 +104,27 @@
                     if (d < 86400) return Math.floor(d / 3600) + 'h ago';
                     return Math.floor(d / 86400) + 'd ago';
                 }
-                async function loadUserActivity() {
+                let uaPage = 1;
+                const uaPerPage = 12;
+                function renderUaPagination(data) {
+                    const el = document.getElementById('ua-pagination');
+                    if (!el) return;
+                    const pages = data.total_pages || 1, cur = data.page || 1;
+                    if (pages <= 1) { el.innerHTML = ''; return; }
+                    el.innerHTML = `
+                        <button onclick="loadUserActivity(${cur - 1})" ${cur <= 1 ? 'disabled' : ''} class="px-3 py-1.5 rounded-xl glass-panel border border-hairline text-sm font-bold disabled:opacity-40"><i class="fa-solid fa-chevron-left"></i></button>
+                        <span class="text-sm text-text-secondary">Page ${cur} of ${pages} · ${data.total} users</span>
+                        <button onclick="loadUserActivity(${cur + 1})" ${cur >= pages ? 'disabled' : ''} class="px-3 py-1.5 rounded-xl glass-panel border border-hairline text-sm font-bold disabled:opacity-40"><i class="fa-solid fa-chevron-right"></i></button>`;
+                }
+                async function loadUserActivity(page) {
+                    if (page) uaPage = page;
                     const box = document.getElementById('ua-list');
                     try {
-                        const res = await fetch('/api/admin/user-activity');
+                        const res = await fetch(`/api/admin/user-activity?page=${uaPage}&per_page=${uaPerPage}`);
                         const data = await res.json();
                         const users = data.users || [];
                         document.getElementById('ua-online').textContent = (data.online_count || 0) + ' online';
-                        if (!users.length) { box.innerHTML = '<p class="text-text-secondary text-sm ml-2">No user activity recorded yet.</p>'; return; }
+                        if (!users.length) { box.innerHTML = '<p class="text-text-secondary text-sm">No user activity recorded yet.</p>'; renderUaPagination(data); return; }
                         box.innerHTML = users.map(u => {
                             const loc = [u.country, u.city].filter(Boolean).join(': ') || 'Unknown';
                             const nowLine = u.now_playing
@@ -135,12 +149,13 @@
                                 </div>
                             </div>`;
                         }).join('');
+                        renderUaPagination(data);
                     } catch (e) {
-                        box.innerHTML = '<p class="text-text-secondary text-sm ml-2">Unable to load user activity.</p>';
+                        box.innerHTML = '<p class="text-text-secondary text-sm">Unable to load user activity.</p>';
                     }
                 }
                 loadUserActivity();
-                setInterval(loadUserActivity, 15000);
+                setInterval(() => loadUserActivity(), 15000);
             </script>
 
             <section>

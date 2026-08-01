@@ -1126,9 +1126,11 @@ class Database:
     #----- Multi Database Method for insert/update/delete/list
     #-----
 
-    async def _build_part_id_and_size(self, parts: List[dict]) -> Tuple[str, str]:
+    async def _build_part_id_and_size(self, parts: List[dict], archive: Optional[str] = None) -> Tuple[str, str]:
         sorted_parts = sorted(parts, key=lambda p: p.get("part_number", 0))
         payload = {"parts": [{"chat_id": p["chat_id"], "msg_id": p["msg_id"]} for p in sorted_parts]}
+        if archive == "zip":
+            payload["zip"] = True
         encoded = await encode_string(payload)
         total_bytes = sum(p.get("size_bytes", 0) for p in sorted_parts)
         from Backend.helper.pyro import get_readable_file_size 
@@ -1248,7 +1250,8 @@ class Database:
                 "msg_id": msg_id,
                 "size_bytes": raw_size,
             }
-            part_id, part_size = await self._build_part_id_and_size([part])
+            archive = "zip" if str(group_key).endswith(".zip") else None
+            part_id, part_size = await self._build_part_id_and_size([part], archive)
             quality_detail = QualityDetail(
                 quality=metadata_info['quality'],
                 id=part_id,
@@ -1357,7 +1360,8 @@ class Database:
                     p for p in existing_parts if p.get("part_number") != new_part.get("part_number")
                 ]
                 existing_parts.append(new_part)
-                new_id, new_size = await self._build_part_id_and_size(existing_parts)
+                archive = "zip" if str(group_key).endswith(".zip") else None
+                new_id, new_size = await self._build_part_id_and_size(existing_parts, archive)
                 q["parts"] = existing_parts
                 q["id"] = new_id
                 q["size"] = new_size

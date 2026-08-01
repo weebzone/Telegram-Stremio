@@ -1619,9 +1619,9 @@ async def update_catalog_order_api(payload: dict):
     return {"ok": True, "message": "Catalog order saved."}
 
 
-async def get_user_activity_api():
+async def get_user_activity_api(page: int = 1, per_page: int = 12):
     try:
-        return await get_activity_overview()
+        return await get_activity_overview(page, per_page)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

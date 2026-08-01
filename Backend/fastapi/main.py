@@ -314,8 +314,8 @@ async def get_stream_analytics(_: bool = Depends(require_auth)):
     return await get_stream_analytics_api()
 
 @app.get("/api/admin/user-activity")
-async def get_user_activity(_: bool = Depends(require_auth)):
-    return await get_user_activity_api()
+async def get_user_activity(page: int = 1, per_page: int = 12, _: bool = Depends(require_auth)):
+    return await get_user_activity_api(page, per_page)
 
 @app.post("/api/admin/clear-analytics")
 async def clear_analytics(_: bool = Depends(require_auth)):

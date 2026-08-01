@@ -112,7 +112,7 @@ async def record_stream_start(token: str, name: str, ip: str, user_agent: str) -
         LOGGER.warning(f"[ANALYTICS] record failed: {e}")
 
 
-async def get_activity_overview() -> dict:
+async def get_activity_overview(page: int = 1, per_page: int = 12) -> dict:
     now = datetime.utcnow()
     playing = {}
     for info in ACTIVE_STREAMS.values():
@@ -153,4 +153,17 @@ async def get_activity_overview() -> dict:
         })
 
     rows.sort(key=lambda r: 0 if r["online"] else 1)
-    return {"users": rows, "online_count": sum(1 for r in rows if r["online"]), "total": len(rows)}
+    total = len(rows)
+    online_count = sum(1 for r in rows if r["online"])
+    per_page = max(1, min(int(per_page or 12), 60))
+    total_pages = max(1, (total + per_page - 1) // per_page)
+    page = max(1, min(int(page or 1), total_pages))
+    offset = (page - 1) * per_page
+    return {
+        "users": rows[offset:offset + per_page],
+        "online_count": online_count,
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "total_pages": total_pages,
+    }
