@@ -818,26 +818,64 @@ async def configure_addon(token: str, request: Request):
 
     token_doc = await db.get_api_token(token)
     user_name = "Unknown"
-    expiry_str = "N/A"
+    expiry_str = "Never"
     status_color = "#ef4444"
     status_text = "Unknown"
 
+    def _expired(when):
+        ref = datetime.utcnow()
+        try:
+            if when.tzinfo is not None:
+                ref = datetime.now(timezone.utc)
+        except AttributeError:
+            pass
+        return when < ref
+
+    def _fmt(when):
+        try:
+            return when.strftime("%d %b %Y").lstrip("0")
+        except Exception:
+            return "N/A"
+
     if token_doc:
         uid = token_doc.get("user_id")
+        is_admin = bool(token_doc.get("is_admin"))
+        try:
+            is_admin = is_admin or (uid is not None and int(uid) == int(Telegram.OWNER_ID))
+        except (TypeError, ValueError):
+            pass
+
+        user = None
         if uid:
             try:
                 user = await db.get_user(int(uid))
-                if user:
-                    user_name = user.get("first_name") or user.get("username") or f"User {uid}"
-                    expiry = user.get("subscription_expiry")
-                    if expiry:
-                        expiry_str = expiry.strftime("%d %b %Y").lstrip("0")
-                    if user.get("subscription_status") == "active":
-                        status_color, status_text = "#22c55e", "Active"
-                    else:
-                        status_color, status_text = "#ef4444", "Expired"
             except Exception:
-                pass
+                user = None
+        if user:
+            user_name = user.get("first_name") or user.get("username") or f"User {uid}"
+        elif uid:
+            user_name = f"User {uid}"
+
+        token_expiry = token_doc.get("expires_at")
+        if is_admin:
+            status_color, status_text, expiry_str = "#22c55e", "Admin", "Never"
+        elif token_doc.get("subscription_exempt"):
+            status_color, status_text, expiry_str = "#22c55e", "Active", "Never"
+        elif token_expiry is not None:
+            expiry_str = _fmt(token_expiry)
+            if _expired(token_expiry):
+                status_color, status_text = "#ef4444", "Expired"
+            else:
+                status_color, status_text = "#22c55e", "Active"
+        elif SettingsManager.current().subscription:
+            expiry = user.get("subscription_expiry") if user else None
+            if user and user.get("subscription_status") == "active" and expiry and not _expired(expiry):
+                status_color, status_text, expiry_str = "#22c55e", "Active", _fmt(expiry)
+            else:
+                status_color, status_text = "#ef4444", "Expired"
+                expiry_str = _fmt(expiry) if expiry else "N/A"
+        else:
+            status_color, status_text, expiry_str = "#22c55e", "Active", "Never"
 
     return templates.TemplateResponse("stremio_configure.html", {
         "request": request,
