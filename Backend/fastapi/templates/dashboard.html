@@ -70,7 +70,8 @@
             <style>
                 .ua-dot { width:.7rem;height:.7rem;border-radius:9999px;background:var(--text-secondary);flex-shrink:0; }
                 .ua-dot.on { background:#22c55e;box-shadow:0 0 8px #22c55e; }
-                .ua-vpn { font-size:.6rem;font-weight:900;padding:.15rem .45rem;border-radius:9999px;background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.3); }
+                .ua-vpn { font-size:.6rem;font-weight:900;padding:.15rem .45rem;border-radius:9999px;background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.3);white-space:nowrap; }
+                .ua-clean { font-size:.6rem;font-weight:900;padding:.15rem .45rem;border-radius:9999px;background:rgba(34,197,94,.15);color:#22c55e;border:1px solid rgba(34,197,94,.3);white-space:nowrap; }
                 .ua-now { margin-top:.5rem;font-size:.8rem;font-weight:800;color:#22c55e; }
                 .ua-meta { margin-top:.6rem;display:grid;grid-template-columns:1fr 1fr;gap:.3rem .6rem;font-size:.72rem; }
                 .ua-meta span { color:var(--text-secondary);display:flex;align-items:center;gap:.35rem;min-width:0; }
@@ -79,6 +80,7 @@
 
             <script>
                 function uaEsc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+                function uaFlag(cc) { if (!cc || cc.length !== 2) return ''; return String.fromCodePoint(...[...cc.toUpperCase()].map(c => 127397 + c.charCodeAt(0))); }
                 function uaAgo(iso) {
                     if (!iso) return '—';
                     const t = new Date(iso.endsWith('Z') ? iso : iso + 'Z').getTime();
@@ -111,19 +113,21 @@
                         const nowLine = u.now_playing
                             ? `<div class="ua-now"><i class="fas fa-play"></i> Now Playing — ${uaEsc(u.now_playing)}</div>`
                             : `<div class="text-text-secondary text-xs mt-2 truncate"><i class="fas fa-clock-rotate-left"></i> ${uaEsc(u.last_title || 'No history')}</div>`;
+                        const fl = uaFlag(u.country_code);
                         return `<div class="glass-panel p-4 rounded-2xl border border-hairline">
                             <div class="flex items-center justify-between gap-2">
                                 <div class="flex items-center gap-2 min-w-0">
                                     <span class="ua-dot ${u.online ? 'on' : ''}"></span>
                                     <span class="font-bold truncate">${uaEsc(u.name)}</span>
                                 </div>
-                                ${u.proxy ? '<span class="ua-vpn"><i class="fas fa-shield-halved"></i> VPN</span>' : ''}
+                                <span class="${u.proxy ? 'ua-vpn' : 'ua-clean'}"><i class="fas fa-shield-halved"></i> ${u.proxy ? 'VPN' : 'Clean'}</span>
                             </div>
                             ${nowLine}
                             <div class="ua-meta">
                                 <span><i class="fas fa-signal"></i> <span>${u.online ? 'Online' : uaAgo(u.last_active)}</span></span>
-                                <span><i class="fas fa-location-dot"></i> <span>${uaEsc(loc)}</span></span>
+                                <span><i class="fas fa-location-dot"></i> <span>${fl ? fl + ' ' : ''}${uaEsc(loc)}</span></span>
                                 <span><i class="fas fa-network-wired"></i> <span>${uaEsc(u.isp || '—')}</span></span>
+                                <span><i class="fas fa-mobile-screen-button"></i> <span>${uaEsc(u.app)}${u.device ? ' · ' + uaEsc(u.device) : ''}</span></span>
                                 <span><i class="fas fa-globe"></i> <span>${uaEsc(u.ip || '—')}</span></span>
                                 <span><i class="fas fa-film"></i> <span>${u.streams} streams</span></span>
                             </div>

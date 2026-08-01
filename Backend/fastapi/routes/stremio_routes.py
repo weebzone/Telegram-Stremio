@@ -13,6 +13,7 @@ from pyrogram.errors import UserNotParticipant
 
 from Backend import __version__, db
 from Backend.config import Telegram
+from Backend.helper.analytics import client_ip_from, record_client
 from Backend.fastapi.security.tokens import verify_token
 from Backend.fastapi.themes import DEFAULT_THEME, get_theme
 from Backend.helper.fanart import fanart_artwork
@@ -675,8 +676,16 @@ async def get_streams(
     token: str,
     media_type: str,
     id: str,
+    request: Request,
     token_data: dict = Depends(verify_token)
 ):
+    #----- Capture the real app/device from the addon-protocol UA (not the spoofed video UA)
+    asyncio.create_task(record_client(
+        token,
+        token_data.get("name") if token_data else None,
+        client_ip_from(request),
+        request.headers.get("user-agent", ""),
+    ))
 
     if token_data.get("subscription_expired"):
         return {
