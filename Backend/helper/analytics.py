@@ -13,65 +13,6 @@ _LAST_FULL = {}
 _FULL_INTERVAL = 60
 ONLINE_WINDOW = 120
 
-_APP_MAP = [
-    ("nuvio", "Nuvio"),
-    ("stremio", "Stremio"),
-    ("vlc", "VLC"),
-    ("infuse", "Infuse"),
-    ("outplayer", "Outplayer"),
-    ("iina", "IINA"),
-    ("potplayer", "PotPlayer"),
-    ("mxplayer", "MX Player"),
-    ("mxtech", "MX Player"),
-    ("vimu", "Vimu"),
-    ("justplayer", "Just Player"),
-    ("splayer", "SPlayer"),
-    ("kodi", "Kodi"),
-    ("xbmc", "Kodi"),
-    ("crkey", "Chromecast"),
-    ("mpv", "mpv"),
-    ("exoplayer", "ExoPlayer"),
-    ("media3", "ExoPlayer"),
-    ("applecoremedia", "Apple Player"),
-    ("lavf", "FFmpeg"),
-    ("ffmpeg", "FFmpeg"),
-    ("libav", "FFmpeg"),
-    ("edg", "Edge"),
-    ("opr", "Opera"),
-    ("firefox", "Firefox"),
-    ("chrome", "Chrome"),
-    ("safari", "Safari"),
-    ("okhttp", "Android App"),
-    ("dalvik", "Android App"),
-    ("cfnetwork", "iOS App"),
-    ("mozilla", "Browser"),
-]
-
-_DEVICE_MAP = [
-    ("android tv", "Android TV"),
-    ("googletv", "Android TV"),
-    ("bravia", "Android TV"),
-    ("aft", "Fire TV"),
-    ("appletv", "Apple TV"),
-    ("apple tv", "Apple TV"),
-    ("tvos", "Apple TV"),
-    ("tizen", "Samsung TV"),
-    ("web0s", "LG TV"),
-    ("webos", "LG TV"),
-    ("roku", "Roku"),
-    ("smarttv", "Smart TV"),
-    ("smart-tv", "Smart TV"),
-    ("ipad", "iPad"),
-    ("iphone", "iPhone"),
-    ("ipod", "iPhone"),
-    ("android", "Android"),
-    ("windows nt", "Windows"),
-    ("macintosh", "macOS"),
-    ("mac os x", "macOS"),
-    ("cros", "ChromeOS"),
-    ("linux", "Linux"),
-]
-
 
 def client_ip_from(request) -> str:
     xff = request.headers.get("x-forwarded-for") or request.headers.get("x-real-ip")
@@ -80,39 +21,19 @@ def client_ip_from(request) -> str:
     return request.client.host if request.client else ""
 
 
-def parse_app(user_agent: str) -> str:
-    if not user_agent:
-        return "Unknown"
-    low = user_agent.lower()
-    for needle, name in _APP_MAP:
-        if needle in low:
-            return name
-    return "Unknown"
-
-
-def parse_device(user_agent: str) -> str:
-    if not user_agent:
-        return ""
-    low = user_agent.lower()
-    for needle, name in _DEVICE_MAP:
-        if needle in low:
-            return name
-    return ""
-
-
 async def lookup_ip(ip: str) -> dict:
     if not ip or ip.startswith(("127.", "10.", "192.168.", "172.")) or ip in ("::1", "localhost"):
-        return {"country": "Local", "city": "", "isp": "", "proxy": False, "mobile": False}
+        return {"country": "Local", "city": "", "isp": "", "proxy": False}
     now = time.time()
     cached = _IP_CACHE.get(ip)
     if cached and now - cached[1] < _IP_TTL:
         return cached[0]
-    data = {"country": "", "city": "", "isp": "", "proxy": False, "mobile": False}
+    data = {"country": "", "city": "", "isp": "", "proxy": False}
     try:
         async with httpx.AsyncClient(timeout=6) as client:
             resp = await client.get(
                 f"http://ip-api.com/json/{ip}",
-                params={"fields": "status,country,city,isp,proxy,hosting,mobile"},
+                params={"fields": "status,country,city,isp,proxy,hosting"},
             )
             if resp.status_code == 200:
                 j = resp.json()
@@ -122,7 +43,6 @@ async def lookup_ip(ip: str) -> dict:
                         "city": j.get("city") or "",
                         "isp": j.get("isp") or "",
                         "proxy": bool(j.get("proxy") or j.get("hosting")),
-                        "mobile": bool(j.get("mobile")),
                     }
     except Exception as e:
         LOGGER.warning(f"[ANALYTICS] IP lookup failed for {ip}: {e}")
@@ -130,25 +50,14 @@ async def lookup_ip(ip: str) -> dict:
     return data
 
 
-async def record_stream_start(token: str, name: str, ip: str, user_agent: str) -> None:
+async def record_stream_start(token: str, name: str, ip: str, user_agent: str = "") -> None:
     if not token:
         return
     coll = db.dbs["tracking"]["user_activity"]
-    device = parse_device(user_agent)
-
-    #----- Always refresh the cheap, device-identifying fields (no network) so the
-    #----- most recent device/app is shown immediately.
-    base = {
-        "last_active": datetime.utcnow(),
-        "ip": ip or "",
-        "app": parse_app(user_agent),
-        "device": device,
-        "user_agent": user_agent or "",
-    }
     try:
         await coll.update_one(
             {"_id": token},
-            {"$set": base, "$setOnInsert": {"name": name or "Unknown"}},
+            {"$set": {"last_active": datetime.utcnow(), "ip": ip or ""}, "$setOnInsert": {"name": name or "Unknown"}},
             upsert=True,
         )
     except Exception as e:
@@ -162,16 +71,13 @@ async def record_stream_start(token: str, name: str, ip: str, user_agent: str) -
     _LAST_FULL[token] = now_ts
 
     geo = await lookup_ip(ip)
-    upd = {
-        "country": geo.get("country"),
-        "city": geo.get("city"),
-        "isp": geo.get("isp"),
-        "proxy": geo.get("proxy", False),
-    }
-    if not device and geo.get("mobile"):
-        upd["device"] = "Mobile"
     try:
-        await coll.update_one({"_id": token}, {"$set": upd})
+        await coll.update_one({"_id": token}, {"$set": {
+            "country": geo.get("country"),
+            "city": geo.get("city"),
+            "isp": geo.get("isp"),
+            "proxy": geo.get("proxy", False),
+        }})
     except Exception as e:
         LOGGER.warning(f"[ANALYTICS] geo update failed: {e}")
 
@@ -225,8 +131,6 @@ async def get_activity_overview(page: int = 1, per_page: int = 12) -> dict:
             "country": d.get("country") or "",
             "city": d.get("city") or "",
             "isp": d.get("isp") or "",
-            "app": d.get("app") or "Unknown",
-            "device": d.get("device") or "",
             "proxy": bool(d.get("proxy")),
             "streams": int(d.get("streams") or 0),
             "last_active": last.isoformat() if last else None,

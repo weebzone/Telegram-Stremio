@@ -8,6 +8,7 @@ from Backend import StartTime, __version__, db
 from Backend.config import Telegram
 from Backend.fastapi.security.credentials import get_current_user, is_authenticated, require_auth, verify_credentials
 from Backend.fastapi.themes import DEFAULT_THEME, get_all_themes, get_theme
+from Backend.helper.analytics import get_activity_overview
 from Backend.helper.custom_dl import ACTIVE_STREAMS, RECENT_STREAMS
 from Backend.helper.metadata import resolve_cover_url
 from Backend.helper.pyro import get_readable_time
@@ -145,6 +146,10 @@ async def dashboard_page(request: Request, _: bool = Depends(require_auth)):
         }
 
     ctx["system_stats"] = system_stats
+    try:
+        ctx["user_activity_initial"] = await get_activity_overview(1, 12)
+    except Exception:
+        ctx["user_activity_initial"] = {"users": [], "online_count": 0, "total": 0, "page": 1, "per_page": 12, "total_pages": 1}
     return templates.TemplateResponse("dashboard.html", ctx)
 
 
