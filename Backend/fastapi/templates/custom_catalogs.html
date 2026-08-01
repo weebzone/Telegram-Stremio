@@ -1081,14 +1081,14 @@ function renderCatalogOrder() {
   const box = document.getElementById('catalog-order-list');
   if (!catalogOrder.length) { box.innerHTML = emptyState('📚', 'No catalogs', 'Create catalogs to reorder them.'); return; }
   box.innerHTML = catalogOrder.map((e, i) => {
-    const types = (e.types || []).map(t => t === 'series' ? 'TV' : 'Movie').join(' · ');
+    const typeLabel = e.type === 'series' ? '📺 TV' : '🎬 Movie';
     return `<div class="order-row">
       <span class="drag-idx">${i + 1}</span>
       <span class="min-w-0 flex-1">
         <span class="font-black truncate block">${escapeHtml(e.name)}</span>
         <span class="flex items-center gap-2 mt-1">
           <span class="vis-chip ${ORDER_GROUP_CLASS[e.group] || 'vis-tokens'}">${escapeHtml(e.group)}</span>
-          <span class="muted text-xs">${escapeHtml(types)}</span>
+          <span class="muted text-xs">${typeLabel}</span>
         </span>
       </span>
       <span class="flex flex-col gap-1">
@@ -1113,7 +1113,7 @@ async function saveCatalogOrder() {
   try {
     const res = await fetch('/api/custom-catalogs-order', {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ order: catalogOrder.map(e => e.id) })
+      body: JSON.stringify({ order: catalogOrder.map(e => e.key) })
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.detail || 'Failed to save order');

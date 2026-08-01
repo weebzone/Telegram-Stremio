@@ -369,11 +369,19 @@ async def get_manifest(token: str, token_data: dict = Depends(verify_token)):
             token_order = (token_data.get("config") or {}).get("catalog_order") or []
             effective = token_order or order
             if effective:
-                rank = {cid: i for i, cid in enumerate(effective)}
-                catalogs.sort(key=lambda c: rank.get(c.get("id"), len(effective) + 1))
+                rank = {k: i for i, k in enumerate(effective)}
+
+                def _crank(c):
+                    key = f"{c.get('id')}::{c.get('type')}"
+                    return rank.get(key, rank.get(c.get("id"), len(effective) + 1))
+
+                catalogs.sort(key=_crank)
             hidden = set((token_data.get("config") or {}).get("hidden_catalogs") or [])
             if hidden:
-                catalogs = [c for c in catalogs if c.get("id") not in hidden]
+                catalogs = [
+                    c for c in catalogs
+                    if c.get("id") not in hidden and f"{c.get('id')}::{c.get('type')}" not in hidden
+                ]
         except Exception:
             pass
 
@@ -892,25 +900,31 @@ async def configure_addon(token: str, request: Request):
 #----- Catalogs this token can see, in effective (token or global) order
 async def _addon_catalogs_for_token(token_data: dict) -> list:
     entries = [
-        {"id": "latest_movies", "name": "Latest Movies"},
-        {"id": "top_movies", "name": "Popular Movies"},
-        {"id": "latest_series", "name": "Latest Series"},
-        {"id": "top_series", "name": "Popular Series"},
+        {"id": "latest_movies", "name": "Latest Movies", "type": "movie"},
+        {"id": "top_movies", "name": "Popular Movies", "type": "movie"},
+        {"id": "latest_series", "name": "Latest Series", "type": "series"},
+        {"id": "top_series", "name": "Popular Series", "type": "series"},
     ]
     try:
         for c in await db.get_custom_catalogs():
             items = [i for i in (c.get("items") or []) if _token_can_view(*_effective_visibility(c, i), token_data)]
             if not items:
                 continue
-            entries.append({"id": f"custom_{c['_id']}", "name": c.get("name") or "Catalog"})
+            cid, name = f"custom_{c['_id']}", (c.get("name") or "Catalog")
+            if any(i.get("media_type") == "movie" for i in items):
+                entries.append({"id": cid, "name": name, "type": "movie"})
+            if any(i.get("media_type") == "tv" for i in items):
+                entries.append({"id": cid, "name": name, "type": "series"})
     except Exception:
         pass
+    for e in entries:
+        e["key"] = f"{e['id']}::{e['type']}"
     order = await db.get_catalog_order()
     tconf = token_data.get("config") or {}
     effective = tconf.get("catalog_order") or order
     if effective:
-        rank = {cid: i for i, cid in enumerate(effective)}
-        entries.sort(key=lambda e: rank.get(e["id"], len(effective) + 1))
+        rank = {k: i for i, k in enumerate(effective)}
+        entries.sort(key=lambda e: rank.get(e["key"], rank.get(e["id"], len(effective) + 1)))
     return entries
 
 

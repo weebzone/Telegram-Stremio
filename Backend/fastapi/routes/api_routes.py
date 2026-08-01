@@ -1579,10 +1579,10 @@ async def update_auto_catalog_settings_api(payload: dict):
 
 
 _DEFAULT_CATALOG_ENTRIES = [
-    {"id": "latest_movies", "name": "Latest Movies", "group": "Default Movies", "types": ["movie"]},
-    {"id": "top_movies", "name": "Popular Movies", "group": "Default Movies", "types": ["movie"]},
-    {"id": "latest_series", "name": "Latest Series", "group": "Default TV", "types": ["series"]},
-    {"id": "top_series", "name": "Popular Series", "group": "Default TV", "types": ["series"]},
+    {"id": "latest_movies", "name": "Latest Movies", "group": "Default Movies", "type": "movie"},
+    {"id": "top_movies", "name": "Popular Movies", "group": "Default Movies", "type": "movie"},
+    {"id": "latest_series", "name": "Latest Series", "group": "Default TV", "type": "series"},
+    {"id": "top_series", "name": "Popular Series", "group": "Default TV", "type": "series"},
 ]
 
 
@@ -1592,20 +1592,20 @@ async def get_catalog_order_api():
         entries = [dict(e) for e in _DEFAULT_CATALOG_ENTRIES]
         for c in catalogs:
             items = c.get("items") or []
-            types = []
-            if any(i.get("media_type") == "movie" for i in items):
-                types.append("movie")
-            if any(i.get("media_type") == "tv" for i in items):
-                types.append("series")
-            entries.append({
-                "id": f"custom_{c['_id']}",
-                "name": c.get("name") or "Catalog",
-                "group": "Auto" if c.get("auto") else "Custom",
-                "types": types or ["movie"],
-            })
+            cid = f"custom_{c['_id']}"
+            name = c.get("name") or "Catalog"
+            group = "Auto" if c.get("auto") else "Custom"
+            has_movie = any(i.get("media_type") == "movie" for i in items)
+            has_series = any(i.get("media_type") == "tv" for i in items)
+            if has_movie or not items:
+                entries.append({"id": cid, "name": name, "group": group, "type": "movie"})
+            if has_series:
+                entries.append({"id": cid, "name": name, "group": group, "type": "series"})
+        for e in entries:
+            e["key"] = f"{e['id']}::{e['type']}"
         order = await db.get_catalog_order()
-        rank = {cid: i for i, cid in enumerate(order)}
-        entries.sort(key=lambda e: rank.get(e["id"], len(order) + 1))
+        rank = {k: i for i, k in enumerate(order)}
+        entries.sort(key=lambda e: rank.get(e["key"], rank.get(e["id"], len(order) + 1)))
         return {"entries": entries, "order": order}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
