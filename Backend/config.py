@@ -18,7 +18,6 @@ class Telegram:
     API_ID              = _int_env("API_ID")
     API_HASH            = getenv("API_HASH", "")
     BOT_TOKEN           = getenv("BOT_TOKEN", "")
-    USER_SESSION_STRING = ""
 
     #----- Required: Database URIs
     DATABASE = [db.strip() for db in (getenv("DATABASE") or "").split(",") if db.strip()]

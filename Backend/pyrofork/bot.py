@@ -16,19 +16,8 @@ StreamBot = Client(
 
 USERBOT_CLIENT_INDEX = -1
 
-#----- Optional userbot client (only when a session string is configured)
+#----- Userbot client — built at runtime via build_userbot() from the stored session
 Userbot = None
-if Telegram.USER_SESSION_STRING:
-    Userbot = Client(
-        name='userbot',
-        api_id=Telegram.API_ID,
-        api_hash=Telegram.API_HASH,
-        session_string=Telegram.USER_SESSION_STRING,
-        sleep_threshold=20,
-        workers=6,
-        max_concurrent_transmissions=10,
-        no_updates=True,
-    )
 
 #----- Shared multi-client registries
 multi_clients = {}

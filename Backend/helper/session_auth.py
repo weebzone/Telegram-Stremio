@@ -75,7 +75,6 @@ async def get_active_session_string() -> str:
 
 
 async def _activate(session_string: str) -> None:
-    Telegram.USER_SESSION_STRING = session_string
     try:
         if botmod.Userbot is None:
             botmod.build_userbot(session_string)
@@ -92,7 +91,6 @@ async def _activate(session_string: str) -> None:
 
 
 async def _deactivate() -> None:
-    Telegram.USER_SESSION_STRING = ""
     try:
         if botmod.Userbot is not None:
             await botmod.Userbot.stop()
@@ -176,12 +174,10 @@ async def _finalize(login_id: str) -> dict:
 
 async def get_session_status() -> dict:
     doc = await _read_stored()
-    env_configured = bool(Telegram.USER_SESSION_STRING) and not doc
     if not doc:
-        return {"connected": False, "env_configured": env_configured, "profile": None}
+        return {"connected": False, "profile": None}
     return {
         "connected": bool(doc.get("active")),
-        "env_configured": env_configured,
         "live": botmod.Userbot is not None,
         "profile": {
             "name": doc.get("name"),

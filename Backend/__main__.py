@@ -7,7 +7,6 @@ from pyrogram import idle
 from starlette.middleware.sessions import SessionMiddleware
 
 from Backend import __version__, db
-from Backend.config import Telegram
 from Backend.fastapi import server
 from Backend.fastapi.main import app
 from Backend.helper import subscription_task_manager
@@ -54,7 +53,6 @@ async def start_services():
         if botmod.Userbot is None:
             stored_session = await get_active_session_string()
             if stored_session:
-                Telegram.USER_SESSION_STRING = stored_session
                 botmod.build_userbot(stored_session)
                 LOGGER.info("Loaded Userbot session from encrypted storage.")
 

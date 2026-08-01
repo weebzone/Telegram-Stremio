@@ -307,7 +307,7 @@ class SettingsManager:
 
         #----- Global Search requires a Userbot session; enforce it server-side
         if merged.get("global_search"):
-            if not Telegram.USER_SESSION_STRING and botmod.Userbot is None:
+            if botmod.Userbot is None:
                 merged["global_search"] = False
                 LOGGER.warning(
                     "SettingsManager: rejected global_search=True — no Userbot session connected."
