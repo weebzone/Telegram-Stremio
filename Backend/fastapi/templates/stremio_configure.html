@@ -39,10 +39,14 @@ body {
     color: var(--text);
     min-height: 100vh;
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: center;
-    padding: 24px;
+    padding: clamp(16px, 4vw, 40px);
 }
+
+.wrap { width: 100%; max-width: 960px; margin: auto; }
+.layout { display: grid; gap: 16px; grid-template-columns: 1fr; align-items: start; }
+@media (min-width: 860px) { .layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
 
 body::before {
     content: "";
@@ -60,8 +64,7 @@ body::before {
     border: 1px solid var(--hairline);
     border-radius: 1.75rem;
     box-shadow: 0 24px 60px rgba(var(--shadow-color), {{ '0.45' if theme.is_dark else '0.16' }});
-    padding: 40px 32px;
-    max-width: 480px;
+    padding: clamp(24px, 4vw, 36px);
     width: 100%;
     text-align: center;
 }
@@ -140,6 +143,8 @@ h1 { font-size: 1.15rem; font-weight: 700; color: var(--text); margin-bottom: 6p
 </style>
 </head>
 <body>
+<div class="wrap">
+<div class="layout">
 <div class="card">
     <div class="brand">
         <div class="brand-logo"><i class="fa-solid fa-play"></i></div>
@@ -179,7 +184,7 @@ h1 { font-size: 1.15rem; font-weight: 700; color: var(--text); margin-bottom: 6p
     <button onclick="copyUrl()" class="btn-copy"><i class="fa-solid fa-copy"></i> Copy URL</button>
 </div>
 
-<div class="card" style="margin-top:16px;text-align:left">
+<div class="card" style="text-align:left">
     <h1 style="text-align:center"><i class="fa-solid fa-sliders"></i> Personalize</h1>
     <p class="sub-title" style="text-align:center">Tune quality and catalogs for your install. Re-install after saving.</p>
 
@@ -207,6 +212,8 @@ h1 { font-size: 1.15rem; font-weight: 700; color: var(--text); margin-bottom: 6p
         <i class="fa-solid fa-floppy-disk"></i> Save preferences
     </button>
     <p id="cfg-state" class="cfg-hint" style="text-align:center"></p>
+</div>
+</div>
 </div>
 
 <style>

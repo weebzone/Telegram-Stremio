@@ -15,7 +15,8 @@ from pyrogram.errors import (
 )
 
 from Backend.logger import LOGGER
-from Backend.pyrofork.bot import StreamBot, Userbot
+import Backend.pyrofork.bot as botmod
+from Backend.pyrofork.bot import StreamBot
 
 DELETE_BATCH_SIZE = 10
 _FALLBACK_WORTHY = (
@@ -32,7 +33,7 @@ _userbot_session_dead = False
 
 
 def _userbot_usable() -> bool:
-    return Userbot is not None and not _userbot_session_dead
+    return botmod.Userbot is not None and not _userbot_session_dead
 
 
 #----- Edit a message caption via StreamBot, falling back to the Userbot
@@ -62,13 +63,13 @@ async def edit_message(chat_id: int, msg_id: int, new_caption: str):
 async def _userbot_edit(chat_id: int, msg_id: int, new_caption: str):
     global _userbot_session_dead
     try:
-        await Userbot.edit_message_caption(chat_id=chat_id, message_id=msg_id, caption=new_caption)
+        await botmod.Userbot.edit_message_caption(chat_id=chat_id, message_id=msg_id, caption=new_caption)
         await sleep(2)
     except FloodWait as e:
         LOGGER.warning(f"[USERBOT] FloodWait detected: sleeping {e.value}s (edit {msg_id} in {chat_id})")
         await sleep(e.value)
         try:
-            await Userbot.edit_message_caption(chat_id=chat_id, message_id=msg_id, caption=new_caption)
+            await botmod.Userbot.edit_message_caption(chat_id=chat_id, message_id=msg_id, caption=new_caption)
         except Exception as e2:
             LOGGER.error(f"[USERBOT] Retry after FloodWait failed while editing {msg_id} in {chat_id}: {e2}")
     except _SESSION_DEAD as e:
@@ -94,7 +95,7 @@ async def delete_messages_batch(chat_id: int, msg_ids: List[int]):
 
         if remaining and _userbot_usable():
             LOGGER.info(f"[USERBOT] Fallback triggered: deleting {len(remaining)} message(s) in {chat_id}")
-            remaining = await _delete_chunk(Userbot, "Userbot", chat_id, remaining)
+            remaining = await _delete_chunk(botmod.Userbot, "Userbot", chat_id, remaining)
 
         if remaining:
             LOGGER.error(

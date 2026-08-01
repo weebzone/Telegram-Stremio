@@ -327,8 +327,9 @@
             <p class="hint" style="margin:0">
                 <i class="fa-solid fa-circle-info"></i>
                 {% if not userbot_configured %}
-                This tool needs a <strong>session string</strong> (USER_SESSION_STRING). Only a user account
-                can promote bots to admin — a bot can't promote another bot. Add one and restart to enable it.
+                This tool needs a connected <strong>Telegram user session</strong>. Only a user account can
+                promote bots to admin. Connect one from
+                <a href="/admin/settings" style="color:var(--primary)">Settings → Telegram User Session</a>.
                 {% else %}
                 This tool needs <strong>more than one bot token</strong>. Add extra tokens under
                 <a href="/admin/settings" style="color:var(--primary)">Settings → Multi-Token Clients</a> to enable it.

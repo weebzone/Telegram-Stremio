@@ -306,13 +306,13 @@ class SettingsManager:
 
         #----- Global Search requires a Userbot session; enforce it server-side
         if merged.get("global_search"):
-            if not Telegram.USER_SESSION_STRING:
+            import Backend.pyrofork.bot as botmod
+            if not Telegram.USER_SESSION_STRING and botmod.Userbot is None:
                 merged["global_search"] = False
                 LOGGER.warning(
-                    "SettingsManager: rejected global_search=True — "
-                    "USER_SESSION_STRING is not configured."
+                    "SettingsManager: rejected global_search=True — no Userbot session connected."
                 )
-                results["global_search"] = "rejected — no Userbot session configured"
+                results["global_search"] = "rejected — connect a Telegram session in Settings first"
 
         #----- Phase 1: validate/apply changes that can abort the save
         old_extra = old.get("extra_databases") or []

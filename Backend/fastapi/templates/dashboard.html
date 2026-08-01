@@ -68,6 +68,82 @@
     <div class="grid lg:grid-cols-3 gap-8">
         <div class="lg:col-span-2 space-y-8">
             <section>
+                <div class="flex items-center justify-between gap-3 mb-4 ml-2">
+                    <h3 class="flex items-center gap-2 text-lg font-bold">
+                        <i class="fa-solid fa-users text-primary"></i> User Activity
+                        <span id="ua-online" class="text-xs font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary">0 online</span>
+                    </h3>
+                    <button onclick="loadUserActivity()" class="text-sm font-semibold text-text-secondary hover:text-primary transition">
+                        <i class="fa-solid fa-rotate"></i> Refresh
+                    </button>
+                </div>
+                <div id="ua-list" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <p class="text-text-secondary text-sm ml-2">Loading…</p>
+                </div>
+            </section>
+
+            <style>
+                .ua-dot { width:.7rem;height:.7rem;border-radius:9999px;background:var(--text-secondary);flex-shrink:0; }
+                .ua-dot.on { background:#22c55e;box-shadow:0 0 8px #22c55e; }
+                .ua-vpn { font-size:.6rem;font-weight:900;padding:.15rem .45rem;border-radius:9999px;background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.3); }
+                .ua-now { margin-top:.5rem;font-size:.8rem;font-weight:800;color:#22c55e; }
+                .ua-meta { margin-top:.6rem;display:grid;grid-template-columns:1fr 1fr;gap:.3rem .6rem;font-size:.72rem; }
+                .ua-meta span { color:var(--text-secondary);display:flex;align-items:center;gap:.35rem;min-width:0; }
+                .ua-meta span span { color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+            </style>
+
+            <script>
+                function uaEsc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+                function uaAgo(iso) {
+                    if (!iso) return '—';
+                    const t = new Date(iso.endsWith('Z') ? iso : iso + 'Z').getTime();
+                    const d = (Date.now() - t) / 1000;
+                    if (d < 60) return 'just now';
+                    if (d < 3600) return Math.floor(d / 60) + 'm ago';
+                    if (d < 86400) return Math.floor(d / 3600) + 'h ago';
+                    return Math.floor(d / 86400) + 'd ago';
+                }
+                async function loadUserActivity() {
+                    const box = document.getElementById('ua-list');
+                    try {
+                        const res = await fetch('/api/admin/user-activity');
+                        const data = await res.json();
+                        const users = data.users || [];
+                        document.getElementById('ua-online').textContent = (data.online_count || 0) + ' online';
+                        if (!users.length) { box.innerHTML = '<p class="text-text-secondary text-sm ml-2">No user activity recorded yet.</p>'; return; }
+                        box.innerHTML = users.map(u => {
+                            const loc = [u.country, u.city].filter(Boolean).join(': ') || 'Unknown';
+                            const nowLine = u.now_playing
+                                ? `<div class="ua-now"><i class="fas fa-play"></i> Now Playing — ${uaEsc(u.now_playing)}</div>`
+                                : `<div class="text-text-secondary text-xs mt-2 truncate"><i class="fas fa-clock-rotate-left"></i> ${uaEsc(u.last_title || 'No history')}</div>`;
+                            return `<div class="glass-panel p-4 rounded-2xl border border-hairline">
+                                <div class="flex items-center justify-between gap-2">
+                                    <div class="flex items-center gap-2 min-w-0">
+                                        <span class="ua-dot ${u.online ? 'on' : ''}"></span>
+                                        <span class="font-bold truncate">${uaEsc(u.name)}</span>
+                                    </div>
+                                    ${u.proxy ? '<span class="ua-vpn"><i class="fas fa-shield-halved"></i> VPN</span>' : ''}
+                                </div>
+                                ${nowLine}
+                                <div class="ua-meta">
+                                    <span><i class="fas fa-signal"></i> <span>${u.online ? 'Online' : uaAgo(u.last_active)}</span></span>
+                                    <span><i class="fas fa-location-dot"></i> <span>${uaEsc(loc)}</span></span>
+                                    <span><i class="fas fa-network-wired"></i> <span>${uaEsc(u.isp || '—')}</span></span>
+                                    <span><i class="fas fa-mobile-screen-button"></i> <span>${uaEsc(u.app)}</span></span>
+                                    <span><i class="fas fa-globe"></i> <span>${uaEsc(u.ip || '—')}</span></span>
+                                    <span><i class="fas fa-film"></i> <span>${u.streams} streams</span></span>
+                                </div>
+                            </div>`;
+                        }).join('');
+                    } catch (e) {
+                        box.innerHTML = '<p class="text-text-secondary text-sm ml-2">Unable to load user activity.</p>';
+                    }
+                }
+                loadUserActivity();
+                setInterval(loadUserActivity, 15000);
+            </script>
+
+            <section>
                 <h3 class="flex items-center gap-2 text-lg font-bold mb-4 ml-2">
                     <i class="fa-solid fa-database text-primary"></i> Storage Nodes
                 </h3>

@@ -20,7 +20,7 @@ from Backend.logger import LOGGER
 from Backend.helper.settings_manager import SettingsManager
 from Backend.helper.encrypt import encode_string
 from Backend.helper.pyro import get_readable_file_size
-from Backend.pyrofork.bot import Userbot
+import Backend.pyrofork.bot as botmod
 
 MAX_RESULTS = 50
 MAX_RESULTS_PER_CHAT = 50
@@ -40,7 +40,7 @@ _VIDEO_EXTS = (".mkv", ".mp4", ".avi", ".ts", ".m4v", ".mov", ".wmv", ".webm", "
 
 
 def is_userbot_available() -> bool:
-    return Userbot is not None and not _userbot_session_dead
+    return botmod.Userbot is not None and not _userbot_session_dead
 
 
 def is_global_search_enabled() -> bool:
@@ -253,7 +253,7 @@ async def global_search(
         async with _search_semaphore:
             LOGGER.info(f"[USERBOT] Search started: '{search_query}' across {len(target_ids)} channel(s)")
             chat_titles = await asyncio.gather(
-                *(_get_chat_title(Userbot, cid) for cid in target_ids),
+                *(_get_chat_title(botmod.Userbot, cid) for cid in target_ids),
                 return_exceptions=True,
             )
 
@@ -264,7 +264,7 @@ async def global_search(
                 if isinstance(title, Exception):
                     title = str(cid)
                 search_tasks.append(
-                    _search_channel(Userbot, cid, title, search_query, expected_title, season, episode)
+                    _search_channel(botmod.Userbot, cid, title, search_query, expected_title, season, episode)
                 )
 
             per_channel_results = await asyncio.gather(*search_tasks, return_exceptions=True)

@@ -246,16 +246,12 @@
         return `${v.toFixed(v >= 100 || i === 0 ? 0 : 1)} ${units[i]}`;
     }
 
-    function topQualityLabel(qualities) {
-        const rank = { '2160p': 5, '4k': 5, '1080p': 4, '720p': 3, '480p': 2, '360p': 1 };
+    function allQualityLabels(qualities) {
         const norm = { '2160p': '4K', '4k': '4K', '1080p': '1080p', '720p': '720p', '480p': '480p', '360p': '360p' };
-        let best = '', bestRank = 0;
-        qualities.forEach(q => {
-            const key = String(q.quality || '').toLowerCase();
-            const r = rank[key] || 0;
-            if (r > bestRank) { bestRank = r; best = norm[key] || q.quality; }
-        });
-        return best;
+        const rank = { '4K': 5, '1080p': 4, '720p': 3, '480p': 2, '360p': 1 };
+        const set = new Set();
+        qualities.forEach(q => { const k = String(q.quality || '').toLowerCase(); if (norm[k]) set.add(norm[k]); });
+        return Array.from(set).sort((a, b) => (rank[b] || 0) - (rank[a] || 0));
     }
 
     function mediaBadges(item) {
@@ -263,14 +259,15 @@
         if (!qs.length) return '';
         const isSplit = qs.some(q => q.group_key || (q.parts && q.parts.length));
         const totalBytes = qs.reduce((sum, q) => sum + sizeToBytes(q.size), 0);
-        const quality = topQualityLabel(qs);
+        const labels = allQualityLabels(qs);
         const size = bytesToSize(totalBytes);
         const badge = (icon, text, cls) => text
             ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md ${cls} text-white text-[10px] font-extrabold shadow">${icon}${text}</span>` : '';
+        const qualityBadges = labels.map(l => badge('', l, 'bg-primary/90')).join('');
         return `
-            <div class="absolute bottom-2 left-2 right-2 flex items-center justify-between gap-1 flex-wrap">
-                <span class="flex items-center gap-1">
-                    ${badge('', quality, 'bg-primary/90')}
+            <div class="absolute bottom-2 left-2 right-2 flex items-end justify-between gap-1">
+                <span class="flex items-center gap-1 flex-wrap">
+                    ${qualityBadges}
                     ${isSplit ? badge('<i class="fa-solid fa-puzzle-piece"></i>', 'Split', 'bg-purple-600/90') : ''}
                 </span>
                 ${badge('<i class="fa-solid fa-hard-drive"></i>', size, 'bg-black/70 border border-hairline')}

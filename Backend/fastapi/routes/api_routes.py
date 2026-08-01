@@ -61,9 +61,9 @@ from Backend.helper.subtitles import (
     resolve_subtitle_message,
 )
 from Backend.logger import LOGGER
+import Backend.pyrofork.bot as botmod
 from Backend.pyrofork.bot import (
     StreamBot,
-    Userbot,
     client_avg_mbps,
     client_dc_map,
     client_failures,
@@ -2489,7 +2489,7 @@ def _no_privileges() -> ChatPrivileges:
 
 async def _bot_member_status(chat_id, bot_user_id) -> str:
     try:
-        m = await Userbot.get_chat_member(chat_id, bot_user_id)
+        m = await botmod.Userbot.get_chat_member(chat_id, bot_user_id)
         st = m.status
         if st in (ChatMemberStatus.OWNER, ChatMemberStatus.ADMINISTRATOR):
             return "admin"
@@ -2522,7 +2522,7 @@ def _friendly_promote_error(exc) -> str:
 
 async def _session_rights(chat_id) -> dict:
     try:
-        me = await Userbot.get_chat_member(chat_id, "me")
+        me = await botmod.Userbot.get_chat_member(chat_id, "me")
     except Exception as e:
         return {"manageable": False, "status": "unknown", "reason": f"Couldn't check your rights: {e}"}
     st = me.status
@@ -2539,9 +2539,9 @@ async def _session_rights(chat_id) -> dict:
 
 
 async def bot_admin_scan_api() -> dict:
-    if Userbot is None:
+    if botmod.Userbot is None:
         return {"status": "error", "reason": "no_session",
-                "message": "Add a session string (USER_SESSION_STRING) to manage channel admins."}
+                "message": "Connect your Telegram session from the Settings page to manage channel admins."}
 
     bots = await _managed_bots()
     if len(bots) <= 1:
@@ -2561,7 +2561,7 @@ async def bot_admin_scan_api() -> dict:
         }
 
         try:
-            chat = await Userbot.get_chat(cid)
+            chat = await botmod.Userbot.get_chat(cid)
             entry["name"] = getattr(chat, "title", None) or getattr(chat, "first_name", None) or str(cid)
             entry["accessible"] = True
         except Exception as e:
@@ -2578,7 +2578,7 @@ async def bot_admin_scan_api() -> dict:
             entry["bots"][str(b["user_id"])] = await _bot_member_status(cid, b["user_id"])
 
         try:
-            async for m in Userbot.get_chat_members(cid, filter=ChatMembersFilter.ADMINISTRATORS):
+            async for m in botmod.Userbot.get_chat_members(cid, filter=ChatMembersFilter.ADMINISTRATORS):
                 u = getattr(m, "user", None)
                 if u and getattr(u, "is_bot", False) and u.id not in managed_ids:
                     entry["orphans"].append({
@@ -2601,7 +2601,7 @@ async def _promote_one(chat_id, bot: dict, privileges: ChatPrivileges, _retry: b
         return {"bot": label, "user_id": bid, "status": "already", "message": "Already an admin."}
 
     try:
-        await Userbot.promote_chat_member(chat_id, bid, privileges=privileges)
+        await botmod.Userbot.promote_chat_member(chat_id, bid, privileges=privileges)
         return {"bot": label, "user_id": bid, "status": "added", "message": "Promoted to admin."}
     except FloodWait as fw:
         wait = int(getattr(fw, "value", getattr(fw, "x", 5)) or 5)
@@ -2614,9 +2614,9 @@ async def _promote_one(chat_id, bot: dict, privileges: ChatPrivileges, _retry: b
         up = str(e).upper()
         if _retry and ("PARTICIPANT" in up or "USER_NOT_MUTUAL_CONTACT" in up):
             try:
-                await Userbot.add_chat_members(chat_id, bid)
+                await botmod.Userbot.add_chat_members(chat_id, bid)
                 await asyncio.sleep(0.5)
-                await Userbot.promote_chat_member(chat_id, bid, privileges=privileges)
+                await botmod.Userbot.promote_chat_member(chat_id, bid, privileges=privileges)
                 return {"bot": label, "user_id": bid, "status": "added", "message": "Added and promoted to admin."}
             except Exception as e2:
                 return {"bot": label, "user_id": bid, "status": "error", "message": _friendly_promote_error(e2)}
@@ -2626,7 +2626,7 @@ async def _promote_one(chat_id, bot: dict, privileges: ChatPrivileges, _retry: b
 async def _demote_one(chat_id, user) -> dict:
     label = getattr(user, "first_name", None) or (f"@{user.username}" if getattr(user, "username", None) else str(user.id))
     try:
-        await Userbot.promote_chat_member(chat_id, user.id, privileges=_no_privileges())
+        await botmod.Userbot.promote_chat_member(chat_id, user.id, privileges=_no_privileges())
         return {"bot": label, "user_id": user.id, "status": "demoted", "message": "Admin rights removed (orphan)."}
     except Exception as e:
         return {"bot": label, "user_id": user.id, "status": "error", "message": _friendly_promote_error(e)}
@@ -2641,7 +2641,7 @@ async def _run_bot_admin_apply(channel_ids, selected, demote_orphans, managed_id
             ch_result = {"id": str(cid), "name": str(cid), "items": []}
 
             try:
-                chat = await Userbot.get_chat(cid)
+                chat = await botmod.Userbot.get_chat(cid)
                 ch_result["name"] = getattr(chat, "title", None) or getattr(chat, "first_name", None) or str(cid)
             except Exception as e:
                 ch_result["items"].append({"bot": "—", "status": "error", "message": f"Channel not accessible: {e}"})
@@ -2665,7 +2665,7 @@ async def _run_bot_admin_apply(channel_ids, selected, demote_orphans, managed_id
 
             if demote_orphans:
                 try:
-                    async for m in Userbot.get_chat_members(cid, filter=ChatMembersFilter.ADMINISTRATORS):
+                    async for m in botmod.Userbot.get_chat_members(cid, filter=ChatMembersFilter.ADMINISTRATORS):
                         u = getattr(m, "user", None)
                         if u and getattr(u, "is_bot", False) and u.id not in managed_ids:
                             ch_result["items"].append(await _demote_one(cid, u))
@@ -2686,8 +2686,8 @@ async def _run_bot_admin_apply(channel_ids, selected, demote_orphans, managed_id
 
 
 async def bot_admin_apply_api(payload: dict | None = None) -> dict:
-    if Userbot is None:
-        raise HTTPException(status_code=503, detail="No session string configured.")
+    if botmod.Userbot is None:
+        raise HTTPException(status_code=503, detail="No Telegram session connected. Connect one from Settings.")
 
     if _bot_admin_apply_state["running"]:
         raise HTTPException(status_code=409, detail="An apply run is already in progress.")

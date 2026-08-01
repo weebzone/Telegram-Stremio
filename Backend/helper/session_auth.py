@@ -81,6 +81,12 @@ async def _activate(session_string: str) -> None:
             await botmod.Userbot.start()
             botmod.Userbot.username = getattr(botmod.Userbot.me, "username", None)
             LOGGER.info("Userbot session activated live from stored session.")
+        for mod in ("Backend.helper.global_search", "Backend.helper.task_manager"):
+            try:
+                import importlib
+                setattr(importlib.import_module(mod), "_userbot_session_dead", False)
+            except Exception:
+                pass
     except Exception as e:
         LOGGER.warning(f"[SESSION] Live Userbot activation failed (restart to apply): {e}")
 
