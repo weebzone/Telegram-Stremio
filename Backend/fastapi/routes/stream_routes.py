@@ -19,6 +19,7 @@ from Backend.helper.custom_dl import ACTIVE_STREAMS, RECENT_STREAMS, ByteStreame
 from Backend.helper.encrypt import decode_string
 from Backend.helper.utils import track_usage
 from Backend.helper.virtual_dl import resolve_virtual_parts, virtual_stream_generator
+from Backend.helper.zip_stream import resolve_zip_entry
 from Backend.logger import LOGGER
 import Backend.pyrofork.bot as botmod
 from Backend.pyrofork.bot import (
@@ -266,6 +267,11 @@ async def stream_handler(request: Request, token: str, id: str, name: str, token
     decoded = await decode_string(id)
 
     if decoded.get("global"):
+        if decoded.get("zip"):
+            return await global_zip_media_streamer(
+                request=request, parts_payload=decoded["parts"],
+                token=token, token_data=token_data, stream_id_hash=id,
+            )
         if "parts" in decoded:
             return await global_virtual_media_streamer(
                 request=request, parts_payload=decoded["parts"],
@@ -522,6 +528,84 @@ async def global_virtual_media_streamer(request: Request, parts_payload: list, t
 
     body_gen = virtual_stream_generator(
         parts=parts, start=start, end=end, chunk_size=chunk_size,
+        streamer=streamer, client_index=USERBOT_CLIENT_INDEX, request=request, meta=meta,
+        stream_id=stream_id, parallelism=1, prefetch_count=1,
+    )
+    return StreamingResponse(body_gen, headers=headers, status_code=status, media_type=mime_type)
+
+
+#----- Read a byte range from the concatenated virtual parts into memory
+async def _read_virtual_range(parts, start, length, streamer, request):
+    buf = bytearray()
+    gen = virtual_stream_generator(
+        parts=parts, start=start, end=start + length - 1, chunk_size=1024 * 1024,
+        streamer=streamer, client_index=USERBOT_CLIENT_INDEX, request=request,
+        meta={"title": "zip-index", "user_name": "system", "token": "", "global_search": True},
+        stream_id=secrets.token_hex(6), parallelism=1, prefetch_count=1,
+    )
+    try:
+        async for chunk in gen:
+            buf.extend(chunk)
+            if len(buf) >= length:
+                break
+    finally:
+        await gen.aclose()
+    return bytes(buf[:length])
+
+
+#----- Stream a split ZIP archive (.zip.001/.002 ...) as its inner video, with seeking.
+#----- Only STORED (uncompressed) archives are seekable; the inner file bytes are served
+#----- directly at their offset inside the concatenated zip (no stream-unzip needed).
+async def global_zip_media_streamer(request: Request, parts_payload: list, token: str, token_data: dict = None, stream_id_hash: str = None):
+    streamer = _get_userbot_streamer()
+    if streamer is None:
+        raise HTTPException(status_code=503, detail="Global Search streaming is unavailable (no Userbot connected)")
+
+    parts, zip_size = await resolve_virtual_parts(parts_payload, streamer, prefix_100=False)
+    if not parts or zip_size <= 0:
+        raise HTTPException(status_code=404, detail="Split archive parts not accessible via Global Search")
+
+    async def _read(off, length):
+        return await _read_virtual_range(parts, off, length, streamer, request)
+
+    entry = await resolve_zip_entry(_read, zip_size)
+    if not entry:
+        raise HTTPException(status_code=415, detail="Unreadable or incomplete split archive")
+    if entry["method"] != 0:
+        raise HTTPException(
+            status_code=415,
+            detail="This archive is compressed; only stored (uncompressed) ZIP archives can be seek-streamed.",
+        )
+
+    inner_size = entry["size"]
+    data_offset = entry["data_offset"]
+    if inner_size <= 0 or data_offset + inner_size > zip_size:
+        raise HTTPException(status_code=415, detail="Split archive has an unexpected layout")
+
+    range_header = request.headers.get("Range", "")
+    start, end = parse_range_header(range_header, inner_size)
+    req_length = end - start + 1
+    stream_id = secrets.token_hex(8)
+    inner_name = (entry.get("name") or "").split("/")[-1] or unquote(request.path_params.get("name", "")) or "video.mkv"
+    mime_type = mimetypes.guess_type(inner_name)[0] or "video/x-matroska"
+
+    meta = {
+        "request_path": str(request.url.path),
+        "client_host": request.client.host if request.client else None,
+        "title": await _lookup_title(stream_id_hash, inner_name),
+        "user_name": token_data.get("name", "Unknown") if token_data else "Unknown",
+        "token": token,
+        "global_search": True,
+        "zip_parts": len(parts),
+    }
+    asyncio.create_task(track_usage(stream_id, token, token_data))
+
+    headers, status = _build_stream_headers(mime_type, inner_name, req_length, range_header, start, end, inner_size)
+    if request.method == "HEAD":
+        return PlainResponse(status_code=status, headers=headers)
+
+    body_gen = virtual_stream_generator(
+        parts=parts, start=data_offset + start, end=data_offset + end, chunk_size=1024 * 1024,
         streamer=streamer, client_index=USERBOT_CLIENT_INDEX, request=request, meta=meta,
         stream_id=stream_id, parallelism=1, prefetch_count=1,
     )

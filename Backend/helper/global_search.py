@@ -98,23 +98,29 @@ def _parse_and_validate(filename: str, expected_title: str, season: Optional[int
     return _validate_name(filename, expected_title, season, episode)
 
 
-#----- Detect a split part -> (group_base, part_number, display_name) or None
+#----- Detect a split part -> (group_base, part_number, display_name, is_zip) or None
 def _split_part_info(filename: str) -> Optional[tuple]:
     if not filename:
         return None
+    zm = _ZIP_SPLIT_RE.match(filename)
+    if zm:
+        base_raw = zm.group("base")
+        base = _NORMALIZE_ALT_RE.sub(".", base_raw).strip(".").lower() + ".zip"
+        return base, int(zm.group("num")), base_raw, True
     info = parse_split_info(filename)
     if info:
-        return info[0], info[1], strip_part_suffix(filename)
+        return info[0], info[1], strip_part_suffix(filename), False
     m = _ALT_PART_RE.match(filename)
     if m and m.group(1).strip(" ._-"):
         ext_m = re.search(r"(\.\w+)$", filename)
         display = m.group(1).strip(" ._-") + (ext_m.group(1) if ext_m else ".mkv")
         base = _NORMALIZE_ALT_RE.sub(".", m.group(1)).strip(".").lower()
-        return base, int(m.group(2)), display
+        return base, int(m.group(2)), display, False
     return None
 
 
 _NORMALIZE_ALT_RE = re.compile(r"[\s._-]+")
+_ZIP_SPLIT_RE = re.compile(r"^(?P<base>.+)\.zip\.(?P<num>\d{2,3})$", re.IGNORECASE)
 
 
 def _video_filename(message) -> Optional[str]:
@@ -224,7 +230,7 @@ async def _search_channel(
                 #----- Split part: gather siblings once per group into one combined stream
                 split = _split_part_info(raw_name)
                 if split:
-                    base, _part_num, display = split
+                    base, _part_num, display, is_zip = split
                     if base in split_groups:
                         continue
                     parsed = _validate_name(display, expected_title, season, episode)
@@ -237,6 +243,7 @@ async def _search_channel(
                         "parts": parts,
                         "display": display,
                         "quality": parsed.get("resolution") or "HD",
+                        "zip": is_zip,
                     }
                     continue
 
@@ -291,14 +298,18 @@ async def _search_channel(
         ordered = [group["parts"][pn] for pn in sorted(group["parts"])]
         total_bytes = sum(p["size_bytes"] for p in ordered)
         size = get_readable_file_size(total_bytes)
-        token = await encode_string({
+        is_zip = bool(group.get("zip"))
+        payload = {
             "global": True,
             "parts": [{"chat_id": chat_id, "msg_id": p["msg_id"]} for p in ordered],
             "title": group["display"],
             "size": size,
             "quality": group["quality"],
             "source": chat_title,
-        })
+        }
+        if is_zip:
+            payload["zip"] = True
+        token = await encode_string(payload)
         results.append({
             "token": token,
             "title": group["display"],
@@ -306,9 +317,11 @@ async def _search_channel(
             "source_chat": chat_title,
             "quality": group["quality"],
             "is_split": True,
+            "is_zip": is_zip,
             "part_count": len(ordered),
         })
-        LOGGER.info(f"[GLOBAL SEARCH] Split stream: {group['display']} ({len(ordered)} parts) in {chat_title}")
+        kind = "zip parts" if is_zip else "parts"
+        LOGGER.info(f"[GLOBAL SEARCH] Split stream: {group['display']} ({len(ordered)} {kind}) in {chat_title}")
 
     return results
 
