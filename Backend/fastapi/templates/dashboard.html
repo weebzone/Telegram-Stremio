@@ -72,6 +72,8 @@
                 .ua-dot.on { background:#22c55e;box-shadow:0 0 8px #22c55e; }
                 .ua-vpn { font-size:.6rem;font-weight:900;padding:.15rem .45rem;border-radius:9999px;background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.3);white-space:nowrap; }
                 .ua-clean { font-size:.6rem;font-weight:900;padding:.15rem .45rem;border-radius:9999px;background:rgba(34,197,94,.15);color:#22c55e;border:1px solid rgba(34,197,94,.3);white-space:nowrap; }
+                .ua-skel { height:132px;border-radius:1rem;border:1px solid var(--hairline);background:linear-gradient(90deg, color-mix(in srgb,var(--text) 6%,transparent) 25%, color-mix(in srgb,var(--text) 14%,transparent) 37%, color-mix(in srgb,var(--text) 6%,transparent) 63%);background-size:400% 100%;animation:ua-shimmer 1.4s ease infinite; }
+                @keyframes ua-shimmer { 0%{background-position:100% 0;} 100%{background-position:-100% 0;} }
                 .ua-now { margin-top:.5rem;font-size:.8rem;font-weight:800;color:#22c55e; }
                 .ua-meta { margin-top:.6rem;display:grid;grid-template-columns:1fr 1fr;gap:.3rem .6rem;font-size:.72rem; }
                 .ua-meta span { color:var(--text-secondary);display:flex;align-items:center;gap:.35rem;min-width:0; }
@@ -135,8 +137,10 @@
                     }).join('');
                     renderUaPagination(data);
                 }
-                async function loadUserActivity(page) {
+                function uaSkeleton(n) { let s = ''; for (let i = 0; i < (n || 6); i++) s += '<div class="ua-skel"></div>'; return s; }
+                async function loadUserActivity(page, silent) {
                     if (page) uaPage = page;
+                    if (!silent) document.getElementById('ua-list').innerHTML = uaSkeleton(6);
                     try {
                         const res = await fetch(`/api/admin/user-activity?page=${uaPage}&per_page=${uaPerPage}`);
                         renderUserActivity(await res.json());
@@ -144,8 +148,8 @@
                         document.getElementById('ua-list').innerHTML = '<p class="text-text-secondary text-sm">Unable to load user activity.</p>';
                     }
                 }
-                if (window.__UA_INITIAL__) { renderUserActivity(window.__UA_INITIAL__); } else { loadUserActivity(); }
-                setInterval(() => loadUserActivity(), 15000);
+                if (window.__UA_INITIAL__ && (window.__UA_INITIAL__.users || []).length) { renderUserActivity(window.__UA_INITIAL__); } else { loadUserActivity(); }
+                setInterval(() => loadUserActivity(null, true), 15000);
             </script>
 
             <section>
@@ -237,7 +241,8 @@
                 </div>
                 <div class="p-6">
                     <div id="ua-list" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-                        <p class="text-text-secondary text-sm">Loading…</p>
+                        <div class="ua-skel"></div><div class="ua-skel"></div><div class="ua-skel"></div>
+                        <div class="ua-skel"></div><div class="ua-skel"></div><div class="ua-skel"></div>
                     </div>
                     <div id="ua-pagination" class="flex items-center justify-center gap-3 mt-6"></div>
                 </div>
