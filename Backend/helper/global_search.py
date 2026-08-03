@@ -4,7 +4,7 @@ import time
 from typing import Dict, List, Optional
 
 import PTN
-from pyrogram import enums
+from pyrogram import enums, utils
 from pyrogram.errors import (
     FloodWait,
     ChatAdminRequired,
@@ -22,6 +22,10 @@ from Backend.helper.encrypt import encode_string
 from Backend.helper.pyro import get_readable_file_size
 from Backend.helper.split_files import parse_split_info, strip_part_suffix
 import Backend.pyrofork.bot as botmod
+
+# Patch Pyrogram's internal channel ID bounds for newer 13+ digit channel IDs (-1003xxxxxxxx)
+utils.MIN_CHANNEL_ID = -1000000000000
+utils.MIN_CHAT_ID = -999999999999
 
 MAX_RESULTS = 50
 MAX_RESULTS_PER_CHAT = 50
@@ -65,7 +69,6 @@ def _title_score(result_title: str, expected_title: str) -> float:
 
 
 def _matches_episode(parsed: dict, season: Optional[int], episode: Optional[int]) -> bool:
-    #----- Keep movie results out of TV searches and TV-episode results out of movie searches
     wants_episode = season is not None or episode is not None
     is_episode_like = parsed.get("season") is not None or parsed.get("episode") is not None
 
@@ -109,7 +112,6 @@ def _parse_and_validate(filename: str, expected_title: str, season: Optional[int
     return _validate_name(filename, expected_title, season, episode)
 
 
-#----- Detect a split part -> (group_base, part_number, display_name, is_zip) or None
 def _split_part_info(filename: str) -> Optional[tuple]:
     if not filename:
         return None
@@ -145,7 +147,6 @@ def _video_filename(message) -> Optional[str]:
     return None
 
 
-#----- Filename for any video/document message (so split parts like ".001" are seen)
 def _raw_media_name(message) -> Optional[str]:
     media = message.video or message.document
     if not media:
@@ -153,7 +154,6 @@ def _raw_media_name(message) -> Optional[str]:
     return (message.caption or "").strip() or getattr(media, "file_name", None)
 
 
-#----- Scan messages around a matched split part to collect all sibling parts
 async def _gather_split_parts(client, chat_id: int, seed_id: int, base: str) -> Dict[int, dict]:
     ids = list(range(max(1, seed_id - SPLIT_SCAN_WINDOW), seed_id + SPLIT_SCAN_WINDOW + 1))
     parts: Dict[int, dict] = {}
@@ -200,7 +200,8 @@ async def _get_chat_title(client, chat_id: int) -> str:
     try:
         chat = await client.get_chat(chat_id)
         title = chat.title or str(chat_id)
-    except Exception:
+    except Exception as e:
+        LOGGER.warning(f"[USERBOT] Could not fetch chat title for {chat_id}: {e}")
         title = str(chat_id)
     _chat_title_cache[chat_id] = title
     return title
@@ -222,8 +223,6 @@ def _build_search_query(expected_title: str, year: Optional[int], season: Option
     return expected_title
 
 
-#----- Ordered, de-duplicated fallback chain:
-#----- original -> no-year -> symbols-stripped -> symbols-stripped + no-year
 def _build_query_candidates(
     expected_title: str, year: Optional[int], season: Optional[int], episode: Optional[int]
 ) -> List[str]:
@@ -236,11 +235,9 @@ def _build_query_candidates(
 
     add(_build_search_query(expected_title, year, season, episode))
 
-    #----- Fallback: drop the year (only meaningful when year was actually used)
     if season is None and episode is None and year is not None:
         add(expected_title)
 
-    #----- Fallback: strip symbols from the title and retry the same query shapes
     stripped_title = _strip_symbols(expected_title)
     if stripped_title and stripped_title.lower() != expected_title.lower():
         add(_build_search_query(stripped_title, year, season, episode))
@@ -268,6 +265,7 @@ async def _search_channel(
         if len(results) >= MAX_RESULTS_PER_CHAT:
             break
         try:
+            # Iterating directly handles RPC exceptions during generator initialization
             async for message in client.search_messages(
                 chat_id=chat_id,
                 query=search_query,
@@ -282,7 +280,6 @@ async def _search_channel(
                 if not raw_name:
                     continue
 
-                #----- Split part: gather siblings once per group into one combined stream
                 split = _split_part_info(raw_name)
                 if split:
                     base, _part_num, display, is_zip = split
@@ -338,17 +335,17 @@ async def _search_channel(
         except FloodWait as e:
             LOGGER.warning(f"[USERBOT] FloodWait for {chat_title}: sleeping {e.value}s")
             await asyncio.sleep(e.value)
-        except (ChatAdminRequired, ChannelPrivate, PeerIdInvalid, UserNotParticipant) as e:
-            LOGGER.warning(f"[USERBOT] Cannot access channel {chat_title}: {type(e).__name__}")
+        except (ChatAdminRequired, ChannelPrivate, PeerIdInvalid, UserNotParticipant, RPCError) as e:
+            LOGGER.warning(f"[USERBOT] Cannot access channel {chat_title} ({chat_id}): {e}")
             break
         except (AuthKeyUnregistered, SessionRevoked) as e:
             LOGGER.error(f"[USERBOT] Session invalid ({type(e).__name__}): {e}")
             _userbot_session_dead = True
             break
-        except RPCError as e:
-            LOGGER.warning(f"[USERBOT] RPC error in {chat_title} ({msg_filter}): {e}")
+        except Exception as e:
+            LOGGER.warning(f"[USERBOT] Unexpected error searching {chat_title} ({chat_id}): {e}")
+            break
 
-    #----- Emit one combined stream per gathered split group
     for group in split_groups.values():
         ordered = [group["parts"][pn] for pn in sorted(group["parts"])]
         total_bytes = sum(p["size_bytes"] for p in ordered)
@@ -398,7 +395,6 @@ async def global_search(
     if not target_ids:
         return []
 
-    #----- Ordered fallback chain: original query -> no-year -> symbols-stripped -> both
     query_candidates = _build_query_candidates(expected_title, year, season, episode)
     if not query_candidates:
         return []
