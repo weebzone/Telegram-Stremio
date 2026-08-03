@@ -4,7 +4,7 @@ import time
 from typing import Dict, List, Optional
 
 import PTN
-from pyrogram import enums, utils
+from pyrogram import enums
 from pyrogram.errors import (
     FloodWait,
     ChatAdminRequired,
@@ -22,10 +22,6 @@ from Backend.helper.encrypt import encode_string
 from Backend.helper.pyro import get_readable_file_size
 from Backend.helper.split_files import parse_split_info, strip_part_suffix
 import Backend.pyrofork.bot as botmod
-
-# Patch Pyrogram's internal channel ID bounds for newer 13+ digit channel IDs (-1003xxxxxxxx)
-utils.MIN_CHANNEL_ID = -1000000000000
-utils.MIN_CHAT_ID = -999999999999
 
 MAX_RESULTS = 50
 MAX_RESULTS_PER_CHAT = 50
@@ -433,7 +429,7 @@ async def global_search(
                 )
 
                 search_tasks = [
-                    _search_channel(botmod.Userbot, cid, title, search_query, expected_title, season, episode)
+                    _search_channel(botmod.Userbot, int(cid), title, search_query, expected_title, season, episode)
                     for cid, title in zip(target_ids, resolved_titles)
                 ]
                 per_channel_results = await asyncio.gather(*search_tasks, return_exceptions=True)
