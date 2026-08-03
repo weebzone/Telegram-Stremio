@@ -40,6 +40,8 @@ _MULTIPART_RE = re.compile(r"(?:part|cd|disc|disk)[s._-]*\d+(?=\.\w+$)", re.IGNO
 _ALT_PART_RE = re.compile(r"^(.*?)[\s._-]*(?:part|cd|disc|disk|pt)[\s._-]*0*(\d{1,3})(?=\.\w+$|$)", re.IGNORECASE)
 _VIDEO_EXTS = (".mkv", ".mp4", ".avi", ".ts", ".m4v", ".mov", ".wmv", ".webm", ".flv")
 SPLIT_SCAN_WINDOW = 60
+_APOSTROPHE_RE = re.compile(r"[''`]")
+_SYMBOL_STRIP_RE = re.compile(r"[&.\-:]+")
 
 
 def is_userbot_available() -> bool:
@@ -63,6 +65,15 @@ def _title_score(result_title: str, expected_title: str) -> float:
 
 
 def _matches_episode(parsed: dict, season: Optional[int], episode: Optional[int]) -> bool:
+    #----- Keep movie results out of TV searches and TV-episode results out of movie searches
+    wants_episode = season is not None or episode is not None
+    is_episode_like = parsed.get("season") is not None or parsed.get("episode") is not None
+
+    if wants_episode and not is_episode_like:
+        return False
+    if not wants_episode and is_episode_like:
+        return False
+
     for value, parsed_key in ((season, "season"), (episode, "episode")):
         if value is None:
             continue
@@ -193,6 +204,50 @@ async def _get_chat_title(client, chat_id: int) -> str:
         title = str(chat_id)
     _chat_title_cache[chat_id] = title
     return title
+
+
+def _strip_symbols(text: str) -> str:
+    if not text:
+        return ""
+    text = _APOSTROPHE_RE.sub("", text)
+    text = _SYMBOL_STRIP_RE.sub(" ", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _build_search_query(expected_title: str, year: Optional[int], season: Optional[int], episode: Optional[int]) -> str:
+    if season is not None and episode is not None:
+        return f"{expected_title} S{int(season):02d}E{int(episode):02d}"
+    if year is not None:
+        return f"{expected_title} {year}"
+    return expected_title
+
+
+#----- Ordered, de-duplicated fallback chain:
+#----- original -> no-year -> symbols-stripped -> symbols-stripped + no-year
+def _build_query_candidates(
+    expected_title: str, year: Optional[int], season: Optional[int], episode: Optional[int]
+) -> List[str]:
+    candidates: List[str] = []
+
+    def add(q: Optional[str]) -> None:
+        q = (q or "").strip()
+        if q and q.lower() not in (c.lower() for c in candidates):
+            candidates.append(q)
+
+    add(_build_search_query(expected_title, year, season, episode))
+
+    #----- Fallback: drop the year (only meaningful when year was actually used)
+    if season is None and episode is None and year is not None:
+        add(expected_title)
+
+    #----- Fallback: strip symbols from the title and retry the same query shapes
+    stripped_title = _strip_symbols(expected_title)
+    if stripped_title and stripped_title.lower() != expected_title.lower():
+        add(_build_search_query(stripped_title, year, season, episode))
+        if season is None and episode is None and year is not None:
+            add(stripped_title)
+
+    return candidates
 
 
 async def _search_channel(
@@ -343,20 +398,18 @@ async def global_search(
     if not target_ids:
         return []
 
-    if season is not None and episode is not None:
-        search_query = f"{expected_title} S{int(season):02d}E{int(episode):02d}"
-    elif year is not None:
-        search_query = f"{expected_title} {year}"
-    else:
-        search_query = expected_title
+    #----- Ordered fallback chain: original query -> no-year -> symbols-stripped -> both
+    query_candidates = _build_query_candidates(expected_title, year, season, episode)
+    if not query_candidates:
+        return []
 
-    key = search_query.lower()
+    key = query_candidates[0].lower()
     now = time.time()
     if now - _last_search_ts.get(key, 0) < SEARCH_COOLDOWN_SECONDS:
-        LOGGER.info(f"[GLOBAL SEARCH] Cooldown active for '{search_query}'")
+        LOGGER.info(f"[GLOBAL SEARCH] Cooldown active for '{query_candidates[0]}'")
         return []
     if key in _inflight_queries:
-        LOGGER.info(f"[GLOBAL SEARCH] Duplicate in-flight for '{search_query}'")
+        LOGGER.info(f"[GLOBAL SEARCH] Duplicate in-flight for '{query_candidates[0]}'")
         return []
 
     _inflight_queries.add(key)
@@ -364,31 +417,46 @@ async def global_search(
 
     try:
         async with _search_semaphore:
-            LOGGER.info(f"[USERBOT] Search started: '{search_query}' across {len(target_ids)} channel(s)")
             chat_titles = await asyncio.gather(
                 *(_get_chat_title(botmod.Userbot, cid) for cid in target_ids),
                 return_exceptions=True,
             )
-
-            search_tasks = []
-            for cid, title in zip(target_ids, chat_titles):
-                if _userbot_session_dead:
-                    break
-                if isinstance(title, Exception):
-                    title = str(cid)
-                search_tasks.append(
-                    _search_channel(botmod.Userbot, cid, title, search_query, expected_title, season, episode)
-                )
-
-            per_channel_results = await asyncio.gather(*search_tasks, return_exceptions=True)
+            resolved_titles = [
+                str(cid) if isinstance(t, Exception) else t
+                for cid, t in zip(target_ids, chat_titles)
+            ]
 
             all_results: List[Dict] = []
-            for r in per_channel_results:
-                if isinstance(r, list):
-                    all_results.extend(r)
-            all_results = all_results[:MAX_RESULTS]
+            for attempt_idx, search_query in enumerate(query_candidates):
+                if _userbot_session_dead:
+                    break
 
-            LOGGER.info(f"[USERBOT] Search completed: '{search_query}' -> {len(all_results)} result(s)")
+                LOGGER.info(
+                    f"[USERBOT] Search attempt {attempt_idx + 1}/{len(query_candidates)}: "
+                    f"'{search_query}' across {len(target_ids)} channel(s)"
+                )
+
+                search_tasks = [
+                    _search_channel(botmod.Userbot, cid, title, search_query, expected_title, season, episode)
+                    for cid, title in zip(target_ids, resolved_titles)
+                ]
+                per_channel_results = await asyncio.gather(*search_tasks, return_exceptions=True)
+
+                for r in per_channel_results:
+                    if isinstance(r, list):
+                        all_results.extend(r)
+
+                if all_results:
+                    LOGGER.info(
+                        f"[USERBOT] Succeeded on attempt {attempt_idx + 1} "
+                        f"('{search_query}') -> {len(all_results)} result(s)"
+                    )
+                    break
+                if attempt_idx + 1 < len(query_candidates):
+                    LOGGER.info(f"[USERBOT] No results for '{search_query}', trying next fallback")
+
+            all_results = all_results[:MAX_RESULTS]
+            LOGGER.info(f"[USERBOT] Search completed: '{expected_title}' -> {len(all_results)} result(s)")
             return all_results
     finally:
         _inflight_queries.discard(key)
