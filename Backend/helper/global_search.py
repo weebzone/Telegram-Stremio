@@ -27,11 +27,14 @@ MAX_RESULTS = 50
 MAX_RESULTS_PER_CHAT = 50
 SEARCH_COOLDOWN_SECONDS = 5
 MAX_CONCURRENT_SEARCHES = 3
+MAX_CONCURRENT_CHANNELS = 5  # caps how many channels hit Telegram at once per search
 MIN_TITLE_SCORE = 0.6
 
 _last_search_ts: Dict[str, float] = {}
-_inflight_queries: set = set()
+_inflight_tasks: Dict[str, asyncio.Task] = {}
+_result_cache: Dict[str, tuple] = {}  # key -> (timestamp, results)
 _search_semaphore = asyncio.Semaphore(MAX_CONCURRENT_SEARCHES)
+_channel_semaphore = asyncio.Semaphore(MAX_CONCURRENT_CHANNELS)
 _userbot_session_dead = False
 _chat_title_cache: Dict[int, str] = {}
 
@@ -39,8 +42,8 @@ _TOKEN_RE = re.compile(r"[a-z0-9]+")
 _MULTIPART_RE = re.compile(r"(?:part|cd|disc|disk)[s._-]*\d+(?=\.\w+$)", re.IGNORECASE)
 _ALT_PART_RE = re.compile(r"^(.*?)[\s._-]*(?:part|cd|disc|disk|pt)[\s._-]*0*(\d{1,3})(?=\.\w+$|$)", re.IGNORECASE)
 _VIDEO_EXTS = (".mkv", ".mp4", ".avi", ".ts", ".m4v", ".mov", ".wmv", ".webm", ".flv")
-SPLIT_SCAN_WINDOW = 60
-_APOSTROPHE_RE = re.compile(r"[''`]")
+SPLIT_SCAN_WINDOW = 20  # was 60 — smaller window = faster get_messages, still covers consecutive uploads
+_APOSTROPHE_RE = re.compile(r"['\u2018\u2019`\u00B4]")
 _SYMBOL_STRIP_RE = re.compile(r"[&.\-:]+")
 
 
@@ -99,7 +102,13 @@ def _validate_name(filename: str, expected_title: str, season: Optional[int], ep
         return None
 
     result_title = parsed.get("title", "")
+
+    # Step 1: score against the title exactly as given.
     score = _title_score(result_title, expected_title)
+
+    # Step 2: if that falls short, retry against the symbol-stripped version
+    # (apostrophes/&/./-/: removed) — release names almost never keep
+    # punctuation like "India's" -> "Indias".
     if score < MIN_TITLE_SCORE:
         stripped_expected = _strip_symbols(expected_title)
         if stripped_expected and stripped_expected.lower() != expected_title.lower():
@@ -161,11 +170,15 @@ def _raw_media_name(message) -> Optional[str]:
 async def _gather_split_parts(client, chat_id: int, seed_id: int, base: str) -> Dict[int, dict]:
     ids = list(range(max(1, seed_id - SPLIT_SCAN_WINDOW), seed_id + SPLIT_SCAN_WINDOW + 1))
     parts: Dict[int, dict] = {}
+    t0 = time.monotonic()
     try:
         messages = await client.get_messages(chat_id, ids)
     except Exception as e:
         LOGGER.warning(f"[GLOBAL SEARCH] Could not gather split parts near {seed_id}: {e}")
         return parts
+    finally:
+        elapsed = time.monotonic() - t0
+        LOGGER.info(f"[GLOBAL SEARCH] get_messages({len(ids)} ids, base={base}) took {elapsed:.1f}s")
     for msg in (messages or []):
         if not msg or getattr(msg, "empty", False):
             continue
@@ -261,125 +274,127 @@ async def _search_channel(
     episode: Optional[int],
 ) -> List[Dict]:
     global _userbot_session_dead
-    results: List[Dict] = []
-    split_groups: Dict[str, dict] = {}
-    seen_msg_ids: set = set()
 
-    for msg_filter in (enums.MessagesFilter.VIDEO, enums.MessagesFilter.DOCUMENT):
-        if len(results) >= MAX_RESULTS_PER_CHAT:
-            break
-        try:
-            # Iterating directly handles RPC exceptions during generator initialization
-            async for message in client.search_messages(
-                chat_id=chat_id,
-                query=search_query,
-                filter=msg_filter,
-                limit=MAX_RESULTS_PER_CHAT,
-            ):
-                if message.id in seen_msg_ids:
-                    continue
-                seen_msg_ids.add(message.id)
+    async with _channel_semaphore:
+        results: List[Dict] = []
+        split_groups: Dict[str, dict] = {}
+        seen_msg_ids: set = set()
 
-                raw_name = _raw_media_name(message)
-                if not raw_name:
-                    continue
-
-                split = _split_part_info(raw_name)
-                if split:
-                    base, _part_num, display, is_zip = split
-                    if base in split_groups:
+        for msg_filter in (enums.MessagesFilter.VIDEO, enums.MessagesFilter.DOCUMENT):
+            if len(results) >= MAX_RESULTS_PER_CHAT:
+                break
+            try:
+                # Iterating directly handles RPC exceptions during generator initialization
+                async for message in client.search_messages(
+                    chat_id=chat_id,
+                    query=search_query,
+                    filter=msg_filter,
+                    limit=MAX_RESULTS_PER_CHAT,
+                ):
+                    if message.id in seen_msg_ids:
                         continue
-                    parsed = _validate_name(display, expected_title, season, episode)
+                    seen_msg_ids.add(message.id)
+
+                    raw_name = _raw_media_name(message)
+                    if not raw_name:
+                        continue
+
+                    split = _split_part_info(raw_name)
+                    if split:
+                        base, _part_num, display, is_zip = split
+                        if base in split_groups:
+                            continue
+                        parsed = _validate_name(display, expected_title, season, episode)
+                        if parsed is None:
+                            continue
+                        parts = await _gather_split_parts(client, chat_id, message.id, base)
+                        if len(parts) < 2:
+                            continue
+                        split_groups[base] = {
+                            "parts": parts,
+                            "display": display,
+                            "quality": parsed.get("resolution") or "HD",
+                            "zip": is_zip,
+                        }
+                        continue
+
+                    filename = _video_filename(message)
+                    if not filename:
+                        continue
+                    parsed = _parse_and_validate(filename, expected_title, season, episode)
                     if parsed is None:
                         continue
-                    parts = await _gather_split_parts(client, chat_id, message.id, base)
-                    if len(parts) < 2:
-                        continue
-                    split_groups[base] = {
-                        "parts": parts,
-                        "display": display,
-                        "quality": parsed.get("resolution") or "HD",
-                        "zip": is_zip,
-                    }
-                    continue
 
-                filename = _video_filename(message)
-                if not filename:
-                    continue
-                parsed = _parse_and_validate(filename, expected_title, season, episode)
-                if parsed is None:
-                    continue
+                    media = message.video or message.document
+                    size = get_readable_file_size(getattr(media, "file_size", 0) or 0)
+                    quality = parsed.get("resolution") or "HD"
 
-                media = message.video or message.document
-                size = get_readable_file_size(getattr(media, "file_size", 0) or 0)
-                quality = parsed.get("resolution") or "HD"
+                    token = await encode_string({
+                        "global": True,
+                        "chat_id": chat_id,
+                        "msg_id": message.id,
+                        "title": filename,
+                        "size": size,
+                        "quality": quality,
+                        "source": chat_title,
+                    })
 
-                token = await encode_string({
-                    "global": True,
-                    "chat_id": chat_id,
-                    "msg_id": message.id,
-                    "title": filename,
-                    "size": size,
-                    "quality": quality,
-                    "source": chat_title,
-                })
+                    results.append({
+                        "token": token,
+                        "title": filename,
+                        "size": size,
+                        "source_chat": chat_title,
+                        "quality": quality,
+                    })
+                    LOGGER.debug(f"[GLOBAL SEARCH] Result found: {filename} in {chat_title}")
 
-                results.append({
-                    "token": token,
-                    "title": filename,
-                    "size": size,
-                    "source_chat": chat_title,
-                    "quality": quality,
-                })
-                LOGGER.debug(f"[GLOBAL SEARCH] Result found: {filename} in {chat_title}")
+                    if len(results) >= MAX_RESULTS_PER_CHAT:
+                        break
 
-                if len(results) >= MAX_RESULTS_PER_CHAT:
-                    break
+            except FloodWait as e:
+                LOGGER.warning(f"[USERBOT] FloodWait for {chat_title}: sleeping {e.value}s")
+                await asyncio.sleep(e.value)
+            except (ChatAdminRequired, ChannelPrivate, PeerIdInvalid, UserNotParticipant, RPCError) as e:
+                LOGGER.warning(f"[USERBOT] Cannot access channel {chat_title} ({chat_id}): {e}")
+                break
+            except (AuthKeyUnregistered, SessionRevoked) as e:
+                LOGGER.error(f"[USERBOT] Session invalid ({type(e).__name__}): {e}")
+                _userbot_session_dead = True
+                break
+            except Exception as e:
+                LOGGER.warning(f"[USERBOT] Unexpected error searching {chat_title} ({chat_id}): {e}")
+                break
 
-        except FloodWait as e:
-            LOGGER.warning(f"[USERBOT] FloodWait for {chat_title}: sleeping {e.value}s")
-            await asyncio.sleep(e.value)
-        except (ChatAdminRequired, ChannelPrivate, PeerIdInvalid, UserNotParticipant, RPCError) as e:
-            LOGGER.warning(f"[USERBOT] Cannot access channel {chat_title} ({chat_id}): {e}")
-            break
-        except (AuthKeyUnregistered, SessionRevoked) as e:
-            LOGGER.error(f"[USERBOT] Session invalid ({type(e).__name__}): {e}")
-            _userbot_session_dead = True
-            break
-        except Exception as e:
-            LOGGER.warning(f"[USERBOT] Unexpected error searching {chat_title} ({chat_id}): {e}")
-            break
+        for group in split_groups.values():
+            ordered = [group["parts"][pn] for pn in sorted(group["parts"])]
+            total_bytes = sum(p["size_bytes"] for p in ordered)
+            size = get_readable_file_size(total_bytes)
+            is_zip = bool(group.get("zip"))
+            payload = {
+                "global": True,
+                "parts": [{"chat_id": chat_id, "msg_id": p["msg_id"]} for p in ordered],
+                "title": group["display"],
+                "size": size,
+                "quality": group["quality"],
+                "source": chat_title,
+            }
+            if is_zip:
+                payload["zip"] = True
+            token = await encode_string(payload)
+            results.append({
+                "token": token,
+                "title": group["display"],
+                "size": size,
+                "source_chat": chat_title,
+                "quality": group["quality"],
+                "is_split": True,
+                "is_zip": is_zip,
+                "part_count": len(ordered),
+            })
+            kind = "zip parts" if is_zip else "parts"
+            LOGGER.info(f"[GLOBAL SEARCH] Split stream: {group['display']} ({len(ordered)} {kind}) in {chat_title}")
 
-    for group in split_groups.values():
-        ordered = [group["parts"][pn] for pn in sorted(group["parts"])]
-        total_bytes = sum(p["size_bytes"] for p in ordered)
-        size = get_readable_file_size(total_bytes)
-        is_zip = bool(group.get("zip"))
-        payload = {
-            "global": True,
-            "parts": [{"chat_id": chat_id, "msg_id": p["msg_id"]} for p in ordered],
-            "title": group["display"],
-            "size": size,
-            "quality": group["quality"],
-            "source": chat_title,
-        }
-        if is_zip:
-            payload["zip"] = True
-        token = await encode_string(payload)
-        results.append({
-            "token": token,
-            "title": group["display"],
-            "size": size,
-            "source_chat": chat_title,
-            "quality": group["quality"],
-            "is_split": True,
-            "is_zip": is_zip,
-            "part_count": len(ordered),
-        })
-        kind = "zip parts" if is_zip else "parts"
-        LOGGER.info(f"[GLOBAL SEARCH] Split stream: {group['display']} ({len(ordered)} {kind}) in {chat_title}")
-
-    return results
+        return results
 
 
 async def global_search(
@@ -405,58 +420,86 @@ async def global_search(
 
     key = query_candidates[0].lower()
     now = time.time()
+
+    # Join an already-running search for the same title/episode instead of
+    # returning empty for it — Stremio commonly fires overlapping or
+    # retried stream requests, and the old set-based guard silently
+    # starved every one of them except the very first.
+    existing_task = _inflight_tasks.get(key)
+    if existing_task and not existing_task.done():
+        LOGGER.info(f"[GLOBAL SEARCH] Joining in-flight search for '{query_candidates[0]}'")
+        try:
+            return await existing_task
+        except Exception:
+            return []
+
     if now - _last_search_ts.get(key, 0) < SEARCH_COOLDOWN_SECONDS:
+        cached = _result_cache.get(key)
+        if cached is not None:
+            LOGGER.info(f"[GLOBAL SEARCH] Serving cached results for '{query_candidates[0]}' (cooldown)")
+            return cached[1]
         LOGGER.info(f"[GLOBAL SEARCH] Cooldown active for '{query_candidates[0]}'")
         return []
-    if key in _inflight_queries:
-        LOGGER.info(f"[GLOBAL SEARCH] Duplicate in-flight for '{query_candidates[0]}'")
-        return []
 
-    _inflight_queries.add(key)
     _last_search_ts[key] = now
-
+    task = asyncio.create_task(
+        _run_global_search(expected_title, query_candidates, target_ids, season, episode)
+    )
+    _inflight_tasks[key] = task
     try:
-        async with _search_semaphore:
-            chat_titles = await asyncio.gather(
-                *(_get_chat_title(botmod.Userbot, cid) for cid in target_ids),
-                return_exceptions=True,
-            )
-            resolved_titles = [
-                str(cid) if isinstance(t, Exception) else t
-                for cid, t in zip(target_ids, chat_titles)
-            ]
-
-            all_results: List[Dict] = []
-            for attempt_idx, search_query in enumerate(query_candidates):
-                if _userbot_session_dead:
-                    break
-
-                LOGGER.info(
-                    f"[USERBOT] Search attempt {attempt_idx + 1}/{len(query_candidates)}: "
-                    f"'{search_query}' across {len(target_ids)} channel(s)"
-                )
-
-                search_tasks = [
-                    _search_channel(botmod.Userbot, int(cid), title, search_query, expected_title, season, episode)
-                    for cid, title in zip(target_ids, resolved_titles)
-                ]
-                per_channel_results = await asyncio.gather(*search_tasks, return_exceptions=True)
-
-                for r in per_channel_results:
-                    if isinstance(r, list):
-                        all_results.extend(r)
-
-                if all_results:
-                    LOGGER.info(
-                        f"[USERBOT] Succeeded on attempt {attempt_idx + 1} "
-                        f"('{search_query}') -> {len(all_results)} result(s)"
-                    )
-                    break
-                if attempt_idx + 1 < len(query_candidates):
-                    LOGGER.info(f"[USERBOT] No results for '{search_query}', trying next fallback")
-
-            all_results = all_results[:MAX_RESULTS]
-            LOGGER.info(f"[USERBOT] Search completed: '{expected_title}' -> {len(all_results)} result(s)")
-            return all_results
+        results = await task
+        _result_cache[key] = (time.time(), results)
+        return results
     finally:
-        _inflight_queries.discard(key)
+        _inflight_tasks.pop(key, None)
+
+
+async def _run_global_search(
+    expected_title: str,
+    query_candidates: List[str],
+    target_ids: List[int],
+    season: Optional[int],
+    episode: Optional[int],
+) -> List[Dict]:
+    async with _search_semaphore:
+        chat_titles = await asyncio.gather(
+            *(_get_chat_title(botmod.Userbot, cid) for cid in target_ids),
+            return_exceptions=True,
+        )
+        resolved_titles = [
+            str(cid) if isinstance(t, Exception) else t
+            for cid, t in zip(target_ids, chat_titles)
+        ]
+
+        all_results: List[Dict] = []
+        for attempt_idx, search_query in enumerate(query_candidates):
+            if _userbot_session_dead:
+                break
+
+            LOGGER.info(
+                f"[USERBOT] Search attempt {attempt_idx + 1}/{len(query_candidates)}: "
+                f"'{search_query}' across {len(target_ids)} channel(s)"
+            )
+
+            search_tasks = [
+                _search_channel(botmod.Userbot, int(cid), title, search_query, expected_title, season, episode)
+                for cid, title in zip(target_ids, resolved_titles)
+            ]
+            per_channel_results = await asyncio.gather(*search_tasks, return_exceptions=True)
+
+            for r in per_channel_results:
+                if isinstance(r, list):
+                    all_results.extend(r)
+
+            if all_results:
+                LOGGER.info(
+                    f"[USERBOT] Succeeded on attempt {attempt_idx + 1} "
+                    f"('{search_query}') -> {len(all_results)} result(s)"
+                )
+                break
+            if attempt_idx + 1 < len(query_candidates):
+                LOGGER.info(f"[USERBOT] No results for '{search_query}', trying next fallback")
+
+        all_results = all_results[:MAX_RESULTS]
+        LOGGER.info(f"[USERBOT] Search completed: '{expected_title}' -> {len(all_results)} result(s)")
+        return all_results
