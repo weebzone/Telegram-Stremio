@@ -97,7 +97,15 @@ def _validate_name(filename: str, expected_title: str, season: Optional[int], ep
         return None
     if not _matches_episode(parsed, season, episode):
         return None
-    if _title_score(parsed.get("title", ""), expected_title) < MIN_TITLE_SCORE:
+
+    result_title = parsed.get("title", "")
+    score = _title_score(result_title, expected_title)
+    if score < MIN_TITLE_SCORE:
+        stripped_expected = _strip_symbols(expected_title)
+        if stripped_expected and stripped_expected.lower() != expected_title.lower():
+            score = _title_score(result_title, stripped_expected)
+
+    if score < MIN_TITLE_SCORE:
         return None
     return parsed
 
