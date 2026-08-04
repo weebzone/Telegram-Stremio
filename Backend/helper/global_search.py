@@ -27,12 +27,12 @@ MAX_RESULTS = 50
 MAX_RESULTS_PER_CHAT = 50
 SEARCH_COOLDOWN_SECONDS = 5
 MAX_CONCURRENT_SEARCHES = 3
-MAX_CONCURRENT_CHANNELS = 10  # caps how many channels hit Telegram at once per search
+MAX_CONCURRENT_CHANNELS = 5
 MIN_TITLE_SCORE = 0.6
 
 _last_search_ts: Dict[str, float] = {}
 _inflight_tasks: Dict[str, asyncio.Task] = {}
-_result_cache: Dict[str, tuple] = {}  # key -> (timestamp, results)
+_result_cache: Dict[str, tuple] = {} 
 _search_semaphore = asyncio.Semaphore(MAX_CONCURRENT_SEARCHES)
 _channel_semaphore = asyncio.Semaphore(MAX_CONCURRENT_CHANNELS)
 _userbot_session_dead = False
@@ -42,7 +42,7 @@ _TOKEN_RE = re.compile(r"[a-z0-9]+")
 _MULTIPART_RE = re.compile(r"(?:part|cd|disc|disk)[s._-]*\d+(?=\.\w+$)", re.IGNORECASE)
 _ALT_PART_RE = re.compile(r"^(.*?)[\s._-]*(?:part|cd|disc|disk|pt)[\s._-]*0*(\d{1,3})(?=\.\w+$|$)", re.IGNORECASE)
 _VIDEO_EXTS = (".mkv", ".mp4", ".avi", ".ts", ".m4v", ".mov", ".wmv", ".webm", ".flv")
-SPLIT_SCAN_WINDOW = 20  # was 60 — smaller window = faster get_messages, still covers consecutive uploads
+SPLIT_SCAN_WINDOW = 20
 _APOSTROPHE_RE = re.compile(r"['\u2018\u2019`\u00B4]")
 _SYMBOL_STRIP_RE = re.compile(r"[&.\-:]+")
 
@@ -103,12 +103,7 @@ def _validate_name(filename: str, expected_title: str, season: Optional[int], ep
 
     result_title = parsed.get("title", "")
 
-    # Step 1: score against the title exactly as given.
     score = _title_score(result_title, expected_title)
-
-    # Step 2: if that falls short, retry against the symbol-stripped version
-    # (apostrophes/&/./-/: removed) — release names almost never keep
-    # punctuation like "India's" -> "Indias".
     if score < MIN_TITLE_SCORE:
         stripped_expected = _strip_symbols(expected_title)
         if stripped_expected and stripped_expected.lower() != expected_title.lower():
@@ -284,7 +279,6 @@ async def _search_channel(
             if len(results) >= MAX_RESULTS_PER_CHAT:
                 break
             try:
-                # Iterating directly handles RPC exceptions during generator initialization
                 async for message in client.search_messages(
                     chat_id=chat_id,
                     query=search_query,
@@ -421,10 +415,6 @@ async def global_search(
     key = query_candidates[0].lower()
     now = time.time()
 
-    # Join an already-running search for the same title/episode instead of
-    # returning empty for it — Stremio commonly fires overlapping or
-    # retried stream requests, and the old set-based guard silently
-    # starved every one of them except the very first.
     existing_task = _inflight_tasks.get(key)
     if existing_task and not existing_task.done():
         LOGGER.info(f"[GLOBAL SEARCH] Joining in-flight search for '{query_candidates[0]}'")
