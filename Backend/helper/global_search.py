@@ -27,7 +27,7 @@ MAX_RESULTS = 50
 MAX_RESULTS_PER_CHAT = 50
 SEARCH_COOLDOWN_SECONDS = 5
 MAX_CONCURRENT_SEARCHES = 3
-MAX_CONCURRENT_CHANNELS = 5  # caps how many channels hit Telegram at once per search
+MAX_CONCURRENT_CHANNELS = 10  # caps how many channels hit Telegram at once per search
 MIN_TITLE_SCORE = 0.6
 
 _last_search_ts: Dict[str, float] = {}
