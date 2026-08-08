@@ -256,16 +256,31 @@ def _episode_title(ep: dict, season: int, episode: int, absolute: bool = False) 
 
 
 def _find_anizip_episode(episodes: dict, season, episode, absolute: bool) -> dict:
-    """Locate the ani.zip episode entry for an absolute or S/E number."""
+    """Locate the ani.zip episode entry for an absolute or S/E number.
+
+    When absolute=True, prefer entries that carry absoluteEpisodeNumber so we
+    get the rich TVDB-style seasonNumber/episodeNumber instead of the sparse
+    AniDB-only keys that often collide with the same numeric string.
+    """
     if not episodes:
         return {}
     ep_num = int(episode)
 
-    # 1) Direct key match (most ani.zip catalogs key by absolute / sequential number)
+    # When looking up by absolute number, prefer the entry that actually
+    # carries absoluteEpisodeNumber (these are the ones with season/episode).
+    if absolute or season is None:
+        for candidate in episodes.values():
+            try:
+                if int(candidate.get("absoluteEpisodeNumber") or -1) == ep_num:
+                    return candidate
+            except (TypeError, ValueError):
+                continue
+
+    # 1) Direct key match (AniDB-style sequential / absolute key)
     if str(ep_num) in episodes:
         return episodes[str(ep_num)] or {}
 
-    # 2) Match absoluteEpisodeNumber (TVDB absolute)
+    # 2) Match absoluteEpisodeNumber (also useful when not in absolute mode)
     for candidate in episodes.values():
         try:
             if int(candidate.get("absoluteEpisodeNumber") or -1) == ep_num:
@@ -298,6 +313,31 @@ def _find_anizip_episode(episodes: dict, season, episode, absolute: bool) -> dic
     return {}
 
 
+def _ids_from_anizip(doc: dict) -> dict:
+    """Extract cross-db IDs from ani.zip mappings block."""
+    mappings = (doc or {}).get("mappings") or {}
+    out = {}
+    for key, dest in (
+        ("anidb_id", "anidb_id"),
+        ("anilist_id", "anilist_id"),
+        ("mal_id", "mal_id"),
+        ("thetvdb_id", "tvdb_id"),
+        ("themoviedb_id", "tmdb_id"),
+        ("imdb_id", "imdb_id"),
+    ):
+        val = mappings.get(key)
+        if val is None:
+            continue
+        if key == "imdb_id":
+            out[dest] = str(val).strip() or None
+            continue
+        try:
+            out[dest] = int(val)
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
 def _resolve_episode_slot(doc: dict, season, episode, absolute: bool) -> tuple:
     """Map (season, episode) or absolute episode to IMDb-style S/E via ani.zip.
 
@@ -306,9 +346,20 @@ def _resolve_episode_slot(doc: dict, season, episode, absolute: bool) -> tuple:
       - absoluteEpisodeNumber         → continuous absolute number
     Prefer the mapped seasonNumber+episodeNumber so Stremio arranges episodes
     correctly even when the filename used absolute numbering.
+
+    Returns (season, episode, ep_dict, is_absolute, extra_ids).
+    extra_ids may include tvdb_id / tmdb_id hints for later enrichment.
     """
     episodes = (doc or {}).get("episodes") or {}
     ep = _find_anizip_episode(episodes, season, episode, absolute)
+    extra = _ids_from_anizip(doc)
+
+    # Prefer tvdb id from the episode row when present
+    if ep.get("tvdbShowId"):
+        try:
+            extra["tvdb_id"] = int(ep["tvdbShowId"])
+        except (TypeError, ValueError):
+            pass
 
     mapped_season = ep.get("seasonNumber") if ep else None
     mapped_ep = ep.get("episodeNumber") if ep else None
@@ -328,11 +379,61 @@ def _resolve_episode_slot(doc: dict, season, episode, absolute: bool) -> tuple:
         # Prefer provider-mapped S/E; fall back to S1 + absolute
         use_season = mapped_season if mapped_season is not None else 1
         use_episode = mapped_ep if mapped_ep is not None else int(episode)
-        return use_season, use_episode, ep, True
+        return use_season, use_episode, ep, True, extra
 
     use_season = mapped_season if mapped_season is not None else int(season)
     use_episode = mapped_ep if mapped_ep is not None else int(episode)
-    return use_season, use_episode, ep, False
+    return use_season, use_episode, ep, False, extra
+
+
+async def _enrich_from_tvdb(
+    payload: dict,
+    tvdb_id: int,
+    season_number: int,
+    episode_number: int,
+    *,
+    absolute_hint: Optional[int] = None,
+) -> dict:
+    """Overwrite poster/backdrop/rating/episode art from TVDB when available."""
+    try:
+        from Backend.helper.metadata.providers import tvdb as tvdb_mod
+
+        series = await tvdb_mod.series_extended(int(tvdb_id))
+        if not series:
+            return payload
+
+        ep = None
+        if absolute_hint and hasattr(tvdb_mod, "episode_by_absolute"):
+            ep = await tvdb_mod.episode_by_absolute(int(tvdb_id), int(absolute_hint))
+            if ep:
+                try:
+                    season_number = int(ep.get("seasonNumber") or season_number)
+                    episode_number = int(ep.get("number") or ep.get("episodeNumber") or episode_number)
+                except (TypeError, ValueError):
+                    pass
+        if ep is None:
+            ep = await tvdb_mod.episode_by_number(int(tvdb_id), season_number, episode_number)
+
+        rich = tvdb_mod.build_series_payload(
+            series, ep, season_number, episode_number,
+            payload.get("quality"), payload.get("encoded_string"),
+        )
+        # Merge: keep Kitsu title variants, prefer TVDB art/rating/episode fields
+        for key in (
+            "poster", "backdrop", "logo", "rate", "description",
+            "genres", "year", "year_end", "runtime",
+            "episode_title", "episode_backdrop", "episode_overview", "episode_released",
+            "imdb_id", "tmdb_id", "tvdb_id",
+        ):
+            val = rich.get(key)
+            if val not in (None, "", [], 0):
+                payload[key] = val
+        payload["season_number"] = season_number
+        payload["episode_number"] = episode_number
+        payload["tvdb_id"] = int(tvdb_id)
+    except Exception as e:
+        LOGGER.debug(f"[KITSU] TVDB enrich failed for tvdb={tvdb_id}: {e}")
+    return payload
 
 
 async def fetch_anime_tv(
@@ -359,15 +460,74 @@ async def fetch_anime_tv(
     doc = await get_anizip_mappings(kitsu_id) or {}
     payload = _common_payload(row, doc, title)
 
-    season_number, episode_number, ep, is_abs = _resolve_episode_slot(
+    season_number, episode_number, ep, is_abs, extra_ids = _resolve_episode_slot(
         doc, season, episode, absolute or season is None
     )
 
-    if is_abs and not ep:
+    # ani.zip often stores sparse AniDB-only rows without seasonNumber.
+    # Fall back to Anime-Lists → anibridge when mapped S/E is missing or
+    # we only have the weak S1+absolute default for a true absolute lookup.
+    needs_fallback = is_abs and (
+        not ep
+        or ep.get("seasonNumber") is None
+        or (
+            # key-only hit with no absoluteEpisodeNumber → weak
+            ep.get("absoluteEpisodeNumber") is None
+            and ep.get("seasonNumber") is None
+        )
+    )
+
+    map_hit = None
+    if needs_fallback:
+        try:
+            from Backend.helper.metadata.episode_maps import resolve_absolute_episode
+
+            map_hit = await resolve_absolute_episode(
+                int(episode),
+                anidb_id=extra_ids.get("anidb_id"),
+                anilist_id=extra_ids.get("anilist_id"),
+                mal_id=extra_ids.get("mal_id"),
+            )
+        except Exception as e:
+            LOGGER.debug(f"[KITSU] episode_maps fallback failed: {e}")
+            map_hit = None
+
+        if map_hit:
+            if map_hit.get("tvdb_absolute") and map_hit.get("tvdb_id"):
+                # Need TVDB absolute → S/E conversion
+                extra_ids["tvdb_id"] = map_hit["tvdb_id"]
+                if map_hit.get("tmdb_id"):
+                    extra_ids["tmdb_id"] = map_hit["tmdb_id"]
+                if map_hit.get("imdb_id"):
+                    extra_ids["imdb_id"] = map_hit["imdb_id"]
+            else:
+                if map_hit.get("season_number") is not None:
+                    season_number = int(map_hit["season_number"])
+                if map_hit.get("episode_number") is not None:
+                    episode_number = int(map_hit["episode_number"])
+                for k in ("tvdb_id", "tmdb_id", "imdb_id"):
+                    if map_hit.get(k):
+                        extra_ids[k] = map_hit[k]
+                LOGGER.info(
+                    f"[KITSU] Mapped abs={episode} via {map_hit.get('source')} "
+                    f"→ S{season_number}E{episode_number}"
+                )
+
+    if is_abs and not ep and not map_hit:
         LOGGER.info(
             f"[KITSU] Absolute episode {episode} not in ani.zip for '{title}' "
             f"(kitsu={kitsu_id}) — still indexing with season={season_number}"
         )
+
+    # Propagate IDs into payload early so enrich can use them
+    if extra_ids.get("tvdb_id") and not payload.get("tvdb_id"):
+        payload["tvdb_id"] = extra_ids["tvdb_id"]
+    if extra_ids.get("tmdb_id") and not payload.get("tmdb_id"):
+        payload["tmdb_id"] = extra_ids["tmdb_id"]
+    if extra_ids.get("imdb_id") and (
+        not payload.get("imdb_id") or str(payload.get("imdb_id", "")).startswith("tg")
+    ):
+        payload["imdb_id"] = extra_ids["imdb_id"]
 
     payload.update({
         "media_type": "tv",
@@ -379,8 +539,24 @@ async def fetch_anime_tv(
         "episode_released": ep.get("airDate") or ep.get("airdate") or "",
         "quality": quality,
         "encoded_string": encoded_string,
-        "absolute_episode": episode_number if is_abs else None,
+        "absolute_episode": int(episode) if is_abs else None,
     })
+
+    # Enrich poster / backdrop / rating / episode art from TVDB when possible
+    tvdb_id = extra_ids.get("tvdb_id") or payload.get("tvdb_id")
+    abs_hint = int(episode) if (is_abs and (map_hit or {}).get("tvdb_absolute")) else None
+    if tvdb_id:
+        try:
+            payload = await _enrich_from_tvdb(
+                payload,
+                int(tvdb_id),
+                int(payload["season_number"]),
+                int(payload["episode_number"]),
+                absolute_hint=abs_hint,
+            )
+        except Exception as e:
+            LOGGER.debug(f"[KITSU] enrich skip: {e}")
+
     return payload
 
 

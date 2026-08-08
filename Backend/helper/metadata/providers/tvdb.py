@@ -274,6 +274,76 @@ async def episode_by_number(tvdb_id: int, season: int, episode: int) -> Optional
     return await cached_call(TVDB_CACHE, cache_key, "tvdb_ep", _produce)
 
 
+async def _iter_series_episodes(tvdb_id: int, order: str = "default") -> list:
+    """Page through TVDB series episodes (default or absolute order)."""
+    all_eps: list = []
+    page = 0
+    while page < 40:  # hard safety cap
+        data = await _get(
+            f"/series/{tvdb_id}/episodes/{order}",
+            {"page": page},
+        )
+        if not data:
+            break
+        block = (data.get("data") or {})
+        if isinstance(block, dict):
+            eps = block.get("episodes") or []
+            links = block.get("links") or (data.get("links") or {})
+        else:
+            eps = block if isinstance(block, list) else []
+            links = data.get("links") or {}
+        if not eps:
+            break
+        all_eps.extend(eps)
+        # pagination: TVDB v4 uses links.next
+        next_url = None
+        if isinstance(links, dict):
+            next_url = links.get("next")
+        if not next_url:
+            break
+        page += 1
+    return all_eps
+
+
+async def episode_by_absolute(tvdb_id: int, absolute: int) -> Optional[dict]:
+    """Resolve an absolute episode number to a TVDB episode record (with S/E).
+
+    Tries the absolute-order endpoint first, then falls back to scanning the
+    default-order list for absoluteNumber / absoluteIndex fields.
+    """
+    cache_key = f"tvdb_abs::{tvdb_id}::{absolute}"
+
+    async def _produce():
+        abs_n = int(absolute)
+        # 1) absolute order endpoint (episode.number == absolute)
+        try:
+            eps = await _iter_series_episodes(tvdb_id, order="absolute")
+            for ep in eps:
+                try:
+                    if int(ep.get("number") or -1) == abs_n:
+                        return ep
+                except (TypeError, ValueError):
+                    continue
+        except Exception as e:
+            LOGGER.debug(f"[TVDB] absolute order fetch failed for {tvdb_id}: {e}")
+
+        # 2) default order – match absoluteNumber / absoluteIndex
+        try:
+            eps = await _iter_series_episodes(tvdb_id, order="default")
+            for ep in eps:
+                for key in ("absoluteNumber", "absoluteIndex", "absNumber"):
+                    try:
+                        if int(ep.get(key) or -1) == abs_n:
+                            return ep
+                    except (TypeError, ValueError):
+                        continue
+        except Exception as e:
+            LOGGER.debug(f"[TVDB] default order abs scan failed for {tvdb_id}: {e}")
+        return None
+
+    return await cached_call(TVDB_CACHE, cache_key, "tvdb_abs", _produce)
+
+
 def _remote_ids(doc: dict) -> tuple:
     imdb_id = None
     tmdb_id = None
