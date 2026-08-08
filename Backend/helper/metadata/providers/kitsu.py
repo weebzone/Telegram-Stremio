@@ -242,8 +242,8 @@ def _common_payload(row: dict, doc: dict, title: str) -> dict:
     return ensure_media_ids(payload, seed=f"kitsu:{row.get('id')}")
 
 
-def _pick_english_text(*candidates) -> str:
-    """Prefer English / latin-script text over Japanese/CJK-only strings."""
+def _pick_english_text(*candidates, allow_fallback: bool = True) -> str:
+    """Prefer English / latin-script text. Optionally fall back to any language."""
     import re
     cjk = re.compile(r"[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uff66-\uff9f]")
     latin = re.compile(r"[A-Za-z]")
@@ -258,11 +258,11 @@ def _pick_english_text(*candidates) -> str:
                     return str(val).strip()
             for val in raw.values():
                 s = str(val or "").strip()
-                if s and latin.search(s):
+                if not s:
+                    continue
+                if latin.search(s):
                     return s
-            for val in raw.values():
-                s = str(val or "").strip()
-                if s and not best_any:
+                if not best_any:
                     best_any = s
             continue
         s = str(raw).strip()
@@ -272,22 +272,333 @@ def _pick_english_text(*candidates) -> str:
             return s
         if not best_any:
             best_any = s
-    return best_any
+    return best_any if allow_fallback else ""
 
 
-def _episode_title(ep: dict, season: int, episode: int, absolute: bool = False) -> str:
-    ep_title = None
-    if isinstance(ep.get("title"), dict):
-        ep_title = _pick_english_text(ep.get("title"))
-    elif isinstance(ep.get("title"), str):
-        ep_title = _pick_english_text(ep.get("title"))
-    if not ep_title:
-        ep_title = _pick_english_text(ep.get("nameTvdb"))
-    if ep_title:
-        return ep_title
+def _is_mostly_cjk(text: str) -> bool:
+    if not text:
+        return False
+    import re
+    cjk = re.compile(r"[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uff66-\uff9f]")
+    latin = re.compile(r"[A-Za-z]")
+    s = str(text)
+    return bool(cjk.search(s)) and not bool(latin.search(s))
+
+
+def _needs_english(text: str) -> bool:
+    """True when field is empty, generic, or non-English (CJK-only)."""
+    if not text or not str(text).strip():
+        return True
+    s = str(text).strip()
+    if s.startswith(("S0", "S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8", "S9")) and "E" in s[:6]:
+        return True
+    if s.startswith("Episode "):
+        return True
+    return _is_mostly_cjk(s)
+
+
+def _episode_title_fallback(season: int, episode: int, absolute: bool = False) -> str:
     if absolute or season is None:
         return f"Episode {episode}"
     return f"S{int(season):02d}E{int(episode):02d}"
+
+
+def _anizip_episode_fields(ep: dict) -> dict:
+    """Extract preferred English fields from a single ani.zip episode object."""
+    if not ep:
+        return {}
+    title = _pick_english_text(ep.get("title"), allow_fallback=False)
+    overview = _pick_english_text(
+        ep.get("overview"), ep.get("summary"), allow_fallback=False
+    )
+    # If no English overview/summary, leave empty so later APIs can fill
+    image = (ep.get("image") or "").strip()
+    return {
+        "episode_title": title or "",
+        "episode_overview": overview or "",
+        "episode_backdrop": image,
+        "episode_released": ep.get("airDate") or ep.get("airdate") or "",
+        "rating": ep.get("rating"),
+    }
+
+
+async def _tvdb_episode_fields(tvdb_id: int, season: int, episode: int, absolute_hint=None) -> dict:
+    """Cached TVDB episode fields (English). Empty dict if unavailable."""
+    try:
+        from Backend.helper.metadata.providers import tvdb as tvdb_mod
+        if not tvdb_mod.tvdb_api_key():
+            return {}
+        ep = None
+        if absolute_hint and (season is None or int(season) < 1):
+            ep = await tvdb_mod.episode_by_absolute(int(tvdb_id), int(absolute_hint))
+        if ep is None:
+            ep = await tvdb_mod.episode_details(int(tvdb_id), int(season or 1), int(episode))
+        if not ep:
+            return {}
+        name = (ep.get("name") or "").strip()
+        overview = (ep.get("overview") or "").strip()
+        image = ""
+        for key in ("image", "filename"):
+            raw = ep.get(key)
+            if raw:
+                image = raw if str(raw).startswith("http") else f"https://artworks.thetvdb.com{raw}"
+                break
+        out = {
+            "episode_title": name if name and not _is_mostly_cjk(name) else "",
+            "episode_overview": overview if overview and not _is_mostly_cjk(overview) else "",
+            "episode_backdrop": image,
+            "episode_released": (ep.get("aired") or ep.get("firstAired") or ""),
+        }
+        # If absolute resolved S/E, surface them
+        if ep.get("seasonNumber") is not None:
+            try:
+                out["season_number"] = int(ep["seasonNumber"])
+            except (TypeError, ValueError):
+                pass
+        if ep.get("number") is not None:
+            try:
+                out["episode_number"] = int(ep["number"])
+            except (TypeError, ValueError):
+                pass
+        return out
+    except Exception as e:
+        LOGGER.debug(f"[KITSU] TVDB episode fields failed: {e}")
+        return {}
+
+
+async def _tmdb_episode_fields(tmdb_id: int, season: int, episode: int) -> dict:
+    """Cached TMDB episode fields (language=en-US client). Empty dict if unavailable."""
+    try:
+        from Backend.helper.metadata.providers import tmdb as tmdb_mod
+        from Backend.helper.metadata.common import format_tmdb_image
+        if not tmdb_mod.tmdb_api_key():
+            return {}
+        ep = await tmdb_mod.episode_details(int(tmdb_id), int(season), int(episode))
+        if not ep:
+            return {}
+        name = getattr(ep, "name", None) or ""
+        overview = getattr(ep, "overview", None) or ""
+        still = getattr(ep, "still_path", None)
+        air = getattr(ep, "air_date", None)
+        return {
+            "episode_title": name if name and not _is_mostly_cjk(name) else "",
+            "episode_overview": overview if overview and not _is_mostly_cjk(overview) else "",
+            "episode_backdrop": format_tmdb_image(still, "original") if still else "",
+            "episode_released": str(air) if air else "",
+        }
+    except Exception as e:
+        LOGGER.debug(f"[KITSU] TMDB episode fields failed: {e}")
+        return {}
+
+
+async def _tmdb_series_english(tmdb_id: int) -> dict:
+    """Cached TMDB series-level English overview/title."""
+    try:
+        from Backend.helper.metadata.providers import tmdb as tmdb_mod
+        if not tmdb_mod.tmdb_api_key():
+            return {}
+        tv = await tmdb_mod.details("tv", int(tmdb_id))
+        if not tv:
+            return {}
+        overview = getattr(tv, "overview", None) or ""
+        name = getattr(tv, "name", None) or ""
+        return {
+            "description": overview if overview and not _is_mostly_cjk(overview) else "",
+            "title_english": name if name and not _is_mostly_cjk(name) else "",
+        }
+    except Exception as e:
+        LOGGER.debug(f"[KITSU] TMDB series english failed: {e}")
+        return {}
+
+
+async def _tvdb_series_english(tvdb_id: int) -> dict:
+    try:
+        from Backend.helper.metadata.providers import tvdb as tvdb_mod
+        if not tvdb_mod.tvdb_api_key():
+            return {}
+        series = await tvdb_mod.series_details(int(tvdb_id))
+        if not series:
+            return {}
+        overview = (series.get("overview") or "").strip()
+        name = (series.get("name") or "").strip()
+        return {
+            "description": overview if overview and not _is_mostly_cjk(overview) else "",
+            "title_english": name if name and not _is_mostly_cjk(name) else "",
+        }
+    except Exception as e:
+        LOGGER.debug(f"[KITSU] TVDB series english failed: {e}")
+        return {}
+
+
+def _merge_field(current: str, incoming: str) -> str:
+    """Keep current if already good English; else take incoming if better."""
+    if not _needs_english(current):
+        return current
+    if incoming and not _needs_english(incoming):
+        return incoming
+    if not current and incoming:
+        return incoming
+    return current or incoming or ""
+
+
+async def _resolve_episode_meta(
+    payload: dict,
+    *,
+    anizip_ep: dict,
+    season_number: int,
+    episode_number: int,
+    absolute: bool,
+    absolute_hint,
+    tvdb_id,
+    tmdb_id,
+) -> dict:
+    """Per-field cascade for episode details.
+
+    Order per field:
+      1) ani.zip (English)
+      2) TVDB (English, cached)
+      3) TMDB (English, cached)
+      4) ani.zip any language / generic fallback
+    """
+    # 1) ani.zip English
+    az = _anizip_episode_fields(anizip_ep or {})
+    title = az.get("episode_title") or ""
+    overview = az.get("episode_overview") or ""
+    backdrop = az.get("episode_backdrop") or ""
+    released = az.get("episode_released") or ""
+
+    need_title = _needs_english(title)
+    need_overview = _needs_english(overview)
+    need_backdrop = not bool(backdrop)
+
+    # 2) TVDB only for missing fields
+    if (need_title or need_overview or need_backdrop) and tvdb_id:
+        try:
+            tvdb_id_int = int(tvdb_id)
+        except (TypeError, ValueError):
+            tvdb_id_int = None
+        if tvdb_id_int:
+            tv = await _tvdb_episode_fields(
+                tvdb_id_int, season_number, episode_number, absolute_hint=absolute_hint
+            )
+            if tv.get("season_number") is not None and absolute:
+                season_number = int(tv["season_number"])
+                payload["season_number"] = season_number
+            if tv.get("episode_number") is not None and absolute:
+                episode_number = int(tv["episode_number"])
+                payload["episode_number"] = episode_number
+            title = _merge_field(title, tv.get("episode_title") or "")
+            overview = _merge_field(overview, tv.get("episode_overview") or "")
+            if need_backdrop and tv.get("episode_backdrop"):
+                backdrop = tv["episode_backdrop"]
+                need_backdrop = False
+            released = released or tv.get("episode_released") or ""
+            need_title = _needs_english(title)
+            need_overview = _needs_english(overview)
+
+    # 3) TMDB only for still-missing fields
+    if (need_title or need_overview or need_backdrop) and tmdb_id:
+        try:
+            tmdb_id_int = int(tmdb_id)
+        except (TypeError, ValueError):
+            tmdb_id_int = None
+        if tmdb_id_int and int(season_number or 0) > 0:
+            tm = await _tmdb_episode_fields(tmdb_id_int, season_number, episode_number)
+            title = _merge_field(title, tm.get("episode_title") or "")
+            overview = _merge_field(overview, tm.get("episode_overview") or "")
+            if need_backdrop and tm.get("episode_backdrop"):
+                backdrop = tm["episode_backdrop"]
+            released = released or tm.get("episode_released") or ""
+            need_title = _needs_english(title)
+            need_overview = _needs_english(overview)
+
+    # 4) Last resort: ani.zip any language (ja etc.)
+    if need_title:
+        title = _pick_english_text((anizip_ep or {}).get("title"), allow_fallback=True) or title
+    if need_overview:
+        title_ov = _pick_english_text(
+            (anizip_ep or {}).get("overview"),
+            (anizip_ep or {}).get("summary"),
+            allow_fallback=True,
+        )
+        overview = overview or title_ov or ""
+
+    if not title:
+        title = _episode_title_fallback(season_number, episode_number, absolute=absolute)
+
+    payload["episode_title"] = title
+    payload["episode_overview"] = overview or ""
+    payload["episode_backdrop"] = backdrop or ""
+    payload["episode_released"] = released or payload.get("episode_released") or ""
+    return payload
+
+
+async def _resolve_series_description(payload: dict, tvdb_id, tmdb_id) -> dict:
+    """Series description: Kitsu EN first (already in payload), then TVDB, then TMDB, then keep JA."""
+    desc = payload.get("description") or ""
+    if not _needs_english(desc):
+        return payload
+
+    if tvdb_id:
+        try:
+            tv = await _tvdb_series_english(int(tvdb_id))
+            if tv.get("description"):
+                payload["description"] = tv["description"]
+                desc = payload["description"]
+            if tv.get("title_english") and _is_mostly_cjk(payload.get("title") or ""):
+                payload["title"] = tv["title_english"]
+                payload["title_english"] = tv["title_english"]
+        except Exception:
+            pass
+
+    if _needs_english(desc) and tmdb_id:
+        try:
+            tm = await _tmdb_series_english(int(tmdb_id))
+            if tm.get("description"):
+                payload["description"] = tm["description"]
+            if tm.get("title_english"):
+                payload["title_english"] = tm["title_english"]
+                if _is_mostly_cjk(payload.get("title") or ""):
+                    payload["title"] = tm["title_english"]
+        except Exception:
+            pass
+    return payload
+
+
+async def _enrich_from_tvdb(
+    payload: dict,
+    tvdb_id: int,
+    season_number: int,
+    episode_number: int,
+    *,
+    absolute_hint: int | None = None,
+) -> dict:
+    """Legacy helper kept for series-level art/rating fill from TVDB."""
+    try:
+        from Backend.helper.metadata.providers import tvdb as tvdb_mod
+        if not tvdb_mod.tvdb_api_key():
+            return payload
+        series = await tvdb_mod.series_details(int(tvdb_id))
+        if series:
+            arts = await tvdb_mod.series_artworks(int(tvdb_id)) if hasattr(tvdb_mod, "series_artworks") else {}
+            # Prefer filling empty series art / rating only
+            if not payload.get("poster") and series.get("image"):
+                img = series["image"]
+                payload["poster"] = img if str(img).startswith("http") else f"https://artworks.thetvdb.com{img}"
+            if not payload.get("backdrop") and series.get("fanart"):
+                img = series["fanart"]
+                payload["backdrop"] = img if str(img).startswith("http") else f"https://artworks.thetvdb.com{img}"
+            site = series.get("score") or series.get("siteRating")
+            if site and not payload.get("rate"):
+                try:
+                    payload["rate"] = float(site)
+                except (TypeError, ValueError):
+                    pass
+            if not payload.get("tvdb_id"):
+                payload["tvdb_id"] = int(tvdb_id)
+    except Exception as e:
+        LOGGER.debug(f"[KITSU] TVDB series enrich failed for tvdb={tvdb_id}: {e}")
+    return payload
 
 
 def _find_anizip_episode(episodes: dict, season, episode, absolute: bool) -> dict:
@@ -347,7 +658,6 @@ def _find_anizip_episode(episodes: dict, season, episode, absolute: bool) -> dic
                 continue
     return {}
 
-
 def _ids_from_anizip(doc: dict) -> dict:
     """Extract cross-db IDs from ani.zip mappings block."""
     mappings = (doc or {}).get("mappings") or {}
@@ -372,222 +682,56 @@ def _ids_from_anizip(doc: dict) -> dict:
             continue
     return out
 
-
-def _resolve_episode_slot(doc: dict, season, episode, absolute: bool) -> tuple:
-    """Map (season, episode) or absolute episode to IMDb-style S/E via ani.zip.
-
-    ani.zip entries often carry:
-      - seasonNumber / episodeNumber  → aired-order IMDb/TVDB style slot
-      - absoluteEpisodeNumber         → continuous absolute number
-    Prefer the mapped seasonNumber+episodeNumber so Stremio arranges episodes
-    correctly even when the filename used absolute numbering.
-
-    Returns (season, episode, ep_dict, is_absolute, extra_ids).
-    extra_ids may include tvdb_id / tmdb_id hints for later enrichment.
-    """
-    episodes = (doc or {}).get("episodes") or {}
-    ep = _find_anizip_episode(episodes, season, episode, absolute)
-    extra = _ids_from_anizip(doc)
-
-    # Prefer tvdb id from the episode row when present
-    if ep.get("tvdbShowId"):
-        try:
-            extra["tvdb_id"] = int(ep["tvdbShowId"])
-        except (TypeError, ValueError):
-            pass
-
-    mapped_season = ep.get("seasonNumber") if ep else None
-    mapped_ep = ep.get("episodeNumber") if ep else None
-    if mapped_ep is None and ep:
-        mapped_ep = ep.get("episode")
-
-    try:
-        mapped_season = int(mapped_season) if mapped_season is not None else None
-    except (TypeError, ValueError):
-        mapped_season = None
-    try:
-        mapped_ep = int(mapped_ep) if mapped_ep is not None else None
-    except (TypeError, ValueError):
-        mapped_ep = None
-
-    if absolute or season is None:
-        # Prefer provider-mapped S/E; fall back to S1 + absolute
-        use_season = mapped_season if mapped_season is not None else 1
-        use_episode = mapped_ep if mapped_ep is not None else int(episode)
-        return use_season, use_episode, ep, True, extra
-
-    use_season = mapped_season if mapped_season is not None else int(season)
-    use_episode = mapped_ep if mapped_ep is not None else int(episode)
-    return use_season, use_episode, ep, False, extra
-
-
-async def _enrich_from_tvdb(
-    payload: dict,
-    tvdb_id: int,
-    season_number: int,
-    episode_number: int,
-    *,
-    absolute_hint: Optional[int] = None,
-) -> dict:
-    """Overwrite poster/backdrop/rating/episode art from TVDB when available."""
-    try:
-        from Backend.helper.metadata.providers import tvdb as tvdb_mod
-
-        series = await tvdb_mod.series_extended(int(tvdb_id))
-        if not series:
-            return payload
-
-        ep = None
-        if absolute_hint and hasattr(tvdb_mod, "episode_by_absolute"):
-            ep = await tvdb_mod.episode_by_absolute(int(tvdb_id), int(absolute_hint))
-            if ep:
-                try:
-                    season_number = int(ep.get("seasonNumber") or season_number)
-                    episode_number = int(ep.get("number") or ep.get("episodeNumber") or episode_number)
-                except (TypeError, ValueError):
-                    pass
-        if ep is None:
-            ep = await tvdb_mod.episode_by_number(int(tvdb_id), season_number, episode_number)
-
-        rich = tvdb_mod.build_series_payload(
-            series, ep, season_number, episode_number,
-            payload.get("quality"), payload.get("encoded_string"),
-        )
-        # Merge: keep Kitsu title variants, prefer TVDB art/rating/episode fields
-        for key in (
-            "poster", "backdrop", "logo", "rate", "description",
-            "genres", "year", "year_end", "runtime",
-            "episode_title", "episode_backdrop", "episode_overview", "episode_released",
-            "imdb_id", "tmdb_id", "tvdb_id",
-        ):
-            val = rich.get(key)
-            if val not in (None, "", [], 0):
-                payload[key] = val
-        payload["season_number"] = season_number
-        payload["episode_number"] = episode_number
-        payload["tvdb_id"] = int(tvdb_id)
-    except Exception as e:
-        LOGGER.debug(f"[KITSU] TVDB enrich failed for tvdb={tvdb_id}: {e}")
-    return payload
-
-
-def _is_mostly_cjk(text: str) -> bool:
-    if not text:
-        return False
-    import re
-    cjk = re.compile(r"[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uff66-\uff9f]")
-    latin = re.compile(r"[A-Za-z]")
-    s = str(text)
-    return bool(cjk.search(s)) and not bool(latin.search(s))
-
-
-async def _enrich_english_meta(
-    payload: dict,
-    *,
-    season_number: int,
-    episode_number: int,
-) -> dict:
-    """Fill English description / episode title / art when missing or CJK-only.
-
-    Prefer existing English → keep TVDB enrich → TMDB English → Japanese fallback.
-    """
-    need_desc = not payload.get("description") or _is_mostly_cjk(payload.get("description") or "")
-    need_ep_title = (
-        not payload.get("episode_title")
-        or _is_mostly_cjk(payload.get("episode_title") or "")
-        or str(payload.get("episode_title") or "").startswith(("S", "Episode "))
-    )
-    need_ep_overview = not payload.get("episode_overview") or _is_mostly_cjk(
-        payload.get("episode_overview") or ""
-    )
-    need_ep_art = not payload.get("episode_backdrop")
-
-    if not (need_desc or need_ep_title or need_ep_overview or need_ep_art):
-        return payload
-
-    tmdb_id = payload.get("tmdb_id")
-    try:
-        tmdb_id = int(tmdb_id) if tmdb_id and int(tmdb_id) > 0 else None
-    except (TypeError, ValueError):
-        tmdb_id = None
-    if not tmdb_id:
-        return payload
-
-    try:
-        from Backend.helper.metadata.providers import tmdb as tmdb_mod
-        from Backend.helper.metadata.common import format_tmdb_image
-
-        if need_desc:
-            tv = await tmdb_mod.details("tv", tmdb_id)
-            if tv:
-                overview = getattr(tv, "overview", None) or ""
-                if overview and not _is_mostly_cjk(overview):
-                    payload["description"] = overview
-                name = getattr(tv, "name", None) or ""
-                if name and not _is_mostly_cjk(name):
-                    if _is_mostly_cjk(payload.get("title") or ""):
-                        payload["title"] = name
-                    payload["title_english"] = name or payload.get("title_english")
-
-        if need_ep_title or need_ep_overview or need_ep_art:
-            ep = await tmdb_mod.episode_details(tmdb_id, int(season_number), int(episode_number))
-            if ep:
-                ep_name = getattr(ep, "name", None) or ""
-                ep_overview = getattr(ep, "overview", None) or ""
-                still = getattr(ep, "still_path", None)
-                if need_ep_title and ep_name and not _is_mostly_cjk(ep_name):
-                    payload["episode_title"] = ep_name
-                if need_ep_overview and ep_overview and not _is_mostly_cjk(ep_overview):
-                    payload["episode_overview"] = ep_overview
-                if need_ep_art and still:
-                    payload["episode_backdrop"] = format_tmdb_image(still, "original")
-    except Exception as e:
-        LOGGER.debug(f"[KITSU] TMDB english enrich failed: {e}")
-    return payload
-
-
 async def fetch_anime_tv(
-    title,
+    title: str,
     season,
-    episode,
+    episode: int,
     encoded_string,
     year=None,
     quality=None,
     absolute: bool = False,
-) -> Optional[dict]:
-    # For absolute episodes, search without season suffix (One Piece not "One Piece Season 21")
-    search_season = None if absolute or season is None else season
-    row = await search_anime(title, season=search_season, movie=False)
+) -> dict | None:
+    is_abs = bool(absolute)
+    row = await search_anime(title, movie=False)
     if not row:
-        LOGGER.info(f"[KITSU] No match for '{title}' (season={season}, absolute={absolute})")
         return None
 
-    try:
-        kitsu_id = int(row["id"])
-    except (TypeError, ValueError, KeyError):
-        return None
+    kitsu_id = row.get("id")
+    doc = await get_anizip_mappings(kitsu_id) if kitsu_id else {}
+    episodes = (doc or {}).get("episodes") or {}
+    extra_ids = _ids_from_anizip(doc)
 
-    doc = await get_anizip_mappings(kitsu_id) or {}
-    payload = _common_payload(row, doc, title)
+    ep = _find_anizip_episode(episodes, season, episode, absolute=is_abs)
 
-    season_number, episode_number, ep, is_abs, extra_ids = _resolve_episode_slot(
-        doc, season, episode, absolute or season is None
-    )
+    use_season = season
+    use_episode = int(episode)
 
-    # ani.zip often stores sparse AniDB-only rows without seasonNumber.
-    # Fall back to Anime-Lists → anibridge when mapped S/E is missing or
-    # we only have the weak S1+absolute default for a true absolute lookup.
+    if is_abs:
+        if ep.get("seasonNumber") is not None:
+            try:
+                use_season = int(ep["seasonNumber"])
+            except (TypeError, ValueError):
+                pass
+        if ep.get("episodeNumber") is not None:
+            try:
+                use_episode = int(ep["episodeNumber"])
+            except (TypeError, ValueError):
+                pass
+        elif ep.get("absoluteEpisodeNumber") is not None:
+            try:
+                use_episode = int(ep["absoluteEpisodeNumber"])
+            except (TypeError, ValueError):
+                pass
+
     needs_fallback = is_abs and (
         not ep
         or ep.get("seasonNumber") is None
         or (
-            # key-only hit with no absoluteEpisodeNumber → weak
             ep.get("absoluteEpisodeNumber") is None
             and ep.get("seasonNumber") is None
         )
     )
 
-    map_hit = None
     if needs_fallback:
         try:
             from Backend.helper.metadata.episode_maps import resolve_absolute_episode
@@ -599,84 +743,86 @@ async def fetch_anime_tv(
                 mal_id=extra_ids.get("mal_id"),
             )
         except Exception as e:
-            LOGGER.debug(f"[KITSU] episode_maps fallback failed: {e}")
+            LOGGER.debug(f"[KITSU] episode_maps resolve failed: {e}")
             map_hit = None
 
         if map_hit:
+            if map_hit.get("season_number") is not None:
+                use_season = int(map_hit["season_number"])
+            if map_hit.get("episode_number") is not None:
+                use_episode = int(map_hit["episode_number"])
+            for key in ("tvdb_id", "tmdb_id", "imdb_id"):
+                if map_hit.get(key) and not extra_ids.get(key):
+                    extra_ids[key] = map_hit[key]
             if map_hit.get("tvdb_absolute") and map_hit.get("tvdb_id"):
-                # Need TVDB absolute → S/E conversion
                 extra_ids["tvdb_id"] = map_hit["tvdb_id"]
-                if map_hit.get("tmdb_id"):
-                    extra_ids["tmdb_id"] = map_hit["tmdb_id"]
-                if map_hit.get("imdb_id"):
-                    extra_ids["imdb_id"] = map_hit["imdb_id"]
-            else:
-                if map_hit.get("season_number") is not None:
-                    season_number = int(map_hit["season_number"])
-                if map_hit.get("episode_number") is not None:
-                    episode_number = int(map_hit["episode_number"])
-                for k in ("tvdb_id", "tmdb_id", "imdb_id"):
-                    if map_hit.get(k):
-                        extra_ids[k] = map_hit[k]
-                LOGGER.info(
-                    f"[KITSU] Mapped abs={episode} via {map_hit.get('source')} "
-                    f"→ S{season_number}E{episode_number}"
-                )
 
-    if is_abs and not ep and not map_hit:
+    season_number = int(use_season) if use_season is not None else 1
+    episode_number = int(use_episode)
+
+    if is_abs and (not ep or ep.get("seasonNumber") is None) and season_number == 1 and episode_number == int(episode):
         LOGGER.info(
-            f"[KITSU] Absolute episode {episode} not in ani.zip for '{title}' "
-            f"(kitsu={kitsu_id}) — still indexing with season={season_number}"
+            f"[KITSU] Absolute episode {episode} not fully mapped for '{title}' "
+            f"(kitsu={kitsu_id}) — indexing with S{season_number}E{episode_number}"
         )
 
-    # Propagate IDs into payload early so enrich can use them
-    if extra_ids.get("tvdb_id") and not payload.get("tvdb_id"):
-        payload["tvdb_id"] = extra_ids["tvdb_id"]
-    if extra_ids.get("tmdb_id") and not payload.get("tmdb_id"):
-        payload["tmdb_id"] = extra_ids["tmdb_id"]
-    if extra_ids.get("imdb_id") and (
-        not payload.get("imdb_id") or str(payload.get("imdb_id", "")).startswith("tg")
-    ):
-        payload["imdb_id"] = extra_ids["imdb_id"]
+    attrs = row.get("attributes") or {}
+    display_title = (
+        (attrs.get("titles") or {}).get("en")
+        or (attrs.get("titles") or {}).get("en_jp")
+        or attrs.get("canonicalTitle")
+        or title
+    )
+    payload = _common_payload(row, doc or {}, display_title)
+    for key, val in extra_ids.items():
+        if val and not payload.get(key):
+            payload[key] = val
 
     payload.update({
         "media_type": "tv",
         "season_number": season_number,
         "episode_number": episode_number,
-        "episode_title": _episode_title(ep, season_number, episode_number, absolute=is_abs),
-        "episode_backdrop": ep.get("image", "") or "",
-        "episode_overview": _pick_english_text(ep.get("overview"), ep.get("summary"), ep.get("description")) or "",
-        "episode_released": ep.get("airDate") or ep.get("airdate") or "",
         "quality": quality,
         "encoded_string": encoded_string,
         "absolute_episode": int(episode) if is_abs else None,
     })
 
-    # Enrich poster / backdrop / rating / episode art from TVDB when possible
-    tvdb_id = extra_ids.get("tvdb_id") or payload.get("tvdb_id")
-    abs_hint = int(episode) if (is_abs and (map_hit or {}).get("tvdb_absolute")) else None
+    # Series description: Kitsu EN → TVDB → TMDB → JA
+    payload = await _resolve_series_description(
+        payload,
+        payload.get("tvdb_id") or extra_ids.get("tvdb_id"),
+        payload.get("tmdb_id") or extra_ids.get("tmdb_id"),
+    )
+
+    # Series art / rating fill from TVDB if needed
+    tvdb_id = payload.get("tvdb_id") or extra_ids.get("tvdb_id")
     if tvdb_id:
         try:
             payload = await _enrich_from_tvdb(
                 payload,
                 int(tvdb_id),
-                int(payload["season_number"]),
-                int(payload["episode_number"]),
-                absolute_hint=abs_hint,
+                season_number,
+                episode_number,
+                absolute_hint=int(episode) if is_abs else None,
             )
         except Exception as e:
-            LOGGER.debug(f"[KITSU] enrich skip: {e}")
+            LOGGER.debug(f"[KITSU] series enrich skip: {e}")
 
-    try:
-        payload = await _enrich_english_meta(
-            payload,
-            season_number=int(payload.get("season_number") or season_number or 1),
-            episode_number=int(payload.get("episode_number") or episode_number or episode),
-        )
-    except Exception as e:
-        LOGGER.debug(f"[KITSU] english enrich skip: {e}")
+    # Episode fields: ani.zip EN → TVDB → TMDB → JA (per field, cached APIs)
+    abs_hint = int(episode) if is_abs else None
+    payload = await _resolve_episode_meta(
+        payload,
+        anizip_ep=ep or {},
+        season_number=int(payload.get("season_number") or season_number),
+        episode_number=int(payload.get("episode_number") or episode_number),
+        absolute=is_abs,
+        absolute_hint=abs_hint,
+        tvdb_id=payload.get("tvdb_id") or extra_ids.get("tvdb_id"),
+        tmdb_id=payload.get("tmdb_id") or extra_ids.get("tmdb_id"),
+    )
 
     return payload
+
 
 
 async def fetch_anime_movie(title, encoded_string, year=None, quality=None) -> Optional[dict]:
