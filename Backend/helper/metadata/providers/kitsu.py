@@ -311,14 +311,20 @@ def _anizip_episode_fields(ep: dict) -> dict:
     overview = _pick_english_text(
         ep.get("overview"), ep.get("summary"), allow_fallback=False
     )
-    # If no English overview/summary, leave empty so later APIs can fill
     image = (ep.get("image") or "").strip()
+    rating = None
+    raw_r = ep.get("rating")
+    if raw_r is not None and str(raw_r).strip() != "":
+        try:
+            rating = float(raw_r)
+        except (TypeError, ValueError):
+            rating = None
     return {
         "episode_title": title or "",
         "episode_overview": overview or "",
         "episode_backdrop": image,
         "episode_released": ep.get("airDate") or ep.get("airdate") or "",
-        "rating": ep.get("rating"),
+        "episode_rating": rating,
     }
 
 
@@ -332,7 +338,7 @@ async def _tvdb_episode_fields(tvdb_id: int, season: int, episode: int, absolute
         if absolute_hint and (season is None or int(season) < 1):
             ep = await tvdb_mod.episode_by_absolute(int(tvdb_id), int(absolute_hint))
         if ep is None:
-            ep = await tvdb_mod.episode_details(int(tvdb_id), int(season or 1), int(episode))
+            ep = await tvdb_mod.episode_by_number(int(tvdb_id), int(season or 1), int(episode))
         if not ep:
             return {}
         name = (ep.get("name") or "").strip()
@@ -343,11 +349,20 @@ async def _tvdb_episode_fields(tvdb_id: int, season: int, episode: int, absolute
             if raw:
                 image = raw if str(raw).startswith("http") else f"https://artworks.thetvdb.com{raw}"
                 break
+        rating = None
+        for rk in ("siteRating", "rating", "score"):
+            if ep.get(rk) is not None:
+                try:
+                    rating = float(ep[rk])
+                    break
+                except (TypeError, ValueError):
+                    continue
         out = {
             "episode_title": name if name and not _is_mostly_cjk(name) else "",
             "episode_overview": overview if overview and not _is_mostly_cjk(overview) else "",
             "episode_backdrop": image,
             "episode_released": (ep.get("aired") or ep.get("firstAired") or ""),
+            "episode_rating": rating,
         }
         # If absolute resolved S/E, surface them
         if ep.get("seasonNumber") is not None:
@@ -380,11 +395,19 @@ async def _tmdb_episode_fields(tmdb_id: int, season: int, episode: int) -> dict:
         overview = getattr(ep, "overview", None) or ""
         still = getattr(ep, "still_path", None)
         air = getattr(ep, "air_date", None)
+        rating = None
+        vote = getattr(ep, "vote_average", None)
+        if vote is not None:
+            try:
+                rating = float(vote)
+            except (TypeError, ValueError):
+                rating = None
         return {
             "episode_title": name if name and not _is_mostly_cjk(name) else "",
             "episode_overview": overview if overview and not _is_mostly_cjk(overview) else "",
             "episode_backdrop": format_tmdb_image(still, "original") if still else "",
             "episode_released": str(air) if air else "",
+            "episode_rating": rating,
         }
     except Exception as e:
         LOGGER.debug(f"[KITSU] TMDB episode fields failed: {e}")
@@ -466,10 +489,12 @@ async def _resolve_episode_meta(
     overview = az.get("episode_overview") or ""
     backdrop = az.get("episode_backdrop") or ""
     released = az.get("episode_released") or ""
+    rating = az.get("episode_rating")
 
     need_title = _needs_english(title)
     need_overview = _needs_english(overview)
     need_backdrop = not bool(backdrop)
+    need_rating = rating is None
 
     # 2) TVDB only for missing fields
     if (need_title or need_overview or need_backdrop) and tvdb_id:
@@ -492,6 +517,9 @@ async def _resolve_episode_meta(
             if need_backdrop and tv.get("episode_backdrop"):
                 backdrop = tv["episode_backdrop"]
                 need_backdrop = False
+            if need_rating and tv.get("episode_rating") is not None:
+                rating = tv["episode_rating"]
+                need_rating = False
             released = released or tv.get("episode_released") or ""
             need_title = _needs_english(title)
             need_overview = _needs_english(overview)
@@ -508,6 +536,10 @@ async def _resolve_episode_meta(
             overview = _merge_field(overview, tm.get("episode_overview") or "")
             if need_backdrop and tm.get("episode_backdrop"):
                 backdrop = tm["episode_backdrop"]
+                need_backdrop = False
+            if need_rating and tm.get("episode_rating") is not None:
+                rating = tm["episode_rating"]
+                need_rating = False
             released = released or tm.get("episode_released") or ""
             need_title = _needs_english(title)
             need_overview = _needs_english(overview)
@@ -526,10 +558,19 @@ async def _resolve_episode_meta(
     if not title:
         title = _episode_title_fallback(season_number, episode_number, absolute=absolute)
 
+    # Last visual fallback: series backdrop/poster if episode still has no still
+    if not backdrop:
+        backdrop = (payload.get("backdrop") or payload.get("poster") or "") or ""
+
     payload["episode_title"] = title
     payload["episode_overview"] = overview or ""
     payload["episode_backdrop"] = backdrop or ""
     payload["episode_released"] = released or payload.get("episode_released") or ""
+    if rating is not None:
+        try:
+            payload["episode_rating"] = float(rating)
+        except (TypeError, ValueError):
+            pass
     return payload
 
 
@@ -565,6 +606,111 @@ async def _resolve_series_description(payload: dict, tvdb_id, tmdb_id) -> dict:
     return payload
 
 
+def _tvdb_art_url(path: str) -> str:
+    if not path:
+        return ""
+    p = str(path)
+    if p.startswith("http"):
+        return p
+    return f"https://artworks.thetvdb.com{p}" if p.startswith("/") else f"https://artworks.thetvdb.com/{p}"
+
+
+def _pick_tvdb_artwork(artworks: list, type_ids: set) -> str:
+    for art in artworks or []:
+        try:
+            if int(art.get("type") or 0) in type_ids and art.get("image"):
+                return _tvdb_art_url(art["image"])
+        except (TypeError, ValueError):
+            continue
+    return ""
+
+
+async def _resolve_series_art(payload: dict, tvdb_id, tmdb_id) -> dict:
+    """Poster / backdrop / logo fallbacks: Kitsu/ani.zip → TVDB → TMDB.
+
+    Only fills fields that are still empty. All remote calls are cached in providers.
+    """
+    need_poster = not (payload.get("poster") or "").strip()
+    need_backdrop = not (payload.get("backdrop") or "").strip()
+    need_logo = not (payload.get("logo") or "").strip()
+    need_rate = not payload.get("rate")
+
+    if not (need_poster or need_backdrop or need_logo or need_rate):
+        return payload
+
+    # TVDB series
+    if tvdb_id and (need_poster or need_backdrop or need_logo or need_rate):
+        try:
+            from Backend.helper.metadata.providers import tvdb as tvdb_mod
+            if tvdb_mod.tvdb_api_key():
+                series = await tvdb_mod.series_details(int(tvdb_id))
+                if series:
+                    artworks = series.get("artworks") or []
+                    if need_poster:
+                        poster = (
+                            _pick_tvdb_artwork(artworks, {2, 14, 27})
+                            or _tvdb_art_url(series.get("image") or "")
+                        )
+                        if poster:
+                            payload["poster"] = poster
+                            need_poster = False
+                    if need_backdrop:
+                        backdrop = (
+                            _pick_tvdb_artwork(artworks, {3, 15, 19})
+                            or _tvdb_art_url(series.get("background") or series.get("fanart") or "")
+                        )
+                        if backdrop:
+                            payload["backdrop"] = backdrop
+                            need_backdrop = False
+                    if need_logo:
+                        logo = _pick_tvdb_artwork(artworks, {25, 23})
+                        if logo:
+                            payload["logo"] = logo
+                            need_logo = False
+                    if need_rate:
+                        site = series.get("siteRating") or series.get("rating")
+                        if site is not None:
+                            try:
+                                payload["rate"] = float(site)
+                                need_rate = False
+                            except (TypeError, ValueError):
+                                pass
+                    payload.setdefault("tvdb_id", int(tvdb_id))
+        except Exception as e:
+            LOGGER.debug(f"[KITSU] TVDB series art failed: {e}")
+
+    # TMDB series
+    if tmdb_id and (need_poster or need_backdrop or need_logo or need_rate):
+        try:
+            from Backend.helper.metadata.providers import tmdb as tmdb_mod
+            from Backend.helper.metadata.common import format_tmdb_image
+            if tmdb_mod.tmdb_api_key():
+                tv = await tmdb_mod.details("tv", int(tmdb_id))
+                if tv:
+                    if need_poster and getattr(tv, "poster_path", None):
+                        payload["poster"] = format_tmdb_image(tv.poster_path)
+                        need_poster = False
+                    if need_backdrop and getattr(tv, "backdrop_path", None):
+                        payload["backdrop"] = format_tmdb_image(tv.backdrop_path, "original")
+                        need_backdrop = False
+                    if need_logo:
+                        logo = tmdb_mod.get_tmdb_logo(getattr(tv, "images", None))
+                        if logo:
+                            payload["logo"] = logo
+                            need_logo = False
+                    if need_rate and getattr(tv, "vote_average", None):
+                        try:
+                            payload["rate"] = float(tv.vote_average)
+                            need_rate = False
+                        except (TypeError, ValueError):
+                            pass
+                    payload.setdefault("tmdb_id", int(tmdb_id))
+        except Exception as e:
+            LOGGER.debug(f"[KITSU] TMDB series art failed: {e}")
+
+    return payload
+
+
 async def _enrich_from_tvdb(
     payload: dict,
     tvdb_id: int,
@@ -573,32 +719,8 @@ async def _enrich_from_tvdb(
     *,
     absolute_hint: int | None = None,
 ) -> dict:
-    """Legacy helper kept for series-level art/rating fill from TVDB."""
-    try:
-        from Backend.helper.metadata.providers import tvdb as tvdb_mod
-        if not tvdb_mod.tvdb_api_key():
-            return payload
-        series = await tvdb_mod.series_details(int(tvdb_id))
-        if series:
-            arts = await tvdb_mod.series_artworks(int(tvdb_id)) if hasattr(tvdb_mod, "series_artworks") else {}
-            # Prefer filling empty series art / rating only
-            if not payload.get("poster") and series.get("image"):
-                img = series["image"]
-                payload["poster"] = img if str(img).startswith("http") else f"https://artworks.thetvdb.com{img}"
-            if not payload.get("backdrop") and series.get("fanart"):
-                img = series["fanart"]
-                payload["backdrop"] = img if str(img).startswith("http") else f"https://artworks.thetvdb.com{img}"
-            site = series.get("score") or series.get("siteRating")
-            if site and not payload.get("rate"):
-                try:
-                    payload["rate"] = float(site)
-                except (TypeError, ValueError):
-                    pass
-            if not payload.get("tvdb_id"):
-                payload["tvdb_id"] = int(tvdb_id)
-    except Exception as e:
-        LOGGER.debug(f"[KITSU] TVDB series enrich failed for tvdb={tvdb_id}: {e}")
-    return payload
+    """Thin wrapper: series art is handled by _resolve_series_art."""
+    return await _resolve_series_art(payload, tvdb_id, payload.get("tmdb_id"))
 
 
 def _find_anizip_episode(episodes: dict, season, episode, absolute: bool) -> dict:
@@ -794,19 +916,13 @@ async def fetch_anime_tv(
         payload.get("tmdb_id") or extra_ids.get("tmdb_id"),
     )
 
-    # Series art / rating fill from TVDB if needed
+    # Series art / rating: Kitsu → ani.zip (already in payload) → TVDB → TMDB
     tvdb_id = payload.get("tvdb_id") or extra_ids.get("tvdb_id")
-    if tvdb_id:
-        try:
-            payload = await _enrich_from_tvdb(
-                payload,
-                int(tvdb_id),
-                season_number,
-                episode_number,
-                absolute_hint=int(episode) if is_abs else None,
-            )
-        except Exception as e:
-            LOGGER.debug(f"[KITSU] series enrich skip: {e}")
+    tmdb_id = payload.get("tmdb_id") or extra_ids.get("tmdb_id")
+    try:
+        payload = await _resolve_series_art(payload, tvdb_id, tmdb_id)
+    except Exception as e:
+        LOGGER.debug(f"[KITSU] series art skip: {e}")
 
     # Episode fields: ani.zip EN → TVDB → TMDB → JA (per field, cached APIs)
     abs_hint = int(episode) if is_abs else None
