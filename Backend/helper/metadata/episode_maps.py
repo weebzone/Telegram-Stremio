@@ -24,7 +24,6 @@ import httpx
 
 from Backend.logger import LOGGER
 
-# ── URLs ──────────────────────────────────────────────────────────────────────
 ANIME_LISTS_URL = (
     "https://raw.githubusercontent.com/Anime-Lists/anime-lists/master/"
     "anime-list-master.xml"
@@ -38,10 +37,8 @@ ANIBRIDGE_MIN_URL = (
     "mappings.min.json"
 )
 
-# Refresh at most once per day
 _TTL_SECONDS = 24 * 3600
 
-# Optional on-disk cache dir (best-effort)
 _CACHE_DIR = os.environ.get(
     "EPISODE_MAPS_CACHE",
     os.path.join(os.path.dirname(__file__), ".episode_maps_cache"),
@@ -53,17 +50,15 @@ class AnimeListEntry:
     anidb_id: int
     tvdb_id: Optional[int] = None
     tmdb_tv_id: Optional[int] = None
-    default_tvdb_season: Optional[str] = None  # "a" | "1" | "0" | …
+    default_tvdb_season: Optional[str] = None
     episode_offset: int = 0
     tmdb_season: Optional[str] = None
     tmdb_offset: int = 0
     imdb_id: Optional[str] = None
     name: str = ""
-    # list of (anidb_season, tvdb_season, start, end, offset) for regular eps
     mappings: List[Tuple[int, int, Optional[int], Optional[int], int]] = field(
         default_factory=list
     )
-    # specials: anidb special ep → tvdb special ep (0 = drop)
     special_map: Dict[int, int] = field(default_factory=dict)
 
 
@@ -110,14 +105,11 @@ def _read_disk(name: str) -> Optional[bytes]:
 def _write_disk(name: str, data: bytes) -> None:
     try:
         _ensure_cache_dir()
-        path = os.path.join(_CACHE_DIR, name)
-        with open(path, "wb") as f:
+        with open(os.path.join(_CACHE_DIR, name), "wb") as f:
             f.write(data)
     except Exception as e:
         LOGGER.debug(f"[EP_MAPS] disk cache write failed: {e}")
 
-
-# ── Anime-Lists ───────────────────────────────────────────────────────────────
 
 def _parse_anime_lists_xml(raw: bytes) -> Dict[int, AnimeListEntry]:
     out: Dict[int, AnimeListEntry] = {}
@@ -183,7 +175,6 @@ def _parse_anime_lists_xml(raw: bytes) -> Dict[int, AnimeListEntry]:
                 tmdb_season_raw = m.get("tmdbseason")
                 text = (m.text or "").strip()
 
-                # Specials style: ;1-4;2-3;  (anidb special → tvdb special)
                 if text.startswith(";") and "start" not in m.attrib:
                     for pair in text.strip(";").split(";"):
                         pair = pair.strip()
@@ -196,7 +187,6 @@ def _parse_anime_lists_xml(raw: bytes) -> Dict[int, AnimeListEntry]:
                             continue
                     continue
 
-                # Range mapping with start/end/offset
                 try:
                     start = int(m.get("start")) if m.get("start") not in (None, "") else None
                     end = int(m.get("end")) if m.get("end") not in (None, "") else None
@@ -260,12 +250,7 @@ def resolve_via_anime_lists(
     *,
     prefer_tvdb: bool = True,
 ) -> Optional[dict]:
-    """Map absolute/AniDB regular episode → season + episode via Anime-Lists.
-
-    Returns dict with keys:
-      season_number, episode_number, tvdb_id, tmdb_id, imdb_id, source
-    or None if no useful mapping.
-    """
+    """Map absolute/AniDB regular episode → season + episode via Anime-Lists."""
     if not anidb_id or absolute < 1:
         return None
     entry = _anime_lists.get(int(anidb_id))
@@ -279,17 +264,9 @@ def resolve_via_anime_lists(
         "source": "anime-lists",
     }
 
-    # defaulttvdbseason == "a" → absolute numbering on TVDB
-    if (entry.default_tvdb_season or "").lower() == "a":
-        # Absolute on TVDB: season is not known from XML alone; leave season
-        # for the TVDB absolute lookup. Still return tvdb_id + absolute.
-        result["absolute_episode"] = absolute
-        result["season_number"] = None
-        result["episode_number"] = absolute
-        result["tvdb_absolute"] = True
-        return result
-
-    # Apply explicit range mappings first (regular season 1 on AniDB)
+    # 1) Explicit range mappings FIRST — even when defaulttvdbseason is "a".
+    #    One Piece ships both "a" AND per-arc season ranges; ranges give real
+    #    S/E (e.g. abs 1171 → S23E16) without needing the TVDB API.
     for anidb_season, tvdb_season, start, end, offset in entry.mappings:
         if anidb_season not in (0, 1):
             continue
@@ -297,14 +274,22 @@ def resolve_via_anime_lists(
             continue
         if end is not None and absolute > end:
             continue
-        ep = absolute + offset
+        ep = absolute + int(offset or 0)
         if ep < 1:
             continue
-        result["season_number"] = tvdb_season
+        result["season_number"] = int(tvdb_season)
         result["episode_number"] = ep
         return result
 
-    # Simple default season + offset
+    # 2) defaulttvdbseason == "a" → absolute on TVDB (caller may resolve via API)
+    if (entry.default_tvdb_season or "").lower() == "a":
+        result["absolute_episode"] = absolute
+        result["season_number"] = None
+        result["episode_number"] = absolute
+        result["tvdb_absolute"] = True
+        return result
+
+    # 3) Simple default season + offset
     try:
         season = int(entry.default_tvdb_season) if entry.default_tvdb_season else 1
     except (TypeError, ValueError):
@@ -317,22 +302,17 @@ def resolve_via_anime_lists(
     return result
 
 
-# ── anibridge-mappings ────────────────────────────────────────────────────────
-
 _RANGE_RE = re.compile(
     r"^(?P<start>\d+)(?:-(?P<end>\d+)?)?(?:\|(?P<ratio>-?\d+(?:\.\d+)?))?$"
 )
 
 
 def _parse_range_token(token: str) -> Optional[Tuple[int, Optional[int], float]]:
-    """Return (start, end|None, ratio). end=None means open-ended."""
     token = (token or "").strip()
     if not token:
         return None
-    # multi-segment handled by caller
     m = _RANGE_RE.match(token)
     if not m:
-        # bare number
         if token.isdigit():
             n = int(token)
             return n, n, 1.0
@@ -340,7 +320,6 @@ def _parse_range_token(token: str) -> Optional[Tuple[int, Optional[int], float]]
     start = int(m.group("start"))
     end_raw = m.group("end")
     if end_raw is None and "-" in token and not token.endswith("|"):
-        # "14-" style open-ended
         end = None
     elif end_raw is None and "-" not in token.split("|")[0]:
         end = start
@@ -350,16 +329,10 @@ def _parse_range_token(token: str) -> Optional[Tuple[int, Optional[int], float]]
     return start, end, ratio
 
 
-def _map_through_ranges(
-    source_ep: int,
-    range_map: dict,
-) -> Optional[int]:
-    """Apply anibridge source→target range rules. Returns target episode number."""
+def _map_through_ranges(source_ep: int, range_map: dict) -> Optional[int]:
     if not isinstance(range_map, dict):
         return None
-
     for src_key, tgt_val in range_map.items():
-        # src_key may be "1-12" or "14-"
         src = _parse_range_token(str(src_key))
         if not src:
             continue
@@ -368,15 +341,10 @@ def _map_through_ranges(
             continue
         if s_end is not None and source_ep > s_end:
             continue
-
-        offset_in_src = source_ep - s_start  # 0-based
-
-        # Target may be multi-segment: "1-6,8-13" or "14-|2"
+        offset_in_src = source_ep - s_start
         tgt_str = str(tgt_val or "").strip()
         if not tgt_str:
-            # empty map = 1:1 identity within the source range
             return source_ep
-
         segments = [p.strip() for p in tgt_str.split(",") if p.strip()]
         remaining = offset_in_src
         for seg in segments:
@@ -387,30 +355,23 @@ def _map_through_ranges(
             if ratio == 0:
                 continue
             if ratio > 0:
-                # each source ep spans `ratio` target eps
                 span = 1
                 if t_end is not None:
-                    # number of source slots this segment covers
                     tgt_count = t_end - t_start + 1
                     span = max(1, int(round(tgt_count / ratio)))
                 if remaining < span or t_end is None:
-                    # land inside this segment
-                    tgt_offset = int(remaining * ratio)
-                    return t_start + tgt_offset
+                    return t_start + int(remaining * ratio)
                 remaining -= span
             else:
-                # negative ratio: each source ep = 1/|ratio| target eps
                 inv = abs(ratio)
                 span = int(inv)
                 if remaining < span or t_end is None:
                     return t_start + int(remaining / inv)
                 remaining -= span
-        # open-ended last segment already handled
     return None
 
 
 def _descriptor_parts(desc: str) -> Tuple[str, str, Optional[str]]:
-    """'tvdb_show:81797:s1' → ('tvdb_show', '81797', 's1')"""
     parts = str(desc).split(":")
     provider = parts[0] if parts else ""
     id_ = parts[1] if len(parts) > 1 else ""
@@ -425,7 +386,6 @@ async def ensure_anibridge() -> dict:
             return _anibridge
 
         data = None
-        # Prefer zstd if zstandard is available
         raw = _read_disk("mappings.json.zst")
         if raw is None:
             try:
@@ -439,8 +399,7 @@ async def ensure_anibridge() -> dict:
 
         if raw:
             try:
-                import zstandard as zstd  # optional dependency
-
+                import zstandard as zstd
                 dctx = zstd.ZstdDecompressor()
                 data = json.loads(dctx.decompress(raw))
             except Exception:
@@ -456,8 +415,7 @@ async def ensure_anibridge() -> dict:
                         raw_json = resp.content
                         _write_disk("mappings.min.json", raw_json)
                         LOGGER.info(
-                            f"[EP_MAPS] Downloaded anibridge mappings "
-                            f"({len(raw_json)} bytes)"
+                            f"[EP_MAPS] Downloaded anibridge mappings ({len(raw_json)} bytes)"
                         )
                 except Exception as e:
                     LOGGER.warning(f"[EP_MAPS] anibridge JSON download failed: {e}")
@@ -468,7 +426,6 @@ async def ensure_anibridge() -> dict:
                     LOGGER.warning(f"[EP_MAPS] anibridge JSON parse failed: {e}")
 
         if isinstance(data, dict):
-            # Drop meta key
             data.pop("$meta", None)
             _anibridge = data
             _anibridge_loaded_at = time.time()
@@ -483,10 +440,6 @@ def resolve_via_anibridge(
     mal_id: Optional[int] = None,
     absolute: int,
 ) -> Optional[dict]:
-    """Map episode number through anibridge range rules → TVDB/TMDB S/E.
-
-    Tries AniDB regular (R) first, then AniList, then MAL.
-    """
     if absolute < 1 or not _anibridge:
         return None
 
@@ -503,8 +456,6 @@ def resolve_via_anibridge(
         targets = _anibridge.get(src_desc)
         if not isinstance(targets, dict):
             continue
-
-        # Prefer tvdb_show targets, then tmdb_show
         ordered = sorted(
             targets.items(),
             key=lambda kv: (
@@ -521,14 +472,11 @@ def resolve_via_anibridge(
             season = None
             if scope and scope.startswith("s") and scope[1:].isdigit():
                 season = int(scope[1:])
-
             mapped_ep = _map_through_ranges(absolute, range_map or {})
             if mapped_ep is None and not range_map:
-                # empty {} often means 1:1 identity for the whole season
                 mapped_ep = absolute
             if mapped_ep is None or mapped_ep < 1:
                 continue
-
             result = {
                 "season_number": season if season is not None else 1,
                 "episode_number": int(mapped_ep),
@@ -542,8 +490,6 @@ def resolve_via_anibridge(
     return None
 
 
-# ── Unified public helper ─────────────────────────────────────────────────────
-
 async def resolve_absolute_episode(
     absolute: int,
     *,
@@ -551,24 +497,12 @@ async def resolve_absolute_episode(
     anilist_id: Optional[int] = None,
     mal_id: Optional[int] = None,
 ) -> Optional[dict]:
-    """Full fallback chain after ani.zip fails.
-
-    Returns:
-      {
-        season_number, episode_number,
-        tvdb_id?, tmdb_id?, imdb_id?,
-        tvdb_absolute?: bool,   # need TVDB absolute lookup
-        source: str,
-      }
-    """
     if absolute < 1:
         return None
 
-    # 1) Anime-Lists
     await ensure_anime_lists()
     hit = resolve_via_anime_lists(anidb_id, absolute)
     if hit:
-        # If defaulttvdbseason=a we still need TVDB absolute → S/E
         if hit.get("tvdb_absolute") and hit.get("tvdb_id"):
             return hit
         if hit.get("season_number") is not None and hit.get("episode_number") is not None:
@@ -578,11 +512,9 @@ async def resolve_absolute_episode(
                 f"(tvdb={hit.get('tvdb_id')})"
             )
             return hit
-        # tvdb_absolute path – return so caller can query TVDB
         if hit.get("tvdb_absolute"):
             return hit
 
-    # 2) anibridge
     await ensure_anibridge()
     hit = resolve_via_anibridge(
         anidb_id=anidb_id,
