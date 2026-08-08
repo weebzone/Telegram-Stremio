@@ -230,7 +230,7 @@ def _common_payload(row: dict, doc: dict, title: str) -> dict:
         "year": year,
         "year_end": year_end,
         "rate": rate,
-        "description": strip_html(attrs.get("synopsis") or attrs.get("description") or ""),
+        "description": strip_html(_pick_english_text(attrs.get("synopsis"), attrs.get("description")) or ""),
         "poster": _poster(attrs, images),
         "backdrop": _backdrop(attrs, images),
         "logo": logo,
@@ -242,12 +242,47 @@ def _common_payload(row: dict, doc: dict, title: str) -> dict:
     return ensure_media_ids(payload, seed=f"kitsu:{row.get('id')}")
 
 
+def _pick_english_text(*candidates) -> str:
+    """Prefer English / latin-script text over Japanese/CJK-only strings."""
+    import re
+    cjk = re.compile(r"[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uff66-\uff9f]")
+    latin = re.compile(r"[A-Za-z]")
+    best_any = ""
+    for raw in candidates:
+        if raw is None:
+            continue
+        if isinstance(raw, dict):
+            for key in ("en", "en_us", "en_jp", "x-jat", "romaji"):
+                val = raw.get(key)
+                if val and str(val).strip():
+                    return str(val).strip()
+            for val in raw.values():
+                s = str(val or "").strip()
+                if s and latin.search(s):
+                    return s
+            for val in raw.values():
+                s = str(val or "").strip()
+                if s and not best_any:
+                    best_any = s
+            continue
+        s = str(raw).strip()
+        if not s:
+            continue
+        if latin.search(s):
+            return s
+        if not best_any:
+            best_any = s
+    return best_any
+
+
 def _episode_title(ep: dict, season: int, episode: int, absolute: bool = False) -> str:
     ep_title = None
     if isinstance(ep.get("title"), dict):
-        ep_title = ep["title"].get("en") or ep["title"].get("ja")
+        ep_title = _pick_english_text(ep.get("title"))
     elif isinstance(ep.get("title"), str):
-        ep_title = ep.get("title")
+        ep_title = _pick_english_text(ep.get("title"))
+    if not ep_title:
+        ep_title = _pick_english_text(ep.get("nameTvdb"))
     if ep_title:
         return ep_title
     if absolute or season is None:
@@ -535,7 +570,7 @@ async def fetch_anime_tv(
         "episode_number": episode_number,
         "episode_title": _episode_title(ep, season_number, episode_number, absolute=is_abs),
         "episode_backdrop": ep.get("image", "") or "",
-        "episode_overview": ep.get("overview") or ep.get("summary") or "",
+        "episode_overview": _pick_english_text(ep.get("overview"), ep.get("summary"), ep.get("description")) or "",
         "episode_released": ep.get("airDate") or ep.get("airdate") or "",
         "quality": quality,
         "encoded_string": encoded_string,

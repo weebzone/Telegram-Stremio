@@ -65,7 +65,16 @@ _SEASON_EP_RE = re.compile(r"(?i)s\d{1,2}[._\s-]*e\d{1,3}")
 # Quality / codec tokens (with or without trailing 'p')
 _QUALITY_TOKEN_RE = re.compile(
     r"(?i)(?:(?<![\w])(?:240|360|480|576|720|1080|1440|2160|4320)p?(?![\w])|"
-    r"\d{3,4}x\d{3,4}|web-?dl|blu-?ray|hdtv|hdrip|webrip|x264|x265|hevc|avc|aac|dts|truehd|atmos|10bit|8bit)"
+    r"\d{3,4}x\d{3,4}|web-?dl|blu-?ray|bluray|hdtv|hdrip|webrip|bdrip|brrip|"
+    r"x264|x265|h\.?264|h\.?265|hevc|avc|aac|dts|truehd|atmos|10bit|8bit|"
+    r"multi(?:\s*audio)?|dual(?:\s*audio)?|esub|subs?|softsubs?|hardsubs?|"
+    r"(?<![\w])(?:bd|remux|encode)(?![\w]))"
+)
+# Bracketed release-group tags: [Judas], [SubsPlease], etc.
+_RELEASE_GROUP_RE = re.compile(r"\[[^\]]{1,40}\]")
+# Trailing absolute ep after title: "One Piece - 1172" / "One Piece 1172"
+_TITLE_ABS_EP_RE = re.compile(
+    r"(?i)^(?P<title>.+?)\s*[-–—]?\s*0*(?P<ep>\d{2,4})\s*$"
 )
 _YEAR_RE = re.compile(r"(?:^|[\s._\-(])((?:19|20)\d{2})(?:[\s._\-)]|$)")
 
@@ -77,6 +86,8 @@ def extract_absolute_episode(filename: str, parsed: dict | None = None) -> int |
       One Piece 1223 720.mkv
       One Piece - 1223 720p.mkv
       Naruto 500 1080p.mkv
+      Naruto Shippuden - 016 480p BD x264 Multi Audio ESub
+      [Judas] One Piece - 1172.mkv
     """
     parsed = parsed or {}
     if parsed.get("season") is not None:
@@ -94,8 +105,9 @@ def extract_absolute_episode(filename: str, parsed: dict | None = None) -> int |
             pass
 
     name = filename or ""
-    # Strip extension and quality/codec tokens
+    # Strip extension, release-group brackets, quality/codec tokens
     cleaned = re.sub(r"\.[a-z0-9]{2,4}$", " ", name, flags=re.I)
+    cleaned = _RELEASE_GROUP_RE.sub(" ", cleaned)
     cleaned = _QUALITY_TOKEN_RE.sub(" ", cleaned)
     # Strip years so 2021 is not treated as an episode
     cleaned = _YEAR_RE.sub(" ", cleaned)
@@ -107,14 +119,52 @@ def extract_absolute_episode(filename: str, parsed: dict | None = None) -> int |
         return int(prefixed[-1])
 
     # Bare numbers left after stripping quality/year — prefer last 2–4 digit token
-    bare = re.findall(r"(?:^|\s)(\d{2,4})(?:\s|$)", cleaned)
-    if not bare:
+    # Include leading-zero forms like 016 (still 2–4 digit string length)
+    bare = re.findall(r"(?:^|\s)(0*\d{1,4})(?:\s|$)", cleaned)
+    # Filter pure years already stripped; drop 1-digit noise unless it's the only token
+    candidates = []
+    for x in bare:
+        try:
+            n = int(x)
+        except ValueError:
+            continue
+        if n < 1:
+            continue
+        # Skip obvious non-episode leftovers (e.g. bitrate-like huge numbers already limited to 4 digits)
+        candidates.append(n)
+    if not candidates:
         return None
-    # Prefer 3–4 digit (typical anime absolute); fall back to last remaining
-    long = [int(x) for x in bare if len(x) >= 3]
+    # Prefer 3–4 digit (typical anime absolute); else last remaining (covers 016 → 16)
+    long = [n for n in candidates if n >= 100]
     if long:
         return long[-1]
-    return int(bare[-1])
+    return candidates[-1]
+
+
+def clean_anime_search_title(title: str, absolute_ep: int | None = None) -> str:
+    """Strip absolute episode / noise from a title used for provider search.
+
+    "One Piece - 1172" + abs=1172 → "One Piece"
+    "[Judas] One Piece" → "One Piece"
+    """
+    t = (title or "").strip()
+    if not t:
+        return t
+    t = _RELEASE_GROUP_RE.sub(" ", t)
+    t = re.sub(r"[\s._]+", " ", t).strip()
+    if absolute_ep is not None:
+        # Remove trailing " - 1172" / " 1172" matching this absolute
+        t = re.sub(
+            rf"(?i)\s*[-–—]?\s*0*{int(absolute_ep)}\s*$",
+            "",
+            t,
+        ).strip()
+    # Generic trailing absolute-looking number (2–4 digits) when no SxxExx
+    if not _SEASON_EP_RE.search(t):
+        t2 = re.sub(r"(?i)\s*[-–—]?\s*0*\d{2,4}\s*$", "", t).strip()
+        if t2:
+            t = t2
+    return t or (title or "").strip()
 
 
 def is_absolute_episode(parsed: dict, filename: str = "") -> bool:

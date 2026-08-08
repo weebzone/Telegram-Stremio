@@ -19,6 +19,7 @@ from Backend.helper.metadata.common import (
 from Backend.helper.metadata.parse import (
     analyze_metadata_failure,
     apply_combined_override,
+    clean_anime_search_title,
     extract_absolute_episode,
     is_absolute_episode,
     is_multipart_video,
@@ -103,7 +104,8 @@ async def metadata(
         combined = {"season": season, "start": None, "end": None}
         episode = 1
 
-    # Absolute / orphan episode (e.g. "One Piece 1223 720.mkv")
+    # Absolute / orphan episode (e.g. "One Piece 1223 720.mkv",
+    # "Naruto Shippuden - 016 480p ...", "[Judas] One Piece - 1172.mkv")
     absolute = False
     if episode is None and not season:
         abs_ep = extract_absolute_episode(filename, parsed)
@@ -116,12 +118,34 @@ async def metadata(
         if episode is None:
             episode = extract_absolute_episode(filename, parsed)
 
+    # On anime channels, recover absolute from the raw filename when
+    # PTN/GuessIt treated a numbered release as a movie (no season/episode).
+    anime_channel_early = _is_anime_channel(channel)
+    if (
+        anime_channel_early
+        and not season
+        and not absolute
+        and episode is None
+    ):
+        abs_ep = extract_absolute_episode(filename, parsed)
+        if abs_ep is not None:
+            episode = abs_ep
+            absolute = True
+            parsed["episode"] = abs_ep
+
     if not quality:
         LOGGER.warning(f"Skipping {filename}: No resolution (parsed={parsed})")
         return None
     if not title:
         LOGGER.info(f"No title parsed from: {filename} (parsed={parsed})")
         return None
+
+    # Strip absolute episode / release-group noise from the search title so
+    # "One Piece - 1172" does not match "One Piece Egghead Arc Recap".
+    if absolute and episode is not None:
+        title = clean_anime_search_title(title, int(episode))
+    else:
+        title = clean_anime_search_title(title, None)
 
     default_id = _resolve_default_id(override_id, filename)
 
