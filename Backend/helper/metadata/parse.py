@@ -35,11 +35,27 @@ def parse_media_name(name: str) -> dict:
             g = _guessit(name)
             parsed["title"] = parsed["title"] or first(g.get("title"))
             parsed["year"] = parsed["year"] or first(g.get("year"))
-            parsed["season"] = parsed["season"] or first(g.get("season"))
+            g_season = first(g.get("season"))
+            # GuessIt often invents season=0 for "Title - 016 480p" style anime
+            # absolute releases. Treat 0 as "no season" so absolute detection works.
+            if g_season is not None:
+                try:
+                    g_season_int = int(g_season)
+                except (TypeError, ValueError):
+                    g_season_int = None
+                if g_season_int is not None and g_season_int > 0:
+                    parsed["season"] = parsed["season"] or g_season_int
             parsed["episode"] = parsed["episode"] or first(g.get("episode"))
             parsed["quality"] = parsed["quality"] or first(g.get("screen_size"))
         except Exception as e:
             LOGGER.warning(f"GuessIt parsing failed for {name}: {e}")
+
+    # Normalize season 0 → None (specials folder only, not a real season for routing)
+    try:
+        if parsed.get("season") is not None and int(parsed["season"]) == 0:
+            parsed["season"] = None
+    except (TypeError, ValueError):
+        pass
 
     return parsed
 
@@ -90,8 +106,12 @@ def extract_absolute_episode(filename: str, parsed: dict | None = None) -> int |
       [Judas] One Piece - 1172.mkv
     """
     parsed = parsed or {}
-    if parsed.get("season") is not None:
-        return None
+    try:
+        if parsed.get("season") is not None and int(parsed.get("season")) > 0:
+            return None
+    except (TypeError, ValueError):
+        if parsed.get("season") is not None:
+            return None
     if _SEASON_EP_RE.search(filename or ""):
         return None
 
@@ -169,8 +189,12 @@ def clean_anime_search_title(title: str, absolute_ep: int | None = None) -> str:
 
 def is_absolute_episode(parsed: dict, filename: str = "") -> bool:
     """True when we have an episode number but no season (orphan/absolute style)."""
-    if parsed.get("season") is not None:
-        return False
+    try:
+        if parsed.get("season") is not None and int(parsed.get("season")) > 0:
+            return False
+    except (TypeError, ValueError):
+        if parsed.get("season") is not None:
+            return False
     if _SEASON_EP_RE.search(filename or ""):
         return False
     if parsed.get("episode") is not None and not isinstance(parsed.get("episode"), list):

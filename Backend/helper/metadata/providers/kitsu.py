@@ -471,6 +471,81 @@ async def _enrich_from_tvdb(
     return payload
 
 
+def _is_mostly_cjk(text: str) -> bool:
+    if not text:
+        return False
+    import re
+    cjk = re.compile(r"[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uff66-\uff9f]")
+    latin = re.compile(r"[A-Za-z]")
+    s = str(text)
+    return bool(cjk.search(s)) and not bool(latin.search(s))
+
+
+async def _enrich_english_meta(
+    payload: dict,
+    *,
+    season_number: int,
+    episode_number: int,
+) -> dict:
+    """Fill English description / episode title / art when missing or CJK-only.
+
+    Prefer existing English → keep TVDB enrich → TMDB English → Japanese fallback.
+    """
+    need_desc = not payload.get("description") or _is_mostly_cjk(payload.get("description") or "")
+    need_ep_title = (
+        not payload.get("episode_title")
+        or _is_mostly_cjk(payload.get("episode_title") or "")
+        or str(payload.get("episode_title") or "").startswith(("S", "Episode "))
+    )
+    need_ep_overview = not payload.get("episode_overview") or _is_mostly_cjk(
+        payload.get("episode_overview") or ""
+    )
+    need_ep_art = not payload.get("episode_backdrop")
+
+    if not (need_desc or need_ep_title or need_ep_overview or need_ep_art):
+        return payload
+
+    tmdb_id = payload.get("tmdb_id")
+    try:
+        tmdb_id = int(tmdb_id) if tmdb_id and int(tmdb_id) > 0 else None
+    except (TypeError, ValueError):
+        tmdb_id = None
+    if not tmdb_id:
+        return payload
+
+    try:
+        from Backend.helper.metadata.providers import tmdb as tmdb_mod
+        from Backend.helper.metadata.common import format_tmdb_image
+
+        if need_desc:
+            tv = await tmdb_mod.details("tv", tmdb_id)
+            if tv:
+                overview = getattr(tv, "overview", None) or ""
+                if overview and not _is_mostly_cjk(overview):
+                    payload["description"] = overview
+                name = getattr(tv, "name", None) or ""
+                if name and not _is_mostly_cjk(name):
+                    if _is_mostly_cjk(payload.get("title") or ""):
+                        payload["title"] = name
+                    payload["title_english"] = name or payload.get("title_english")
+
+        if need_ep_title or need_ep_overview or need_ep_art:
+            ep = await tmdb_mod.episode_details(tmdb_id, int(season_number), int(episode_number))
+            if ep:
+                ep_name = getattr(ep, "name", None) or ""
+                ep_overview = getattr(ep, "overview", None) or ""
+                still = getattr(ep, "still_path", None)
+                if need_ep_title and ep_name and not _is_mostly_cjk(ep_name):
+                    payload["episode_title"] = ep_name
+                if need_ep_overview and ep_overview and not _is_mostly_cjk(ep_overview):
+                    payload["episode_overview"] = ep_overview
+                if need_ep_art and still:
+                    payload["episode_backdrop"] = format_tmdb_image(still, "original")
+    except Exception as e:
+        LOGGER.debug(f"[KITSU] TMDB english enrich failed: {e}")
+    return payload
+
+
 async def fetch_anime_tv(
     title,
     season,
@@ -591,6 +666,15 @@ async def fetch_anime_tv(
             )
         except Exception as e:
             LOGGER.debug(f"[KITSU] enrich skip: {e}")
+
+    try:
+        payload = await _enrich_english_meta(
+            payload,
+            season_number=int(payload.get("season_number") or season_number or 1),
+            episode_number=int(payload.get("episode_number") or episode_number or episode),
+        )
+    except Exception as e:
+        LOGGER.debug(f"[KITSU] english enrich skip: {e}")
 
     return payload
 

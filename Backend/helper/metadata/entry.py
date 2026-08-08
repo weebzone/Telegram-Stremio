@@ -95,6 +95,13 @@ async def metadata(
     if season_hint is not None and episode and not season and not isinstance(episode, list):
         season = season_hint
 
+    # GuessIt sometimes yields season=0 for absolute anime releases — treat as no season
+    try:
+        if season is not None and int(season) == 0:
+            season = None
+    except (TypeError, ValueError):
+        pass
+
     if combined:
         season, episode = combined["season"], combined["start"] or 1
     elif isinstance(season, list) or isinstance(episode, list):
