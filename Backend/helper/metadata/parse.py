@@ -13,6 +13,19 @@ from Backend.logger import LOGGER
 
 _MULTIPART_RE = re.compile(r"(?:part|cd|disc|disk)[s._-]*\d+(?=\.\w+$)", re.IGNORECASE)
 
+# --- Explicit season/episode anchors -----------------------------------
+# GuessIt will happily invent a season/episode by splitting any bare 3-4
+# digit number in half (e.g. "One Piece - 1172" -> season 11, episode 72;
+# or read a "(2011)" reboot-year tag as season 2011). PTN already catches
+# real SxxExx / NxNN patterns on its own, so GuessIt's season/episode is
+# only ever trusted when the filename has independent, explicit textual
+# evidence for it (i.e. spelled-out "Season N"/"Series N" wording, which
+# PTN does NOT parse by itself). Anything else falls through to the
+# absolute-episode logic below instead of guessing.
+_EXPLICIT_SXXEXX_RE = re.compile(r"(?i)\bs\d{1,2}[._\s-]*e\d{1,3}\b")
+_EXPLICIT_NXNN_RE = re.compile(r"(?i)\b\d{1,2}x\d{2,3}\b")
+_EXPLICIT_SEASON_WORD_RE = re.compile(r"(?i)\b(?:season|series)\s*0*\d{1,2}\b")
+
 
 def parse_media_name(name: str) -> dict:
     try:
@@ -35,17 +48,29 @@ def parse_media_name(name: str) -> dict:
             g = _guessit(name)
             parsed["title"] = parsed["title"] or first(g.get("title"))
             parsed["year"] = parsed["year"] or first(g.get("year"))
-            g_season = first(g.get("season"))
-            # GuessIt often invents season=0 for "Title - 016 480p" style anime
-            # absolute releases. Treat 0 as "no season" so absolute detection works.
-            if g_season is not None:
-                try:
-                    g_season_int = int(g_season)
-                except (TypeError, ValueError):
-                    g_season_int = None
-                if g_season_int is not None and g_season_int > 0:
-                    parsed["season"] = parsed["season"] or g_season_int
-            parsed["episode"] = parsed["episode"] or first(g.get("episode"))
+
+            # Only pull season/episode from GuessIt when PTN found neither
+            # AND the filename has explicit textual evidence for a season
+            # (spelled-out "Season"/"Series" wording, or a raw SxxExx/NxNN
+            # PTN somehow missed). Never accept GuessIt's pure numeric
+            # digit-splitting guess.
+            if parsed["season"] is None and parsed["episode"] is None:
+                has_anchor = bool(
+                    _EXPLICIT_SXXEXX_RE.search(name)
+                    or _EXPLICIT_NXNN_RE.search(name)
+                    or _EXPLICIT_SEASON_WORD_RE.search(name)
+                )
+                if has_anchor:
+                    g_season = first(g.get("season"))
+                    if g_season is not None:
+                        try:
+                            g_season_int = int(g_season)
+                        except (TypeError, ValueError):
+                            g_season_int = None
+                        if g_season_int is not None and g_season_int > 0:
+                            parsed["season"] = g_season_int
+                    parsed["episode"] = first(g.get("episode"))
+
             parsed["quality"] = parsed["quality"] or first(g.get("screen_size"))
         except Exception as e:
             LOGGER.warning(f"GuessIt parsing failed for {name}: {e}")
@@ -77,12 +102,25 @@ def is_multipart_video(filename: str) -> bool:
 
 
 # Absolute / orphan episode patterns (no SxxExx), e.g. "One Piece 1223 720.mkv"
-_SEASON_EP_RE = re.compile(r"(?i)s\d{1,2}[._\s-]*e\d{1,3}")
-# Quality / codec tokens (with or without trailing 'p')
+_SEASON_EP_RE = _EXPLICIT_SXXEXX_RE
+# Resolution with an explicit trailing 'p' (unambiguous quality marker)
+_RES_WITH_P_RE = re.compile(r"(?i)(?<![\w])(?:240|360|480|576|720|1080|1440|2160|4320)p(?![\w])")
+# Bare resolution value with NO trailing 'p' (e.g. "One Piece 1223 720.mkv") is
+# ambiguous with an absolute episode number that happens to equal a common
+# resolution (episode 240, 480, 720...). Only treat it as quality when it's the
+# trailing token right before the extension/end of string - conventionally
+# where quality sits - and it's applied only as a fallback when no proper
+# "NNNp" resolution was already found elsewhere in the name.
+_RES_BARE_TRAILING_RE = re.compile(
+    r"(?i)(?<![\w])(?:240|360|480|576|720|1080|1440|2160|4320)(?![\w])"
+    r"(?=(?:[\s._-]*(?:\.[a-z0-9]{2,4})?)$)"
+)
+# Quality / codec / audio tokens
 _QUALITY_TOKEN_RE = re.compile(
-    r"(?i)(?:(?<![\w])(?:240|360|480|576|720|1080|1440|2160|4320)p?(?![\w])|"
-    r"\d{3,4}x\d{3,4}|web-?dl|blu-?ray|bluray|hdtv|hdrip|webrip|bdrip|brrip|"
-    r"x264|x265|h\.?264|h\.?265|hevc|avc|aac|dts|truehd|atmos|10bit|8bit|"
+    r"(?i)(?:\d{3,4}x\d{3,4}|web-?dl|blu-?ray|bluray|hdtv|hdrip|webrip|bdrip|brrip|"
+    r"x264|x265|h\.?264|h\.?265|hevc|avc|aac|"
+    r"(?:ddp|dd\+?|e?ac-?3|dts(?:-?hd)?|truehd|atmos)\s*\d?(?:[\s.]\d)?|"
+    r"(?<!\d)\d[\s.]\d(?!\d)|10bit|8bit|"
     r"multi(?:\s*audio)?|dual(?:\s*audio)?|esub|subs?|softsubs?|hardsubs?|"
     r"(?<![\w])(?:bd|remux|encode)(?![\w]))"
 )
@@ -128,6 +166,13 @@ def extract_absolute_episode(filename: str, parsed: dict | None = None) -> int |
     # Strip extension, release-group brackets, quality/codec tokens
     cleaned = re.sub(r"\.[a-z0-9]{2,4}$", " ", name, flags=re.I)
     cleaned = _RELEASE_GROUP_RE.sub(" ", cleaned)
+    cleaned = _RES_WITH_P_RE.sub(" ", cleaned)
+    # Only fall back to matching a bare (no-"p") resolution value when nothing
+    # else in the name already claimed quality via an explicit "p" - otherwise
+    # an absolute episode number that happens to equal 240/480/720/etc gets
+    # eaten as if it were quality.
+    if not _RES_WITH_P_RE.search(name):
+        cleaned = _RES_BARE_TRAILING_RE.sub(" ", cleaned)
     cleaned = _QUALITY_TOKEN_RE.sub(" ", cleaned)
     # Strip years so 2021 is not treated as an episode
     cleaned = _YEAR_RE.sub(" ", cleaned)
@@ -173,15 +218,16 @@ def clean_anime_search_title(title: str, absolute_ep: int | None = None) -> str:
     t = _RELEASE_GROUP_RE.sub(" ", t)
     t = re.sub(r"[\s._]+", " ", t).strip()
     if absolute_ep is not None:
-        # Remove trailing " - 1172" / " 1172" matching this absolute
+        # Remove trailing " - 1172" / " 1172" / " E1172" matching this absolute
         t = re.sub(
-            rf"(?i)\s*[-–—]?\s*0*{int(absolute_ep)}\s*$",
+            rf"(?i)\s*[-–—]?\s*(?:e|ep|episode)?\s*0*{int(absolute_ep)}\s*$",
             "",
             t,
         ).strip()
-    # Generic trailing absolute-looking number (2–4 digits) when no SxxExx
+    # Generic trailing absolute-looking number (2–4 digits, optional E-prefix)
+    # when no SxxExx
     if not _SEASON_EP_RE.search(t):
-        t2 = re.sub(r"(?i)\s*[-–—]?\s*0*\d{2,4}\s*$", "", t).strip()
+        t2 = re.sub(r"(?i)\s*[-–—]?\s*(?:e|ep|episode)?\s*0*\d{2,4}\s*$", "", t).strip()
         if t2:
             t = t2
     return t or (title or "").strip()
