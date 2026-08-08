@@ -463,7 +463,7 @@ async def get_manifest(token: str, token_data: dict = Depends(verify_token)):
         "types": ["movie", "series"],
         "resources": resources,
         "catalogs": catalogs,
-        "idPrefixes": ["tt", "tg"],
+        "idPrefixes": ["tt", "tg", "kitsu"],
         "behaviorHints": {
             "configurable": True,
             "configurationRequired": False
@@ -872,6 +872,7 @@ async def get_streams(
                     streams.append({"name": stream_name, "title": stream_title, "url": original_url, "size_bytes": size_bytes, "episode_start": episode_start, "name_key": name_key})
     elif is_global_search_enabled():
         try:
+            LOGGER.info(f"{imdb_id}:{season_num}:{episode_num}|{media_type}")
             streams.extend(
                 await _global_streams_for(token, imdb_id, media_type, season_num, episode_num)
             )
