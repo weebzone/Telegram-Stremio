@@ -654,6 +654,21 @@ async def is_anime_imdb(imdb_id: str, title: Optional[str] = None) -> bool:
     return False
 
 
+def count_cinemeta_episodes(videos: list) -> Optional[int]:
+    if not videos:
+        return None
+    count = 0
+    for v in videos:
+        try:
+            s = int(v.get("season"))
+            e = int(v.get("episode"))
+        except (TypeError, ValueError):
+            continue
+        if s >= 1 and e >= 1:
+            count += 1
+    return count or None
+
+
 def absolute_from_cinemeta_videos(videos: list, season: int, episode: int) -> Optional[int]:
     if not videos:
         return None
@@ -718,6 +733,8 @@ async def absolute_from_imdb_episode(
     if not entries:
         return None
 
+    total_episodes = count_cinemeta_episodes(videos or [])
+
     for entry in entries:
         abs_ep = _absolute_from_entry(entry, season, episode)
         if abs_ep is not None:
@@ -734,6 +751,7 @@ async def absolute_from_imdb_episode(
                 "name": entry.name,
                 "source": source,
                 "is_anime": True,
+                "total_episodes": total_episodes,
             }
 
     abs_ep = absolute_from_cinemeta_videos(videos or [], season, episode)
@@ -751,6 +769,7 @@ async def absolute_from_imdb_episode(
             "name": entries[0].name,
             "source": "cinemeta-cumulative",
             "is_anime": True,
+            "total_episodes": total_episodes,
         }
 
     if season == 1:
@@ -763,6 +782,13 @@ async def absolute_from_imdb_episode(
             "name": entries[0].name,
             "source": "anime-lists-fallback",
             "is_anime": True,
+            "total_episodes": total_episodes,
         }
 
-    return {"is_anime": True, "absolute_episode": None, "source": source, "name": entries[0].name}
+    return {
+        "is_anime": True,
+        "absolute_episode": None,
+        "source": source,
+        "name": entries[0].name,
+        "total_episodes": total_episodes,
+    }
