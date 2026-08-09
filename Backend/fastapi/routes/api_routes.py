@@ -1722,30 +1722,6 @@ async def session_remove_api():
 # Settings API
 # ─────────────────────────────────────────────────────────────────────────────
 
-async def _resolve_channel_titles(data: dict) -> dict:
-    channel_titles = {}
-    all_ids = set()
-    for key in ("auth_channels", "global_search_channels", "manual_channels", "anime_channels"):
-        for c in (data.get(key) or []):
-            c = str(c).strip()
-            if c:
-                all_ids.add(c)
-    for key in ("announcement_channel", "skip_channel"):
-        v = str(data.get(key) or "").strip()
-        if v:
-            all_ids.add(v)
-    client = botmod.Userbot or getattr(botmod, "Bot", None)
-    if client and all_ids:
-        for cid in all_ids:
-            try:
-                chat = await client.get_chat(int(cid))
-                if chat and getattr(chat, "title", None):
-                    channel_titles[cid] = chat.title
-            except Exception:
-                pass
-    return channel_titles
-
-
 async def get_settings_api() -> dict:
 
     data = SettingsManager.current().to_dict()
@@ -1760,7 +1736,22 @@ async def get_settings_api() -> dict:
         LOGGER.error(f"get_settings_api: could not load database list: {e}")
         data["database_list"] = []
 
-    data["channel_titles"] = await _resolve_channel_titles(data)
+    active = SettingsManager._all_channel_ids(data)
+    titles = data.get("channel_titles") or {}
+    if not isinstance(titles, dict):
+        titles = {}
+    titles = {str(k): str(v) for k, v in titles.items() if str(k) in active and v}
+    missing = [cid for cid in active if cid not in titles]
+    if missing:
+        full = SettingsManager.current().to_dict()
+        await SettingsManager._sync_channel_titles(full)
+        try:
+            await db.save_settings(full)
+            SettingsManager._current = SettingsManager.current().__class__(full)
+        except Exception as e:
+            LOGGER.warning(f"get_settings_api: could not persist channel titles: {e}")
+        titles = full.get("channel_titles") or {}
+    data["channel_titles"] = {str(k): str(v) for k, v in (titles or {}).items() if k and v}
 
     return {"settings": data}
 
@@ -2372,6 +2363,8 @@ async def setup_status_api() -> dict:
     checks = [
         {"key": "tmdb", "label": "TMDB API key", "done": bool(s.tmdb_api),
          "hint": "Powers automatic poster & metadata matching."},
+        {"key": "tvdb", "label": "TVDB API key", "done": bool(s.tvdb_api),
+         "hint": "Improves TV show matching; used after TMDB / with anime pipelines."},
         {"key": "channels", "label": "AUTH channel added", "done": len(s.auth_channels) > 0,
          "hint": "The channel(s) the bot indexes and streams from."},
         {"key": "base_url", "label": "Base URL set", "done": bool(s.base_url),

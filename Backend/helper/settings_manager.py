@@ -37,6 +37,7 @@ _DEFAULTS: Dict[str, Any] = {
     "global_search_channels": [],
     "anime_channels": [],
     "manual_channels": [],
+    "channel_titles": {},
     "announce_new_content": False,
     "announcement_channel": "",
     "skip_channel": "",
@@ -129,6 +130,13 @@ class Settings:
     @property
     def manual_channels(self) -> List[str]:
         return list(self._d.get("manual_channels") or [])
+
+    @property
+    def channel_titles(self) -> Dict[str, str]:
+        raw = self._d.get("channel_titles") or {}
+        if not isinstance(raw, dict):
+            return {}
+        return {str(k): str(v) for k, v in raw.items() if k and v}
 
     @property
     def announce_new_content(self) -> bool:
@@ -302,6 +310,50 @@ class SettingsManager:
             return Settings({})
         return cls._current
 
+    @staticmethod
+    def _all_channel_ids(data: dict) -> set:
+        ids = set()
+        for key in ("auth_channels", "global_search_channels", "manual_channels", "anime_channels"):
+            for c in (data.get(key) or []):
+                c = str(c).strip()
+                if c:
+                    ids.add(c)
+        for key in ("announcement_channel", "skip_channel"):
+            v = str(data.get(key) or "").strip()
+            if v:
+                ids.add(v)
+        return ids
+
+    @classmethod
+    async def _sync_channel_titles(cls, data: dict) -> dict:
+        active = cls._all_channel_ids(data)
+        existing = data.get("channel_titles") or {}
+        if not isinstance(existing, dict):
+            existing = {}
+        titles = {str(k): str(v) for k, v in existing.items() if str(k) in active and v}
+        missing = [cid for cid in active if cid not in titles]
+        if missing:
+            clients = []
+            stream = getattr(botmod, "StreamBot", None)
+            if stream is not None:
+                clients.append(stream)
+            if botmod.Userbot is not None:
+                clients.append(botmod.Userbot)
+            for cid in missing:
+                resolved = None
+                for client in clients:
+                    try:
+                        chat = await client.get_chat(int(cid))
+                        if chat and getattr(chat, "title", None):
+                            resolved = chat.title
+                            break
+                    except Exception:
+                        continue
+                if resolved:
+                    titles[cid] = resolved
+        data["channel_titles"] = titles
+        return titles
+
     #----- Persist new values, flip the snapshot, and reinitialise dependents
     @classmethod
     async def update(cls, db, new_values: Dict[str, Any]) -> Dict[str, str]:
@@ -319,6 +371,8 @@ class SettingsManager:
                     "SettingsManager: rejected global_search=True — no Userbot session connected."
                 )
                 results["global_search"] = "rejected — connect a Telegram session in Settings first"
+
+        await cls._sync_channel_titles(merged)
 
         #----- Phase 1: validate/apply changes that can abort the save
         old_extra = old.get("extra_databases") or []
