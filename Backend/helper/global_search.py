@@ -24,10 +24,10 @@ from Backend.helper.split_files import parse_combined_episodes, parse_split_info
 import Backend.pyrofork.bot as botmod
 
 MAX_RESULTS = 50
-MAX_RESULTS_PER_CHAT = 10
+MAX_RESULTS_PER_CHAT = 50
 SEARCH_COOLDOWN_SECONDS = 5
-MAX_CONCURRENT_SEARCHES = 4
-MAX_CONCURRENT_CHANNELS = 10
+MAX_CONCURRENT_SEARCHES = 3
+MAX_CONCURRENT_CHANNELS = 5
 MIN_TITLE_SCORE = 0.7
 RESULT_CACHE_SECONDS = 60
 
@@ -292,49 +292,22 @@ def _strip_symbols(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
-def _absolute_ep_forms(episode: int, total_episodes: Optional[int] = None) -> List[str]:
+def _absolute_ep_forms(episode: int) -> List[str]:
     ep = int(episode)
     if ep < 1:
         return [str(ep)]
-
-    total = None
-    try:
-        if total_episodes is not None:
-            total = int(total_episodes)
-    except (TypeError, ValueError):
-        total = None
-
-    if total is not None and total >= 100:
-        max_width = 3
-    elif ep >= 100:
-        max_width = 3
-    else:
-        max_width = 2
-
-    max_width = min(max_width, 3)
-    natural = str(ep)
-    min_width = len(natural)
-    forms: List[str] = []
-    for width in range(max_width, min_width - 1, -1):
-        form = f"{ep:0{width}d}"
-        if form not in forms:
-            forms.append(form)
-    if natural not in forms:
-        forms.append(natural)
-    return forms
+    if ep < 10:
+        return [f"{ep:03d}", f"{ep:02d}", str(ep)]
+    if ep < 100:
+        return [f"{ep:03d}", str(ep)]
+    return [str(ep)]
 
 
-def _build_search_query(
-    expected_title: str,
-    year: Optional[int],
-    season: Optional[int],
-    episode: Optional[int],
-    total_episodes: Optional[int] = None,
-) -> str:
+def _build_search_query(expected_title: str, year: Optional[int], season: Optional[int], episode: Optional[int]) -> str:
     if season is not None and episode is not None:
         return f"{expected_title} S{int(season):02d}E{int(episode):02d}"
     if season is None and episode is not None:
-        forms = _absolute_ep_forms(int(episode), total_episodes=total_episodes)
+        forms = _absolute_ep_forms(int(episode))
         return f"{expected_title} {forms[0]}"
     if year is not None:
         return f"{expected_title} {year}"
@@ -342,11 +315,7 @@ def _build_search_query(
 
 
 def _build_query_candidates(
-    expected_title: str,
-    year: Optional[int],
-    season: Optional[int],
-    episode: Optional[int],
-    total_episodes: Optional[int] = None,
+    expected_title: str, year: Optional[int], season: Optional[int], episode: Optional[int]
 ) -> List[str]:
     candidates: List[str] = []
 
@@ -360,20 +329,20 @@ def _build_query_candidates(
         stripped_title = _strip_symbols(expected_title)
         if stripped_title and stripped_title.lower() != expected_title.lower():
             titles.append(stripped_title)
-        for form in _absolute_ep_forms(int(episode), total_episodes=total_episodes):
+        for form in _absolute_ep_forms(int(episode)):
             for title in titles:
                 add(f"{title} {form}")
                 add(f"{title} E{form}")
         return candidates
 
-    add(_build_search_query(expected_title, year, season, episode, total_episodes=total_episodes))
+    add(_build_search_query(expected_title, year, season, episode))
 
     if season is None and episode is None and year is not None:
         add(expected_title)
 
     stripped_title = _strip_symbols(expected_title)
     if stripped_title and stripped_title.lower() != expected_title.lower():
-        add(_build_search_query(stripped_title, year, season, episode, total_episodes=total_episodes))
+        add(_build_search_query(stripped_title, year, season, episode))
         if season is None and episode is None and year is not None:
             add(stripped_title)
 
@@ -528,7 +497,6 @@ async def global_search(
     year: Optional[int] = None,
     season: Optional[int] = None,
     episode: Optional[int] = None,
-    total_episodes: Optional[int] = None,
 ) -> List[Dict]:
     expected_title = (expected_title or "").strip()
     if not expected_title or not is_global_search_enabled():
@@ -539,9 +507,7 @@ async def global_search(
     if not target_ids:
         return []
 
-    query_candidates = _build_query_candidates(
-        expected_title, year, season, episode, total_episodes=total_episodes
-    )
+    query_candidates = _build_query_candidates(expected_title, year, season, episode)
     if not query_candidates:
         return []
 

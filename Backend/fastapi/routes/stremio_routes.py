@@ -826,15 +826,6 @@ async def _global_streams_for(
 
     abs_ep = absolute_episode
     map_source = None
-    total_episodes = None
-    if cinemeta_videos:
-        try:
-            from Backend.helper.metadata.episode_maps import count_cinemeta_episodes
-
-            total_episodes = count_cinemeta_episodes(cinemeta_videos)
-        except Exception:
-            total_episodes = None
-
     if (
         abs_ep is None
         and media_type == "series"
@@ -856,8 +847,6 @@ async def _global_streams_for(
                 is_anime = True
                 map_source = mapped.get("source")
                 abs_ep = mapped.get("absolute_episode")
-                if mapped.get("total_episodes"):
-                    total_episodes = mapped.get("total_episodes")
                 if abs_ep is None and int(season_num) == 1:
                     abs_ep = int(episode_num)
         except Exception as e:
@@ -876,7 +865,6 @@ async def _global_streams_for(
             f"[GLOBAL SEARCH] Anime mapped S{int(season_num):02d}E{int(episode_num):02d} "
             f"→ absolute {int(abs_ep)} for '{expected_title}'"
             + (f" (via {map_source})" if map_source else "")
-            + (f", total_eps={total_episodes}" if total_episodes else "")
             + "; trying absolute first"
         )
 
@@ -888,7 +876,6 @@ async def _global_streams_for(
             year=year,
             season=search_season,
             episode=search_episode,
-            total_episodes=total_episodes,
         )
     except Exception as e:
         LOGGER.error(f"[GLOBAL SEARCH] search failed for '{expected_title}': {e}")
