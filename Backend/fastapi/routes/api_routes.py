@@ -1805,50 +1805,58 @@ async def update_settings_api(payload: dict) -> dict:
             payload["subscription_group_id"] = int(payload["subscription_group_id"])
         except (ValueError, TypeError):
             raise HTTPException(status_code=400, detail="'subscription_group_id' must be an integer.")
+    def _validate_channel_id(channel: str, field: str) -> str:
+        channel = str(channel).strip()
+        if not channel:
+            return ""
+        if not channel.startswith("-100") or not channel[4:].isdigit() or len(channel) < 8:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid {field}: '{channel}'. Only channel IDs in -100xxxxxxxxxx format are accepted (channels only, no groups/users/bots)."
+            )
+        return channel
+
+    if "auth_channels" in payload:
+        cleaned = []
+        for channel in payload["auth_channels"]:
+            c = _validate_channel_id(channel, "auth channel")
+            if c:
+                cleaned.append(c)
+        payload["auth_channels"] = cleaned
+
     if "global_search_channels" in payload:
         cleaned = []
         for channel in payload["global_search_channels"]:
-            channel = str(channel).strip()
-            if not channel:
-                continue
-            try:
-                int(channel)
-            except ValueError:
-                raise HTTPException(status_code=400,
-                    detail=f"Invalid channel id: {channel}"
-                    )
-            cleaned.append(channel)
+            c = _validate_channel_id(channel, "global search channel")
+            if c:
+                cleaned.append(c)
         payload["global_search_channels"] = cleaned
 
     if "anime_channels" in payload:
         cleaned = []
         for channel in payload["anime_channels"]:
-            channel = str(channel).strip()
-            if not channel:
-                continue
-            try:
-                int(channel.replace("-100", ""))
-            except ValueError:
-                raise HTTPException(status_code=400,
-                    detail=f"Invalid anime channel id: {channel}"
-                    )
-            cleaned.append(channel)
+            c = _validate_channel_id(channel, "anime channel")
+            if c:
+                cleaned.append(c)
         payload["anime_channels"] = cleaned
 
     if "manual_channels" in payload:
         cleaned = []
         for channel in payload["manual_channels"]:
-            channel = str(channel).strip()
-            if not channel:
-                continue
-            try:
-                int(channel.replace("-100", ""))
-            except ValueError:
-                raise HTTPException(status_code=400,
-                    detail=f"Invalid manual channel id: {channel}"
-                    )
-            cleaned.append(channel)
+            c = _validate_channel_id(channel, "manual channel")
+            if c:
+                cleaned.append(c)
         payload["manual_channels"] = cleaned
+
+    if "announcement_channel" in payload and payload["announcement_channel"]:
+        payload["announcement_channel"] = _validate_channel_id(
+            payload["announcement_channel"], "announcement channel"
+        )
+
+    if "skip_channel" in payload and payload["skip_channel"]:
+        payload["skip_channel"] = _validate_channel_id(
+            payload["skip_channel"], "skip channel"
+        )
 
     #----- The same channel id may not appear in more than one channel field.
     #----- Only AUTH ∩ ANIME is allowed, because an anime channel is an auth channel

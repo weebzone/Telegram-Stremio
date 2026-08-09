@@ -270,6 +270,26 @@ async def settings_page(request: Request, _: bool = Depends(require_auth)):
     except Exception:
         settings["database_list"] = []
 
+    channel_titles = {}
+    all_ids = set()
+    for key in ("auth_channels", "global_search_channels", "manual_channels", "anime_channels"):
+        for c in (settings.get(key) or []):
+            all_ids.add(str(c).strip())
+    for key in ("announcement_channel", "skip_channel"):
+        v = str(settings.get(key) or "").strip()
+        if v:
+            all_ids.add(v)
+    client = botmod.Userbot or botmod.Bot
+    if client and all_ids:
+        for cid in all_ids:
+            try:
+                chat = await client.get_chat(int(cid))
+                if chat and getattr(chat, "title", None):
+                    channel_titles[cid] = chat.title
+            except Exception:
+                pass
+    settings["channel_titles"] = channel_titles
+
     ctx = _base_context(request)
     ctx.update({
         "current_user": get_current_user(request),

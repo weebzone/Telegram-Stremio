@@ -56,7 +56,7 @@ def is_global_search_enabled() -> bool:
     if not is_userbot_available():
         return False
     s = SettingsManager.current()
-    return bool(s.global_search and s.global_search_channels)
+    return bool(s.global_search)
 
 
 def _tokens(s: str) -> set:
@@ -504,8 +504,6 @@ async def global_search(
 
     settings = SettingsManager.current()
     target_ids = _resolve_channel_ids(settings.global_search_channels)
-    if not target_ids:
-        return []
 
     query_candidates = _build_query_candidates(expected_title, year, season, episode)
     if not query_candidates:
@@ -535,9 +533,14 @@ async def global_search(
         return []
 
     _last_search_ts[key] = now
-    task = asyncio.create_task(
-        _run_global_search(expected_title, query_candidates, target_ids, season, episode)
-    )
+    if target_ids:
+        task = asyncio.create_task(
+            _run_global_search(expected_title, query_candidates, target_ids, season, episode)
+        )
+    else:
+        task = asyncio.create_task(
+            _run_true_global_search(expected_title, query_candidates, season, episode)
+        )
     _inflight_tasks[key] = task
     try:
         results = await task
@@ -595,4 +598,171 @@ async def _run_global_search(
 
         all_results = all_results[:MAX_RESULTS]
         LOGGER.info(f"[USERBOT] Search completed: '{expected_title}' -> {len(all_results)} result(s)")
+        return all_results
+
+
+async def _run_true_global_search(
+    expected_title: str,
+    query_candidates: List[str],
+    season: Optional[int],
+    episode: Optional[int],
+) -> List[Dict]:
+    global _userbot_session_dead
+    async with _search_semaphore:
+        all_results: List[Dict] = []
+        split_groups: Dict[str, dict] = {}
+        seen_msg_ids: set = set()
+
+        for attempt_idx, search_query in enumerate(query_candidates):
+            if _userbot_session_dead:
+                break
+
+            LOGGER.info(
+                f"[USERBOT] True global search attempt {attempt_idx + 1}/{len(query_candidates)}: '{search_query}'"
+            )
+
+            for msg_filter in (enums.MessagesFilter.VIDEO, enums.MessagesFilter.DOCUMENT):
+                if len(all_results) + len(split_groups) >= MAX_RESULTS:
+                    break
+                try:
+                    async for message in botmod.Userbot.search_global(
+                        query=search_query,
+                        filter=msg_filter,
+                        channels_only=True,
+                        limit=MAX_RESULTS,
+                    ):
+                        if not message or not message.chat:
+                            continue
+                        chat = message.chat
+                        if chat.type != enums.ChatType.CHANNEL:
+                            continue
+                        chat_id = chat.id
+                        chat_title = chat.title or str(chat_id)
+                        _chat_title_cache[chat_id] = chat_title
+
+                        msg_key = (chat_id, message.id)
+                        if msg_key in seen_msg_ids:
+                            continue
+                        seen_msg_ids.add(msg_key)
+
+                        raw_name = _raw_media_name(message)
+                        if not raw_name:
+                            continue
+
+                        split = _split_part_info(raw_name)
+                        if split:
+                            base, _part_num, display, is_zip = split
+                            group_key = f"{chat_id}:{base}"
+                            if group_key in split_groups:
+                                continue
+                            parsed = _validate_name(display, expected_title, season, episode)
+                            if parsed is None:
+                                continue
+                            parts = await _gather_split_parts(botmod.Userbot, chat_id, message.id, base)
+                            if len(parts) < 2:
+                                continue
+                            split_groups[group_key] = {
+                                "chat_id": chat_id,
+                                "chat_title": chat_title,
+                                "parts": parts,
+                                "display": display,
+                                "quality": parsed.get("resolution") or "HD",
+                                "zip": is_zip,
+                            }
+                            continue
+
+                        filename = _video_filename(message)
+                        if not filename:
+                            continue
+                        parsed = _parse_and_validate(filename, expected_title, season, episode)
+                        if parsed is None:
+                            continue
+
+                        media = message.video or message.document
+                        size = get_readable_file_size(getattr(media, "file_size", 0) or 0)
+                        quality = parsed.get("resolution") or "HD"
+
+                        is_single_zip = bool(filename and filename.lower().endswith(".zip"))
+                        payload = {
+                            "global": True,
+                            "chat_id": chat_id,
+                            "msg_id": message.id,
+                            "title": filename,
+                            "size": size,
+                            "quality": quality,
+                            "source": chat_title,
+                        }
+                        if is_single_zip:
+                            payload["zip"] = True
+                            payload["parts"] = [{"chat_id": chat_id, "msg_id": message.id}]
+                            del payload["chat_id"]
+                            del payload["msg_id"]
+                        token = await encode_string(payload)
+
+                        all_results.append({
+                            "token": token,
+                            "title": filename,
+                            "size": size,
+                            "source_chat": chat_title,
+                            "quality": quality,
+                            "is_zip": is_single_zip,
+                        })
+                        LOGGER.debug(f"[GLOBAL SEARCH] True global result: {filename} in {chat_title}")
+
+                        if len(all_results) >= MAX_RESULTS:
+                            break
+
+                except FloodWait as e:
+                    LOGGER.warning(f"[USERBOT] FloodWait on true global: sleeping {e.value}s")
+                    await asyncio.sleep(e.value)
+                except (AuthKeyUnregistered, SessionRevoked) as e:
+                    LOGGER.error(f"[USERBOT] Session invalid ({type(e).__name__}): {e}")
+                    _userbot_session_dead = True
+                    break
+                except Exception as e:
+                    LOGGER.warning(f"[USERBOT] True global search error: {e}")
+                    break
+
+            if all_results or split_groups:
+                LOGGER.info(
+                    f"[USERBOT] True global succeeded on attempt {attempt_idx + 1} "
+                    f"('{search_query}') -> {len(all_results)} + {len(split_groups)} split group(s)"
+                )
+                break
+            if attempt_idx + 1 < len(query_candidates):
+                LOGGER.info(f"[USERBOT] No results for '{search_query}', trying next fallback")
+
+        for group in split_groups.values():
+            chat_id = group["chat_id"]
+            chat_title = group["chat_title"]
+            ordered = [group["parts"][pn] for pn in sorted(group["parts"])]
+            total_bytes = sum(p["size_bytes"] for p in ordered)
+            size = get_readable_file_size(total_bytes)
+            is_zip = bool(group.get("zip"))
+            payload = {
+                "global": True,
+                "parts": [{"chat_id": chat_id, "msg_id": p["msg_id"]} for p in ordered],
+                "title": group["display"],
+                "size": size,
+                "quality": group["quality"],
+                "source": chat_title,
+            }
+            if is_zip:
+                payload["zip"] = True
+            token = await encode_string(payload)
+            all_results.append({
+                "token": token,
+                "title": group["display"],
+                "size": size,
+                "source_chat": chat_title,
+                "quality": group["quality"],
+                "is_split": True,
+                "is_zip": is_zip,
+                "part_count": len(ordered),
+            })
+            kind = "zip parts" if is_zip else "parts"
+            LOGGER.info(f"[GLOBAL SEARCH] Split stream: {group['display']} ({len(ordered)} {kind}) in {chat_title}")
+
+        all_results = all_results[:MAX_RESULTS]
+        LOGGER.info(f"[USERBOT] True global search completed: '{expected_title}' -> {len(all_results)} result(s)")
         return all_results
