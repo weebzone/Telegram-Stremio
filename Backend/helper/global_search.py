@@ -82,26 +82,49 @@ def _title_score(
 
     return (2 * precision * recall) / (precision + recall)
 
-def _matches_episode(parsed: dict, season: Optional[int], episode: Optional[int]) -> bool:
+_ABS_EP_BOUNDARY_RE = re.compile(
+    r"(?i)(?:^|[^0-9])(?:e|ep|episode)?\s*0*(\d{1,4})(?=[^0-9]|$)"
+)
+
+
+def _filename_has_exact_episode(filename: str, episode: int) -> bool:
+    if not filename or episode is None:
+        return False
+    target = int(episode)
+    for m in _ABS_EP_BOUNDARY_RE.finditer(filename):
+        try:
+            if int(m.group(1)) == target:
+                return True
+        except (TypeError, ValueError):
+            continue
+    return False
+
+
+def _matches_episode(parsed: dict, season: Optional[int], episode: Optional[int], filename: str = "") -> bool:
     wants_episode = season is not None or episode is not None
     is_episode_like = parsed.get("season") is not None or parsed.get("episode") is not None
+
+    if season is None and episode is not None:
+        rv = parsed.get("episode")
+        if rv is not None:
+            if isinstance(rv, list):
+                try:
+                    if int(episode) in [int(x) for x in rv]:
+                        return True
+                except (TypeError, ValueError):
+                    pass
+            else:
+                try:
+                    if int(rv) == int(episode):
+                        return True
+                except (TypeError, ValueError):
+                    pass
+        return _filename_has_exact_episode(filename, int(episode))
 
     if wants_episode and not is_episode_like:
         return False
     if not wants_episode and is_episode_like:
         return False
-
-    # Absolute / orphan: season is None, episode is set — match episode only
-    if season is None and episode is not None:
-        rv = parsed.get("episode")
-        if rv is None:
-            return True  # title-only parse still ok for absolute search hits
-        if isinstance(rv, list):
-            return int(episode) in [int(x) for x in rv]
-        try:
-            return int(rv) == int(episode)
-        except (TypeError, ValueError):
-            return False
 
     for value, parsed_key in ((season, "season"), (episode, "episode")):
         if value is None:
@@ -125,7 +148,7 @@ def _validate_name(filename: str, expected_title: str, season: Optional[int], ep
     if "excess" in parsed and any("combined" in item.lower() for item in parsed["excess"]):
         LOGGER.info(f"Skipping {filename}: contains 'combined'")
         return None
-    if not _matches_episode(parsed, season, episode):
+    if not _matches_episode(parsed, season, episode, filename=filename):
         return None
 
     result_title = parsed.get("title", "")
