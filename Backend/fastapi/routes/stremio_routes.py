@@ -827,6 +827,27 @@ async def _global_streams_for(
         search_episode = episode_num
         use_absolute_first = True
 
+    map_task = None
+    if (
+        not use_absolute_first
+        and media_type == "series"
+        and imdb_id
+        and season_num is not None
+        and episode_num is not None
+        and absolute_episode is None
+    ):
+        from Backend.helper.metadata.episode_maps import absolute_from_imdb_episode
+
+        map_task = asyncio.create_task(
+            absolute_from_imdb_episode(
+                imdb_id,
+                int(season_num),
+                int(episode_num),
+                title=expected_title,
+                videos=cinemeta_videos,
+            )
+        )
+
     try:
         global_results = await global_search(
             expected_title,
@@ -834,30 +855,15 @@ async def _global_streams_for(
             year=year,
             season=search_season,
             episode=search_episode,
+            budget_seconds=5.0 if map_task is not None else None,
         )
     except Exception as e:
         LOGGER.error(f"[GLOBAL SEARCH] search failed for '{expected_title}': {e}")
-        return []
+        global_results = []
 
-    if (
-        not global_results
-        and not use_absolute_first
-        and media_type == "series"
-        and imdb_id
-        and season_num is not None
-        and episode_num is not None
-        and absolute_episode is None
-    ):
+    if not global_results and map_task is not None:
         try:
-            from Backend.helper.metadata.episode_maps import absolute_from_imdb_episode
-
-            mapped = await absolute_from_imdb_episode(
-                imdb_id,
-                int(season_num),
-                int(episode_num),
-                title=expected_title,
-                videos=cinemeta_videos,
-            )
+            mapped = await map_task
         except Exception as e:
             LOGGER.warning(f"[GLOBAL SEARCH] anime map lookup failed for {imdb_id}: {e}")
             mapped = None
@@ -878,6 +884,7 @@ async def _global_streams_for(
                         year=year,
                         season=None,
                         episode=int(abs_ep),
+                        budget_seconds=10.0,
                     )
                 except Exception as e:
                     LOGGER.error(f"[GLOBAL SEARCH] absolute retry failed for '{expected_title}': {e}")
@@ -886,6 +893,8 @@ async def _global_streams_for(
                     f"[GLOBAL SEARCH] '{expected_title}' is anime but could not map "
                     f"S{season_num:02d}E{episode_num:02d} to absolute"
                 )
+    elif map_task is not None:
+        map_task.cancel()
 
     return _streams_from_global_results(token, global_results)
 
