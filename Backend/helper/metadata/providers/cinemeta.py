@@ -124,6 +124,7 @@ async def get_detail(imdb_id: str, media_type: str) -> Optional[Dict[str, Any]]:
         "releaseDetailed": {"year": extract_first_year(meta.get("releaseInfo"))},
         "moviedb_id": meta.get("moviedb_id") or meta.get("tmdb_id"),
         "type": media_type,
+        "videos": meta.get("videos") or [],
     }
 
 

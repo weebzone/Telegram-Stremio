@@ -793,6 +793,7 @@ async def _global_streams_for(
 ) -> list:
     expected_title = ""
     year = None
+    cinemeta_videos = []
 
     if kitsu_id is not None:
         expected_title, year = await _kitsu_title_year(int(kitsu_id))
@@ -804,6 +805,7 @@ async def _global_streams_for(
             return []
         expected_title = detail["title"]
         year = (detail.get("releaseDetailed") or {}).get("year") or None
+        cinemeta_videos = detail.get("videos") or []
         if season_num is not None and episode_num is not None and absolute_episode is None:
             try:
                 await get_season(imdb_id=imdb_id, season_id=season_num, episode_id=episode_num)
@@ -849,7 +851,13 @@ async def _global_streams_for(
         try:
             from Backend.helper.metadata.episode_maps import absolute_from_imdb_episode
 
-            mapped = await absolute_from_imdb_episode(imdb_id, int(season_num), int(episode_num))
+            mapped = await absolute_from_imdb_episode(
+                imdb_id,
+                int(season_num),
+                int(episode_num),
+                title=expected_title,
+                videos=cinemeta_videos,
+            )
         except Exception as e:
             LOGGER.warning(f"[GLOBAL SEARCH] anime map lookup failed for {imdb_id}: {e}")
             mapped = None
@@ -873,6 +881,11 @@ async def _global_streams_for(
                     )
                 except Exception as e:
                     LOGGER.error(f"[GLOBAL SEARCH] absolute retry failed for '{expected_title}': {e}")
+            else:
+                LOGGER.info(
+                    f"[GLOBAL SEARCH] '{expected_title}' is anime but could not map "
+                    f"S{season_num:02d}E{episode_num:02d} to absolute"
+                )
 
     return _streams_from_global_results(token, global_results)
 
