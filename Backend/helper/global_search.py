@@ -292,15 +292,42 @@ def _strip_symbols(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
-def _absolute_ep_forms(episode: int) -> List[str]:
+def _absolute_ep_forms(episode: int, total_episodes: Optional[int] = None) -> List[str]:
     ep = int(episode)
     if ep < 1:
         return [str(ep)]
-    if ep < 10:
-        return [f"{ep:03d}", f"{ep:02d}", str(ep)]
-    if ep < 100:
-        return [f"{ep:03d}", str(ep)]
-    return [str(ep)]
+
+    total = total_episodes
+    if total is None:
+        if ep >= 1000:
+            total = 1000
+        elif ep >= 100:
+            total = 999
+        elif ep >= 10:
+            total = 99
+        else:
+            total = 9
+
+    forms: List[str] = []
+    if total >= 100:
+        if ep < 1000:
+            forms.append(f"{ep:03d}")
+        else:
+            forms.append(str(ep))
+        if ep < 100:
+            forms.append(f"{ep:02d}")
+        forms.append(str(ep))
+    else:
+        forms.append(f"{ep:02d}")
+        forms.append(str(ep))
+
+    seen = set()
+    out: List[str] = []
+    for f in forms:
+        if f not in seen:
+            seen.add(f)
+            out.append(f)
+    return out
 
 
 def _build_search_query(expected_title: str, year: Optional[int], season: Optional[int], episode: Optional[int]) -> str:
@@ -315,7 +342,13 @@ def _build_search_query(expected_title: str, year: Optional[int], season: Option
 
 
 def _build_query_candidates(
-    expected_title: str, year: Optional[int], season: Optional[int], episode: Optional[int]
+    expected_title: str,
+    year: Optional[int],
+    season: Optional[int],
+    episode: Optional[int],
+    total_episodes: Optional[int] = None,
+    sxx_season: Optional[int] = None,
+    sxx_episode: Optional[int] = None,
 ) -> List[str]:
     candidates: List[str] = []
 
@@ -324,27 +357,21 @@ def _build_query_candidates(
         if q and q.lower() not in (c.lower() for c in candidates):
             candidates.append(q)
 
+    title = _strip_symbols(expected_title) or expected_title
+
     if season is None and episode is not None:
-        titles = [expected_title]
-        stripped_title = _strip_symbols(expected_title)
-        if stripped_title and stripped_title.lower() != expected_title.lower():
-            titles.append(stripped_title)
-        for form in _absolute_ep_forms(int(episode)):
-            for title in titles:
-                add(f"{title} {form}")
-                add(f"{title} E{form}")
+        forms = _absolute_ep_forms(int(episode), total_episodes)
+        for i, form in enumerate(forms):
+            add(f"{title} {form}")
+            add(f"{title} E{form}")
+            if i == 0 and sxx_season is not None and sxx_episode is not None:
+                add(f"{title} S{int(sxx_season):02d}E{int(sxx_episode):02d}")
         return candidates
 
-    add(_build_search_query(expected_title, year, season, episode))
+    add(_build_search_query(title, year, season, episode))
 
     if season is None and episode is None and year is not None:
-        add(expected_title)
-
-    stripped_title = _strip_symbols(expected_title)
-    if stripped_title and stripped_title.lower() != expected_title.lower():
-        add(_build_search_query(stripped_title, year, season, episode))
-        if season is None and episode is None and year is not None:
-            add(stripped_title)
+        add(title)
 
     return candidates
 
@@ -497,6 +524,9 @@ async def global_search(
     year: Optional[int] = None,
     season: Optional[int] = None,
     episode: Optional[int] = None,
+    total_episodes: Optional[int] = None,
+    sxx_season: Optional[int] = None,
+    sxx_episode: Optional[int] = None,
 ) -> List[Dict]:
     expected_title = (expected_title or "").strip()
     if not expected_title or not is_global_search_enabled():
@@ -507,7 +537,15 @@ async def global_search(
     if not target_ids:
         return []
 
-    query_candidates = _build_query_candidates(expected_title, year, season, episode)
+    query_candidates = _build_query_candidates(
+        expected_title,
+        year,
+        season,
+        episode,
+        total_episodes=total_episodes,
+        sxx_season=sxx_season,
+        sxx_episode=sxx_episode,
+    )
     if not query_candidates:
         return []
 

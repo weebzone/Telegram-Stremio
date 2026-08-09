@@ -858,15 +858,26 @@ async def _global_streams_for(
         and season_num is not None
         and episode_num is not None
     )
+    sxx_season = None
+    sxx_episode = None
     if mapped_from_sxx:
         search_season = None
         search_episode = int(abs_ep)
+        sxx_season = int(season_num)
+        sxx_episode = int(episode_num)
         LOGGER.info(
             f"[GLOBAL SEARCH] Anime mapped S{int(season_num):02d}E{int(episode_num):02d} "
             f"→ absolute {int(abs_ep)} for '{expected_title}'"
             + (f" (via {map_source})" if map_source else "")
-            + "; trying absolute first"
+            + "; absolute with SxxExx after 2 queries"
         )
+
+    total_episodes = None
+    if cinemeta_videos:
+        try:
+            total_episodes = len(cinemeta_videos)
+        except Exception:
+            total_episodes = None
 
     auth_channels = SettingsManager.current().auth_channels
     try:
@@ -876,27 +887,13 @@ async def _global_streams_for(
             year=year,
             season=search_season,
             episode=search_episode,
+            total_episodes=total_episodes,
+            sxx_season=sxx_season,
+            sxx_episode=sxx_episode,
         )
     except Exception as e:
         LOGGER.error(f"[GLOBAL SEARCH] search failed for '{expected_title}': {e}")
         global_results = []
-
-    if not global_results and mapped_from_sxx:
-        LOGGER.info(
-            f"[GLOBAL SEARCH] Absolute {int(abs_ep)} empty for '{expected_title}'; "
-            f"falling back to S{int(season_num):02d}E{int(episode_num):02d}"
-        )
-        try:
-            global_results = await global_search(
-                expected_title,
-                auth_channels,
-                year=year,
-                season=season_num,
-                episode=episode_num,
-            )
-        except Exception as e:
-            LOGGER.error(f"[GLOBAL SEARCH] SxxExx fallback failed for '{expected_title}': {e}")
-            global_results = []
 
     return _streams_from_global_results(token, global_results)
 
