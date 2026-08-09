@@ -85,6 +85,22 @@
     display: flex; align-items: center; gap: 0.5rem;
 }
 .multi-item .s-input { flex: 1; }
+.channel-chip {
+    flex: 1; min-width: 0;
+    padding: 0.55rem 0.85rem;
+    background: color-mix(in srgb, var(--primary) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--primary) 28%, transparent);
+    border-radius: 0.75rem;
+    font-size: 0.875rem; font-weight: 600;
+    color: var(--text);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    user-select: none; cursor: default;
+}
+.s-input[readonly] {
+    opacity: 0.9;
+    background: color-mix(in srgb, var(--primary) 8%, transparent);
+    cursor: default;
+}
 .remove-btn {
     width: 2rem; height: 2rem; flex-shrink: 0;
     background: rgba(239,68,68,0.12); border: 1px solid rgba(239,68,68,0.25);
@@ -315,9 +331,9 @@
         <div class="multi-list-items" id="auth_channels_items">
             {% for ch in settings.auth_channels %}
             {% set is_anime = (ch | string | replace('-100', '')) in anime_norm %}
-            {% set t = titles.get(ch|string, '') %}
+            {% set t = titles.get(ch|string, ch|string) %}
             <div class="multi-item auth-item">
-                <input type="text" class="s-input" value="{% if t %}{{ t }} ({{ ch }}){% else %}{{ ch }}{% endif %}" data-list="auth_channels" data-id="{{ ch }}">
+                <span class="channel-chip" data-list="auth_channels" data-id="{{ ch }}" title="{{ ch }}">{{ t }}</span>
                 <label class="anime-check {% if is_anime %}is-anime{% endif %}" title="Mark as anime channel — uses Kitsu → TVDB → TMDB → Cinemeta">
                     <input type="checkbox" class="anime-toggle" {% if is_anime %}checked{% endif %} onchange="syncAnimeChip(this)">
                     <span>Anime</span>
@@ -484,10 +500,9 @@
         </label>
         <div class="multi-list-items" id="manual_channels_items">
             {% for ch in settings.manual_channels %}
-            {% set t = (settings.channel_titles or {}).get(ch|string, '') %}
+            {% set t = (settings.channel_titles or {}).get(ch|string, ch|string) %}
             <div class="multi-item">
-                <input type="text" class="s-input" value="{% if t %}{{ t }} ({{ ch }}){% else %}{{ ch }}{% endif %}" data-list="manual_channels" data-id="{{ ch }}"
-                    placeholder="-100xxxxxxxxxx">
+                <span class="channel-chip" data-list="manual_channels" data-id="{{ ch }}" title="{{ ch }}">{{ t }}</span>
                 <button class="remove-btn" onclick="removeItem(this)" title="Remove">
                     <i class="fa-solid fa-xmark"></i>
                 </button>
@@ -823,15 +838,9 @@ document.addEventListener('DOMContentLoaded', sessLoadStatus);
 
             <div class="multi-list-items" id="global_search_channels_items">
                 {% for ch in settings.global_search_channels %}
-                {% set t = (settings.channel_titles or {}).get(ch|string, '') %}
+                {% set t = (settings.channel_titles or {}).get(ch|string, ch|string) %}
                 <div class="multi-item">
-                    <input type="text"
-                           class="s-input"
-                           value="{% if t %}{{ t }} ({{ ch }}){% else %}{{ ch }}{% endif %}"
-                           data-list="global_search_channels"
-                           data-id="{{ ch }}"
-                           placeholder="-100xxxxxxxxxx">
-
+                    <span class="channel-chip" data-list="global_search_channels" data-id="{{ ch }}" title="{{ ch }}">{{ t }}</span>
                     <button class="remove-btn"
                             onclick="removeItem(this)"
                             title="Remove">
@@ -885,14 +894,23 @@ document.addEventListener('DOMContentLoaded', sessLoadStatus);
         <label class="s-label" for="announcement_channel">ANNOUNCEMENT CHANNEL</label>
         <p style="font-size:0.78rem;color:var(--text-sec);margin-bottom:0.75rem">
             <i class="fa-solid fa-circle-info"></i>
-            Channel ID (e.g. <code>-1001234567890</code>) or <code>@username</code>.
+            Channel ID only in <code>-100xxxxxxxxxx</code> format (channels only).
             The bot must be an <strong>admin</strong> in that channel.
         </p>
-        {% set ac_t = (settings.channel_titles or {}).get(settings.announcement_channel|string, '') %}
-        <input type="text" id="announcement_channel" class="s-input"
-            value="{% if ac_t %}{{ ac_t }} ({{ settings.announcement_channel }}){% else %}{{ settings.announcement_channel }}{% endif %}"
-            data-id="{{ settings.announcement_channel }}"
-            placeholder="-100xxxxxxxxxx (channels only)">
+        <div class="multi-item" style="margin-top:0.25rem">
+            {% set ac_t = (settings.channel_titles or {}).get(settings.announcement_channel|string, settings.announcement_channel) %}
+            <input type="text" id="announcement_channel" class="s-input"
+                value="{{ ac_t if settings.announcement_channel else '' }}"
+                data-id="{{ settings.announcement_channel }}"
+                {% if settings.announcement_channel %}readonly{% endif %}
+                placeholder="-100xxxxxxxxxx (channels only)"
+                oninput="if(!this.readOnly){this.dataset.id='';}">
+            <button type="button" class="remove-btn" id="announcement_channel_clear"
+                style="{% if not settings.announcement_channel %}display:none{% endif %}"
+                onclick="clearSingleChannel('announcement_channel')" title="Remove">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
     </div>
 </div>
 
@@ -907,12 +925,20 @@ document.addEventListener('DOMContentLoaded', sessLoadStatus);
                 Files sent to this channel are <strong>not</strong> indexed. Only one channel is
                 allowed and the bot must be an <strong>admin</strong> here.</span>
         </label>
-        {% set sc_t = (settings.channel_titles or {}).get(settings.skip_channel|string, '') %}
-        <input type="text" id="skip_channel" class="s-input"
-            value="{% if sc_t %}{{ sc_t }} ({{ settings.skip_channel }}){% else %}{{ settings.skip_channel }}{% endif %}"
-            data-id="{{ settings.skip_channel }}"
-            placeholder="-100xxxxxxxxxx (channels only)"
-            oninput="toggleSkipDeleteField()">
+        <div class="multi-item" style="margin-top:0.25rem">
+            {% set sc_t = (settings.channel_titles or {}).get(settings.skip_channel|string, settings.skip_channel) %}
+            <input type="text" id="skip_channel" class="s-input"
+                value="{{ sc_t if settings.skip_channel else '' }}"
+                data-id="{{ settings.skip_channel }}"
+                {% if settings.skip_channel %}readonly{% endif %}
+                placeholder="-100xxxxxxxxxx (channels only)"
+                oninput="if(!this.readOnly){this.dataset.id='';toggleSkipDeleteField();}">
+            <button type="button" class="remove-btn" id="skip_channel_clear"
+                style="{% if not settings.skip_channel %}display:none{% endif %}"
+                onclick="clearSingleChannel('skip_channel')" title="Remove">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
 
         <label class="toggle-wrap" id="delete_on_metadata_fail_wrap" style="margin-top:1.25rem;{% if not settings.skip_channel %}display:none{% endif %}">
             <input type="checkbox" class="toggle-input" id="delete_on_metadata_fail"
@@ -1185,7 +1211,8 @@ function toggleMfPwdVisibility() {
 }
 
 function toggleSkipDeleteField() {
-    const hasChannel = document.getElementById('skip_channel').value.trim() !== '';
+    const el = document.getElementById('skip_channel');
+    const hasChannel = !!(el && (el.dataset.id || extractChannelId(el.value.trim())));
     const wrap = document.getElementById('delete_on_metadata_fail_wrap');
     if (wrap) {
         wrap.style.display = hasChannel ? '' : 'none';
@@ -1237,10 +1264,10 @@ function generateSessionSecret() {
 }
 
 /* ── Multi-value list helpers ─────────────────────────────────────────── */
-function authRowHTML(value, isAnime) {
-    const id = (typeof extractChannelId === 'function' ? extractChannelId(value) : value) || value;
+function authRowHTML(id, title, isAnime) {
+    const display = title ? escapeHtmlAttr(title) : escapeHtmlAttr(id);
     return `
-        <input type="text" class="s-input" value="${escapeHtmlAttr(value)}" data-list="auth_channels" data-id="${escapeHtmlAttr(id)}">
+        <span class="channel-chip" data-list="auth_channels" data-id="${escapeHtmlAttr(id)}" title="${escapeHtmlAttr(id)}">${display}</span>
         <label class="anime-check ${isAnime ? 'is-anime' : ''}" title="Mark as anime channel — uses Kitsu → TVDB → TMDB → Cinemeta">
             <input type="checkbox" class="anime-toggle" ${isAnime ? 'checked' : ''} onchange="syncAnimeChip(this)">
             <span>Anime</span>
@@ -1271,12 +1298,21 @@ function addItem(listKey) {
         return;
     }
 
+    const existing = collectList(listKey);
+    if (existing.includes(value)) {
+        alert('This channel is already added.');
+        return;
+    }
+
     const container = document.getElementById(listKey + '_items');
     const item = document.createElement('div');
 
     if (listKey === 'auth_channels') {
         item.className = 'multi-item auth-item';
-        item.innerHTML = authRowHTML(value, false);
+        item.innerHTML = authRowHTML(value, value, false);
+    } else if (channelLists.includes(listKey)) {
+        item.className = 'multi-item';
+        item.innerHTML = channelChipHTML(listKey, value, value);
     } else {
         const isNumeric = listKey === 'approver_ids';
         item.className = 'multi-item';
@@ -1284,8 +1320,7 @@ function addItem(listKey) {
         <input type="${isNumeric ? 'number' : 'text'}"
                class="s-input"
                value="${escapeHtmlAttr(value)}"
-               data-list="${listKey}"
-               data-id="${escapeHtmlAttr(value)}">
+               data-list="${listKey}">
         <button class="remove-btn" onclick="removeItem(this)" title="Remove">
             <i class="fa-solid fa-xmark"></i>
         </button>
@@ -1297,10 +1332,31 @@ function addItem(listKey) {
     newInput.focus();
 }
 
+function channelChipHTML(listKey, id, title) {
+    const display = title ? escapeHtmlAttr(title) : escapeHtmlAttr(id);
+    return `
+        <span class="channel-chip" data-list="${listKey}" data-id="${escapeHtmlAttr(id)}" title="${escapeHtmlAttr(id)}">${display}</span>
+        <button class="remove-btn" onclick="removeItem(this)" title="Remove">
+            <i class="fa-solid fa-xmark"></i>
+        </button>
+    `;
+}
+
 function extractChannelId(raw) {
     if (!raw) return '';
     const m = String(raw).match(/-100\d+/);
     return m ? m[0] : raw.trim();
+}
+
+function clearSingleChannel(fieldId) {
+    const el = document.getElementById(fieldId);
+    if (!el) return;
+    el.value = '';
+    el.dataset.id = '';
+    el.readOnly = false;
+    const btn = document.getElementById(fieldId + '_clear');
+    if (btn) btn.style.display = 'none';
+    if (fieldId === 'skip_channel') toggleSkipDeleteField();
 }
 
 function collectAnimeChannels() {
@@ -1309,9 +1365,9 @@ function collectAnimeChannels() {
     const out = [];
     container.querySelectorAll('.multi-item').forEach(row => {
         const toggle = row.querySelector('.anime-toggle');
-        const input = row.querySelector('input[data-list="auth_channels"]');
-        if (toggle && toggle.checked && input) {
-            const id = input.dataset.id || extractChannelId(input.value);
+        const el = row.querySelector('[data-list="auth_channels"]');
+        if (toggle && toggle.checked && el) {
+            const id = el.dataset.id || extractChannelId(el.value || el.textContent);
             if (id) out.push(id);
         }
     });
@@ -1325,10 +1381,11 @@ function removeItem(btn) {
 function collectList(listKey) {
     const container = document.getElementById(listKey + '_items');
     if (!container) return [];
-    return [...container.querySelectorAll('input[data-list]')]
+    return [...container.querySelectorAll('[data-list="' + listKey + '"]')]
         .map(i => {
             if (i.dataset.id) return i.dataset.id.trim();
-            return extractChannelId(i.value);
+            if (i.value !== undefined) return extractChannelId(i.value);
+            return extractChannelId(i.textContent || '');
         })
         .filter(Boolean);
 }
@@ -1337,6 +1394,32 @@ function collectList(listKey) {
 async function saveSettings() {
     const btn   = document.getElementById('save-btn');
     const label = document.getElementById('save-label');
+
+    const channelFields = [
+        ...collectList('auth_channels'),
+        ...collectList('global_search_channels'),
+        ...collectList('manual_channels'),
+    ];
+    const acEl = document.getElementById('announcement_channel');
+    const scEl = document.getElementById('skip_channel');
+    const acId = (acEl.dataset.id || extractChannelId(acEl.value.trim()));
+    const scId = (scEl.dataset.id || extractChannelId(scEl.value.trim()));
+    if (acId) channelFields.push(acId);
+    if (scId) channelFields.push(scId);
+    for (const c of channelFields) {
+        if (!isValidChannelId(c)) {
+            alert('Only channel IDs in -100xxxxxxxxxx format are accepted: ' + c);
+            return;
+        }
+    }
+    if (acEl.value.trim() && !acId) {
+        alert('Announcement channel must be -100xxxxxxxxxx format.');
+        return;
+    }
+    if (scEl.value.trim() && !scId) {
+        alert('Skip channel must be -100xxxxxxxxxx format.');
+        return;
+    }
 
     btn.disabled  = true;
     label.textContent = 'Saving…';
@@ -1516,57 +1599,76 @@ function renderSettings(s) {
     document.getElementById('mediaflow_proxy').checked = !!s.mediaflow_proxy;
     document.getElementById('mediaflow_password').value = s.mediaflow_password || '';
     toggleMediaflowFields();
-    const ac = document.getElementById('announcement_channel');
-    ac.value = s.announcement_channel || '';
-    ac.dataset.id = s.announcement_channel || '';
-    const sc = document.getElementById('skip_channel');
-    sc.value = s.skip_channel || '';
-    sc.dataset.id = s.skip_channel || '';
-    toggleSkipDeleteField();
 
-    // Auth channels (with per-channel anime checkbox) + other multi-value lists
-    rebuildAuthChannels(s.auth_channels, s.anime_channels);
+    const titles = s.channel_titles || {};
+    rebuildAuthChannels(s.auth_channels, s.anime_channels, titles);
     rebuildSimpleList('approver_ids_items', s.approver_ids, 'number');
     rebuildSimpleList('multi_tokens_items', s.multi_tokens, 'text');
-    rebuildSimpleList('global_search_channels_items', s.global_search_channels, 'text');
-    rebuildSimpleList('manual_channels_items', s.manual_channels, 'text');
+    rebuildSimpleList('global_search_channels_items', s.global_search_channels, 'text', titles);
+    rebuildSimpleList('manual_channels_items', s.manual_channels, 'text', titles);
 
-    // Databases — needs the live connection-status dot per entry
+    const ac = document.getElementById('announcement_channel');
+    if (ac) {
+        const acid = s.announcement_channel || '';
+        ac.dataset.id = acid;
+        ac.value = acid ? (titles[acid] || acid) : '';
+        ac.readOnly = !!acid;
+        const acBtn = document.getElementById('announcement_channel_clear');
+        if (acBtn) acBtn.style.display = acid ? '' : 'none';
+    }
+    const sc = document.getElementById('skip_channel');
+    if (sc) {
+        const scid = s.skip_channel || '';
+        sc.dataset.id = scid;
+        sc.value = scid ? (titles[scid] || scid) : '';
+        sc.readOnly = !!scid;
+        const scBtn = document.getElementById('skip_channel_clear');
+        if (scBtn) scBtn.style.display = scid ? '' : 'none';
+    }
+    toggleSkipDeleteField();
+
     rebuildDatabaseList(s.database_list || []);
 }
 
-function rebuildSimpleList(containerId, values, inputType) {
+function rebuildSimpleList(containerId, values, inputType, titles) {
     const container = document.getElementById(containerId);
     if (!container) return;
     const listKey = containerId.replace('_items', '');
     const channelLists = ['global_search_channels', 'manual_channels'];
+    titles = titles || {};
 
     container.innerHTML = '';
     (values || []).forEach(val => {
         const item = document.createElement('div');
         item.className = 'multi-item';
-        const idAttr = channelLists.includes(listKey) ? ` data-id="${escapeHtmlAttr(val)}"` : '';
-        item.innerHTML = `
-            <input type="${inputType}" class="s-input"
-                   value="${escapeHtmlAttr(val)}" data-list="${listKey}"${idAttr}>
-            <button class="remove-btn" onclick="removeItem(this)" title="Remove">
-                <i class="fa-solid fa-xmark"></i>
-            </button>
-        `;
+        if (channelLists.includes(listKey)) {
+            const id = String(val);
+            item.innerHTML = channelChipHTML(listKey, id, titles[id] || id);
+        } else {
+            item.innerHTML = `
+                <input type="${inputType}" class="s-input"
+                       value="${escapeHtmlAttr(val)}" data-list="${listKey}">
+                <button class="remove-btn" onclick="removeItem(this)" title="Remove">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            `;
+        }
         container.appendChild(item);
     });
 }
 
-function rebuildAuthChannels(values, animeValues) {
+function rebuildAuthChannels(values, animeValues, titles) {
     const container = document.getElementById('auth_channels_items');
     if (!container) return;
-    const animeNorm = (animeValues || []).map(v => String(v).split('-100').join(''));
+    const animeNorm = (animeValues || []).map(v => String(v).replace(/^-100/, ''));
+    titles = titles || {};
     container.innerHTML = '';
     (values || []).forEach(val => {
-        const isAnime = animeNorm.includes(String(val).split('-100').join(''));
+        const id = String(val);
+        const isAnime = animeNorm.includes(id.replace(/^-100/, ''));
         const item = document.createElement('div');
         item.className = 'multi-item auth-item';
-        item.innerHTML = authRowHTML(val, isAnime);
+        item.innerHTML = authRowHTML(id, titles[id] || id, isAnime);
         container.appendChild(item);
     });
 }

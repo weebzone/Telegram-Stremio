@@ -1722,10 +1722,33 @@ async def session_remove_api():
 # Settings API
 # ─────────────────────────────────────────────────────────────────────────────
 
+async def _resolve_channel_titles(data: dict) -> dict:
+    channel_titles = {}
+    all_ids = set()
+    for key in ("auth_channels", "global_search_channels", "manual_channels", "anime_channels"):
+        for c in (data.get(key) or []):
+            c = str(c).strip()
+            if c:
+                all_ids.add(c)
+    for key in ("announcement_channel", "skip_channel"):
+        v = str(data.get(key) or "").strip()
+        if v:
+            all_ids.add(v)
+    client = botmod.Userbot or getattr(botmod, "Bot", None)
+    if client and all_ids:
+        for cid in all_ids:
+            try:
+                chat = await client.get_chat(int(cid))
+                if chat and getattr(chat, "title", None):
+                    channel_titles[cid] = chat.title
+            except Exception:
+                pass
+    return channel_titles
+
+
 async def get_settings_api() -> dict:
 
     data = SettingsManager.current().to_dict()
-    #----- Never expose the raw password; only whether one is set
     data["admin_password_set"] = bool(data.get("admin_password"))
     data["admin_password"] = ""
     data["session_secret_set"] = bool(data.get("session_secret"))
@@ -1736,6 +1759,8 @@ async def get_settings_api() -> dict:
     except Exception as e:
         LOGGER.error(f"get_settings_api: could not load database list: {e}")
         data["database_list"] = []
+
+    data["channel_titles"] = await _resolve_channel_titles(data)
 
     return {"settings": data}
 
