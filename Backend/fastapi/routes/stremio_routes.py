@@ -817,82 +817,107 @@ async def _global_streams_for(
 
     search_season = season_num
     search_episode = episode_num
-    use_absolute_first = False
     if is_anime and absolute_episode is not None:
         search_season = None
         search_episode = absolute_episode
-        use_absolute_first = True
     elif is_anime and season_num is None and episode_num is not None:
         search_season = None
         search_episode = episode_num
-        use_absolute_first = True
 
-    map_task = None
+    abs_ep = absolute_episode
+    map_source = None
     if (
-        not use_absolute_first
+        abs_ep is None
         and media_type == "series"
         and imdb_id
         and season_num is not None
         and episode_num is not None
-        and absolute_episode is None
     ):
-        from Backend.helper.metadata.episode_maps import absolute_from_imdb_episode
+        try:
+            from Backend.helper.metadata.episode_maps import absolute_from_imdb_episode
 
-        map_task = asyncio.create_task(
-            absolute_from_imdb_episode(
+            mapped = await absolute_from_imdb_episode(
                 imdb_id,
                 int(season_num),
                 int(episode_num),
                 title=expected_title,
                 videos=cinemeta_videos,
             )
-        )
+            if mapped and mapped.get("is_anime"):
+                is_anime = True
+                map_source = mapped.get("source")
+                abs_ep = mapped.get("absolute_episode")
+                if abs_ep is None and int(season_num) == 1:
+                    abs_ep = int(episode_num)
+        except Exception as e:
+            LOGGER.warning(f"[GLOBAL SEARCH] anime map lookup failed for {imdb_id}: {e}")
+
+    auth_channels = SettingsManager.current().auth_channels
+    global_results = []
 
     try:
-        global_results = await global_search(
-            expected_title,
-            SettingsManager.current().auth_channels,
-            year=year,
-            season=search_season,
-            episode=search_episode,
+        run_parallel = (
+            abs_ep is not None
+            and absolute_episode is None
+            and season_num is not None
+            and episode_num is not None
         )
+        if run_parallel:
+            LOGGER.info(
+                f"[GLOBAL SEARCH] Parallel search for '{expected_title}': "
+                f"S{int(season_num):02d}E{int(episode_num):02d} + absolute {int(abs_ep)}"
+                + (f" (via {map_source})" if map_source else "")
+            )
+            sxx_task = asyncio.create_task(
+                global_search(
+                    expected_title,
+                    auth_channels,
+                    year=year,
+                    season=season_num,
+                    episode=episode_num,
+                )
+            )
+            abs_task = asyncio.create_task(
+                global_search(
+                    expected_title,
+                    auth_channels,
+                    year=year,
+                    season=None,
+                    episode=int(abs_ep),
+                )
+            )
+            sxx_results, abs_results = await asyncio.gather(
+                sxx_task, abs_task, return_exceptions=True
+            )
+            if isinstance(sxx_results, Exception):
+                LOGGER.error(f"[GLOBAL SEARCH] SxxExx search failed for '{expected_title}': {sxx_results}")
+                sxx_results = []
+            if isinstance(abs_results, Exception):
+                LOGGER.error(f"[GLOBAL SEARCH] absolute search failed for '{expected_title}': {abs_results}")
+                abs_results = []
+
+            global_results = list(sxx_results or [])
+            if abs_results:
+                seen = {
+                    (r.get("token") or r.get("title"), r.get("source_chat"))
+                    for r in global_results
+                }
+                for r in abs_results:
+                    key = (r.get("token") or r.get("title"), r.get("source_chat"))
+                    if key not in seen:
+                        global_results.append(r)
+                        seen.add(key)
+        else:
+            global_results = await global_search(
+                expected_title,
+                auth_channels,
+                year=year,
+                season=search_season,
+                episode=search_episode,
+            )
     except Exception as e:
         LOGGER.error(f"[GLOBAL SEARCH] search failed for '{expected_title}': {e}")
         global_results = []
-
-    if not global_results and map_task is not None:
-        try:
-            mapped = await map_task
-        except Exception as e:
-            LOGGER.warning(f"[GLOBAL SEARCH] anime map lookup failed for {imdb_id}: {e}")
-            mapped = None
-
-        if mapped and mapped.get("is_anime"):
-            abs_ep = mapped.get("absolute_episode")
-            if abs_ep is None and int(season_num) == 1:
-                abs_ep = int(episode_num)
-            if abs_ep is not None:
-                LOGGER.info(
-                    f"[GLOBAL SEARCH] S{season_num:02d}E{episode_num:02d} empty for '{expected_title}'; "
-                    f"retrying absolute {abs_ep} (anime via {mapped.get('source')})"
-                )
-                try:
-                    global_results = await global_search(
-                        expected_title,
-                        SettingsManager.current().auth_channels,
-                        year=year,
-                        season=None,
-                        episode=int(abs_ep),
-                    )
-                except Exception as e:
-                    LOGGER.error(f"[GLOBAL SEARCH] absolute retry failed for '{expected_title}': {e}")
-            else:
-                LOGGER.info(
-                    f"[GLOBAL SEARCH] '{expected_title}' is anime but could not map "
-                    f"S{season_num:02d}E{episode_num:02d} to absolute"
-                )
-    elif map_task is not None:
-        map_task.cancel()
 
     return _streams_from_global_results(token, global_results)
 
