@@ -24,10 +24,10 @@ from Backend.helper.split_files import parse_combined_episodes, parse_split_info
 import Backend.pyrofork.bot as botmod
 
 MAX_RESULTS = 50
-MAX_RESULTS_PER_CHAT = 50
+MAX_RESULTS_PER_CHAT = 10
 SEARCH_COOLDOWN_SECONDS = 5
 MAX_CONCURRENT_SEARCHES = 3
-MAX_CONCURRENT_CHANNELS = 5
+MAX_CONCURRENT_CHANNELS = 7
 MIN_TITLE_SCORE = 0.7
 RESULT_CACHE_SECONDS = 60
 
