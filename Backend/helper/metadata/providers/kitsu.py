@@ -237,7 +237,7 @@ def _common_payload(row: dict, doc: dict, title: str) -> dict:
         "genres": [],
         "cast": [],
         "runtime": f"{duration} min" if duration else "",
-        "kitsu_id": row.get("id"),
+        "kitsu_id": int(row["id"]) if row.get("id") is not None else None,
     }
     return ensure_media_ids(payload, seed=f"kitsu:{row.get('id')}")
 

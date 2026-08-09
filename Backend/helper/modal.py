@@ -21,26 +21,25 @@ class QualityDetail(BaseModel):
     parts: Optional[List[QualityPart]] = None
 
 
-#----- Episode schema
 class Episode(BaseModel):
     episode_number: int
     title: str
     episode_backdrop: Optional[str] = None
     overview: Optional[str] = None
     released: Optional[str] = None
+    absolute_episode: Optional[int] = None
     telegram: Optional[List[QualityDetail]]
 
 
-#----- Season schema
 class Season(BaseModel):
     season_number: int
     episodes: List[Episode] = Field(default_factory=list)
 
 
-#----- TV show schema
 class TVShowSchema(BaseModel):
     tmdb_id: Optional[int] = None
     imdb_id: Optional[str] = None
+    kitsu_id: Optional[int] = None
     db_index: int
     title: str
     title_english: Optional[str] = None
@@ -67,10 +66,10 @@ class TVShowSchema(BaseModel):
     auto_catalog: Optional[dict] = None
 
 
-#----- Movie schema
 class MovieSchema(BaseModel):
     tmdb_id: Optional[int] = None
     imdb_id: Optional[str] = None
+    kitsu_id: Optional[int] = None
     db_index: int
     title: str
     title_english: Optional[str] = None
