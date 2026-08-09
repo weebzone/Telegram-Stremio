@@ -625,25 +625,36 @@ async def lookup_anime_entries_by_title(title: str) -> List[AnimeListEntry]:
     q = _norm_title(title)
     if not q or len(q) < 3:
         return []
-    q_tokens = set(q.split())
+    q_tokens = [t for t in q.split() if len(t) >= 3]
     if not q_tokens:
         return []
+    q_token_set = set(q_tokens)
     await ensure_anime_lists()
     exact: List[AnimeListEntry] = []
-    partial: List[AnimeListEntry] = []
+    strong: List[AnimeListEntry] = []
     for entry in _anime_lists.values():
         name = _norm_title(entry.name)
-        if not name:
+        if not name or len(name) < 3:
             continue
         if name == q:
             exact.append(entry)
             continue
-        name_tokens = set(name.split())
-        if q_tokens <= name_tokens or name_tokens <= q_tokens:
-            partial.append(entry)
-        elif q in name or name in q:
-            partial.append(entry)
-    return exact or partial
+        name_tokens = [t for t in name.split() if len(t) >= 3]
+        if not name_tokens:
+            continue
+        name_token_set = set(name_tokens)
+        if q_token_set == name_token_set:
+            strong.append(entry)
+            continue
+        if len(name_tokens) >= 2 and name_token_set <= q_token_set:
+            strong.append(entry)
+            continue
+        if len(q_tokens) >= 2 and q_token_set <= name_token_set:
+            strong.append(entry)
+            continue
+        if len(name) >= 6 and len(q) >= 6 and (name in q or q in name):
+            strong.append(entry)
+    return exact or strong
 
 
 async def is_anime_imdb(imdb_id: str, title: Optional[str] = None) -> bool:
