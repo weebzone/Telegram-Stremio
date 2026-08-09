@@ -855,7 +855,6 @@ async def _global_streams_for(
             year=year,
             season=search_season,
             episode=search_episode,
-            budget_seconds=5.0 if map_task is not None else None,
         )
     except Exception as e:
         LOGGER.error(f"[GLOBAL SEARCH] search failed for '{expected_title}': {e}")
@@ -884,7 +883,6 @@ async def _global_streams_for(
                         year=year,
                         season=None,
                         episode=int(abs_ep),
-                        budget_seconds=10.0,
                     )
                 except Exception as e:
                     LOGGER.error(f"[GLOBAL SEARCH] absolute retry failed for '{expected_title}': {e}")
