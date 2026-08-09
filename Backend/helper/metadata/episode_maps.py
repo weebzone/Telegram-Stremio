@@ -63,6 +63,7 @@ class AnimeListEntry:
 
 
 _anime_lists: Dict[int, AnimeListEntry] = {}
+_anime_lists_by_imdb: Dict[str, List[AnimeListEntry]] = {}
 _anime_lists_loaded_at: float = 0.0
 _anime_lists_lock = asyncio.Lock()
 
@@ -215,8 +216,33 @@ def _parse_anime_lists_xml(raw: bytes) -> Dict[int, AnimeListEntry]:
     return out
 
 
+def _normalize_imdb(imdb_id: Optional[str]) -> Optional[str]:
+    if not imdb_id:
+        return None
+    s = str(imdb_id).strip().lower()
+    if not s:
+        return None
+    if s.startswith("tt"):
+        return s
+    if s.isdigit():
+        return f"tt{s}"
+    return s
+
+
+def _rebuild_imdb_index(parsed: Dict[int, AnimeListEntry]) -> Dict[str, List[AnimeListEntry]]:
+    index: Dict[str, List[AnimeListEntry]] = {}
+    for entry in parsed.values():
+        raw = entry.imdb_id or ""
+        for part in re.split(r"[,;\s]+", raw):
+            key = _normalize_imdb(part)
+            if not key:
+                continue
+            index.setdefault(key, []).append(entry)
+    return index
+
+
 async def ensure_anime_lists() -> Dict[int, AnimeListEntry]:
-    global _anime_lists, _anime_lists_loaded_at
+    global _anime_lists, _anime_lists_by_imdb, _anime_lists_loaded_at
     async with _anime_lists_lock:
         if _anime_lists and (time.time() - _anime_lists_loaded_at) < _TTL_SECONDS:
             return _anime_lists
@@ -239,8 +265,12 @@ async def ensure_anime_lists() -> Dict[int, AnimeListEntry]:
             parsed = _parse_anime_lists_xml(raw)
             if parsed:
                 _anime_lists = parsed
+                _anime_lists_by_imdb = _rebuild_imdb_index(parsed)
                 _anime_lists_loaded_at = time.time()
-                LOGGER.info(f"[EP_MAPS] Anime-Lists loaded: {len(parsed)} entries")
+                LOGGER.info(
+                    f"[EP_MAPS] Anime-Lists loaded: {len(parsed)} entries, "
+                    f"{len(_anime_lists_by_imdb)} imdb keys"
+                )
         return _anime_lists
 
 
@@ -531,3 +561,110 @@ async def resolve_absolute_episode(
         return hit
 
     return None
+
+
+def _absolute_from_entry(entry: AnimeListEntry, season: int, episode: int) -> Optional[int]:
+    if episode < 1:
+        return None
+    season = int(season)
+    episode = int(episode)
+
+    for anidb_season, tvdb_season, start, end, offset in entry.mappings:
+        if int(tvdb_season) != season:
+            continue
+        abs_ep = episode - int(offset or 0)
+        if abs_ep < 1:
+            continue
+        if start is not None and abs_ep < int(start):
+            continue
+        if end is not None and abs_ep > int(end):
+            continue
+        return abs_ep
+
+    default = (entry.default_tvdb_season or "").strip().lower()
+    if default == "a":
+        return episode
+
+    try:
+        default_season = int(default) if default else 1
+    except (TypeError, ValueError):
+        default_season = 1
+    if season == default_season:
+        abs_ep = episode - int(entry.episode_offset or 0)
+        if abs_ep >= 1:
+            return abs_ep
+
+    if season == 1 and not entry.mappings:
+        abs_ep = episode - int(entry.episode_offset or 0)
+        if abs_ep >= 1:
+            return abs_ep
+    return None
+
+
+async def lookup_anime_entries_by_imdb(imdb_id: str) -> List[AnimeListEntry]:
+    key = _normalize_imdb(imdb_id)
+    if not key:
+        return []
+    await ensure_anime_lists()
+    return list(_anime_lists_by_imdb.get(key) or [])
+
+
+async def is_anime_imdb(imdb_id: str) -> bool:
+    return bool(await lookup_anime_entries_by_imdb(imdb_id))
+
+
+async def absolute_from_imdb_episode(
+    imdb_id: str,
+    season: int,
+    episode: int,
+) -> Optional[dict]:
+    """Map Cinemeta-style S/E on an IMDb id to an absolute episode when the title is anime.
+
+    Returns dict with absolute_episode / anidb_id / source, or None if not anime / unmapped.
+    """
+    try:
+        season = int(season)
+        episode = int(episode)
+    except (TypeError, ValueError):
+        return None
+    if season < 0 or episode < 1:
+        return None
+
+    entries = await lookup_anime_entries_by_imdb(imdb_id)
+    if not entries:
+        return None
+
+    for entry in entries:
+        abs_ep = _absolute_from_entry(entry, season, episode)
+        if abs_ep is not None:
+            LOGGER.info(
+                f"[EP_MAPS] IMDb {imdb_id} S{season:02d}E{episode:02d} "
+                f"→ abs={abs_ep} (anidb={entry.anidb_id}, {entry.name})"
+            )
+            return {
+                "absolute_episode": int(abs_ep),
+                "anidb_id": entry.anidb_id,
+                "tvdb_id": entry.tvdb_id,
+                "tmdb_id": entry.tmdb_tv_id,
+                "imdb_id": _normalize_imdb(imdb_id),
+                "name": entry.name,
+                "source": "anime-lists",
+                "is_anime": True,
+            }
+
+    if season == 1:
+        LOGGER.info(
+            f"[EP_MAPS] IMDb {imdb_id} is anime; using E{episode} as absolute fallback"
+        )
+        return {
+            "absolute_episode": int(episode),
+            "anidb_id": entries[0].anidb_id,
+            "tvdb_id": entries[0].tvdb_id,
+            "tmdb_id": entries[0].tmdb_tv_id,
+            "imdb_id": _normalize_imdb(imdb_id),
+            "name": entries[0].name,
+            "source": "anime-lists-fallback",
+            "is_anime": True,
+        }
+
+    return {"is_anime": True, "absolute_episode": None, "source": "anime-lists"}

@@ -765,6 +765,22 @@ async def _kitsu_title_year(kitsu_id: int) -> tuple:
         return "", None
 
 
+def _streams_from_global_results(token: str, global_results: list) -> list:
+    streams = []
+    for r in global_results:
+        is_split = bool(r.get("is_split"))
+        _, stream_title = format_stream_details(r["title"], r["quality"], r["size"], is_split=is_split)
+        stream_name = f"🌐 GLOBAL {r['quality']}"
+        stream_title = f"{stream_title}\n📡 {r['source_chat']}"
+        if is_split:
+            kind = "zip parts" if r.get("is_zip") else "parts"
+            stream_title += f" · 📦 {r.get('part_count', 0)} {kind}"
+        url = f"{SettingsManager.current().base_url}/dl/{token}/{r['token']}/{quote(r['title'])}"
+        size_bytes = parse_size_to_bytes(r.get("size", ""))
+        streams.append({"name": stream_name, "title": stream_title, "url": url, "size_bytes": size_bytes})
+    return streams
+
+
 async def _global_streams_for(
     token: str,
     imdb_id: str = None,
@@ -799,12 +815,15 @@ async def _global_streams_for(
 
     search_season = season_num
     search_episode = episode_num
+    use_absolute_first = False
     if is_anime and absolute_episode is not None:
         search_season = None
         search_episode = absolute_episode
+        use_absolute_first = True
     elif is_anime and season_num is None and episode_num is not None:
         search_season = None
         search_episode = episode_num
+        use_absolute_first = True
 
     try:
         global_results = await global_search(
@@ -818,19 +837,44 @@ async def _global_streams_for(
         LOGGER.error(f"[GLOBAL SEARCH] search failed for '{expected_title}': {e}")
         return []
 
-    streams = []
-    for r in global_results:
-        is_split = bool(r.get("is_split"))
-        _, stream_title = format_stream_details(r["title"], r["quality"], r["size"], is_split=is_split)
-        stream_name = f"🌐 GLOBAL {r['quality']}"
-        stream_title = f"{stream_title}\n📡 {r['source_chat']}"
-        if is_split:
-            kind = "zip parts" if r.get("is_zip") else "parts"
-            stream_title += f" · 📦 {r.get('part_count', 0)} {kind}"
-        url = f"{SettingsManager.current().base_url}/dl/{token}/{r['token']}/{quote(r['title'])}"
-        size_bytes = parse_size_to_bytes(r.get("size", ""))
-        streams.append({"name": stream_name, "title": stream_title, "url": url, "size_bytes": size_bytes})
-    return streams
+    if (
+        not global_results
+        and not use_absolute_first
+        and media_type == "series"
+        and imdb_id
+        and season_num is not None
+        and episode_num is not None
+        and absolute_episode is None
+    ):
+        try:
+            from Backend.helper.metadata.episode_maps import absolute_from_imdb_episode
+
+            mapped = await absolute_from_imdb_episode(imdb_id, int(season_num), int(episode_num))
+        except Exception as e:
+            LOGGER.warning(f"[GLOBAL SEARCH] anime map lookup failed for {imdb_id}: {e}")
+            mapped = None
+
+        if mapped and mapped.get("is_anime"):
+            abs_ep = mapped.get("absolute_episode")
+            if abs_ep is None and int(season_num) == 1:
+                abs_ep = int(episode_num)
+            if abs_ep is not None:
+                LOGGER.info(
+                    f"[GLOBAL SEARCH] S{season_num:02d}E{episode_num:02d} empty for '{expected_title}'; "
+                    f"retrying absolute {abs_ep} (anime via {mapped.get('source')})"
+                )
+                try:
+                    global_results = await global_search(
+                        expected_title,
+                        SettingsManager.current().auth_channels,
+                        year=year,
+                        season=None,
+                        episode=int(abs_ep),
+                    )
+                except Exception as e:
+                    LOGGER.error(f"[GLOBAL SEARCH] absolute retry failed for '{expected_title}': {e}")
+
+    return _streams_from_global_results(token, global_results)
 
 
 #----- Cached check that a user is still in the subscription group (fail-open)
