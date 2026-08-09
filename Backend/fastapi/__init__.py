@@ -11,7 +11,7 @@ config = uvicorn.Config(
     port=Port,
     loop="uvloop",
     http="httptools",
-    timeout_keep_alive=30,
+    timeout_keep_alive=60,
     timeout_graceful_shutdown=5,
 )
 server = uvicorn.Server(config)
