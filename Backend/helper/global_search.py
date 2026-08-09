@@ -20,7 +20,7 @@ from Backend.logger import LOGGER
 from Backend.helper.settings_manager import SettingsManager
 from Backend.helper.encrypt import encode_string
 from Backend.helper.pyro import get_readable_file_size
-from Backend.helper.split_files import parse_split_info, strip_part_suffix
+from Backend.helper.split_files import parse_combined_episodes, parse_split_info, strip_part_suffix
 import Backend.pyrofork.bot as botmod
 
 MAX_RESULTS = 50
@@ -140,13 +140,26 @@ def _matches_episode(parsed: dict, season: Optional[int], episode: Optional[int]
     return True
 
 
+def _is_combined_filename(filename: str, parsed: Optional[dict] = None) -> bool:
+    if not filename:
+        return False
+    if parse_combined_episodes(filename):
+        return True
+    if re.search(r"(?i)\bcombined\b", filename):
+        return True
+    if parsed and "excess" in parsed:
+        if any("combined" in str(item).lower() for item in (parsed.get("excess") or [])):
+            return True
+    return False
+
+
 def _validate_name(filename: str, expected_title: str, season: Optional[int], episode: Optional[int]) -> Optional[dict]:
     try:
         parsed = PTN.parse(filename)
     except Exception:
         return None
-    if "excess" in parsed and any("combined" in item.lower() for item in parsed["excess"]):
-        LOGGER.info(f"Skipping {filename}: contains 'combined'")
+    if _is_combined_filename(filename, parsed):
+        LOGGER.info(f"Skipping {filename}: combined episode pack")
         return None
     if not _matches_episode(parsed, season, episode, filename=filename):
         return None
@@ -278,12 +291,23 @@ def _strip_symbols(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+def _absolute_ep_forms(episode: int) -> List[str]:
+    ep = int(episode)
+    if ep < 1:
+        return [str(ep)]
+    if ep < 10:
+        return [f"{ep:03d}", f"{ep:02d}", str(ep)]
+    if ep < 100:
+        return [f"{ep:03d}", str(ep)]
+    return [str(ep)]
+
+
 def _build_search_query(expected_title: str, year: Optional[int], season: Optional[int], episode: Optional[int]) -> str:
     if season is not None and episode is not None:
         return f"{expected_title} S{int(season):02d}E{int(episode):02d}"
-    # Absolute / orphan episode (anime style: "One Piece 1223")
     if season is None and episode is not None:
-        return f"{expected_title} {int(episode)}"
+        forms = _absolute_ep_forms(int(episode))
+        return f"{expected_title} {forms[0]}"
     if year is not None:
         return f"{expected_title} {year}"
     return expected_title
@@ -299,24 +323,27 @@ def _build_query_candidates(
         if q and q.lower() not in (c.lower() for c in candidates):
             candidates.append(q)
 
+    if season is None and episode is not None:
+        titles = [expected_title]
+        stripped_title = _strip_symbols(expected_title)
+        if stripped_title and stripped_title.lower() != expected_title.lower():
+            titles.append(stripped_title)
+        for form in _absolute_ep_forms(int(episode)):
+            for title in titles:
+                add(f"{title} {form}")
+                add(f"{title} E{form}")
+        return candidates
+
     add(_build_search_query(expected_title, year, season, episode))
 
     if season is None and episode is None and year is not None:
         add(expected_title)
-
-    # Absolute episode: also try E-prefix and bare title for broader hits
-    if season is None and episode is not None:
-        add(f"{expected_title} E{int(episode)}")
-        add(f"{expected_title} Episode {int(episode)}")
 
     stripped_title = _strip_symbols(expected_title)
     if stripped_title and stripped_title.lower() != expected_title.lower():
         add(_build_search_query(stripped_title, year, season, episode))
         if season is None and episode is None and year is not None:
             add(stripped_title)
-        if season is None and episode is not None:
-            add(f"{stripped_title} {int(episode)}")
-            add(f"{stripped_title} E{int(episode)}")
 
     return candidates
 
