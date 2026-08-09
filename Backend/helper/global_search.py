@@ -24,11 +24,13 @@ from Backend.helper.split_files import parse_combined_episodes, parse_split_info
 import Backend.pyrofork.bot as botmod
 
 MAX_RESULTS = 50
-MAX_RESULTS_PER_CHAT = 50
+MAX_RESULTS_PER_CHAT = 20
 SEARCH_COOLDOWN_SECONDS = 5
 MAX_CONCURRENT_SEARCHES = 3
-MAX_CONCURRENT_CHANNELS = 5
+MAX_CONCURRENT_CHANNELS = 8
 MIN_TITLE_SCORE = 0.7
+SEARCH_BUDGET_SECONDS = 12.0
+CHANNEL_SEARCH_TIMEOUT = 6.0
 
 _last_search_ts: Dict[str, float] = {}
 _inflight_tasks: Dict[str, asyncio.Task] = {}
@@ -356,16 +358,22 @@ async def _search_channel(
     expected_title: str,
     season: Optional[int],
     episode: Optional[int],
+    deadline: Optional[float] = None,
 ) -> List[Dict]:
     global _userbot_session_dead
 
     async with _channel_semaphore:
+        if deadline is not None and time.monotonic() >= deadline:
+            return []
+
         results: List[Dict] = []
         split_groups: Dict[str, dict] = {}
         seen_msg_ids: set = set()
 
         for msg_filter in (enums.MessagesFilter.VIDEO, enums.MessagesFilter.DOCUMENT):
             if len(results) >= MAX_RESULTS_PER_CHAT:
+                break
+            if deadline is not None and time.monotonic() >= deadline:
                 break
             try:
                 async for message in client.search_messages(
@@ -374,6 +382,8 @@ async def _search_channel(
                     filter=msg_filter,
                     limit=MAX_RESULTS_PER_CHAT,
                 ):
+                    if deadline is not None and time.monotonic() >= deadline:
+                        break
                     if message.id in seen_msg_ids:
                         continue
                     seen_msg_ids.add(message.id)
@@ -496,6 +506,7 @@ async def global_search(
     year: Optional[int] = None,
     season: Optional[int] = None,
     episode: Optional[int] = None,
+    budget_seconds: Optional[float] = None,
 ) -> List[Dict]:
     expected_title = (expected_title or "").strip()
     if not expected_title or not is_global_search_enabled():
@@ -521,8 +532,12 @@ async def global_search(
         except Exception:
             return []
 
+    cached = _result_cache.get(key)
+    if cached is not None and (now - cached[0]) < 60:
+        LOGGER.info(f"[GLOBAL SEARCH] Serving cached results for '{query_candidates[0]}'")
+        return cached[1]
+
     if now - _last_search_ts.get(key, 0) < SEARCH_COOLDOWN_SECONDS:
-        cached = _result_cache.get(key)
         if cached is not None:
             LOGGER.info(f"[GLOBAL SEARCH] Serving cached results for '{query_candidates[0]}' (cooldown)")
             return cached[1]
@@ -530,13 +545,17 @@ async def global_search(
         return []
 
     _last_search_ts[key] = now
+    budget = SEARCH_BUDGET_SECONDS if budget_seconds is None else float(budget_seconds)
     task = asyncio.create_task(
-        _run_global_search(expected_title, query_candidates, target_ids, season, episode)
+        _run_global_search(
+            expected_title, query_candidates, target_ids, season, episode, budget_seconds=budget
+        )
     )
     _inflight_tasks[key] = task
     try:
         results = await task
-        _result_cache[key] = (time.time(), results)
+        if results:
+            _result_cache[key] = (time.time(), results)
         return results
     finally:
         _inflight_tasks.pop(key, None)
@@ -548,8 +567,10 @@ async def _run_global_search(
     target_ids: List[int],
     season: Optional[int],
     episode: Optional[int],
+    budget_seconds: float = SEARCH_BUDGET_SECONDS,
 ) -> List[Dict]:
     async with _search_semaphore:
+        deadline = time.monotonic() + max(2.0, float(budget_seconds))
         chat_titles = await asyncio.gather(
             *(_get_chat_title(botmod.Userbot, cid) for cid in target_ids),
             return_exceptions=True,
@@ -563,19 +584,48 @@ async def _run_global_search(
         for attempt_idx, search_query in enumerate(query_candidates):
             if _userbot_session_dead:
                 break
+            remaining = deadline - time.monotonic()
+            if remaining <= 0.3:
+                LOGGER.info(f"[USERBOT] Search budget exhausted before '{search_query}'")
+                break
 
             LOGGER.info(
                 f"[USERBOT] Search attempt {attempt_idx + 1}/{len(query_candidates)}: "
-                f"'{search_query}' across {len(target_ids)} channel(s)"
+                f"'{search_query}' across {len(target_ids)} channel(s) "
+                f"(budget {remaining:.1f}s left)"
             )
 
             search_tasks = [
-                _search_channel(botmod.Userbot, int(cid), title, search_query, expected_title, season, episode)
+                asyncio.create_task(
+                    _search_channel(
+                        botmod.Userbot,
+                        int(cid),
+                        title,
+                        search_query,
+                        expected_title,
+                        season,
+                        episode,
+                        deadline=deadline,
+                    )
+                )
                 for cid, title in zip(target_ids, resolved_titles)
             ]
-            per_channel_results = await asyncio.gather(*search_tasks, return_exceptions=True)
 
-            for r in per_channel_results:
+            done, pending = await asyncio.wait(
+                search_tasks,
+                timeout=max(0.5, deadline - time.monotonic()),
+                return_when=asyncio.ALL_COMPLETED,
+            )
+            for t in pending:
+                t.cancel()
+            if pending:
+                await asyncio.gather(*pending, return_exceptions=True)
+
+            for t in done:
+                try:
+                    r = t.result()
+                except Exception:
+                    continue
                 if isinstance(r, list):
                     all_results.extend(r)
 
