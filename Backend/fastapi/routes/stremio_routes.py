@@ -852,72 +852,51 @@ async def _global_streams_for(
         except Exception as e:
             LOGGER.warning(f"[GLOBAL SEARCH] anime map lookup failed for {imdb_id}: {e}")
 
-    auth_channels = SettingsManager.current().auth_channels
-    global_results = []
-
-    try:
-        run_parallel = (
-            abs_ep is not None
-            and absolute_episode is None
-            and season_num is not None
-            and episode_num is not None
+    mapped_from_sxx = (
+        abs_ep is not None
+        and absolute_episode is None
+        and season_num is not None
+        and episode_num is not None
+    )
+    if mapped_from_sxx:
+        search_season = None
+        search_episode = int(abs_ep)
+        LOGGER.info(
+            f"[GLOBAL SEARCH] Anime mapped S{int(season_num):02d}E{int(episode_num):02d} "
+            f"→ absolute {int(abs_ep)} for '{expected_title}'"
+            + (f" (via {map_source})" if map_source else "")
+            + "; trying absolute first"
         )
-        if run_parallel:
-            LOGGER.info(
-                f"[GLOBAL SEARCH] Parallel search for '{expected_title}': "
-                f"S{int(season_num):02d}E{int(episode_num):02d} + absolute {int(abs_ep)}"
-                + (f" (via {map_source})" if map_source else "")
-            )
-            sxx_task = asyncio.create_task(
-                global_search(
-                    expected_title,
-                    auth_channels,
-                    year=year,
-                    season=season_num,
-                    episode=episode_num,
-                )
-            )
-            abs_task = asyncio.create_task(
-                global_search(
-                    expected_title,
-                    auth_channels,
-                    year=year,
-                    season=None,
-                    episode=int(abs_ep),
-                )
-            )
-            sxx_results, abs_results = await asyncio.gather(
-                sxx_task, abs_task, return_exceptions=True
-            )
-            if isinstance(sxx_results, Exception):
-                LOGGER.error(f"[GLOBAL SEARCH] SxxExx search failed for '{expected_title}': {sxx_results}")
-                sxx_results = []
-            if isinstance(abs_results, Exception):
-                LOGGER.error(f"[GLOBAL SEARCH] absolute search failed for '{expected_title}': {abs_results}")
-                abs_results = []
 
-            global_results = list(sxx_results or [])
-            if abs_results:
-                seen = {
-                    (r.get("token") or r.get("title"), r.get("source_chat"))
-                    for r in global_results
-                }
-                for r in abs_results:
-                    key = (r.get("token") or r.get("title"), r.get("source_chat"))
-                    if key not in seen:
-                        global_results.append(r)
-                        seen.add(key)
-        else:
+    auth_channels = SettingsManager.current().auth_channels
+    try:
+        global_results = await global_search(
+            expected_title,
+            auth_channels,
+            year=year,
+            season=search_season,
+            episode=search_episode,
+        )
+    except Exception as e:
+        LOGGER.error(f"[GLOBAL SEARCH] search failed for '{expected_title}': {e}")
+        global_results = []
+
+    if not global_results and mapped_from_sxx:
+        LOGGER.info(
+            f"[GLOBAL SEARCH] Absolute {int(abs_ep)} empty for '{expected_title}'; "
+            f"falling back to S{int(season_num):02d}E{int(episode_num):02d}"
+        )
+        try:
             global_results = await global_search(
                 expected_title,
                 auth_channels,
                 year=year,
-                season=search_season,
-                episode=search_episode,
+                season=season_num,
+                episode=episode_num,
             )
-    except Exception as e:
-        LOGGER.error(f"[GLOBAL SEARCH] search failed for '{expected_title}': {e}")
-        global_results = []
+        except Exception as e:
+            LOGGER.error(f"[GLOBAL SEARCH] SxxExx fallback failed for '{expected_title}': {e}")
+            global_results = []
 
     return _streams_from_global_results(token, global_results)
 
