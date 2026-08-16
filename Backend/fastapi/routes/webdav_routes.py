@@ -75,10 +75,14 @@ async def _require_webdav_auth(request: Request, token: str) -> dict:
     if not _basic_ok(request):
         raise HTTPException(
             status_code=401,
-            detail="WebDAV Basic auth required",
+            detail="WebDAV Basic auth required. Set username/password in Settings → WebDAV, or clear both fields to disable Basic auth.",
             headers={"WWW-Authenticate": 'Basic realm="Telegram-Stremio WebDAV"'},
         )
-    token_data = await verify_token(token)
+    try:
+        token_data = await verify_token(token)
+    except HTTPException as e:
+        # Re-raise as 401 JSON-friendly (do not use admin login redirect)
+        raise HTTPException(status_code=401, detail=f"Invalid API token for WebDAV: {e.detail}")
     if token_data.get("subscription_expired") or token_data.get("limit_exceeded"):
         raise HTTPException(status_code=403, detail="Token expired or limit exceeded")
     return token_data
