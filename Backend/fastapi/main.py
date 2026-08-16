@@ -115,6 +115,7 @@ from Backend.fastapi.routes.api_routes import (
 from Backend.fastapi.routes.stream_routes import decay_client_failures
 from Backend.fastapi.routes.stream_routes import router as stream_router
 from Backend.fastapi.routes.stremio_routes import router as stremio_router
+from Backend.fastapi.routes.webdav_routes import router as webdav_router
 from Backend.fastapi.routes.template_routes import (
     admin_access_page,
     admin_dashboard_page,
@@ -168,6 +169,7 @@ async def _startup():
 #----- Streaming and Stremio routers
 app.include_router(stream_router)
 app.include_router(stremio_router)
+app.include_router(webdav_router)
 
 
 #----- Public routes (no authentication)

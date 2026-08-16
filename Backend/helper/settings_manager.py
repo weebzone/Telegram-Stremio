@@ -31,6 +31,8 @@ _DEFAULTS: Dict[str, Any] = {
     "show_proxy_and_non_proxy_both": False,
     "mediaflow_proxy": False,
     "mediaflow_password": "",
+    "webdav_user": "",
+    "webdav_password": "",
     "multi_tokens": [],
     "extra_databases": [],
     "global_search": False,
@@ -194,6 +196,14 @@ class Settings:
     @property
     def mediaflow_password(self) -> str:
         return str(self._d.get("mediaflow_password") or "")
+
+    @property
+    def webdav_user(self) -> str:
+        return str(self._d.get("webdav_user") or "").strip()
+
+    @property
+    def webdav_password(self) -> str:
+        return str(self._d.get("webdav_password") or "")
 
     @property
     def payment_instructions(self) -> str:

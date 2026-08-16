@@ -1007,7 +1007,49 @@ document.addEventListener('DOMContentLoaded', sessLoadStatus);
         </label>
     </div>
 
-    <!-- ── Databases ────────────────────────────────────────────────────── -->
+    
+    <!-- ── WebDAV ──────────────────────────────────────────────────────── -->
+    <div class="settings-card">
+        <h2><i class="fa-solid fa-hard-drive"></i> WebDAV (Jellyfin / Emby / Plex)</h2>
+        <p style="font-size:0.82rem;color:var(--text-sec);margin-bottom:1rem">
+            Expose your library as a virtual filesystem for Jellyfin, Emby, or Plex.
+            URL: <code id="webdav-url-hint">/webdav/&lt;API_TOKEN&gt;/</code>
+            Use any valid Stremio API token in the path. Optional Basic auth below.
+        </p>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4" style="margin-bottom:1rem">
+            <div>
+                <label class="s-label" for="webdav_user">WebDAV Username</label>
+                <input type="text" id="webdav_user" class="s-input"
+                    value="{{ settings.webdav_user | default('', true) }}"
+                    placeholder="Leave empty to disable Basic auth"
+                    autocomplete="off" spellcheck="false">
+            </div>
+            <div>
+                <label class="s-label" for="webdav_password">WebDAV Password</label>
+                <div style="position:relative">
+                    <input type="password" id="webdav_password" class="s-input"
+                        value="{{ settings.webdav_password | default('', true) }}"
+                        placeholder="Optional"
+                        style="padding-right:2.5rem"
+                        autocomplete="off" spellcheck="false">
+                    <button type="button" onclick="toggleWebdavPwdVisibility()"
+                        style="position:absolute;right:0.75rem;top:50%;transform:translateY(-50%);
+                               background:none;border:none;color:var(--text-sec);cursor:pointer">
+                        <i class="fa-solid fa-eye" id="webdav-eye-icon"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+        <p style="font-size:0.78rem;color:var(--text-sec)">
+            <i class="fa-solid fa-circle-info"></i>
+            Movies: <code>/webdav/TOKEN/Movies/</code> ·
+            TV: <code>/webdav/TOKEN/TV Shows/</code> ·
+            NFO files are generated automatically.
+            For Plex, mount with rclone then add the local path.
+        </p>
+    </div>
+
+<!-- ── Databases ────────────────────────────────────────────────────── -->
     <div class="settings-card">
         <h2><i class="fa-solid fa-database"></i> Databases</h2>
         <p style="font-size:0.83rem;color:var(--text-sec);margin-bottom:1rem">
@@ -1391,6 +1433,20 @@ function collectList(listKey) {
 }
 
 /* ── Save ──────────────────────────────────────────────────────────────── */
+
+function toggleWebdavPwdVisibility() {
+    const input = document.getElementById('webdav_password');
+    const icon = document.getElementById('webdav-eye-icon');
+    if (!input) return;
+    if (input.type === 'password') {
+        input.type = 'text';
+        if (icon) icon.className = 'fa-solid fa-eye-slash';
+    } else {
+        input.type = 'password';
+        if (icon) icon.className = 'fa-solid fa-eye';
+    }
+}
+
 async function saveSettings() {
     const btn   = document.getElementById('save-btn');
     const label = document.getElementById('save-label');
@@ -1456,6 +1512,8 @@ async function saveSettings() {
         show_proxy_and_non_proxy_both: document.getElementById('show_proxy_and_non_proxy_both').checked,
         mediaflow_proxy:               document.getElementById('mediaflow_proxy').checked,
         mediaflow_password:            document.getElementById('mediaflow_password').value,
+        webdav_user:                   document.getElementById('webdav_user').value.trim(),
+        webdav_password:               document.getElementById('webdav_password').value,
         multi_tokens:                  collectList('multi_tokens'),
         extra_databases:               collectList('extra_databases'),
         global_search:                 document.getElementById('global_search').checked,
@@ -1598,6 +1656,10 @@ function renderSettings(s) {
     document.getElementById('http_proxy_url').value = s.http_proxy_url || '';
     document.getElementById('mediaflow_proxy').checked = !!s.mediaflow_proxy;
     document.getElementById('mediaflow_password').value = s.mediaflow_password || '';
+    const wu = document.getElementById('webdav_user');
+    if (wu) wu.value = s.webdav_user || '';
+    const wp = document.getElementById('webdav_password');
+    if (wp) wp.value = s.webdav_password || '';
     toggleMediaflowFields();
 
     const titles = s.channel_titles || {};
