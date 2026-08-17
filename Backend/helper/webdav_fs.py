@@ -20,16 +20,18 @@ Layout (stable paths):
 
 from __future__ import annotations
 
-import asyncio
 import re
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import quote
 
 from Backend import db
 from Backend.helper.nfo_generator import episode_nfo, movie_nfo, season_nfo, tvshow_nfo
 from Backend.logger import LOGGER
 
+
+#----- sanitize a single path segment for Windows / media-server friendliness
 _INVALID = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
 
@@ -102,25 +104,24 @@ def parse_size_bytes(size_str: Any, parts: Optional[List[dict]] = None) -> int:
     return int(num * mult.get(unit, 1))
 
 
-def _oid_str(doc: dict) -> dict:
-    if "_id" in doc:
-        doc["_id"] = str(doc["_id"])
-    return doc
-
-
 @dataclass
 class VNode:
-    path: str
+    """One virtual filesystem node."""
+    path: str                          # absolute virtual path, no trailing slash (except root)
     name: str
     is_dir: bool
     size: int = 0
     mtime: float = field(default_factory=time.time)
     content_type: str = "application/octet-stream"
-    kind: str = ""
-    stream_id: Optional[str] = None
+    # for files:
+    kind: str = ""                     # movie_video | movie_nfo | show_nfo | season_nfo | episode_video | episode_nfo | poster
+    # stream payload
+    stream_id: Optional[str] = None    # QualityDetail.id (encoded stream hash)
     stream_name: Optional[str] = None
     parts: Optional[List[dict]] = None
+    # nfo body (generated on demand if empty)
     nfo_body: Optional[bytes] = None
+    # references back to DB
     media_type: Optional[str] = None
     tmdb_id: Optional[int] = None
     db_index: Optional[int] = None
@@ -132,14 +133,14 @@ class VNode:
 class WebDAVFilesystem:
     """
     Builds and caches a virtual tree from all storage databases.
-    Increased cache TTL for large libraries (50k+ files).
+    Cache TTL defaults to 5 minutes.
     """
 
-    def __init__(self, cache_ttl: int = 21600):  # 6 hours instead of 5 minutes
+    def __init__(self, cache_ttl: int = 300):
         self.cache_ttl = cache_ttl
         self._root: Optional[VNode] = None
         self._built_at: float = 0.0
-        self._lock = asyncio.Lock()
+        self._building = False
 
     def invalidate(self) -> None:
         self._built_at = 0.0
@@ -149,19 +150,20 @@ class WebDAVFilesystem:
         now = time.time()
         if self._root is not None and (now - self._built_at) < self.cache_ttl:
             return self._root
-
-        async with self._lock:
-            # Double-check after acquiring lock
-            now = time.time()
-            if self._root is not None and (now - self._built_at) < self.cache_ttl:
-                return self._root
-
-            LOGGER.info("[WebDAV] Building virtual filesystem tree (this can take a while with large libraries)…")
+        if self._building:
+            # another coroutine is building; wait briefly for it
+            for _ in range(50):
+                await _async_sleep(0.1)
+                if self._root is not None and (time.time() - self._built_at) < self.cache_ttl:
+                    return self._root
+        self._building = True
+        try:
             root = await self._build_tree()
             self._root = root
             self._built_at = time.time()
-            LOGGER.info("[WebDAV] Tree build finished")
             return root
+        finally:
+            self._building = False
 
     async def resolve(self, path: str) -> Optional[VNode]:
         root = await self.ensure_tree()
@@ -175,6 +177,7 @@ class WebDAVFilesystem:
                 return None
             child = node.children.get(part)
             if child is None:
+                # case-insensitive fallback
                 lower = part.lower()
                 child = next((c for n, c in node.children.items() if n.lower() == lower), None)
             if child is None:
@@ -189,6 +192,7 @@ class WebDAVFilesystem:
         return list(node.children.values())
 
     async def _build_tree(self) -> VNode:
+        LOGGER.info("[WebDAV] Building virtual filesystem tree…")
         root = VNode(path="/", name="", is_dir=True)
         movies_dir = VNode(path="/Movies", name="Movies", is_dir=True)
         shows_dir = VNode(path="/TV Shows", name="TV Shows", is_dir=True)
@@ -198,11 +202,11 @@ class WebDAVFilesystem:
         movie_count = 0
         show_count = 0
 
+        # walk every storage DB
         storage_keys = sorted(
             [k for k in db.dbs.keys() if k.startswith("storage_")],
-            key=lambda k: int(k.split("_")[1]) if k.split("_")[1].isdigit() else 0,
+            key=lambda k: int(k.split("_")[1]),
         )
-
         for db_key in storage_keys:
             storage = db.dbs[db_key]
             try:
@@ -210,25 +214,25 @@ class WebDAVFilesystem:
             except ValueError:
                 continue
 
-            # Movies
+            #----- Movies
             try:
                 cursor = storage["movie"].find({})
                 async for doc in cursor:
                     doc = _oid_str(doc)
                     doc.setdefault("db_index", db_index)
                     folder = movie_folder_name(doc)
+                    # avoid collisions
                     base_folder = folder
                     n = 2
                     while folder in movies_dir.children:
                         folder = f"{base_folder} [{n}]"
                         n += 1
                     folder_path = f"/Movies/{folder}"
-                    fnode = VNode(
-                        path=folder_path, name=folder, is_dir=True,
-                        media_type="movie", tmdb_id=doc.get("tmdb_id"), db_index=db_index
-                    )
+                    fnode = VNode(path=folder_path, name=folder, is_dir=True,
+                                  media_type="movie", tmdb_id=doc.get("tmdb_id"), db_index=db_index)
                     movies_dir.children[folder] = fnode
 
+                    # NFO
                     nfo_name = f"{folder}.nfo"
                     nfo_bytes = movie_nfo(doc).encode("utf-8")
                     fnode.children[nfo_name] = VNode(
@@ -245,15 +249,19 @@ class WebDAVFilesystem:
                     )
 
                     qualities = doc.get("telegram") or []
+                    q = pick_best_quality(qualities)
+                    # also expose every quality as separate file
                     for qual in qualities:
                         video_node = self._movie_video_node(folder_path, folder, doc, qual)
                         if video_node and video_node.name not in fnode.children:
                             fnode.children[video_node.name] = video_node
+                    if not qualities and q is None:
+                        pass
                     movie_count += 1
             except Exception as e:
                 LOGGER.warning("[WebDAV] movie scan failed on %s: %s", db_key, e)
 
-            # TV Shows
+            #----- TV Shows
             try:
                 cursor = storage["tv"].find({})
                 async for doc in cursor:
@@ -266,12 +274,11 @@ class WebDAVFilesystem:
                         folder = f"{base_folder} [{n}]"
                         n += 1
                     folder_path = f"/TV Shows/{folder}"
-                    snode = VNode(
-                        path=folder_path, name=folder, is_dir=True,
-                        media_type="tv", tmdb_id=doc.get("tmdb_id"), db_index=db_index
-                    )
+                    snode = VNode(path=folder_path, name=folder, is_dir=True,
+                                  media_type="tv", tmdb_id=doc.get("tmdb_id"), db_index=db_index)
                     shows_dir.children[folder] = snode
 
+                    # tvshow.nfo
                     nfo_bytes = tvshow_nfo(doc).encode("utf-8")
                     snode.children["tvshow.nfo"] = VNode(
                         path=f"{folder_path}/tvshow.nfo",
@@ -301,6 +308,7 @@ class WebDAVFilesystem:
                         )
                         snode.children[season_name] = season_node
 
+                        # season.nfo
                         snfo = season_nfo(doc, sn).encode("utf-8")
                         season_node.children["season.nfo"] = VNode(
                             path=f"{season_path}/season.nfo",
@@ -327,45 +335,45 @@ class WebDAVFilesystem:
                                 )
                                 if vnode and vnode.name not in season_node.children:
                                     season_node.children[vnode.name] = vnode
-
+                            # one episode NFO (shared across qualities)
                             ep_nfo_name = f"{show_short} S{sn:02d}E{en:02d} - {ep_title}.nfo"
-                            ep_nfo_bytes = episode_nfo(doc, season, ep).encode("utf-8")
-                            if ep_nfo_name not in season_node.children:
-                                season_node.children[ep_nfo_name] = VNode(
-                                    path=f"{season_path}/{ep_nfo_name}",
-                                    name=ep_nfo_name,
-                                    is_dir=False,
-                                    size=len(ep_nfo_bytes),
-                                    content_type="text/xml; charset=utf-8",
-                                    kind="episode_nfo",
-                                    nfo_body=ep_nfo_bytes,
-                                    media_type="tv",
-                                    tmdb_id=doc.get("tmdb_id"),
-                                    db_index=db_index,
-                                    season_number=sn,
-                                    episode_number=en,
-                                )
+                            ep_nfo_bytes = episode_nfo(doc, sn, ep).encode("utf-8")
+                            season_node.children[ep_nfo_name] = VNode(
+                                path=f"{season_path}/{ep_nfo_name}",
+                                name=ep_nfo_name,
+                                is_dir=False,
+                                size=len(ep_nfo_bytes),
+                                content_type="text/xml; charset=utf-8",
+                                kind="episode_nfo",
+                                nfo_body=ep_nfo_bytes,
+                                media_type="tv",
+                                tmdb_id=doc.get("tmdb_id"),
+                                db_index=db_index,
+                                season_number=sn,
+                                episode_number=en,
+                            )
                     show_count += 1
             except Exception as e:
                 LOGGER.warning("[WebDAV] tv scan failed on %s: %s", db_key, e)
 
-        LOGGER.info("[WebDAV] Built tree: %d movies, %d shows", movie_count, show_count)
+        LOGGER.info("[WebDAV] Tree ready: %s movies, %s shows", movie_count, show_count)
         return root
 
     def _movie_video_node(self, folder_path: str, folder: str, doc: dict, qual: dict) -> Optional[VNode]:
-        qname = str(qual.get("quality") or "Unknown").strip()
-        ext = quality_ext(qual.get("name") or "")
-        name = f"{folder} - {qname}{ext}"
+        qlabel = safe_name(str(qual.get("quality") or "Unknown"), 20)
+        raw_name = qual.get("name") or folder
+        ext = quality_ext(raw_name)
+        fname = f"{folder} - {qlabel}{ext}"
         size = parse_size_bytes(qual.get("size"), qual.get("parts"))
         return VNode(
-            path=f"{folder_path}/{name}",
-            name=name,
+            path=f"{folder_path}/{fname}",
+            name=fname,
             is_dir=False,
-            size=size,
-            content_type="video/x-matroska" if ext == ".mkv" else "video/mp4",
+            size=size or 1,
+            content_type=_mime_for_ext(ext),
             kind="movie_video",
             stream_id=qual.get("id"),
-            stream_name=qual.get("name"),
+            stream_name=raw_name,
             parts=qual.get("parts"),
             media_type="movie",
             tmdb_id=doc.get("tmdb_id"),
@@ -373,21 +381,30 @@ class WebDAVFilesystem:
         )
 
     def _episode_video_node(
-        self, season_path, show_short, sn, en, ep_title, doc, ep, qual
+        self,
+        season_path: str,
+        show_short: str,
+        sn: int,
+        en: int,
+        ep_title: str,
+        doc: dict,
+        ep: dict,
+        qual: dict,
     ) -> Optional[VNode]:
-        qname = str(qual.get("quality") or "Unknown").strip()
-        ext = quality_ext(qual.get("name") or "")
-        name = f"{show_short} S{sn:02d}E{en:02d} - {ep_title} - {qname}{ext}"
+        qlabel = safe_name(str(qual.get("quality") or "Unknown"), 20)
+        raw_name = qual.get("name") or f"{show_short}.S{sn:02d}E{en:02d}"
+        ext = quality_ext(raw_name)
+        fname = f"{show_short} S{sn:02d}E{en:02d} - {ep_title} - {qlabel}{ext}"
         size = parse_size_bytes(qual.get("size"), qual.get("parts"))
         return VNode(
-            path=f"{season_path}/{name}",
-            name=name,
+            path=f"{season_path}/{fname}",
+            name=fname,
             is_dir=False,
-            size=size,
-            content_type="video/x-matroska" if ext == ".mkv" else "video/mp4",
+            size=size or 1,
+            content_type=_mime_for_ext(ext),
             kind="episode_video",
             stream_id=qual.get("id"),
-            stream_name=qual.get("name"),
+            stream_name=raw_name,
             parts=qual.get("parts"),
             media_type="tv",
             tmdb_id=doc.get("tmdb_id"),
@@ -400,8 +417,47 @@ class WebDAVFilesystem:
 def normalize_path(path: str) -> str:
     if not path:
         return "/"
-    path = "/" + path.strip("/")
-    return path if path != "/" else "/"
+    path = path.replace("\\", "/")
+    # decode is caller's job; here just clean
+    while "//" in path:
+        path = path.replace("//", "/")
+    if not path.startswith("/"):
+        path = "/" + path
+    if len(path) > 1 and path.endswith("/"):
+        path = path.rstrip("/")
+    return path or "/"
 
 
-fs = WebDAVFilesystem(cache_ttl=21600)  # 6 hours
+def _mime_for_ext(ext: str) -> str:
+    return {
+        ".mkv": "video/x-matroska",
+        ".mp4": "video/mp4",
+        ".avi": "video/x-msvideo",
+        ".mov": "video/quicktime",
+        ".m4v": "video/x-m4v",
+        ".webm": "video/webm",
+        ".ts": "video/mp2t",
+        ".nfo": "text/xml; charset=utf-8",
+        ".jpg": "image/jpeg",
+        ".png": "image/png",
+    }.get(ext.lower(), "application/octet-stream")
+
+
+def _oid_str(doc: dict) -> dict:
+    from bson import ObjectId
+    out = {}
+    for k, v in doc.items():
+        if isinstance(v, ObjectId):
+            out[k] = str(v)
+        else:
+            out[k] = v
+    return out
+
+
+async def _async_sleep(sec: float) -> None:
+    import asyncio
+    await asyncio.sleep(sec)
+
+
+# singleton used by routes
+fs = WebDAVFilesystem(cache_ttl=300)
