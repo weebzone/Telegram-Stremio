@@ -109,51 +109,13 @@ async def dashboard_page(request: Request, _: bool = Depends(require_auth)):
             }
             for stream_id, info in ACTIVE_STREAMS.items()
         ]
-        connected_bots = len(multi_clients)
-        loads = work_loads_summary()
-        try:
-            proxy = (SettingsManager.current().streaming_proxy_url or "").rstrip("/")
-            if proxy:
-                import httpx
-                async with httpx.AsyncClient(timeout=4.0) as client:
-                    r = await client.get(f"{proxy}/api/state")
-                    if r.status_code == 200:
-                        cf = r.json()
-                        for s in cf.get("active_streams") or []:
-                            active_streams_data.append({
-                                "stream_id": s.get("stream_id"),
-                                "msg_id": s.get("msg_id"),
-                                "chat_id": s.get("chat_id"),
-                                "status": s.get("status", "active"),
-                                "total_bytes": s.get("total_bytes", 0),
-                                "avg_mbps": s.get("avg_mbps", 0),
-                                "instant_mbps": s.get("instant_mbps", 0),
-                                "peak_mbps": s.get("peak_mbps", s.get("avg_mbps", 0)),
-                                "client_index": s.get("client_index", 0),
-                                "dc_id": s.get("dc_id", 0),
-                                "duration": s.get("duration", 0),
-                                "meta": s.get("meta") or {"title": s.get("title") or "CF stream"},
-                            })
-                        if cf.get("botCount"):
-                            connected_bots = max(connected_bots, int(cf["botCount"]))
-                        cf_loads = cf.get("work_loads") or cf.get("loads") or {}
-                        if isinstance(loads, dict):
-                            for k, v in cf_loads.items():
-                                if k == "user":
-                                    continue
-                                try:
-                                    loads[str(k)] = max(int(loads.get(str(k), loads.get(int(k), 0) or 0)), int(v))
-                                except (TypeError, ValueError):
-                                    pass
-        except Exception:
-            pass
 
         system_stats = {
             "server_status": "running",
             "uptime": get_readable_time(now - StartTime),
             "telegram_bot": f"@{StreamBot.username}" if StreamBot and StreamBot.username else "@StreamBot",
-            "connected_bots": connected_bots,
-            "loads": loads,
+            "connected_bots": len(multi_clients),
+            "loads": work_loads_summary(),
             "version": __version__,
             "movies": total_movies,
             "tv_shows": total_tv_shows,

@@ -266,6 +266,11 @@
                         </span>
                     </div>
                     <p class="text-sm text-text-secondary">Current sessions only</p>
+                    {% if streaming_proxy_url %}
+                    <p class="text-xs text-primary mt-2 bg-primary/10 border border-primary/20 rounded-xl px-3 py-2">
+                        <i class="fa-solid fa-cloud"></i> Streaming Proxy active — live bot load &amp; speed for catalog streams are handled by the CF Worker. Local metrics below only cover non-proxy / host streams.
+                    </p>
+                    {% endif %}
                 </div>
 
                 <div class="p-6 space-y-6">

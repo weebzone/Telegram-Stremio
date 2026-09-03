@@ -27,7 +27,7 @@ from Backend.helper.auto_catalog import (
     update_auto_catalog_settings,
 )
 from Backend.helper.backup import export_config, import_config
-from Backend.helper.custom_dl import ACTIVE_STREAMS, ByteStreamer, _speed_test_single_client, run_speed_test
+from Backend.helper.custom_dl import ByteStreamer, _speed_test_single_client, run_speed_test
 from Backend.helper.encrypt import decode_string, encode_string
 from Backend.helper.health import run_health_checks
 from Backend.helper.manual_add import resolve_telegram_message, stamp_caption_by_ref
@@ -114,43 +114,19 @@ async def get_system_stats_api():
         db_stats = await db.get_database_stats()
         total_movies, total_tv_shows = db.content_totals(db_stats)
         api_tokens = await db.get_all_api_tokens()
-        total_active = len(ACTIVE_STREAMS)
-        connected = len(multi_clients)
-        loads = dict(work_loads) if isinstance(work_loads, dict) else {}
-        try:
-            proxy = (SettingsManager.current().streaming_proxy_url or "").rstrip("/")
-            if proxy:
-                import httpx
-                async with httpx.AsyncClient(timeout=4.0) as client:
-                    r = await client.get(f"{proxy}/api/state")
-                    if r.status_code == 200:
-                        cf = r.json()
-                        total_active += int(cf.get("total_active_streams") or len(cf.get("active_streams") or []))
-                        if cf.get("botCount"):
-                            connected = max(connected, int(cf["botCount"]))
-                        for k, v in (cf.get("work_loads") or cf.get("loads") or {}).items():
-                            if k == "user":
-                                continue
-                            try:
-                                loads[int(k)] = max(int(loads.get(int(k), 0)), int(v))
-                            except (TypeError, ValueError):
-                                pass
-        except Exception:
-            pass
+        
         return {
             "server_status": "running",
             "uptime": get_readable_time(time() - StartTime),
             "telegram_bot": f"@{StreamBot.username}" if StreamBot and StreamBot.username else "@StreamBot",
-            "connected_bots": connected,
+            "connected_bots": len(multi_clients),
             "version": __version__,
             "movies": total_movies,
             "tv_shows": total_tv_shows,
             "databases": db_stats,
             "total_databases": len(db_stats),
             "current_db_index": db.current_db_index,
-            "api_tokens": api_tokens,
-            "total_active_streams": total_active,
-            "loads": loads,
+            "api_tokens": api_tokens
         }
     except Exception as e:
         print(f"System Stats API Error: {e}")
@@ -571,31 +547,9 @@ async def speed_test_stream_api(
 async def get_admin_stats_api() -> dict:
     cache_size = sum(len(s._file_id_cache) for s in _streamer_by_client.values())
 
-    cf_loads: dict = {}
-    cf_bot_count = 0
-    try:
-        proxy = (SettingsManager.current().streaming_proxy_url or "").rstrip("/")
-        if proxy:
-            import httpx
-            async with httpx.AsyncClient(timeout=4.0) as client:
-                r = await client.get(f"{proxy}/api/state")
-                if r.status_code == 200:
-                    cf = r.json()
-                    cf_bot_count = int(cf.get("botCount") or 0)
-                    for k, v in (cf.get("work_loads") or cf.get("loads") or {}).items():
-                        if k == "user":
-                            continue
-                        try:
-                            cf_loads[int(k)] = int(v)
-                        except (TypeError, ValueError):
-                            pass
-    except Exception:
-        pass
-
     bot_stats = []
-    indices = set(multi_clients.keys()) | set(cf_loads.keys())
-    for client_index in sorted(indices):
-        load = max(work_loads.get(client_index, 0), cf_loads.get(client_index, 0))
+    for client_index in multi_clients:
+        load = work_loads.get(client_index, 0)
         failures = client_failures.get(client_index, 0)
         mbps = client_avg_mbps.get(client_index, 0.0)
 
@@ -617,7 +571,7 @@ async def get_admin_stats_api() -> dict:
 
     return {
         "cache_size": cache_size,
-        "total_bots": max(len(multi_clients), cf_bot_count),
+        "total_bots": len(multi_clients),
         "bot_workloads": bot_stats
     }
 

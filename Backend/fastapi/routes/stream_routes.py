@@ -698,48 +698,11 @@ async def get_stream_stats():
         }
         for info in RECENT_STREAMS
     ]
-    merged_loads = dict(work_loads) if isinstance(work_loads, dict) else {}
-    try:
-        from Backend.helper.settings_manager import SettingsManager
-        proxy = (SettingsManager.current().streaming_proxy_url or "").rstrip("/")
-        if proxy:
-            import httpx
-            async with httpx.AsyncClient(timeout=4.0) as client:
-                r = await client.get(f"{proxy}/api/state")
-                if r.status_code == 200:
-                    cf = r.json()
-                    for s in cf.get("active_streams") or []:
-                        active.append({
-                            "stream_id": s.get("stream_id"),
-                            "msg_id": s.get("msg_id"),
-                            "chat_id": s.get("chat_id"),
-                            "title": (s.get("meta") or {}).get("title") or s.get("title") or "CF stream",
-                            "client_index": s.get("client_index", 0),
-                            "dc_id": s.get("dc_id"),
-                            "status": s.get("status", "active"),
-                            "total_bytes": s.get("total_bytes", 0),
-                            "instant_mbps": s.get("instant_mbps", 0),
-                            "avg_mbps": s.get("avg_mbps", 0),
-                            "peak_mbps": s.get("peak_mbps", s.get("avg_mbps", 0)),
-                            "start_ts": s.get("start_ts"),
-                            "source": "cf",
-                        })
-                    cf_loads = cf.get("work_loads") or cf.get("loads") or {}
-                    for k, v in cf_loads.items():
-                        if k == "user":
-                            continue
-                        try:
-                            merged_loads[int(k)] = max(int(merged_loads.get(int(k), 0)), int(v))
-                        except (TypeError, ValueError):
-                            pass
-    except Exception:
-        pass
-
     return JSONResponse({
         "active_streams": active,
         "recent_streams": recent,
         "client_dc_map": client_dc_map,
-        "work_loads": merged_loads,
+        "work_loads": work_loads,
     })
 
 
