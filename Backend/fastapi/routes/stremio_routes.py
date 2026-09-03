@@ -48,6 +48,15 @@ def build_proxy_url(original_url: str) -> str | None:
         return url
     return f"{base}{original_url}"
 
+
+#----- Base URL used for /dl/ stream links. Prefer CF streaming proxy when set.
+def stream_base_url() -> str:
+    settings = SettingsManager.current()
+    proxy = (settings.streaming_proxy_url or "").rstrip("/")
+    if proxy:
+        return proxy
+    return settings.base_url
+
 _membership_cache: dict = {}
 _MEMBERSHIP_TTL = 60
 _MEMBERSHIP_CACHE_MAX = 5000
@@ -775,7 +784,7 @@ def _streams_from_global_results(token: str, global_results: list) -> list:
         if is_split:
             kind = "zip parts" if r.get("is_zip") else "parts"
             stream_title += f" · 📦 {r.get('part_count', 0)} {kind}"
-        url = f"{SettingsManager.current().base_url}/dl/{token}/{r['token']}/{quote(r['title'])}"
+        url = f"{stream_base_url()}/dl/{token}/{r['token']}/{quote(r['title'])}"
         size_bytes = parse_size_to_bytes(r.get("size", ""))
         streams.append({"name": stream_name, "title": stream_title, "url": url, "size_bytes": size_bytes})
     return streams
@@ -1047,7 +1056,7 @@ async def get_streams(
                     if label.lower() not in stream_name.lower():
                         stream_name = f"{stream_name} {label}"
 
-                original_url = f"{SettingsManager.current().base_url}/dl/{token}/{quality.get('id')}/video.mkv"
+                original_url = f"{stream_base_url()}/dl/{token}/{quality.get('id')}/video.mkv"
                 proxy_url = build_proxy_url(original_url)
 
                 if SettingsManager.current().show_proxy_and_non_proxy_both and proxy_url:

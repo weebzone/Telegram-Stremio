@@ -28,6 +28,7 @@ _DEFAULTS: Dict[str, Any] = {
     "payment_instructions": "",
     "payment_qr_url": "",
     "http_proxy_url": "",
+    "streaming_proxy_url": "",
     "show_proxy_and_non_proxy_both": False,
     "mediaflow_proxy": False,
     "mediaflow_password": "",
@@ -192,6 +193,10 @@ class Settings:
     @property
     def http_proxy_url(self) -> str:
         return str(self._d.get("http_proxy_url") or "")
+
+    @property
+    def streaming_proxy_url(self) -> str:
+        return str(self._d.get("streaming_proxy_url") or "").rstrip("/")
 
     @property
     def mediaflow_password(self) -> str:
@@ -427,7 +432,7 @@ class SettingsManager:
             results["auth_channels"] = f"{len(new_channels)} channel(s) saved"
 
         #----- Proxy settings changed
-        proxy_keys = {"http_proxy_url", "show_proxy_and_non_proxy_both", "mediaflow_proxy", "mediaflow_password"}
+        proxy_keys = {"http_proxy_url", "streaming_proxy_url", "show_proxy_and_non_proxy_both", "mediaflow_proxy", "mediaflow_password"}
         if any(old.get(k) != new.get(k) for k in proxy_keys):
             results["proxy"] = "updated — applies to next outbound request"
 

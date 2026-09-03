@@ -962,6 +962,15 @@ document.addEventListener('DOMContentLoaded', sessLoadStatus);
                 value="{{ settings.http_proxy_url }}"
                 placeholder="http://user:pass@host:port or leave empty"
                 oninput="toggleMediaflowFields()">
+            <p class="s-hint">Optional outbound HTTP proxy / MediaFlow base (legacy).</p>
+        </div>
+
+        <div class="s-field" style="margin-top:1rem;">
+            <label class="s-label" for="streaming_proxy_url">Streaming Proxy URL (Cloudflare Worker)</label>
+            <input type="url" id="streaming_proxy_url" class="s-input"
+                value="{{ settings.streaming_proxy_url }}"
+                placeholder="https://your-worker.workers.dev">
+            <p class="s-hint">When set, all Stremio <code>/dl/</code> stream links point here so bandwidth is consumed by the CF Worker instead of this host (Render/Koyeb/etc). Deploy the companion CF Worker and paste its public URL.</p>
         </div>
 
         <div id="mediaflow-wrap" style="{% if not settings.http_proxy_url %}display:none{% endif %}">
@@ -1508,6 +1517,7 @@ async function saveSettings() {
         payment_qr_url:                document.getElementById('payment_qr_url').value.trim(),
         approver_ids:                  collectList('approver_ids').map(Number),
         http_proxy_url:                document.getElementById('http_proxy_url').value.trim(),
+        streaming_proxy_url:           document.getElementById('streaming_proxy_url').value.trim(),
         show_proxy_and_non_proxy_both: document.getElementById('show_proxy_and_non_proxy_both').checked,
         mediaflow_proxy:               document.getElementById('mediaflow_proxy').checked,
         mediaflow_password:            document.getElementById('mediaflow_password').value,
@@ -1653,6 +1663,7 @@ function renderSettings(s) {
     document.getElementById('upstream_branch').value = s.upstream_branch || '';
     document.getElementById('subscription_group_id').value = s.subscription_group_id || 0;
     document.getElementById('http_proxy_url').value = s.http_proxy_url || '';
+    document.getElementById('streaming_proxy_url').value = s.streaming_proxy_url || '';
     document.getElementById('mediaflow_proxy').checked = !!s.mediaflow_proxy;
     document.getElementById('mediaflow_password').value = s.mediaflow_password || '';
     const wu = document.getElementById('webdav_user');
