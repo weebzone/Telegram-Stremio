@@ -247,6 +247,8 @@ async def update_media_api(
                 except (ValueError, TypeError):
                     pass
         update_data = {k: v for k, v in update_data.items() if v != ""}
+        if "title" in update_data:
+            update_data["title_english"] = update_data["title"]
         result = await db.update_document(media_type, tmdb_id, db_index, update_data)
         if result:
             return {"message": "Media updated successfully"}
