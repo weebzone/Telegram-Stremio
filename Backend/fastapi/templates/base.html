@@ -148,45 +148,54 @@ body::before {
     box-shadow: 0 0 0 3px var(--ring);
 }
 
-html.style-glass_ios .glass-panel,
-html.style-glass_ios .surface-card {
-    background: color-mix(in srgb, var(--card) 55%, transparent);
-    backdrop-filter: blur(28px) saturate(180%);
-    -webkit-backdrop-filter: blur(28px) saturate(180%);
-    border: 1px solid color-mix(in srgb, var(--text) 14%, transparent);
-    box-shadow: 0 8px 32px rgba(0,0,0,.28), inset 0 1px 0 color-mix(in srgb, var(--text) 12%, transparent);
-    border-radius: 1.35rem;
+html.style-glassy .glass-panel,
+html.style-glassy .surface-card {
+    background: color-mix(in srgb, var(--card) 28%, transparent);
+    backdrop-filter: blur(48px) saturate(220%);
+    -webkit-backdrop-filter: blur(48px) saturate(220%);
+    border: 1px solid color-mix(in srgb, var(--text) 18%, transparent);
+    box-shadow: 0 12px 40px rgba(0,0,0,.32), inset 0 1px 0 color-mix(in srgb, var(--text) 18%, transparent);
+    border-radius: 1.5rem;
 }
-html.style-glass_ios .glass-nav {
-    background: color-mix(in srgb, var(--card) 45%, transparent);
-    backdrop-filter: blur(32px) saturate(200%);
-    -webkit-backdrop-filter: blur(32px) saturate(200%);
-    border-bottom: 1px solid color-mix(in srgb, var(--text) 10%, transparent);
+html.style-glassy body::before {
+    opacity: 1;
+    filter: blur(0px);
 }
-html.style-glass_ios .btn-primary {
+html.style-glassy .glass-nav {
+    background: color-mix(in srgb, var(--card) 30%, transparent);
+    backdrop-filter: blur(56px) saturate(240%);
+    -webkit-backdrop-filter: blur(56px) saturate(240%);
+    border-bottom: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
+}
+html.style-glassy .btn-primary {
     border-radius: 9999px;
     font-weight: 600;
-    box-shadow: 0 6px 20px color-mix(in srgb, var(--primary) 40%, transparent);
-    border: none;
+    background: color-mix(in srgb, var(--primary) 85%, transparent);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow: 0 8px 28px color-mix(in srgb, var(--primary) 45%, transparent);
+    border: 1px solid color-mix(in srgb, var(--text) 15%, transparent);
 }
-html.style-glass_ios .btn-ghost {
+html.style-glassy .btn-ghost {
     border-radius: 9999px;
-    background: color-mix(in srgb, var(--card) 40%, transparent);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
+    background: color-mix(in srgb, var(--card) 28%, transparent);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid color-mix(in srgb, var(--text) 14%, transparent);
 }
-html.style-glass_ios .field {
+html.style-glassy .field {
     border-radius: 9999px;
-    background: color-mix(in srgb, var(--card) 40%, transparent);
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
-    border: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
+    background: color-mix(in srgb, var(--card) 25%, transparent);
+    backdrop-filter: blur(18px) saturate(180%);
+    -webkit-backdrop-filter: blur(18px) saturate(180%);
+    border: 1px solid color-mix(in srgb, var(--text) 14%, transparent);
 }
-html.style-glass_ios .badge {
+html.style-glassy .badge {
     border-radius: 9999px;
-    background: color-mix(in srgb, var(--primary) 20%, transparent);
-    border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent);
+    background: color-mix(in srgb, var(--primary) 22%, transparent);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid color-mix(in srgb, var(--primary) 35%, transparent);
 }
 
 html.style-neo_brutal .glass-panel,
@@ -521,7 +530,7 @@ tailwind.config = {
                     </div>
 
                     <div class="mb-4">
-                        <label class="text-[10px] uppercase text-text-secondary font-bold mb-2 block ml-1">App Theme</label>
+                        <label class="text-[10px] uppercase text-text-secondary font-bold mb-2 block ml-1">Color</label>
                         <div class="theme-grid">
                             {% for theme_key, theme_data in themes.items() %}
                             <button type="button"
@@ -538,8 +547,21 @@ tailwind.config = {
                             </button>
                             {% endfor %}
                         </div>
+                        <label class="text-[10px] uppercase text-text-secondary font-bold mb-2 mt-3 block ml-1">Theme</label>
+                        <div class="theme-grid">
+                            {% for style_key, style_data in styles.items() %}
+                            <button type="button"
+                                onclick="selectStyle('{{ style_key }}')"
+                                class="theme-chip {% if current_style==style_key %}active{% endif %}"
+                                title="{{ style_data.name }}">
+                                <span class="theme-chip-name">{{ style_data.name }}</span>
+                                {% if current_style==style_key %}<i class="fa-solid fa-check chip-check"></i>{% endif %}
+                            </button>
+                            {% endfor %}
+                        </div>
                         <form id="theme-form" method="post" action="/set-theme" class="hidden">
                             <input type="hidden" name="theme" id="theme-input">
+                            <input type="hidden" name="style" id="style-input">
                         </form>
                     </div>
 
@@ -694,6 +716,17 @@ function selectTheme(key) {
     const form = document.getElementById('theme-form');
     if (!input || !form) return;
     input.value = key;
+    const s = document.getElementById('style-input');
+    if (s) s.value = '';
+    form.submit();
+}
+function selectStyle(key) {
+    const input = document.getElementById('style-input');
+    const form = document.getElementById('theme-form');
+    if (!input || !form) return;
+    input.value = key;
+    const c = document.getElementById('theme-input');
+    if (c) c.value = '';
     form.submit();
 }
 

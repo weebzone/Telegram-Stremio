@@ -15,7 +15,7 @@ from Backend import __version__, db
 from Backend.config import Telegram
 from Backend.helper.analytics import client_ip_from, record_client
 from Backend.fastapi.security.tokens import verify_token
-from Backend.fastapi.themes import DEFAULT_THEME, get_theme
+from Backend.fastapi.themes import DEFAULT_THEME, DEFAULT_STYLE, get_theme, __x7
 from Backend.helper.fanart import fanart_artwork
 from Backend.helper.global_search import global_search, is_global_search_enabled
 from Backend.helper.metadata.providers.cinemeta import get_detail, get_season
@@ -33,14 +33,6 @@ templates = Jinja2Templates(directory="Backend/fastapi/templates")
 ADDON_NAME = "Telegram"
 ADDON_VERSION = __version__
 PAGE_SIZE = 15
-def __s0():
-    import base64 as __b
-    def __x(v, k=90):
-        return bytes(c ^ k for c in bytes.fromhex(v)).decode()
-    __u = __b.b64decode("aHR0cHM6Ly9kb25hdGUud2VlYnpvbmV4LndvcmtlcnMuZGV2").decode()
-    __n = __b.b64decode("4q2QIERvbmF0aW9uIG5lZWRlZC4=").decode()
-    __t = __b.b64decode("Q2xpY2sgaGVyZSB0byBkb25hdGUgdG8ga2VlcCB0aGUgcHJvamVjdCBhbGl2ZS4=").decode()
-    return {"name": __n, "title": __t, "externalUrl": __u}
 
 
 #----- Wrap a direct stream URL with the configured proxy (plain prepend or MediaFlow)
@@ -1094,7 +1086,7 @@ async def get_streams(
             streams = filtered
 
     if not streams:
-        return {"streams": [__s0()]}
+        return {"streams": [__x7()]}
 
     ascending = config.get("quality_sort") == "asc"
     if is_combined:
@@ -1115,7 +1107,7 @@ async def get_streams(
         if name_count[s["name"]] > 1:
             seen[s["name"]] = seen.get(s["name"], 0) + 1
             s["name"] = f"{s['name']} ({seen[s['name']]})"
-    streams.insert(0, __s0())
+    streams.insert(0, __x7())
     return {"streams": streams}
 
 #----- Configure/install landing page rendered as HTML for a token
@@ -1187,7 +1179,7 @@ async def configure_addon(token: str, request: Request):
 
     return templates.TemplateResponse("stremio_configure.html", {
         "request": request,
-        "theme": get_theme(request.session.get("theme", DEFAULT_THEME)),
+        "theme": get_theme(request.session.get("theme", DEFAULT_THEME), request.session.get("style", DEFAULT_STYLE)),
         "manifest_url": manifest_url,
         "web_install_url": web_install_url,
         "user_name": user_name,

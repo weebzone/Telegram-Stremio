@@ -7,7 +7,7 @@ from fastapi.templating import Jinja2Templates
 from Backend import StartTime, __version__, db
 from Backend.config import Telegram
 from Backend.fastapi.security.credentials import get_current_user, is_authenticated, require_auth, verify_credentials
-from Backend.fastapi.themes import DEFAULT_THEME, get_all_themes, get_theme
+from Backend.fastapi.themes import DEFAULT_THEME, DEFAULT_STYLE, get_all_themes, get_all_styles, get_theme
 from Backend.helper.analytics import get_activity_overview
 from Backend.helper.custom_dl import ACTIVE_STREAMS, RECENT_STREAMS
 from Backend.helper.metadata import resolve_cover_url
@@ -23,11 +23,14 @@ templates.env.globals["cover_url"] = resolve_cover_url
 #----- Shared template context (request, theme metadata) for every page
 def _base_context(request: Request) -> dict:
     theme_name = request.session.get("theme", DEFAULT_THEME)
+    style_name = request.session.get("style", DEFAULT_STYLE)
     return {
         "request": request,
-        "theme": get_theme(theme_name),
+        "theme": get_theme(theme_name, style_name),
         "themes": get_all_themes(),
+        "styles": get_all_styles(),
         "current_theme": theme_name,
+        "current_style": style_name,
     }
 
 
@@ -63,9 +66,11 @@ async def logout(request: Request):
 
 
 #----- Persist the chosen theme and return to the referring page
-async def set_theme(request: Request, theme: str = Form(...)):
-    if theme in get_all_themes():
+async def set_theme(request: Request, theme: str = Form(None), style: str = Form(None)):
+    if theme and theme in get_all_themes():
         request.session["theme"] = theme
+    if style and style in get_all_styles():
+        request.session["style"] = style
     return RedirectResponse(url=request.headers.get("referer", "/"), status_code=302)
 
 
