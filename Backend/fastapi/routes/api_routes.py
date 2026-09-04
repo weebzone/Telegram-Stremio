@@ -1663,7 +1663,7 @@ async def update_catalog_order_api(payload: dict):
     return {"ok": True, "message": "Catalog order saved."}
 
 
-async def get_user_activity_api(page: int = 1, per_page: int = 12):
+async def get_user_activity_api(page: int = 1, per_page: int = 5):
     try:
         return await get_activity_overview(page, per_page)
     except Exception as e:

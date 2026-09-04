@@ -190,7 +190,7 @@ async def record_client(token: str, name: str, ip: str, user_agent: str = "") ->
     await _record(token, name, ip, user_agent, is_client=True)
 
 
-async def get_activity_overview(page: int = 1, per_page: int = 12) -> dict:
+async def get_activity_overview(page: int = 1, per_page: int = 5) -> dict:
     now = datetime.utcnow()
     cutoff = now - timedelta(seconds=ONLINE_WINDOW)
     coll = db.dbs["tracking"]["user_activity"]

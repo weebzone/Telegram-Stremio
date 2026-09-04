@@ -147,9 +147,9 @@ async def dashboard_page(request: Request, _: bool = Depends(require_auth)):
 
     ctx["system_stats"] = system_stats
     try:
-        ctx["user_activity_initial"] = await get_activity_overview(1, 12)
+        ctx["user_activity_initial"] = await get_activity_overview(1, 5)
     except Exception:
-        ctx["user_activity_initial"] = {"users": [], "online_count": 0, "total": 0, "page": 1, "per_page": 12, "total_pages": 1}
+        ctx["user_activity_initial"] = {"users": [], "online_count": 0, "total": 0, "page": 1, "per_page": 5, "total_pages": 1}
     return templates.TemplateResponse("dashboard.html", ctx)
 
 

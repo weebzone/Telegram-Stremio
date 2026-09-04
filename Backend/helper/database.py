@@ -2306,6 +2306,11 @@ class Database:
 
     async def revoke_api_token(self, token: str) -> bool:
         result = await self.dbs["tracking"]["api_tokens"].delete_one({"token": token})
+        if result.deleted_count > 0:
+            try:
+                await self.dbs["tracking"]["user_activity"].delete_one({"_id": token})
+            except Exception:
+                pass
         return result.deleted_count > 0
 
     async def set_token_config(self, token: str, config: dict) -> bool:

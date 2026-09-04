@@ -93,7 +93,7 @@
                     return Math.floor(d / 86400) + 'd ago';
                 }
                 let uaPage = 1;
-                const uaPerPage = 12;
+                const uaPerPage = 5;
                 window.__UA_INITIAL__ = {{ user_activity_initial | tojson }};
                 function renderUaPagination(data) {
                     const el = document.getElementById('ua-pagination');

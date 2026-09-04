@@ -4,6 +4,7 @@ THEMES = {
     "graphite_amber": {
         "name": "Graphite Amber",
         "is_dark": True,
+        "style": "default",
         "colors": {
             "primary": "#F59E0B",
             "secondary": "#D97706",
@@ -19,6 +20,7 @@ THEMES = {
     "amoled_midnight": {
         "name": "AMOLED Midnight",
         "is_dark": True,
+        "style": "default",
         "colors": {
             "primary": "#38BDF8",
             "secondary": "#0EA5E9",
@@ -34,6 +36,7 @@ THEMES = {
     "obsidian_emerald": {
         "name": "Obsidian Emerald",
         "is_dark": True,
+        "style": "default",
         "colors": {
             "primary": "#10B981",
             "secondary": "#059669",
@@ -49,6 +52,7 @@ THEMES = {
     "royal_violet": {
         "name": "Royal Violet",
         "is_dark": True,
+        "style": "default",
         "colors": {
             "primary": "#8B5CF6",
             "secondary": "#7C3AED",
@@ -64,6 +68,7 @@ THEMES = {
     "slate_ocean": {
         "name": "Slate Ocean",
         "is_dark": True,
+        "style": "default",
         "colors": {
             "primary": "#0EA5E9",
             "secondary": "#0284C7",
@@ -79,6 +84,7 @@ THEMES = {
     "charcoal_violet": {
         "name": "Charcoal Violet",
         "is_dark": True,
+        "style": "default",
         "colors": {
             "primary": "#B6FF00",
             "secondary": "#93CC00",
@@ -94,6 +100,7 @@ THEMES = {
     "fresh_canopy": {
         "name": "Fresh Canopy",
         "is_dark": True,
+        "style": "default",
         "colors": {
             "primary": "#E4FD97",
             "secondary": "#C3E86B",
@@ -109,6 +116,7 @@ THEMES = {
     "tiffany_noir": {
         "name": "Tiffany Noir",
         "is_dark": True,
+        "style": "default",
         "colors": {
             "primary": "#21F1A8",
             "secondary": "#12C88A",
@@ -124,6 +132,7 @@ THEMES = {
     "bridal_blush": {
         "name": "Bridal Blush",
         "is_dark": True,
+        "style": "default",
         "colors": {
             "primary": "#FFC6A8",
             "secondary": "#E8A98A",
@@ -139,6 +148,7 @@ THEMES = {
     "rose_quartz": {
         "name": "Rose Quartz",
         "is_dark": False,
+        "style": "default",
         "colors": {
             "primary": "#E11D48",
             "secondary": "#BE123C",
@@ -154,6 +164,7 @@ THEMES = {
     "daylight_sky": {
         "name": "Daylight Sky",
         "is_dark": False,
+        "style": "default",
         "colors": {
             "primary": "#2563EB",
             "secondary": "#1D4ED8",
@@ -169,6 +180,7 @@ THEMES = {
     "sage_linen": {
         "name": "Sage Linen",
         "is_dark": False,
+        "style": "default",
         "colors": {
             "primary": "#0F766E",
             "secondary": "#0D9488",
@@ -184,6 +196,7 @@ THEMES = {
     "golden_hour": {
         "name": "Golden Hour",
         "is_dark": False,
+        "style": "default",
         "colors": {
             "primary": "#B45309",
             "secondary": "#92400E",
@@ -195,12 +208,46 @@ THEMES = {
             "text_secondary": "#7A5A2E"
         },
         "css_classes": "theme-golden-hour"
+    },
+    "glass_ios": {
+        "name": "Glass iOS",
+        "is_dark": True,
+        "style": "glass_ios",
+        "colors": {
+            "primary": "#0A84FF",
+            "secondary": "#5E5CE6",
+            "accent": "#64D2FF",
+            "background": "#000000",
+            "card": "#1C1C1E",
+            "border": "#2C2C2E",
+            "text": "#F5F5F7",
+            "text_secondary": "#8E8E93"
+        },
+        "css_classes": "theme-glass-ios"
+    },
+    "neo_brutalism": {
+        "name": "Neo Brutalism",
+        "is_dark": False,
+        "style": "neo_brutal",
+        "colors": {
+            "primary": "#FF2E63",
+            "secondary": "#08D9D6",
+            "accent": "#FFC107",
+            "background": "#F4F1DE",
+            "card": "#FFFFFF",
+            "border": "#1A1A1A",
+            "text": "#1A1A1A",
+            "text_secondary": "#4A4A4A"
+        },
+        "css_classes": "theme-neo-brutalism"
     }
 }
 
 #----- Resolve a theme by name, falling back to the default
 def get_theme(theme_name: str = DEFAULT_THEME):
-    return THEMES.get(theme_name, THEMES[DEFAULT_THEME])
+    theme = dict(THEMES.get(theme_name, THEMES[DEFAULT_THEME]))
+    theme.setdefault("style", "default")
+    return theme
 
 
 #----- Return the full theme registry

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class="{{ 'dark' if theme.is_dark else 'light' }}">
+<html lang="en" class="{{ 'dark' if theme.is_dark else 'light' }} style-{{ theme.style|default('default') }}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -77,10 +77,12 @@ body::before {
         radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--card) 40%, transparent), transparent 60%);
 }
 
+
 .glass-panel {
     background: color-mix(in srgb, var(--card) 90%, var(--bg));
     border: 1px solid var(--hairline);
     box-shadow: var(--shadow-soft);
+    border-radius: 1.5rem;
 }
 
 .glass-nav {
@@ -144,6 +146,111 @@ body::before {
     outline: none;
     border-color: var(--primary);
     box-shadow: 0 0 0 3px var(--ring);
+}
+
+html.style-glass_ios .glass-panel,
+html.style-glass_ios .surface-card {
+    background: color-mix(in srgb, var(--card) 55%, transparent);
+    backdrop-filter: blur(28px) saturate(180%);
+    -webkit-backdrop-filter: blur(28px) saturate(180%);
+    border: 1px solid color-mix(in srgb, var(--text) 14%, transparent);
+    box-shadow: 0 8px 32px rgba(0,0,0,.28), inset 0 1px 0 color-mix(in srgb, var(--text) 12%, transparent);
+    border-radius: 1.35rem;
+}
+html.style-glass_ios .glass-nav {
+    background: color-mix(in srgb, var(--card) 45%, transparent);
+    backdrop-filter: blur(32px) saturate(200%);
+    -webkit-backdrop-filter: blur(32px) saturate(200%);
+    border-bottom: 1px solid color-mix(in srgb, var(--text) 10%, transparent);
+}
+html.style-glass_ios .btn-primary {
+    border-radius: 9999px;
+    font-weight: 600;
+    box-shadow: 0 6px 20px color-mix(in srgb, var(--primary) 40%, transparent);
+    border: none;
+}
+html.style-glass_ios .btn-ghost {
+    border-radius: 9999px;
+    background: color-mix(in srgb, var(--card) 40%, transparent);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
+}
+html.style-glass_ios .field {
+    border-radius: 9999px;
+    background: color-mix(in srgb, var(--card) 40%, transparent);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
+}
+html.style-glass_ios .badge {
+    border-radius: 9999px;
+    background: color-mix(in srgb, var(--primary) 20%, transparent);
+    border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent);
+}
+
+html.style-neo_brutal .glass-panel,
+html.style-neo_brutal .surface-card {
+    background: var(--card);
+    border: 3px solid var(--text);
+    box-shadow: 6px 6px 0 var(--text);
+    border-radius: 0.75rem;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+html.style-neo_brutal .glass-nav {
+    background: var(--card);
+    border-bottom: 3px solid var(--text);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+html.style-neo_brutal .btn-primary {
+    background: var(--primary);
+    color: var(--bg);
+    font-weight: 900;
+    border: 3px solid var(--text);
+    border-radius: 0.5rem;
+    box-shadow: 4px 4px 0 var(--text);
+}
+html.style-neo_brutal .btn-primary:hover {
+    transform: translate(-2px, -2px);
+    box-shadow: 6px 6px 0 var(--text);
+    filter: none;
+}
+html.style-neo_brutal .btn-primary:active {
+    transform: translate(2px, 2px);
+    box-shadow: 1px 1px 0 var(--text);
+}
+html.style-neo_brutal .btn-ghost {
+    background: var(--card);
+    color: var(--text);
+    font-weight: 900;
+    border: 3px solid var(--text);
+    border-radius: 0.5rem;
+    box-shadow: 4px 4px 0 var(--text);
+}
+html.style-neo_brutal .btn-ghost:hover {
+    transform: translate(-2px, -2px);
+    box-shadow: 6px 6px 0 var(--text);
+}
+html.style-neo_brutal .badge {
+    border: 2px solid var(--text);
+    border-radius: 0.35rem;
+    font-weight: 900;
+    box-shadow: 2px 2px 0 var(--text);
+    background: var(--accent);
+    color: var(--text);
+}
+html.style-neo_brutal .field {
+    background: var(--card);
+    border: 3px solid var(--text);
+    border-radius: 0.5rem;
+    box-shadow: 3px 3px 0 var(--text);
+}
+html.style-neo_brutal .field:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 3px 3px 0 var(--primary);
 }
 
 .tabular { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }

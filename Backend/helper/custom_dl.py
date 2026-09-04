@@ -21,6 +21,44 @@ from Backend.pyrofork.bot import client_avg_mbps, client_dc_map, client_failures
 
 ACTIVE_STREAMS: Dict[str, Dict] = {}
 RECENT_STREAMS = deque(maxlen=20)
+STALE_STREAM_IDLE = 180
+_STALE_CLEANER_STARTED = False
+
+
+async def _cleanup_stale_streams():
+    while True:
+        try:
+            await asyncio.sleep(30)
+            now = time.time()
+            stale = []
+            for sid, entry in list(ACTIVE_STREAMS.items()):
+                last = entry.get("last_ts") or entry.get("start_ts") or 0
+                status = entry.get("status") or "active"
+                total = entry.get("total_bytes") or 0
+                idle = now - last
+                if status != "active" or idle > STALE_STREAM_IDLE or (total == 0 and idle > 60):
+                    stale.append(sid)
+            for sid in stale:
+                try:
+                    entry = ACTIVE_STREAMS.pop(sid, None)
+                    if entry:
+                        entry["status"] = "stale"
+                        entry["end_ts"] = now
+                        RECENT_STREAMS.appendleft(entry)
+                        idx = entry.get("client_index")
+                        if idx is not None and idx in work_loads:
+                            work_loads[idx] = max(0, work_loads[idx] - 1)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+
+def _ensure_stale_cleaner():
+    global _STALE_CLEANER_STARTED
+    if not _STALE_CLEANER_STARTED:
+        _STALE_CLEANER_STARTED = True
+        asyncio.create_task(_cleanup_stale_streams())
 
 
 #----- Telegram file byte streamer with prefetch, multi-client parallelism, and telemetry
@@ -38,6 +76,7 @@ class ByteStreamer:
             ByteStreamer._instances[client_index] = self
         asyncio.create_task(self._clean_cache())
         asyncio.create_task(self._prewarm_sessions())
+        _ensure_stale_cleaner()
 
     async def _prewarm_sessions(self):
         common_dcs = [1, 2, 4, 5]
