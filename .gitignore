@@ -10,4 +10,5 @@ log.txt
 /.vscode/
 test.py
 config.env
+Caddyfile
 *.pyc

@@ -15,7 +15,7 @@ from Backend import __version__, db
 from Backend.config import Telegram
 from Backend.helper.analytics import client_ip_from, record_client
 from Backend.fastapi.security.tokens import verify_token
-from Backend.fastapi.themes import DEFAULT_THEME, DEFAULT_STYLE, get_theme, __x7
+from Backend.fastapi.themes import DEFAULT_THEME, DEFAULT_STYLE, get_theme
 from Backend.helper.fanart import fanart_artwork
 from Backend.helper.global_search import global_search, is_global_search_enabled
 from Backend.helper.metadata.providers.cinemeta import get_detail, get_season
@@ -1086,7 +1086,7 @@ async def get_streams(
             streams = filtered
 
     if not streams:
-        return {"streams": [__x7()]}
+        return {"streams": []}
 
     ascending = config.get("quality_sort") == "asc"
     if is_combined:
@@ -1107,7 +1107,6 @@ async def get_streams(
         if name_count[s["name"]] > 1:
             seen[s["name"]] = seen.get(s["name"], 0) + 1
             s["name"] = f"{s['name']} ({seen[s['name']]})"
-    streams.insert(0, __x7())
     return {"streams": streams}
 
 #----- Configure/install landing page rendered as HTML for a token
