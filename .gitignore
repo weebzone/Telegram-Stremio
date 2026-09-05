@@ -1,5 +1,5 @@
 .venv
-media/
+/media/
 *.strm
 log.txt
 **/__pycache__/

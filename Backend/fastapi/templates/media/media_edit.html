@@ -1,0 +1,2128 @@
+{% extends "base.html" %}
+
+{% block title %}Edit {{ media_type|title }} - Fyvio Backend{% endblock %}
+
+{% block content %}
+<style>
+  .glass-card {
+    background: color-mix(in srgb, var(--card) 94%, var(--bg));
+    border: 1px solid color-mix(in srgb, var(--border) 95%, transparent);
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.22);
+  }
+
+  .glass-card-soft {
+    background: color-mix(in srgb, var(--card) 86%, var(--bg));
+    border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  }
+
+  .section-title {
+    color: var(--text);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+  }
+
+  .muted {
+    color: var(--text-sec);
+  }
+
+  .field-label {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    color: var(--text);
+  }
+
+  .field-input, .field-textarea {
+    width: 100%;
+    border-radius: 1rem;
+    border: 1px solid color-mix(in srgb, var(--border) 95%, transparent);
+    background: color-mix(in srgb, var(--bg) 76%, transparent);
+    color: var(--text);
+    padding: 0.9rem 1rem;
+    outline: none;
+    transition: all 0.2s ease;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+  }
+
+  .field-input::placeholder,
+  .field-textarea::placeholder {
+    color: color-mix(in srgb, var(--text-sec) 85%, transparent);
+  }
+
+  .field-input:focus, .field-textarea:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 18%, transparent);
+  }
+
+  .hero-wrap {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+  }
+
+  .hero-backdrop {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    opacity: .34;
+    transform: scale(1.04);
+  }
+
+  .hero-gradient {
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(180deg, color-mix(in srgb, var(--bg) 10%, transparent) 0%, color-mix(in srgb, var(--bg) 52%, transparent) 60%, color-mix(in srgb, var(--bg) 96%, transparent) 100%),
+      radial-gradient(circle at top left, color-mix(in srgb, var(--primary) 18%, transparent), transparent 42%),
+      radial-gradient(circle at bottom right, color-mix(in srgb, var(--accent) 16%, transparent), transparent 38%);
+  }
+
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.4rem 0.8rem;
+    border-radius: 9999px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+    background: color-mix(in srgb, var(--bg) 66%, transparent);
+    color: var(--text);
+  }
+
+  .quality-row {
+    background: color-mix(in srgb, var(--bg) 70%, transparent);
+    border: 1px solid color-mix(in srgb, var(--border) 92%, transparent);
+  }
+
+  .quality-badge {
+    border-radius: 9999px;
+    padding: 0.35rem 0.8rem;
+    font-size: 0.75rem;
+    font-weight: 800;
+    letter-spacing: .02em;
+  }
+
+  .btn-ui {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    border-radius: 1rem;
+    padding: 0.8rem 1.15rem;
+    font-size: 0.92rem;
+    font-weight: 800;
+    transition: all 0.2s ease;
+    border: 1px solid transparent;
+    white-space: nowrap;
+  }
+
+  .btn-ui:hover {
+    transform: translateY(-1px);
+  }
+
+  .btn-primary {
+    background: var(--primary);
+    color: white;
+    box-shadow: 0 10px 24px color-mix(in srgb, var(--primary) 26%, transparent);
+  }
+
+  .btn-primary:hover { filter: brightness(1.03); }
+
+  .btn-ghost {
+    background: color-mix(in srgb, var(--bg) 74%, transparent);
+    color: var(--text);
+    border-color: color-mix(in srgb, var(--border) 95%, transparent);
+  }
+
+  .btn-danger {
+    background: color-mix(in srgb, rgb(239 68 68) 16%, transparent);
+    color: rgb(248 113 113);
+    border-color: color-mix(in srgb, rgb(239 68 68) 26%, transparent);
+  }
+
+  .btn-success {
+    background: color-mix(in srgb, rgb(34 197 94) 16%, transparent);
+    color: rgb(74 222 128);
+    border-color: color-mix(in srgb, rgb(34 197 94) 26%, transparent);
+  }
+
+  .btn-info {
+    background: color-mix(in srgb, rgb(59 130 246) 16%, transparent);
+    color: rgb(96 165 250);
+    border-color: color-mix(in srgb, rgb(59 130 246) 26%, transparent);
+  }
+
+  .season-content {
+    transition: max-height 0.32s ease, opacity 0.25s ease, transform 0.25s ease;
+    overflow: hidden;
+  }
+
+  .season-collapsed {
+    max-height: 0 !important;
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+
+  .break-all {
+    word-break: break-all;
+    overflow-wrap: anywhere;
+  }
+
+  .match-card {
+    background: color-mix(in srgb, var(--bg) 72%, transparent);
+    border: 1px solid color-mix(in srgb, var(--border) 92%, transparent);
+    border-radius: 1.25rem;
+    padding: 1rem;
+    transition: all 0.2s ease;
+  }
+
+  .match-card:hover {
+    transform: translateY(-2px);
+    border-color: color-mix(in srgb, var(--primary) 35%, transparent);
+    box-shadow: 0 14px 28px rgba(0, 0, 0, 0.18);
+  }
+
+  .match-card.active {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 18%, transparent);
+  }
+
+  .match-thumb {
+    width: 4.75rem;
+    height: 7rem;
+    border-radius: 1rem;
+    object-fit: cover;
+    border: 1px solid rgba(255,255,255,0.08);
+    flex-shrink: 0;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .st-spin {
+    animation: spin 1s linear infinite;
+  }
+
+  .speed-modal-shell {
+    width: min(100%, 56rem);
+    max-height: calc(100dvh - 1rem);
+    overflow: hidden;
+  }
+
+  .speed-modal-body {
+    max-height: calc(100dvh - 11rem);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  @media (max-width: 640px) {
+    .btn-ui { width: 100%; }
+    .speed-modal-shell {
+      width: calc(100vw - 0.75rem);
+      max-height: calc(100dvh - 0.75rem);
+      border-radius: 1.25rem;
+    }
+
+    .speed-modal-body {
+      max-height: calc(100dvh - 9.5rem);
+    }
+  }
+
+  .edit-tabs {
+    position: sticky;
+    top: 0.5rem;
+    z-index: 20;
+    display: flex;
+    gap: 0.4rem;
+    overflow-x: auto;
+    padding: 0.4rem;
+    margin-bottom: 1.5rem;
+    border-radius: 1.25rem;
+    scrollbar-width: none;
+    background: color-mix(in srgb, var(--card) 90%, var(--bg));
+    border: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
+    box-shadow: 0 12px 34px rgba(0, 0, 0, 0.22);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+  }
+
+  .edit-tabs::-webkit-scrollbar { display: none; }
+
+  .edit-tab {
+    flex: 1 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    white-space: nowrap;
+    padding: 0.65rem 1rem;
+    border-radius: 0.95rem;
+    font-size: 0.9rem;
+    font-weight: 800;
+    color: var(--text-sec);
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+  }
+
+  .edit-tab:hover {
+    color: var(--text);
+    background: color-mix(in srgb, var(--bg) 60%, transparent);
+  }
+
+  .edit-tab.active {
+    color: #fff;
+    background: var(--primary);
+    box-shadow: 0 8px 20px color-mix(in srgb, var(--primary) 30%, transparent);
+  }
+
+  .edit-panel {
+    animation: edit-panel-in 0.22s ease;
+  }
+
+  @keyframes edit-panel-in {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @media (max-width: 640px) {
+    .edit-tab {
+      flex: 0 0 auto;
+      font-size: 0.82rem;
+      padding: 0.55rem 0.85rem;
+    }
+  }
+</style>
+
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8">
+    <div class="glass-card rounded-3xl p-5 sm:p-6 mb-6 sm:mb-8">
+        <div class="flex flex-col gap-4">
+            <a id="back-to-list" href="/media/manage?media_type={{ media_type }}"
+               class="inline-flex items-center gap-2 text-primary font-semibold hover:opacity-90 w-fit">
+                <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
+                </svg>
+                Back to {{ media_type|title }}s
+            </a>
+
+            <div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-3">
+                <div>
+                    <h1 class="section-title text-2xl sm:text-3xl lg:text-4xl">Edit {{ media_type|title }}</h1>
+                    <p class="muted mt-1 text-sm sm:text-base">TMDB ID: {{ tmdb_id }} · DB Index: {{ db_index }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if media_details %}
+    <div class="glass-card rounded-3xl overflow-hidden mb-6 sm:mb-8">
+        <div class="hero-wrap">
+            {% if media_details.backdrop %}
+            <img src="{{ cover_url(media_details.backdrop) }}" alt="{{ media_details.title }} backdrop" class="hero-backdrop"
+                 onerror="this.style.display='none'">
+            {% endif %}
+            <div class="hero-gradient"></div>
+
+            <div class="relative z-10 p-5 sm:p-6 lg:p-8">
+                <div class="flex flex-col md:flex-row md:items-end gap-5 sm:gap-6">
+                    <div class="mx-auto md:mx-0 flex-shrink-0">
+                        <img src="{{ cover_url(media_details.poster) or '/static/placeholder.jpg' }}"
+                             alt="{{ media_details.title }}"
+                             class="w-36 sm:w-40 md:w-48 h-54 sm:h-60 md:h-72 object-cover rounded-2xl shadow-2xl border border-hairline-strong"
+                             onerror="this.src='https://via.placeholder.com/300x450/e5e7eb/9ca3af?text=No+Image'">
+                    </div>
+
+                    <div class="flex-1 min-w-0 text-center md:text-left">
+                        <h2 class="text-2xl sm:text-3xl md:text-4xl font-black tracking-tight text-white drop-shadow">
+                            {{ media_details.title }}
+                        </h2>
+
+                        <div class="flex flex-wrap justify-center md:justify-start items-center gap-2 sm:gap-3 mt-4">
+                            {% if media_details.rating %}
+                            <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-yellow-400 text-black text-sm font-extrabold shadow-sm">
+                                ⭐ {{ media_details.rating }}
+                            </span>
+                            {% endif %}
+                            <span class="inline-flex items-center px-3 py-1 rounded-full bg-surface-3 text-white text-sm font-semibold border border-hairline-strong">
+                                {{ media_details.release_year }}
+                            </span>
+                            {% if media_details.genres %}
+                            <span class="inline-flex items-center px-3 py-1 rounded-full bg-surface-3 text-white text-sm font-semibold border border-hairline-strong">
+                                {{ media_details.genres|length }} genre{{ 's' if media_details.genres|length != 1 else '' }}
+                            </span>
+                            {% endif %}
+                        </div>
+
+                        {% if media_details.genres %}
+                        <div class="flex flex-wrap justify-center md:justify-start gap-2 mt-4">
+                            {% for genre in media_details.genres[:8] %}
+                            <span class="pill">{{ genre }}</span>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {% if media_details.description %}
+        <div class="border-t border-hairline p-5 sm:p-6 lg:p-8">
+            <h3 class="section-title text-lg sm:text-xl mb-3">Overview</h3>
+            <p class="muted leading-7 text-sm sm:text-base">{{ media_details.description }}</p>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% if media_details %}
+    <div class="edit-tabs" role="tablist" id="edit-tabs">
+        <button type="button" class="edit-tab active" data-tab="details" onclick="switchEditTab('details')">📝 <span>Details</span></button>
+        <button type="button" class="edit-tab" data-tab="content" onclick="switchEditTab('content')">🎬 <span>Content</span></button>
+        <button type="button" class="edit-tab" data-tab="subtitles" onclick="switchEditTab('subtitles')">💬 <span>Subtitles</span></button>
+        <button type="button" class="edit-tab" data-tab="catalog" onclick="switchEditTab('catalog')">📚 <span>Catalog</span></button>
+        <button type="button" class="edit-tab" data-tab="rescan" onclick="switchEditTab('rescan')">🔄 <span>Rescan</span></button>
+    </div>
+    {% endif %}
+
+    {% if media_details %}
+    <div class="glass-card edit-panel hidden rounded-3xl p-5 sm:p-6 lg:p-8 mb-6 sm:mb-8" data-panel="rescan">
+        <div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-3 mb-5 sm:mb-6">
+            <div>
+                <h3 class="section-title text-xl sm:text-2xl">Rescan Metadata</h3>
+                <p class="muted mt-1 text-sm sm:text-base">
+                    Use this only when the auto-detected {{ media_type }} is mismatched. Existing Telegram files will stay safe.
+                </p>
+            </div>
+            <span class="pill">IMDb / TMDb re-match</span>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-3">
+            <input
+                id="rescan-query"
+                type="text"
+                class="field-input"
+                placeholder="Title (with or without year), IMDb id/link, or TMDB id/link..."
+                value="{{ media_details.title if media_details else '' }}"
+            >
+            <button type="button" class="btn-ui btn-primary" onclick="searchRescanCandidates()">
+                🔎 Search Matches
+            </button>
+        </div>
+
+        <div id="rescan-state" class="muted text-sm mt-4 hidden"></div>
+
+        <div id="rescan-results" class="grid grid-cols-1 xl:grid-cols-2 gap-3 mt-4"></div>
+
+        <div id="rescan-preview" class="hidden mt-5 rounded-3xl border border-hairline bg-surface p-4 sm:p-5">
+            <div class="flex items-start gap-4">
+                <img id="rescan-preview-poster" src="/static/placeholder.jpg" alt="Selected poster" class="match-thumb">
+                <div class="min-w-0 flex-1">
+                    <h4 id="rescan-preview-title" class="text-white font-bold text-lg"></h4>
+                    <p id="rescan-preview-subtitle" class="muted text-sm mt-1"></p>
+                    <p id="rescan-preview-ids" class="muted text-xs mt-2 break-all"></p>
+                </div>
+            </div>
+
+            <div class="flex flex-col sm:flex-row justify-end gap-3 mt-5">
+                <button type="button" onclick="clearRescanSelection()" class="btn-ui btn-ghost">Cancel</button>
+                <button type="button" onclick="applyRescanSelection()" class="btn-ui btn-primary">
+                    ✨ Apply Selected Match
+                </button>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+
+    {% if media_details %}
+    <div class="glass-card edit-panel hidden rounded-3xl p-5 sm:p-6 lg:p-8 mb-6 sm:mb-8" data-panel="catalog">
+        <div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-3 mb-5 sm:mb-6">
+            <div>
+                <h3 class="section-title text-xl sm:text-2xl">Custom Catalog</h3>
+                <p class="muted mt-1 text-sm sm:text-base">Add this title directly into any custom Stremio catalog.</p>
+            </div>
+            <a href="/catalogs" class="btn-ui btn-ghost">Manage Catalogs</a>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-[1fr_auto_auto] gap-3">
+            <select id="custom-catalog-select" class="field-input">
+                <option value="">Loading catalogs...</option>
+            </select>
+            <button type="button" onclick="addCurrentMediaToCatalog()" class="btn-ui btn-primary">
+                ➕ Add to Catalog
+            </button>
+            <button type="button" onclick="removeCurrentMediaFromCatalog()" class="btn-ui btn-danger">
+                Remove
+            </button>
+        </div>
+        <div id="media-in-catalogs" class="flex flex-wrap gap-2 mt-3"></div>
+        <p id="custom-catalog-status" class="muted text-sm mt-3">Add this title to a catalog, then choose who can see it below.</p>
+
+        <div class="mt-5 pt-5" style="border-top:1px solid color-mix(in srgb, var(--border) 85%, transparent)">
+            <label class="field-label">Who can see this title</label>
+            <div class="flex flex-col sm:flex-row sm:items-center gap-3">
+                <select id="media-visibility" class="field-input" onchange="onMediaVisibilityChange()">
+                    <option value="public">Everyone</option>
+                    <option value="tokens">Specific users</option>
+                    <option value="owner">Owner only (hidden)</option>
+                </select>
+                <button type="button" onclick="applyMediaVisibility()" class="btn-ui btn-primary sm:w-auto shrink-0">Apply</button>
+            </div>
+            <div id="media-token-picker-wrap" class="hidden mt-3">
+                <label class="field-label">Allowed users</label>
+                <div id="media-token-picker" class="me-token-picker"></div>
+            </div>
+            <p class="muted text-xs mt-3">This overrides the title's visibility in every custom catalog it belongs to.</p>
+        </div>
+    </div>
+    {% endif %}
+
+    <style>
+        .me-token-picker { max-height: 12rem; overflow-y: auto; border: 1px solid color-mix(in srgb, var(--border) 95%, transparent); border-radius: 0.9rem; padding: .5rem; display: flex; flex-direction: column; gap: .35rem; background: color-mix(in srgb, var(--bg) 74%, transparent); }
+        .me-token-row { display: flex; align-items: center; gap: .6rem; padding: .5rem .65rem; border-radius: .7rem; cursor: pointer; }
+        .me-token-row:hover { background: color-mix(in srgb, var(--primary) 10%, transparent); }
+        .me-token-row input { width: 1.05rem; height: 1.05rem; accent-color: var(--primary); cursor: pointer; flex-shrink: 0; }
+        .me-chip { display: inline-flex; align-items: center; gap: .35rem; padding: .3rem .7rem; border-radius: 9999px; font-size: .75rem; font-weight: 800; border: 1px solid var(--border); max-width: 100%; }
+        .me-chip-hidden { color: rgb(248 113 113); background: color-mix(in srgb, rgb(239 68 68) 14%, transparent); border-color: color-mix(in srgb, rgb(239 68 68) 30%, transparent); }
+        .me-chip-custom { color: rgb(96 165 250); background: color-mix(in srgb, rgb(59 130 246) 14%, transparent); border-color: color-mix(in srgb, rgb(59 130 246) 30%, transparent); }
+        .me-chip-auto { color: rgb(52 211 153); background: color-mix(in srgb, rgb(16 185 129) 14%, transparent); border-color: color-mix(in srgb, rgb(16 185 129) 30%, transparent); }
+        .me-chip-empty { color: var(--text-sec); background: color-mix(in srgb, var(--bg) 70%, transparent); }
+    </style>
+
+    <div class="glass-card edit-panel rounded-3xl p-5 sm:p-6 lg:p-8 mb-6 sm:mb-8" data-panel="details">
+        <div class="flex items-center justify-between gap-3 mb-5 sm:mb-6">
+            <h3 class="section-title text-xl sm:text-2xl">Edit Details</h3>
+        </div>
+
+        <form onsubmit="updateMedia(event)" id="edit-form">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5 lg:gap-6 mb-6">
+                <div class="md:col-span-2">
+                    <label class="field-label">Title *</label>
+                    <input type="text" id="title" name="title" value="{{ media_details.title if media_details else '' }}"
+                           class="field-input" required>
+                </div>
+
+                <div>
+                    <label class="field-label">Release Year *</label>
+                    <input type="number" id="release_year" name="release_year"
+                           value="{{ media_details.release_year if media_details else '' }}"
+                           class="field-input" required>
+                </div>
+
+                <div>
+                    <label class="field-label">Rating (0-10)</label>
+                    <input type="number" step="0.1" min="0" max="10" id="rating" name="rating"
+                           value="{{ media_details.rating if media_details else '' }}"
+                           class="field-input">
+                </div>
+
+                <div class="md:col-span-2">
+                    <label class="field-label">Logo URL</label>
+                    <input type="url" id="logo" name="logo" value="{{ media_details.logo if media_details else '' }}"
+                           class="field-input">
+                </div>
+
+                <div class="md:col-span-2">
+                    <label class="field-label">Poster URL</label>
+                    <input type="url" id="poster" name="poster" value="{{ media_details.poster if media_details else '' }}"
+                           class="field-input">
+                </div>
+
+                <div class="md:col-span-2">
+                    <label class="field-label">Backdrop URL</label>
+                    <input type="url" id="backdrop" name="backdrop"
+                           value="{{ media_details.backdrop if media_details else '' }}"
+                           class="field-input">
+                </div>
+            </div>
+
+            <div class="mb-6">
+                <label class="field-label">Description</label>
+                <textarea id="description" name="description" rows="4"
+                          class="field-textarea resize-y">{{ media_details.description if media_details else '' }}</textarea>
+            </div>
+
+            <div class="mb-6">
+                <label class="field-label">Genres (comma-separated)</label>
+                <input type="text" id="genres" name="genres"
+                       value="{% if media_details and media_details.genres %}{{ media_details.genres|join(', ') }}{% endif %}"
+                       class="field-input" placeholder="Action, Comedy, Drama">
+            </div>
+
+            <div class="flex flex-col sm:flex-row justify-end gap-3">
+                <button type="button" onclick="goBackToList()" class="btn-ui btn-ghost">
+                    Cancel
+                </button>
+                <button type="submit" class="btn-ui btn-primary">
+                    Save Changes
+                </button>
+            </div>
+        </form>
+    </div>
+
+    {% if media_details %}
+    <div class="glass-card edit-panel hidden rounded-3xl p-5 sm:p-6 lg:p-8" data-panel="content">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5 sm:mb-6">
+            <h3 class="section-title text-xl sm:text-2xl">Available Content</h3>
+            <div class="flex items-center gap-2">
+                <button type="button" onclick="openAddStream()" class="btn-ui btn-success">
+                    ➕ {{ 'Add Season / Episode / Stream' if media_type == 'tv' else 'Add Stream' }}
+                </button>
+            </div>
+        </div>
+
+        {% if media_type == 'movie' and media_details.telegram %}
+        <div class="space-y-3" id="movie-quality-list">
+            {% set sorted_qualities = media_details.telegram|sort(attribute='quality') %}
+            {% for quality in sorted_qualities %}
+            <div class="quality-row rounded-2xl p-4 sm:p-5" data-quality-row>
+                <div class="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+                    <div class="min-w-0 flex-1">
+                        <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+                            <span class="quality-badge bg-blue-500/15 text-blue-300 border border-blue-500/20">
+                                {{ quality.quality }}
+                            </span>
+                            <span class="pill">{{ quality.size }}</span>
+                        </div>
+                        <p class="muted mt-3 text-sm break-all">{{ quality.name }}</p>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 w-full sm:w-auto xl:min-w-[24rem]">
+                        <button onclick="copyStreamLink('{{ quality.id }}', '{{ quality.name }}')" class="btn-ui btn-success w-full" title="Copy direct stream link">
+                            📋 Copy Link
+                        </button>
+                        <button onclick="runSpeedTest('{{ quality.id }}', 'movie', '{{ quality.quality }}')" class="btn-ui btn-info w-full">
+                            🚀 Speed Test
+                        </button>
+                        <button onclick="deleteQuality('{{ quality.id }}', this)" class="btn-ui btn-danger w-full">
+                            Delete
+                        </button>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        <div id="content-empty-state" class="hidden text-center py-10">
+            <p class="muted text-sm sm:text-base">No content available</p>
+        </div>
+
+        {% elif media_type == 'tv' and media_details.seasons %}
+        <div class="space-y-4 sm:space-y-5" id="season-list">
+            {% for season in media_details.seasons|sort(attribute='season_number') %}
+            <div class="glass-card-soft rounded-3xl overflow-hidden border border-hairline" data-season-block data-season="{{ season.season_number }}">
+                <div class="px-4 sm:px-5 lg:px-6 py-4 sm:py-5 border-b border-hairline bg-surface">
+                    <div class="flex items-center justify-between gap-3">
+                        <div class="min-w-0">
+                            <h4 class="section-title text-base sm:text-lg lg:text-xl">Season {{ season.season_number }}</h4>
+                            <p class="muted text-xs sm:text-sm mt-1" data-ep-count>{{ season.episodes|length }} episode{{ 's' if season.episodes|length != 1 else '' }}</p>
+                        </div>
+
+                        <div class="flex items-center gap-2 flex-shrink-0">
+                            <button type="button" onclick="deleteTVSeason({{ season.season_number }}, this)" class="btn-ui btn-danger px-3 py-2 text-xs sm:text-sm" title="Delete entire Season {{ season.season_number }}">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                <span class="hidden sm:inline">Delete Season</span>
+                            </button>
+                            <button type="button" onclick="toggleSeason({{ loop.index0 }})" class="btn-ui btn-ghost px-3 py-2">
+                                <svg id="season-arrow-{{ loop.index0 }}" class="w-4 h-4 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="season-content-{{ loop.index0 }}" class="season-content">
+                    <div class="divide-y divide-hairline" data-episodes>
+                        {% for episode in season.episodes|sort(attribute='episode_number') %}
+                        <div class="p-4 sm:p-5" data-episode-block data-episode="{{ episode.episode_number }}">
+                            <div class="flex flex-col xl:flex-row xl:items-start gap-4">
+                                <div class="flex-shrink-0 w-12 h-12 rounded-2xl bg-primary/15 border border-primary/20 flex items-center justify-center mx-auto xl:mx-0">
+                                    <span class="text-sm font-black text-primary">{{ episode.episode_number }}</span>
+                                </div>
+
+                                <div class="flex-1 min-w-0">
+                                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+                                        <h5 class="text-sm sm:text-base font-semibold text-white text-center sm:text-left">{{ episode.title }}</h5>
+                                        <button onclick="deleteTVEpisode({{ season.season_number }}, {{ episode.episode_number }}, this)" class="btn-ui btn-danger px-3 py-2 text-xs sm:text-sm w-full sm:w-auto">
+                                            Delete Episode
+                                        </button>
+                                    </div>
+
+                                    <div class="space-y-2" data-ep-qualities>
+                                        {% if episode.telegram %}
+                                        {% set sorted_episode_qualities = episode.telegram|sort(attribute='quality') %}
+                                        {% for quality in sorted_episode_qualities %}
+                                        <div class="quality-row rounded-2xl p-3 sm:p-4" data-tv-quality>
+                                            <div class="flex flex-col xl:flex-row xl:items-center justify-between gap-3">
+                                                <div class="min-w-0 flex-1">
+                                                    <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+                                                        <span class="quality-badge bg-green-500/15 text-green-300 border border-green-500/20">{{ quality.quality }}</span>
+                                                        <span class="pill">{{ quality.size }}</span>
+                                                    </div>
+                                                    <p class="muted text-xs sm:text-sm mt-2 break-all">{{ quality.name }}</p>
+                                                </div>
+
+                                                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 w-full sm:w-auto xl:min-w-[22rem]">
+                                                    <button onclick="copyStreamLink('{{ quality.id }}', '{{ quality.name }}')" class="btn-ui btn-success w-full text-xs sm:text-sm">
+                                                        📋 Copy
+                                                    </button>
+                                                    <button onclick="runSpeedTest('{{ quality.id }}', 'tv', '{{ quality.quality }}')" class="btn-ui btn-info w-full text-xs sm:text-sm">
+                                                        🚀 Speed Test
+                                                    </button>
+                                                    <button onclick="deleteTVQuality({{ season.season_number }}, {{ episode.episode_number }}, '{{ quality.id }}', this)" class="btn-ui btn-danger w-full text-xs sm:text-sm">
+                                                        Delete
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        {% endfor %}
+                                        {% else %}
+                                        <p class="muted text-xs sm:text-sm text-center sm:text-left" data-no-qualities>No qualities available</p>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        <div id="content-empty-state-tv" class="hidden text-center py-10">
+            <p class="muted text-sm sm:text-base">No content available</p>
+        </div>
+        {% else %}
+        <div class="text-center py-10">
+            <svg class="mx-auto h-12 w-12 text-muted mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M7 4V2a1 1 0 011-1h8a1 1 0 011 1v2h4a1 1 0 110 2h-1v12a2 2 0 01-2-2V6H3a1 1 0 110-2h4zM9 6v10h6V6H9z" />
+            </svg>
+            <p class="muted text-sm sm:text-base">No content available</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="glass-card edit-panel hidden rounded-3xl p-5 sm:p-6 lg:p-8" data-panel="subtitles">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
+            <div>
+                <h3 class="section-title text-xl sm:text-2xl">Subtitles</h3>
+                <p class="muted text-sm mt-1">Attach subtitle files from a Telegram channel your bot can read.</p>
+            </div>
+            <button type="button" onclick="openSubtitleModal()" class="btn-ui btn-success">➕ Add Subtitle</button>
+        </div>
+        <div id="subtitle-list" class="space-y-2"></div>
+        <div id="subtitle-empty" class="hidden text-center py-8"><p class="muted text-sm">No subtitles added yet.</p></div>
+    </div>
+    {% endif %}
+</div>
+
+<div id="speed-test-modal" class="fixed inset-0 z-50 hidden" aria-modal="true" role="dialog">
+    <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="closeSpeedTest()"></div>
+
+    <div class="absolute inset-0 flex items-center justify-center p-2 sm:p-4">
+        <div class="glass-card speed-modal-shell rounded-2xl sm:rounded-3xl">
+            <div class="flex items-start sm:items-center justify-between gap-3 px-4 sm:px-6 py-4 border-b border-hairline bg-surface">
+                <div class="min-w-0">
+                    <h2 class="text-base sm:text-xl font-black text-white leading-tight">🚀 DC Speed Test</h2>
+                    <p id="st-label" class="text-[11px] sm:text-sm text-text-secondary mt-1 break-all"></p>
+                </div>
+                <button onclick="closeSpeedTest()" class="flex-shrink-0 text-text-secondary hover:text-white text-3xl leading-none transition-colors">&times;</button>
+            </div>
+
+            <div class="speed-modal-body px-4 sm:px-6 py-5 sm:py-6">
+                <div id="st-spinner" class="flex flex-col items-center gap-4 py-8 sm:py-10">
+                    <div class="w-12 h-12 sm:w-14 sm:h-14 rounded-full border-4 border-hairline-strong border-t-primary st-spin"></div>
+                    <p class="text-sm text-text text-center">Testing all DC clients simultaneously…</p>
+                    <p class="text-xs text-text-secondary text-center max-w-md">Downloading 100 MB from each bot client</p>
+                </div>
+
+                <div id="st-results" class="hidden">
+                    <div class="overflow-x-auto rounded-2xl border border-hairline">
+                        <table class="w-full min-w-[760px] text-sm">
+                            <thead class="bg-surface text-left">
+                                <tr class="text-text-secondary">
+                                    <th class="px-4 py-3 font-semibold text-xs uppercase tracking-wider whitespace-nowrap">Bot / DC</th>
+                                    <th class="px-4 py-3 font-semibold text-xs uppercase tracking-wider whitespace-nowrap">Ping</th>
+                                    <th class="px-4 py-3 font-semibold text-xs uppercase tracking-wider whitespace-nowrap">Speed</th>
+                                    <th class="px-4 py-3 font-semibold text-xs uppercase tracking-wider whitespace-nowrap">Time</th>
+                                    <th class="px-4 py-3 font-semibold text-xs uppercase tracking-wider whitespace-nowrap">Downloaded</th>
+                                    <th class="px-4 py-3 font-semibold text-xs uppercase tracking-wider whitespace-nowrap">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="st-tbody" class="divide-y divide-hairline bg-surface"></tbody>
+                        </table>
+                    </div>
+                    <p id="st-summary" class="text-xs text-text-secondary mt-3 text-right"></p>
+                </div>
+
+                <div id="st-error" class="hidden mt-2 rounded-2xl border border-red-500/25 bg-red-500/10 px-4 py-3 text-sm text-red-200"></div>
+            </div>
+
+            <div class="flex flex-col sm:flex-row justify-end gap-3 px-4 sm:px-6 py-4 border-t border-hairline bg-surface">
+                <button id="st-rerun-btn" onclick="rerunSpeedTest()" class="hidden btn-ui btn-primary">
+                    🔄 Re-run
+                </button>
+                <button onclick="closeSpeedTest()" class="btn-ui btn-ghost">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    #add-stream-modal .as-input {
+        width: 100%; border-radius: 0.85rem;
+        border: 1px solid color-mix(in srgb, var(--border) 95%, transparent);
+        background: color-mix(in srgb, var(--bg) 78%, transparent);
+        color: var(--text); padding: 0.7rem 0.9rem; font-size: 0.9rem; outline: none;
+    }
+    #add-stream-modal .as-input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 16%, transparent); }
+    #add-stream-modal .as-label { display:block; font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-sec); margin-bottom:0.35rem; }
+    #add-stream-modal .as-btn { display:inline-flex; align-items:center; justify-content:center; gap:0.4rem; border-radius:0.85rem; padding:0.7rem 1.1rem; font-weight:700; font-size:0.88rem; border:1px solid transparent; cursor:pointer; white-space:nowrap; transition:filter .15s ease; }
+    #add-stream-modal .as-btn:hover { filter: brightness(1.06); }
+    #add-stream-modal .as-btn-ghost { background: color-mix(in srgb, var(--bg) 74%, transparent); color: var(--text); border-color: color-mix(in srgb, var(--border) 95%, transparent); }
+    #add-stream-modal .as-btn-success { background: rgb(16 185 129); color:#fff; }
+</style>
+
+<div id="add-stream-modal" class="fixed inset-0 z-50 hidden" aria-modal="true" role="dialog">
+    <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="closeAddStream()"></div>
+    <div class="absolute inset-0 flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div class="glass-card w-full sm:max-w-xl rounded-t-3xl sm:rounded-3xl max-h-[92dvh] sm:max-h-[90dvh] flex flex-col">
+            <div class="flex items-center justify-between gap-3 px-4 sm:px-6 py-4 border-b border-hairline">
+                <h2 class="text-base sm:text-xl font-black text-text">➕ Add Stream</h2>
+                <button onclick="closeAddStream()" class="text-text-secondary hover:text-text text-3xl leading-none">&times;</button>
+            </div>
+
+            <div class="px-4 sm:px-6 py-5 space-y-4 overflow-y-auto flex-1 min-h-0">
+                {% if media_type == 'tv' %}
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="as-label">Season *</label>
+                        <input id="as-season" type="number" min="0" class="as-input" placeholder="1">
+                    </div>
+                    <div>
+                        <label class="as-label">Episode *</label>
+                        <input id="as-episode" type="number" min="0" class="as-input" placeholder="1">
+                    </div>
+                    <div class="col-span-2">
+                        <label class="as-label">Episode Title</label>
+                        <input id="as-episode-title" class="as-input" placeholder="Optional">
+                    </div>
+                </div>
+                <p class="text-xs text-text-secondary">New season/episode numbers are created automatically; existing ones just get the new stream.</p>
+                {% endif %}
+
+                <div>
+                    <div class="flex items-center justify-between gap-2">
+                        <label class="as-label" style="margin-bottom:0">Telegram message link(s) *</label>
+                        <button type="button" onclick="addStreamPart()" class="text-xs font-bold text-primary shrink-0"><i class="fa-solid fa-plus"></i> Add split part</button>
+                    </div>
+                    <div id="as-parts" class="space-y-2 mt-2"></div>
+                    <p class="text-xs text-text-secondary mt-2">Add more parts only for a split file (they join into one stream, in order).</p>
+                    <p id="as-resolve-state" class="text-xs text-text-secondary mt-1 hidden"></p>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                        <label class="as-label">Quality *</label>
+                        <select id="as-quality" class="as-input" onchange="document.getElementById('as-quality-custom').classList.toggle('hidden', this.value !== '__custom')">
+                            <option value="">Select</option>
+                            <option>480p</option><option>720p</option><option selected>1080p</option>
+                            <option>2160p</option><option value="__custom">Custom…</option>
+                        </select>
+                    </div>
+                    <div class="sm:col-span-2">
+                        <label class="as-label">File name</label>
+                        <input id="as-name" class="as-input" placeholder="Auto-detected on resolve">
+                    </div>
+                </div>
+                <input id="as-quality-custom" class="as-input hidden" placeholder="Custom quality label (e.g. 4K HDR)">
+            </div>
+
+            <div class="flex flex-col sm:flex-row sm:justify-end gap-2 sm:gap-3 px-4 sm:px-6 py-4 border-t border-hairline">
+                <button onclick="closeAddStream()" class="as-btn as-btn-ghost w-full sm:w-auto">Cancel</button>
+                <button id="as-submit" onclick="submitAddStream()" class="as-btn as-btn-success w-full sm:w-auto">Add Stream</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="subtitle-modal" class="fixed inset-0 z-50 hidden" aria-modal="true" role="dialog">
+    <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="closeSubtitleModal()"></div>
+    <div class="absolute inset-0 flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div class="glass-card w-full sm:max-w-xl rounded-t-3xl sm:rounded-3xl max-h-[92dvh] sm:max-h-[90dvh] flex flex-col">
+            <div class="flex items-center justify-between gap-3 px-4 sm:px-6 py-4 border-b border-hairline">
+                <h2 class="text-base sm:text-xl font-black text-text">➕ Add Subtitle</h2>
+                <button onclick="closeSubtitleModal()" class="text-text-secondary hover:text-text text-3xl leading-none">&times;</button>
+            </div>
+            <div class="px-4 sm:px-6 py-5 space-y-4 overflow-y-auto flex-1 min-h-0">
+                {% if media_type == 'tv' %}
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold uppercase tracking-wider text-text-secondary mb-2">Season *</label>
+                        <input id="sub-season" type="number" min="0" class="field-input" placeholder="1">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold uppercase tracking-wider text-text-secondary mb-2">Episode *</label>
+                        <input id="sub-episode" type="number" min="0" class="field-input" placeholder="1">
+                    </div>
+                </div>
+                {% endif %}
+                <div>
+                    <div class="flex items-center justify-between gap-2 mb-2">
+                        <label class="block text-xs font-bold uppercase tracking-wider text-text-secondary">Subtitle link(s) *</label>
+                        <button type="button" onclick="addSubtitleRow()" class="text-xs font-bold text-primary shrink-0"><i class="fa-solid fa-plus"></i> Add another</button>
+                    </div>
+                    <div id="subtitle-rows" class="space-y-3"></div>
+                    <p class="muted text-xs mt-2">Forward the subtitle file to a channel your bot admins (a MANUAL channel is recommended), then paste its message link. Language is auto-detected but you can override it.</p>
+                </div>
+            </div>
+            <div class="flex flex-col sm:flex-row sm:justify-end gap-2 sm:gap-3 px-4 sm:px-6 py-4 border-t border-hairline">
+                <button onclick="closeSubtitleModal()" class="btn-ui btn-ghost w-full sm:w-auto">Cancel</button>
+                <button id="sub-submit" onclick="submitSubtitles()" class="btn-ui btn-success w-full sm:w-auto">Add Subtitle</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const tmdbId = {{ tmdb_id }};
+    const dbIndex = {{ db_index }};
+    const mediaType = '{{ media_type }}';
+
+    let selectedRescanMatch = null;
+    let latestRescanResults = [];
+
+    function escapeHtml(value) {
+        return String(value ?? '')
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#39;');
+    }
+
+    function setRescanState(message = '', visible = false) {
+        const el = document.getElementById('rescan-state');
+        if (!el) return;
+        el.textContent = message;
+        el.classList.toggle('hidden', !visible);
+    }
+
+    function clearRescanSelection() {
+        selectedRescanMatch = null;
+        document.querySelectorAll('.match-card').forEach(card => card.classList.remove('active'));
+        const preview = document.getElementById('rescan-preview');
+        if (preview) preview.classList.add('hidden');
+    }
+
+    function selectRescanMatch(index) {
+        const item = latestRescanResults[index];
+        if (!item) return;
+
+        selectedRescanMatch = item;
+        document.querySelectorAll('.match-card').forEach(card => card.classList.remove('active'));
+        const activeCard = document.getElementById(`match-card-${index}`);
+        if (activeCard) activeCard.classList.add('active');
+
+        document.getElementById('rescan-preview-title').textContent = item.title || 'Unknown title';
+        document.getElementById('rescan-preview-subtitle').textContent = `${item.subtitle || 'Match'}${item.year ? ` • ${item.year}` : ''}`;
+        document.getElementById('rescan-preview-ids').textContent = `IMDb: ${item.imdb_id || 'N/A'} • TMDb: ${item.tmdb_id || 'N/A'}`;
+        document.getElementById('rescan-preview-poster').src = item.poster || '/static/placeholder.jpg';
+        document.getElementById('rescan-preview').classList.remove('hidden');
+    }
+
+    async function searchRescanCandidates() {
+        const query = document.getElementById('rescan-query').value.trim();
+        const resultsEl = document.getElementById('rescan-results');
+
+        if (!query) {
+            showErrorMessage('Please enter a title to search.');
+            return;
+        }
+
+        clearRescanSelection();
+        latestRescanResults = [];
+        resultsEl.innerHTML = '';
+        setRescanState('Searching matches...', true);
+
+        try {
+            const params = new URLSearchParams({
+                media_type: mediaType,
+                query
+            });
+
+            const yearValue = document.getElementById('release_year')?.value;
+            if (yearValue) {
+                params.set('year', yearValue);
+            }
+
+            const response = await fetch(`/api/media/rescan/search?${params.toString()}`);
+            const data = await response.json().catch(() => ({}));
+
+            if (!response.ok) {
+                setRescanState('', false);
+                showErrorMessage(data.detail || 'Failed to search matches.');
+                return;
+            }
+
+            const results = data.results || [];
+            latestRescanResults = results;
+
+            if (!results.length) {
+                setRescanState('No matches found.', true);
+                return;
+            }
+
+            setRescanState(`Found ${results.length} match${results.length > 1 ? 'es' : ''}. Select one below.`, true);
+
+            resultsEl.innerHTML = results.map((item, index) => `
+                <button
+                    type="button"
+                    id="match-card-${index}"
+                    class="match-card text-left w-full"
+                    data-index="${index}"
+                >
+                    <div class="flex items-start gap-4">
+                        <img
+                            src="${item.poster || '/static/placeholder.jpg'}"
+                            alt="${escapeHtml(item.title || 'Poster')}"
+                            class="match-thumb"
+                            onerror="this.src='/static/placeholder.jpg'"
+                        >
+                        <div class="min-w-0 flex-1">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <h4 class="text-white font-bold text-base sm:text-lg">${escapeHtml(item.title || 'Unknown title')}</h4>
+                                <span class="pill">${escapeHtml(item.year || '—')}</span>
+                            </div>
+                            <p class="muted text-sm mt-2">${escapeHtml(item.subtitle || '')}</p>
+                            <p class="muted text-xs mt-2 break-all">
+                                IMDb: ${escapeHtml(item.imdb_id || 'N/A')} · TMDb: ${escapeHtml(item.tmdb_id || 'N/A')}
+                            </p>
+                        </div>
+                    </div>
+                </button>
+            `).join('');
+
+            document.querySelectorAll('#rescan-results .match-card').forEach((card) => {
+                card.addEventListener('click', () => {
+                    const index = Number(card.dataset.index);
+                    selectRescanMatch(index);
+                });
+            });
+        } catch (error) {
+            console.error('Rescan search failed:', error);
+            setRescanState('', false);
+            showErrorMessage('Failed to search matches. Please try again.');
+        }
+    }
+
+    async function applyRescanSelection() {
+        if (!selectedRescanMatch) {
+            showErrorMessage('Please select a match first.');
+            return;
+        }
+        const selectedId = selectedRescanMatch.tmdb_id || selectedRescanMatch.imdb_id;
+        if (!selectedId) {
+            showErrorMessage('Selected match does not contain a valid IMDb/TMDb id.');
+            return;
+        }
+
+        if (!confirm(`Replace current metadata with "${selectedRescanMatch.title}"?\n\nExisting Telegram files will stay safe.`)) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/media/rescan/apply?tmdb_id=${tmdbId}&db_index=${dbIndex}&media_type=${mediaType}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ selected_id: String(selectedId) })
+            });
+
+            const data = await response.json().catch(() => ({}));
+
+            if (!response.ok) {
+                showErrorMessage(data.detail || 'Failed to apply selected metadata.');
+                return;
+            }
+
+            showSuccessMessage(data.message || 'Metadata rescanned successfully.');
+
+            const newTmdbId = data.redirect_tmdb_id || tmdbId;
+            const newDbIndex = data.db_index || dbIndex;
+
+            setTimeout(() => {
+                window.location.href = `/media/edit?tmdb_id=${newTmdbId}&db_index=${newDbIndex}&media_type=${mediaType}`;
+            }, 700);
+        } catch (error) {
+            console.error('Apply rescan failed:', error);
+            showErrorMessage('Failed to apply selected metadata. Please try again.');
+        }
+    }
+
+    function toggleSeason(seasonIndex) {
+        const content = document.getElementById(`season-content-${seasonIndex}`);
+        const arrow = document.getElementById(`season-arrow-${seasonIndex}`);
+        if (!content || !arrow) return;
+
+        const collapsed = content.classList.contains('season-collapsed');
+        if (collapsed) {
+            content.classList.remove('season-collapsed');
+            arrow.style.transform = 'rotate(0deg)';
+            requestAnimationFrame(() => {
+                content.style.maxHeight = content.scrollHeight + 'px';
+                content.style.opacity = '1';
+            });
+        } else {
+            content.style.maxHeight = content.scrollHeight + 'px';
+            requestAnimationFrame(() => {
+                content.classList.add('season-collapsed');
+                content.style.maxHeight = '0px';
+                content.style.opacity = '0';
+                arrow.style.transform = 'rotate(-90deg)';
+            });
+        }
+    }
+
+    async function updateMedia(event) {
+        event.preventDefault();
+
+        const formData = new FormData(event.target);
+        const updateData = {};
+
+        for (let [key, value] of formData.entries()) {
+            if (key === 'genres') {
+                updateData[key] = value.split(',').map(g => g.trim()).filter(Boolean);
+            } else if (key === 'rating' || key === 'release_year' || key === 'runtime') {
+                updateData[key] = value ? parseFloat(value) : null;
+            } else {
+                updateData[key] = value || null;
+            }
+        }
+
+        try {
+            const response = await fetch(`/api/media/update?tmdb_id=${tmdbId}&db_index=${dbIndex}&media_type=${mediaType}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(updateData)
+            });
+
+            if (response.ok) {
+                showSuccessMessage('Media updated successfully');
+                setTimeout(() => location.reload(), 900);
+            } else {
+                const error = await response.json().catch(() => ({}));
+                showErrorMessage(`Error updating media: ${error.detail || 'Unknown error'}`);
+            }
+        } catch (error) {
+            console.error('Error updating media:', error);
+            showErrorMessage('Error updating media. Please try again.');
+        }
+    }
+
+    function _refreshSeasonHeight(node) {
+        const content = node.closest('.season-content') || (node.querySelector ? node.querySelector('.season-content') : null);
+        if (content && !content.classList.contains('season-collapsed')) {
+            requestAnimationFrame(() => { content.style.maxHeight = content.scrollHeight + 'px'; });
+        }
+    }
+
+    function _updateSeasonCount(seasonBlock) {
+        const count = seasonBlock.querySelectorAll('[data-episode-block]').length;
+        const label = seasonBlock.querySelector('[data-ep-count]');
+        if (label) label.textContent = `${count} episode${count !== 1 ? 's' : ''}`;
+        return count;
+    }
+
+    function _checkContentEmpty(listId, emptyId) {
+        const list = document.getElementById(listId);
+        if (list && !list.querySelector(list === document.getElementById('season-list') ? '[data-season-block]' : '[data-quality-row]')) {
+            list.classList.add('hidden');
+            document.getElementById(emptyId)?.classList.remove('hidden');
+        }
+    }
+
+    async function deleteQuality(id, btn) {
+        if (!confirm(`Are you sure you want to delete ${id}?`)) return;
+
+        try {
+            const response = await fetch(`/api/media/delete-quality?tmdb_id=${tmdbId}&db_index=${dbIndex}&id=${encodeURIComponent(id)}`, {
+                method: 'DELETE'
+            });
+
+            if (response.ok) {
+                showSuccessMessage(`${id} deleted successfully`);
+                btn?.closest('[data-quality-row]')?.remove();
+                _checkContentEmpty('movie-quality-list', 'content-empty-state');
+            } else {
+                const error = await response.json().catch(() => ({}));
+                showErrorMessage(`Error deleting: ${error.detail || 'Unknown error'}`);
+            }
+        } catch (error) {
+            console.error('Error deleting:', error);
+            showErrorMessage('Error deleting. Please try again.');
+        }
+    }
+
+    async function deleteTVQuality(season, episode, id, btn) {
+        if (!confirm(`Are you sure you want to delete ${id} from Season ${season} Episode ${episode}?`)) return;
+
+        try {
+            const response = await fetch(`/api/media/delete-tv-quality?tmdb_id=${tmdbId}&db_index=${dbIndex}&season=${season}&episode=${episode}&id=${encodeURIComponent(id)}`, {
+                method: 'DELETE'
+            });
+
+            if (response.ok) {
+                showSuccessMessage(`${id} deleted successfully`);
+                const epBlock = btn?.closest('[data-episode-block]');
+                btn?.closest('[data-tv-quality]')?.remove();
+                if (epBlock) {
+                    const qWrap = epBlock.querySelector('[data-ep-qualities]');
+                    if (qWrap && !qWrap.querySelector('[data-tv-quality]')) {
+                        qWrap.innerHTML = '<p class="muted text-xs sm:text-sm text-center sm:text-left" data-no-qualities>No qualities available</p>';
+                    }
+                    _refreshSeasonHeight(epBlock);
+                }
+            } else {
+                const error = await response.json().catch(() => ({}));
+                showErrorMessage(`Error deleting: ${error.detail || 'Unknown error'}`);
+            }
+        } catch (error) {
+            console.error('Error deleting:', error);
+            showErrorMessage('Error deleting. Please try again.');
+        }
+    }
+
+    async function deleteTVEpisode(season, episode, btn) {
+        if (!confirm(`Delete Season ${season} Episode ${episode}? This removes the episode and all its qualities.`)) return;
+
+        try {
+            const response = await fetch(`/api/media/delete-tv-episode?tmdb_id=${tmdbId}&db_index=${dbIndex}&season=${season}&episode=${episode}`, {
+                method: 'DELETE'
+            });
+
+            if (response.ok) {
+                showSuccessMessage(`Episode ${episode} deleted successfully`);
+                const seasonBlock = btn?.closest('[data-season-block]');
+                btn?.closest('[data-episode-block]')?.remove();
+                if (seasonBlock) {
+                    if (_updateSeasonCount(seasonBlock) === 0) {
+                        seasonBlock.remove();
+                        _checkContentEmpty('season-list', 'content-empty-state-tv');
+                    } else {
+                        _refreshSeasonHeight(seasonBlock);
+                    }
+                }
+            } else {
+                const error = await response.json().catch(() => ({}));
+                showErrorMessage(`Error deleting episode: ${error.detail || 'Unknown error'}`);
+            }
+        } catch (error) {
+            console.error('Error deleting episode:', error);
+            showErrorMessage('Error deleting episode. Please try again.');
+        }
+    }
+
+    async function deleteTVSeason(season, btn) {
+        if (!confirm(`Delete the entire Season ${season}? This action cannot be undone.`)) return;
+
+        try {
+            const response = await fetch(`/api/media/delete-tv-season?tmdb_id=${tmdbId}&db_index=${dbIndex}&season=${season}`, {
+                method: 'DELETE'
+            });
+
+            if (response.ok) {
+                showSuccessMessage(`Season ${season} deleted successfully`);
+                btn?.closest('[data-season-block]')?.remove();
+                _checkContentEmpty('season-list', 'content-empty-state-tv');
+            } else {
+                const error = await response.json().catch(() => ({}));
+                showErrorMessage(`Error deleting season: ${error.detail || 'Unknown error'}`);
+            }
+        } catch (error) {
+            console.error('Error deleting season:', error);
+            showErrorMessage('Error deleting season. Please try again.');
+        }
+    }
+
+    function showSuccessMessage(message) {
+        showToast(message, 'success', 'Success');
+    }
+
+    function showErrorMessage(message) {
+        showToast(message, 'error', 'Error');
+    }
+
+    function copyStreamLink(qualityId, fileName) {
+        const base = window.location.origin;
+        const token = getCopylinkToken();
+
+        if (!token) {
+            showErrorMessage('No API token found. Please create an API token on the Dashboard page first.');
+            return;
+        }
+
+        const encodedName = encodeURIComponent(fileName || 'stream');
+        const url = `${base}/dl/${token}/${qualityId}/${encodedName}`;
+
+        navigator.clipboard.writeText(url).then(() => {
+            showSuccessMessage('Stream link copied to clipboard!');
+        }).catch(() => {
+            prompt('Copy this stream link:', url);
+        });
+    }
+
+    function getCopylinkToken() {
+        const serverToken = {{ (api_token | tojson) if api_token else 'null' }};
+        return serverToken || sessionStorage.getItem('api_token') || localStorage.getItem('api_token') || null;
+    }
+
+
+    const CURRENT_TMDB_ID = Number("{{ tmdb_id }}");
+    const CURRENT_DB_INDEX = Number("{{ db_index }}");
+    const CURRENT_MEDIA_TYPE = "{{ media_type }}";
+
+    let meSubscriptionOn = false;
+    let meTokens = [];
+
+    function mePublicLabel() { return meSubscriptionOn ? 'Active subscribers' : 'Everyone'; }
+
+    async function loadMediaVisibilityDeps() {
+        try {
+            const [sRes, tRes] = await Promise.all([
+                fetch('/api/admin/settings'),
+                fetch('/api/admin/access/tokens')
+            ]);
+            const sData = await sRes.json().catch(() => ({}));
+            const tData = await tRes.json().catch(() => ({}));
+            meSubscriptionOn = !!(sData.settings && sData.settings.subscription);
+            meTokens = (tData.tokens || []).filter(t => t.token);
+        } catch (e) {}
+        const opt = document.querySelector('#media-visibility option[value="public"]');
+        if (opt) opt.textContent = mePublicLabel();
+        await loadMediaVisibility();
+    }
+
+    function renderMediaTokenPicker(selected) {
+        const box = document.getElementById('media-token-picker');
+        if (!box) return;
+        const sel = new Set(selected || []);
+        if (!meTokens.length) {
+            box.innerHTML = '<p class="muted text-xs p-2">No users/tokens found. Create access tokens on the Access page first.</p>';
+            return;
+        }
+        box.innerHTML = meTokens.map(t => `
+            <label class="me-token-row">
+                <input type="checkbox" value="${escapeHtml(t.token)}" ${sel.has(t.token) ? 'checked' : ''}>
+                <span class="min-w-0">
+                    <span class="font-bold text-sm block truncate text-white">${escapeHtml(t.user_name || 'User')}</span>
+                    <span class="muted text-xs block truncate">${escapeHtml((t.token || '').slice(0, 12))}…${t.user_id ? ' · ' + escapeHtml(t.user_id) : ''}</span>
+                </span>
+            </label>`).join('');
+    }
+
+    function getMediaPickedTokens() {
+        return Array.from(document.querySelectorAll('#media-token-picker input:checked')).map(i => i.value);
+    }
+
+    function onMediaVisibilityChange(selected) {
+        const mode = document.getElementById('media-visibility').value;
+        const wrap = document.getElementById('media-token-picker-wrap');
+        if (wrap) wrap.classList.toggle('hidden', mode !== 'tokens');
+        if (mode === 'tokens') renderMediaTokenPicker(selected || []);
+    }
+
+    async function loadMediaVisibility() {
+        try {
+            const params = new URLSearchParams({
+                tmdb_id: String(CURRENT_TMDB_ID),
+                db_index: String(CURRENT_DB_INDEX),
+                media_type: CURRENT_MEDIA_TYPE
+            });
+            const res = await fetch(`/api/custom-catalogs/media-visibility?${params}`);
+            const data = await res.json().catch(() => ({}));
+            const vis = data.visibility || {};
+            const mode = vis.visibility || 'public';
+            const sel = document.getElementById('media-visibility');
+            if (sel) sel.value = mode;
+            onMediaVisibilityChange(vis.allowed_tokens || []);
+        } catch (e) {
+            onMediaVisibilityChange([]);
+        }
+    }
+
+    async function applyMediaVisibility() {
+        const visibility = document.getElementById('media-visibility').value;
+        const allowed_tokens = visibility === 'tokens' ? getMediaPickedTokens() : [];
+        if (visibility === 'tokens' && !allowed_tokens.length) {
+            showErrorMessage('Select at least one user.');
+            return;
+        }
+        try {
+            const res = await fetch('/api/custom-catalogs/media-visibility', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    tmdb_id: CURRENT_TMDB_ID,
+                    db_index: CURRENT_DB_INDEX,
+                    media_type: CURRENT_MEDIA_TYPE,
+                    visibility,
+                    allowed_tokens
+                })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.detail || 'Failed to update visibility');
+            showSuccessMessage(data.message || 'Visibility updated.');
+        } catch (e) {
+            showErrorMessage(e.message || 'Failed to update visibility.');
+        }
+    }
+
+    function setCatalogStatus(message, type = 'info') {
+        const status = document.getElementById('custom-catalog-status');
+        if (!status) return;
+        status.textContent = message;
+        status.classList.remove('text-emerald-300', 'text-rose-300', 'text-amber-300');
+        if (type === 'success') status.classList.add('text-emerald-300');
+        if (type === 'error') status.classList.add('text-rose-300');
+        if (type === 'warn') status.classList.add('text-amber-300');
+    }
+
+    //----- Rank a catalog for default selection: hidden (3) > custom (2) > auto (1)
+    function catalogRank(c) {
+        const hidden = (c.visibility === 'owner') || (c.visible === false);
+        if (hidden) return 3;
+        if (!c.auto) return 2;
+        return 1;
+    }
+
+    //----- Show which catalogs this title currently belongs to
+    function renderMediaInCatalogs(catalogs) {
+        const box = document.getElementById('media-in-catalogs');
+        if (!box) return;
+        const inList = (catalogs || []).filter(c => c.contains_current);
+        if (!inList.length) {
+            box.innerHTML = '<span class="me-chip me-chip-empty">Not in any catalog yet</span>';
+            return;
+        }
+        inList.sort((a, b) => catalogRank(b) - catalogRank(a));
+        box.innerHTML = inList.map(c => {
+            const hidden = (c.visibility === 'owner') || (c.visible === false);
+            const kind = c.auto ? 'auto' : (hidden ? 'hidden' : 'custom');
+            const icon = c.auto ? '✨' : (hidden ? '🔒' : '🎯');
+            const label = c.auto ? 'Auto' : (hidden ? 'Hidden' : 'Custom');
+            const excl = c.exclusive ? ' · 🔐' : '';
+            return `<span class="me-chip me-chip-${kind}" title="${escapeHtml(label)} catalog">${icon} ${escapeHtml(c.name)}${excl}</span>`;
+        }).join('');
+    }
+
+    async function loadMediaCatalogDropdown(selectedCatalogId = '') {
+        const select = document.getElementById('custom-catalog-select');
+        if (!select) return;
+
+        select.disabled = true;
+        select.innerHTML = '<option value="">Loading catalogs...</option>';
+        setCatalogStatus('Loading custom catalogs...');
+
+        try {
+            const params = new URLSearchParams({
+                tmdb_id: String(CURRENT_TMDB_ID),
+                db_index: String(CURRENT_DB_INDEX),
+                media_type: CURRENT_MEDIA_TYPE
+            });
+            const res = await fetch(`/api/custom-catalogs?${params.toString()}`);
+            const data = await res.json().catch(() => ({}));
+
+            if (!res.ok) {
+                throw new Error(data.detail || 'Failed to load catalogs');
+            }
+
+            const catalogs = data.catalogs || [];
+            if (!catalogs.length) {
+                select.innerHTML = '<option value="">No custom catalog found</option>';
+                setCatalogStatus('Create a catalog first from Manage Catalogs.', 'warn');
+                return;
+            }
+
+            select.innerHTML = catalogs.map(catalog => {
+                const visibility = catalog.visible ? 'Visible' : 'Hidden';
+                const added = catalog.contains_current ? ' · Added' : '';
+                return `<option value="${escapeHtml(catalog._id)}" data-visible="${catalog.visible ? '1' : '0'}" data-added="${catalog.contains_current ? '1' : '0'}">${escapeHtml(catalog.name)} (${visibility}${added})</option>`;
+            }).join('');
+
+            renderMediaInCatalogs(catalogs);
+
+            //----- Pre-select the catalog this title lives in: hidden > custom > auto
+            const containing = catalogs.filter(c => c.contains_current);
+            const priority = [...containing].sort((a, b) => catalogRank(b) - catalogRank(a))[0];
+            if (selectedCatalogId && catalogs.some(c => c._id === selectedCatalogId)) {
+                select.value = selectedCatalogId;
+            } else if (priority) {
+                select.value = priority._id;
+            }
+
+            select.disabled = false;
+            updateCatalogDropdownStatus();
+        } catch (error) {
+            select.innerHTML = '<option value="">Failed to load catalogs</option>';
+            setCatalogStatus(error.message || 'Failed to load custom catalogs.', 'error');
+            showToast(error.message || 'Failed to load custom catalogs', 'error', 'Error');
+        }
+    }
+
+    function updateCatalogDropdownStatus() {
+        const select = document.getElementById('custom-catalog-select');
+        if (!select || !select.value) return;
+
+        const option = select.options[select.selectedIndex];
+        const isVisible = option?.dataset.visible === '1';
+        const isAdded = option?.dataset.added === '1';
+
+        if (isAdded) {
+            setCatalogStatus(`This title is already added to ${option.textContent.replace(' · Added', '')}.`, 'success');
+        } else if (!isVisible) {
+            setCatalogStatus('This catalog is hidden from Stremio main catalog screen, but you can still manage it here.', 'warn');
+        } else {
+            setCatalogStatus('This visible catalog will appear in Stremio main catalog screen.', 'info');
+        }
+    }
+
+    async function addCurrentMediaToCatalog() {
+        const select = document.getElementById('custom-catalog-select');
+        const catalogId = select?.value;
+        if (!catalogId) {
+            showToast('Please select a catalog first.', 'error', 'Error');
+            return;
+        }
+
+        try {
+            const res = await fetch(`/api/custom-catalogs/${catalogId}/items`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    tmdb_id: CURRENT_TMDB_ID,
+                    db_index: CURRENT_DB_INDEX,
+                    media_type: CURRENT_MEDIA_TYPE
+                })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.detail || 'Failed to add title to catalog');
+
+            let msg = data.message || 'Added to catalog.';
+            if (data.visibility_synced) {
+                await loadMediaVisibility();
+                msg += data.visibility_synced === 'owner'
+                    ? ' Title is now Owner only.'
+                    : ' Title is now limited to specific users.';
+            }
+            showToast(msg, 'success', 'Success');
+            await loadMediaCatalogDropdown(catalogId);
+        } catch (error) {
+            showToast(error.message || 'Failed to add title to catalog', 'error', 'Error');
+            setCatalogStatus(error.message || 'Failed to add title to catalog.', 'error');
+        }
+    }
+
+    async function removeCurrentMediaFromCatalog() {
+        const select = document.getElementById('custom-catalog-select');
+        const catalogId = select?.value;
+        if (!catalogId) {
+            showToast('Please select a catalog first.', 'error', 'Error');
+            return;
+        }
+
+        try {
+            const params = new URLSearchParams({
+                tmdb_id: String(CURRENT_TMDB_ID),
+                db_index: String(CURRENT_DB_INDEX),
+                media_type: CURRENT_MEDIA_TYPE
+            });
+            const res = await fetch(`/api/custom-catalogs/${catalogId}/items?${params.toString()}`, {method: 'DELETE'});
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.detail || 'Failed to remove title from catalog');
+
+            showToast(data.message || 'Removed from catalog.', data.removed === false ? 'info' : 'success', 'Done');
+            await loadMediaCatalogDropdown(catalogId);
+        } catch (error) {
+            showToast(error.message || 'Failed to remove title from catalog', 'error', 'Error');
+            setCatalogStatus(error.message || 'Failed to remove title from catalog.', 'error');
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const select = document.getElementById('custom-catalog-select');
+        if (select) select.addEventListener('change', updateCatalogDropdownStatus);
+        loadMediaCatalogDropdown();
+        loadMediaVisibilityDeps();
+        document.querySelectorAll('.season-content').forEach((content, index) => {
+            if (index > 0) {
+                content.classList.add('season-collapsed');
+                content.style.maxHeight = '0px';
+                content.style.opacity = '0';
+                const arrow = document.getElementById(`season-arrow-${index}`);
+                if (arrow) arrow.style.transform = 'rotate(-90deg)';
+            } else {
+                content.style.maxHeight = content.scrollHeight + 'px';
+                content.style.opacity = '1';
+            }
+        });
+    });
+
+    let _stQualityId = null;
+    let _stMediaType = null;
+    let _stLabel = null;
+
+    async function runSpeedTest(qualityId, mediaTypeArg, label) {
+        _stQualityId = qualityId;
+        _stMediaType = mediaTypeArg;
+        _stLabel = label;
+        _openModal(label);
+        await _exec();
+    }
+
+    async function rerunSpeedTest() {
+        if (!_stQualityId) return;
+        _resetUI(_stLabel);
+        await _exec();
+    }
+
+    function _openModal(label) {
+        document.getElementById('speed-test-modal').classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+        _resetUI(label);
+    }
+
+    function _resetUI(label) {
+        document.getElementById('st-label').textContent = label ? `File: ${label}` : '';
+        document.getElementById('st-spinner').classList.remove('hidden');
+        document.getElementById('st-results').classList.add('hidden');
+        document.getElementById('st-error').classList.add('hidden');
+        document.getElementById('st-rerun-btn').classList.add('hidden');
+        document.getElementById('st-tbody').innerHTML = '';
+        document.getElementById('st-summary').textContent = '';
+    }
+
+    function closeSpeedTest() {
+        document.getElementById('speed-test-modal').classList.add('hidden');
+        document.body.style.overflow = '';
+        if (window._stEventSource) {
+            window._stEventSource.close();
+            window._stEventSource = null;
+        }
+    }
+
+    function _pingClass(ms) {
+        if (ms === null) return 'text-text-secondary';
+        if (ms < 100) return 'text-emerald-300 font-semibold';
+        if (ms < 300) return 'text-amber-300 font-semibold';
+        return 'text-rose-300 font-semibold';
+    }
+
+    function _speedClass(mbps) {
+        if (mbps === null) return 'text-text-secondary';
+        if (mbps >= 20) return 'text-emerald-300 font-bold';
+        if (mbps >= 5) return 'text-amber-300 font-bold';
+        return 'text-rose-300 font-bold';
+    }
+
+    function _miniBar(value, max, color) {
+        if (!value || !max) return '';
+        const pct = Math.min(100, (value / max) * 100).toFixed(1);
+        return `<div class="w-full bg-surface-2 rounded-full h-1.5 mt-1 overflow-hidden">
+            <div class="${color} h-1.5 rounded-full transition-all" style="width:${pct}%"></div>
+        </div>`;
+    }
+
+    async function _exec() {
+        const params = new URLSearchParams({
+            quality_id: _stQualityId,
+            tmdb_id: tmdbId,
+            db_index: dbIndex,
+            media_type: _stMediaType || mediaType
+        });
+
+        if (window._stEventSource) {
+            window._stEventSource.close();
+            window._stEventSource = null;
+        }
+
+        let maxSpeed = 1;
+        let completedCount = 0;
+        let totalCount = 0;
+        const allResults = [];
+        const pendingRows = {};
+
+        const es = new EventSource(`/api/system/speedtest/stream?${params}`);
+        window._stEventSource = es;
+
+        function updateSummary() {
+            const best = allResults.filter(r => r.speed_mbps).sort((a, b) => b.speed_mbps - a.speed_mbps)[0];
+            const summaryEl = document.getElementById('st-summary');
+            if (!summaryEl) return;
+
+            if (best) {
+                summaryEl.textContent = `🏆 Fastest: DC ${best.dc_id} — ${best.speed_mbps.toFixed(2)} MB/s | ${completedCount}/${totalCount} client(s) done`;
+            } else {
+                summaryEl.textContent = `${completedCount}/${totalCount} client(s) done`;
+            }
+        }
+
+        es.onmessage = (e) => {
+            let msg;
+            try { msg = JSON.parse(e.data); } catch { return; }
+
+            if (msg.type === 'error') {
+                es.close();
+                document.getElementById('st-spinner').classList.add('hidden');
+                document.getElementById('st-error').textContent = `Speed test stream error: ${msg.message}`;
+                document.getElementById('st-error').classList.remove('hidden');
+                document.getElementById('st-rerun-btn').classList.remove('hidden');
+                showToast(msg.message || 'Speed test failed.', 'error', 'Speed Test Error');
+                return;
+            }
+
+            if (msg.type === 'start') {
+                totalCount = msg.total;
+                document.getElementById('st-spinner').classList.add('hidden');
+                document.getElementById('st-results').classList.remove('hidden');
+
+                if (msg.target_dc && msg.target_dc !== "?") {
+                    document.getElementById('st-label').innerHTML += ` &nbsp;|&nbsp; Target DC: <span class="text-white font-semibold">${msg.target_dc}</span>`;
+                }
+
+                const tbody = document.getElementById('st-tbody');
+                tbody.innerHTML = '';
+                for (let i = 0; i < totalCount; i++) {
+                    const tr = document.createElement('tr');
+                    tr.className = 'animate-pulse';
+                    tr.innerHTML = `
+                        <td class="px-4 py-3 font-medium text-text-secondary">🔄 Bot ${i + 1}</td>
+                        <td class="px-4 py-3"><span class="text-muted">testing…</span></td>
+                        <td class="px-4 py-3"><span class="text-muted">testing…</span></td>
+                        <td class="px-4 py-3 text-muted">—</td>
+                        <td class="px-4 py-3 text-muted">—</td>
+                        <td class="px-4 py-3"><span class="px-2 py-0.5 rounded-full text-xs bg-surface-2 text-text-secondary">Pending</span></td>`;
+                    tbody.appendChild(tr);
+                    pendingRows[i] = tr;
+                }
+                updateSummary();
+            }
+
+            if (msg.type === 'progress') {
+                const r = msg.data;
+                const tr = pendingRows[r.client_index];
+                if (tr) {
+                    maxSpeed = Math.max(maxSpeed, r.speed_mbps || 0, 1);
+                    const isErr = !!r.error && !r.speed_mbps;
+                    const medal = '';
+                    const dc = `Bot ${r.client_index + 1} <span class="text-xs text-text-secondary">(DC ${r.dc_id})</span>`;
+                    const ping = r.ping_ms !== null ? `<span class="${_pingClass(r.ping_ms)}">${r.ping_ms} ms</span>` : '<span class="text-text-secondary">—</span>';
+                    const speed = r.speed_mbps !== null
+                        ? `<span class="${_speedClass(r.speed_mbps)}">${r.speed_mbps.toFixed(2)} MB/s</span>
+                           ${_miniBar(r.speed_mbps, maxSpeed, r.speed_mbps >= 20 ? 'bg-emerald-400' : r.speed_mbps >= 5 ? 'bg-amber-300' : 'bg-rose-300')}`
+                        : '<span class="text-text-secondary">—</span>';
+                    const taken = r.time_taken_sec !== null ? `${r.time_taken_sec.toFixed(2)}s` : '—';
+                    const bytes = r.bytes_downloaded ? `${(r.bytes_downloaded / 1048576).toFixed(2)} MB` : '—';
+                    const badge = isErr
+                        ? `<span class="px-2 py-0.5 rounded-full text-xs font-medium bg-rose-500/15 text-rose-200 border border-rose-500/20">Error</span>`
+                        : `<span class="px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-500/15 text-emerald-200 border border-emerald-500/20">✓ OK</span>`;
+
+                    const newTr = document.createElement('tr');
+                    newTr.className = `transition-colors ${isErr ? 'opacity-70' : ''}`;
+                    newTr.innerHTML = `
+                        <td class="px-4 py-3 font-medium text-white">${medal}${dc}</td>
+                        <td class="px-4 py-3 text-text">${ping}</td>
+                        <td class="px-4 py-3 text-text">${speed}${isErr ? `<div class="text-xs text-rose-300 mt-1">${r.error}</div>` : ''}</td>
+                        <td class="px-4 py-3 text-text-secondary text-sm">${taken}</td>
+                        <td class="px-4 py-3 text-text-secondary text-xs">${bytes}</td>
+                        <td class="px-4 py-3">${badge}</td>`;
+
+                    if (pendingRows[r.client_index]) {
+                        pendingRows[r.client_index].replaceWith(newTr);
+                        delete pendingRows[r.client_index];
+                    } else {
+                        document.getElementById('st-tbody').appendChild(newTr);
+                    }
+
+                    allResults.push(r);
+                    completedCount += 1;
+                    updateSummary();
+                }
+            }
+
+            if (msg.type === 'done') {
+                es.close();
+                window._stEventSource = null;
+
+                allResults.sort((a, b) => (b.speed_mbps || 0) - (a.speed_mbps || 0));
+                const tbody = document.getElementById('st-tbody');
+                tbody.innerHTML = '';
+
+                for (let i = 0; i < allResults.length; i++) {
+                    const r = allResults[i];
+                    const isErr = !!r.error && !r.speed_mbps;
+                    const medal = i === 0 && !isErr ? '🥇 ' : '';
+                    const dc = `Bot ${r.client_index + 1} <span class="text-xs text-text-secondary">(DC ${r.dc_id})</span>`;
+                    const ping = r.ping_ms !== null ? `<span class="${_pingClass(r.ping_ms)}">${r.ping_ms} ms</span>` : '<span class="text-text-secondary">—</span>';
+                    const speed = r.speed_mbps !== null
+                        ? `<span class="${_speedClass(r.speed_mbps)}">${r.speed_mbps.toFixed(2)} MB/s</span>
+                           ${_miniBar(r.speed_mbps, maxSpeed, r.speed_mbps >= 20 ? 'bg-emerald-400' : r.speed_mbps >= 5 ? 'bg-amber-300' : 'bg-rose-300')}`
+                        : '<span class="text-text-secondary">—</span>';
+                    const taken = r.time_taken_sec !== null ? `${r.time_taken_sec.toFixed(2)}s` : '—';
+                    const bytes = r.bytes_downloaded ? `${(r.bytes_downloaded / 1048576).toFixed(2)} MB` : '—';
+                    const badge = isErr
+                        ? `<span class="px-2 py-0.5 rounded-full text-xs font-medium bg-rose-500/15 text-rose-200 border border-rose-500/20">Error</span>`
+                        : `<span class="px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-500/15 text-emerald-200 border border-emerald-500/20">✓ OK</span>`;
+
+                    const tr = document.createElement('tr');
+                    tr.className = `transition-colors ${isErr ? 'opacity-70' : ''}`;
+                    tr.innerHTML = `
+                        <td class="px-4 py-3 font-medium text-white">${medal}${dc}</td>
+                        <td class="px-4 py-3 text-text">${ping}</td>
+                        <td class="px-4 py-3 text-text">${speed}${isErr ? `<div class="text-xs text-rose-300 mt-1">${r.error}</div>` : ''}</td>
+                        <td class="px-4 py-3 text-text-secondary text-sm">${taken}</td>
+                        <td class="px-4 py-3 text-text-secondary text-xs">${bytes}</td>
+                        <td class="px-4 py-3">${badge}</td>`;
+                    tbody.appendChild(tr);
+                }
+
+                document.getElementById('st-rerun-btn').classList.remove('hidden');
+                updateSummary();
+                showToast('Speed test completed.', 'success', 'Speed Test');
+            }
+        };
+
+        es.onerror = () => {
+            es.close();
+            window._stEventSource = null;
+            if (completedCount === 0) {
+                document.getElementById('st-spinner').classList.add('hidden');
+                document.getElementById('st-error').textContent = 'Live tracking connection failed or interrupted.';
+                document.getElementById('st-error').classList.remove('hidden');
+                showToast('Live tracking connection failed or interrupted.', 'error', 'Speed Test Error');
+            }
+            document.getElementById('st-rerun-btn').classList.remove('hidden');
+        };
+    }
+
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape') { closeSpeedTest(); closeAddStream(); }
+    });
+
+    function addStreamResetParts() {
+        document.getElementById('as-parts').innerHTML =
+            `<div class="flex flex-col sm:flex-row gap-2" data-part>
+                <input class="as-input as-part-url" placeholder="https://t.me/c/123456/789">
+                <button type="button" onclick="addStreamResolve()" class="as-btn as-btn-ghost w-full sm:w-auto">Resolve</button>
+             </div>`;
+    }
+
+    function addStreamPart() {
+        const div = document.createElement('div');
+        div.className = 'flex flex-col sm:flex-row gap-2';
+        div.setAttribute('data-part', '');
+        div.innerHTML = `<input class="as-input as-part-url" placeholder="Split part link (in order)">
+            <button type="button" onclick="this.closest('[data-part]').remove()" class="as-btn as-btn-ghost w-full sm:w-auto">Remove</button>`;
+        document.getElementById('as-parts').appendChild(div);
+    }
+
+    function addStreamCollectParts() {
+        return [...document.querySelectorAll('#as-parts .as-part-url')]
+            .map(i => i.value.trim()).filter(Boolean).map(url => ({ url }));
+    }
+
+    function openAddStream() {
+        ['as-name', 'as-season', 'as-episode', 'as-episode-title', 'as-quality-custom'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.value = '';
+        });
+        addStreamResetParts();
+        const q = document.getElementById('as-quality');
+        if (q) q.value = '1080p';
+        document.getElementById('as-quality-custom')?.classList.add('hidden');
+        document.getElementById('as-resolve-state')?.classList.add('hidden');
+        document.getElementById('add-stream-modal').classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeAddStream() {
+        document.getElementById('add-stream-modal')?.classList.add('hidden');
+        document.body.style.overflow = '';
+    }
+
+    function addStreamQuality() {
+        const sel = document.getElementById('as-quality');
+        if (sel.value === '__custom') return document.getElementById('as-quality-custom').value.trim();
+        return sel.value;
+    }
+
+    async function addStreamResolve() {
+        const first = document.querySelector('#as-parts .as-part-url');
+        const url = first ? first.value.trim() : '';
+        const state = document.getElementById('as-resolve-state');
+        if (!url) { showErrorMessage('Paste a Telegram message link first.'); return; }
+        state.textContent = 'Resolving...';
+        state.classList.remove('hidden');
+        try {
+            const res = await fetch('/api/media/resolve-telegram', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.detail || 'Could not resolve link');
+            const d = data.data || {};
+            document.getElementById('as-name').value = d.name || '';
+            if (d.quality) {
+                const sel = document.getElementById('as-quality');
+                const custom = document.getElementById('as-quality-custom');
+                const opt = [...sel.options].find(o => o.value.toLowerCase() === String(d.quality).toLowerCase());
+                if (opt) {
+                    sel.value = opt.value;
+                    custom.classList.add('hidden');
+                } else {
+                    sel.value = '__custom';
+                    custom.value = d.quality;
+                    custom.classList.remove('hidden');
+                }
+            }
+            if (mediaType === 'tv') {
+                if (d.season != null && !document.getElementById('as-season').value) document.getElementById('as-season').value = d.season;
+                if (d.episode != null && !document.getElementById('as-episode').value) document.getElementById('as-episode').value = d.episode;
+            }
+            state.textContent = `Found: ${d.name || 'file'} (${d.size || '—'})`;
+        } catch (e) {
+            state.textContent = e.message || 'Could not resolve link.';
+            showErrorMessage(e.message || 'Could not resolve link.');
+        }
+    }
+
+    async function submitAddStream() {
+        const btn = document.getElementById('as-submit');
+        const parts = addStreamCollectParts();
+        const quality = addStreamQuality();
+        if (!parts.length) { showErrorMessage('Paste at least one Telegram message link.'); return; }
+        if (!quality) { showErrorMessage('Select a quality.'); return; }
+
+        const payload = {
+            media_type: mediaType,
+            tmdb_id: tmdbId,
+            db_index: dbIndex,
+            stream: { quality, name: document.getElementById('as-name').value.trim() || undefined, parts }
+        };
+
+        if (mediaType === 'tv') {
+            const s = document.getElementById('as-season').value.trim();
+            const ep = document.getElementById('as-episode').value.trim();
+            if (s === '' || ep === '') { showErrorMessage('Season and episode are required.'); return; }
+            payload.season_number = Number(s);
+            payload.episode_number = Number(ep);
+            payload.episode_title = document.getElementById('as-episode-title').value.trim() || undefined;
+        }
+
+        btn.disabled = true;
+        try {
+            const res = await fetch('/api/media/manual-add', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.detail || 'Failed to add stream');
+            showSuccessMessage(data.message || 'Stream added successfully.');
+            closeAddStream();
+            const goTmdb = data.tmdb_id || tmdbId;
+            const goDb = data.db_index || dbIndex;
+            setTimeout(() => {
+                window.location.href = `/media/edit?tmdb_id=${goTmdb}&db_index=${goDb}&media_type=${mediaType}`;
+            }, 700);
+        } catch (e) {
+            showErrorMessage(e.message || 'Failed to add stream.');
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    let subtitleLanguages = [];
+
+    function subtitleLangOptions() {
+        const opts = ['<option value="">Auto-detect</option>'];
+        for (const l of subtitleLanguages) opts.push(`<option value="${l.code}">${l.label}</option>`);
+        return opts.join('');
+    }
+
+    function addSubtitleRow(url = '') {
+        const div = document.createElement('div');
+        div.className = 'flex flex-col sm:flex-row gap-2';
+        div.setAttribute('data-sub-row', '');
+        div.innerHTML = `<input class="field-input flex-1 sub-url" placeholder="Telegram message link" value="${url}">
+            <select class="field-input sm:w-44 sub-lang">${subtitleLangOptions()}</select>
+            <button type="button" onclick="this.closest('[data-sub-row]').remove()" class="btn-ui btn-ghost w-full sm:w-auto">Remove</button>`;
+        document.getElementById('subtitle-rows').appendChild(div);
+    }
+
+    async function loadSubtitleLanguages() {
+        if (subtitleLanguages.length) return;
+        try {
+            const res = await fetch('/api/media/subtitles/languages');
+            const data = await res.json().catch(() => ({}));
+            subtitleLanguages = data.languages || [];
+        } catch (e) {}
+    }
+
+    async function loadSubtitles() {
+        const listEl = document.getElementById('subtitle-list');
+        const emptyEl = document.getElementById('subtitle-empty');
+        if (!listEl) return;
+        try {
+            const res = await fetch(`/api/media/subtitles?media_type=${mediaType}&tmdb_id=${tmdbId}&db_index=${dbIndex}`);
+            const data = await res.json().catch(() => ({}));
+            const subs = data.subtitles || [];
+            if (!subs.length) { listEl.innerHTML = ''; emptyEl.classList.remove('hidden'); return; }
+            emptyEl.classList.add('hidden');
+            listEl.innerHTML = subs.map(s => {
+                const pad = n => String(n).padStart(2, '0');
+                const where = (s.media_type === 'tv' && s.season) ? `S${pad(s.season)}E${pad(s.episode)} · ` : '';
+                return `<div class="quality-row rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div class="min-w-0 flex-1">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <span class="quality-badge bg-purple-500/15 text-purple-300 border border-purple-500/20">${s.lang_label || s.lang_code || 'Unknown'}</span>
+                            <span class="pill">${where}${s.source || 'auto'}</span>
+                        </div>
+                        <p class="muted mt-2 text-sm break-all">${s.name || ''}</p>
+                    </div>
+                    <button onclick="removeSubtitle(${s.chat_id}, ${s.msg_id}, this)" class="btn-ui btn-danger w-full sm:w-auto">Delete</button>
+                </div>`;
+            }).join('');
+        } catch (e) {
+            listEl.innerHTML = ''; emptyEl.classList.remove('hidden');
+        }
+    }
+
+    function openSubtitleModal() {
+        if (mediaType === 'tv') {
+            document.getElementById('sub-season').value = '';
+            document.getElementById('sub-episode').value = '';
+        }
+        document.getElementById('subtitle-rows').innerHTML = '';
+        addSubtitleRow();
+        document.getElementById('subtitle-modal').classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeSubtitleModal() {
+        document.getElementById('subtitle-modal')?.classList.add('hidden');
+        document.body.style.overflow = '';
+    }
+
+    async function submitSubtitles() {
+        const btn = document.getElementById('sub-submit');
+        let season = '', episode = '';
+        if (mediaType === 'tv') {
+            season = document.getElementById('sub-season').value.trim();
+            episode = document.getElementById('sub-episode').value.trim();
+            if (season === '' || episode === '') { showErrorMessage('Season and episode are required.'); return; }
+        }
+        const items = [...document.querySelectorAll('#subtitle-rows [data-sub-row]')].map(r => {
+            const url = r.querySelector('.sub-url').value.trim();
+            if (!url) return null;
+            const item = { url, lang_code: r.querySelector('.sub-lang').value || undefined };
+            if (mediaType === 'tv') { item.season = Number(season); item.episode = Number(episode); }
+            return item;
+        }).filter(Boolean);
+        if (!items.length) { showErrorMessage('Paste at least one subtitle link.'); return; }
+
+        btn.disabled = true;
+        try {
+            const res = await fetch('/api/media/subtitles/add', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ media_type: mediaType, tmdb_id: tmdbId, db_index: dbIndex, items })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.detail || 'Failed to add subtitle');
+            showSuccessMessage(data.message || 'Subtitle added.');
+            closeSubtitleModal();
+            loadSubtitles();
+        } catch (e) {
+            showErrorMessage(e.message || 'Failed to add subtitle.');
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    async function removeSubtitle(chatId, msgId, el) {
+        if (el) el.disabled = true;
+        try {
+            const res = await fetch('/api/media/subtitles/remove', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chat_id: chatId, msg_id: msgId })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.detail || 'Failed to remove subtitle');
+            showSuccessMessage(data.message || 'Subtitle removed.');
+            loadSubtitles();
+        } catch (e) {
+            if (el) el.disabled = false;
+            showErrorMessage(e.message || 'Failed to remove subtitle.');
+        }
+    }
+
+    function manageListUrl() {
+        const p = new URLSearchParams(location.search);
+        const params = new URLSearchParams();
+        params.set('media_type', mediaType);
+        const page = p.get('page');
+        const search = p.get('search');
+        if (page && parseInt(page, 10) > 1) params.set('page', page);
+        if (search) params.set('search', search);
+        return `/media/manage?${params.toString()}`;
+    }
+
+    function goBackToList() {
+        window.location.href = manageListUrl();
+    }
+
+    function refreshVisibleSeasonHeights() {
+        document.querySelectorAll('.season-content').forEach(content => {
+            if (!content.classList.contains('season-collapsed')) {
+                content.style.maxHeight = content.scrollHeight + 'px';
+            }
+        });
+    }
+
+    function switchEditTab(name, doScroll = true) {
+        document.querySelectorAll('.edit-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+        document.querySelectorAll('.edit-panel').forEach(p => p.classList.toggle('hidden', p.dataset.panel !== name));
+        if (name === 'content') refreshVisibleSeasonHeights();
+        try { history.replaceState(null, '', '#' + name); } catch (e) {}
+        if (doScroll) {
+            const tabs = document.getElementById('edit-tabs');
+            if (tabs) tabs.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const valid = ['details', 'content', 'subtitles', 'catalog', 'rescan'];
+        const hash = (location.hash || '').replace('#', '');
+        if (valid.includes(hash)) {
+            switchEditTab(hash, false);
+        } else {
+            refreshVisibleSeasonHeights();
+        }
+    });
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const backLink = document.getElementById('back-to-list');
+        if (backLink) backLink.href = manageListUrl();
+        if (document.getElementById('subtitle-list')) {
+            loadSubtitleLanguages().then(loadSubtitles);
+        }
+    });
+</script>
+{% endblock %}

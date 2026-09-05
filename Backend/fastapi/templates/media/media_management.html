@@ -1,0 +1,998 @@
+{% extends "base.html" %}
+
+{% block title %}Media Management - Telegram Stremio{% endblock %}
+
+{% block content %}
+<div class="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <!-- Unified toolbar -->
+    <section class="glass-panel rounded-3xl p-4 sm:p-5 mb-6 sm:mb-8">
+        <div class="flex flex-col xl:flex-row xl:items-center gap-4">
+            <h1 class="text-xl sm:text-2xl font-extrabold tracking-tight text-text shrink-0">
+                <i class="fa-solid fa-clapperboard text-primary mr-2"></i>Media Library
+            </h1>
+
+            <div class="relative flex-1 min-w-0">
+                <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-text-secondary text-sm"></i>
+                <input type="text" id="search-input"
+                       placeholder="Search {{ media_type }}s by title..."
+                       class="w-full pl-11 pr-24 py-3 rounded-2xl bg-background text-text placeholder:text-text-secondary border border-border focus:outline-none focus:ring-2 focus:ring-primary/60 focus:border-primary transition">
+                <div class="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                    <button onclick="clearSearch()" title="Clear"
+                            class="w-9 h-9 inline-flex items-center justify-center rounded-xl text-text-secondary hover:bg-surface-2 transition">
+                        <i class="fa-solid fa-rotate-left"></i>
+                    </button>
+                    <button onclick="searchMedia()" title="Search"
+                            class="w-9 h-9 inline-flex items-center justify-center rounded-xl bg-primary text-white shadow-lg shadow-primary/20">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2">
+                <a href="/media/manage?media_type=movie{% if custom %}&custom=1{% endif %}"
+                   class="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-full text-sm font-bold transition border {% if media_type == 'movie' %}bg-primary text-white border-primary shadow-lg shadow-primary/20{% else %}glass-panel text-text hover:bg-surface-2 border-hairline{% endif %}">
+                    <i class="fa-solid fa-film"></i> Movies
+                </a>
+                <a href="/media/manage?media_type=tv{% if custom %}&custom=1{% endif %}"
+                   class="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-full text-sm font-bold transition border {% if media_type == 'tv' %}bg-primary text-white border-primary shadow-lg shadow-primary/20{% else %}glass-panel text-text hover:bg-surface-2 border-hairline{% endif %}">
+                    <i class="fa-solid fa-tv"></i> TV
+                </a>
+                <label class="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-full text-sm font-bold transition border cursor-pointer select-none {% if custom %}bg-amber-500/15 text-amber-300 border-amber-500/40{% else %}glass-panel text-text hover:bg-surface-2 border-hairline{% endif %}">
+                    <input type="checkbox" {% if custom %}checked{% endif %}
+                           onchange="window.location.href='/media/manage?media_type={{ media_type }}' + (this.checked ? '&custom=1' : '')"
+                           class="w-4 h-4 rounded accent-amber-500 cursor-pointer">
+                    <i class="fa-solid fa-star"></i> Custom
+                </label>
+                <button type="button" onclick="openManualAdd()"
+                   class="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-full text-sm font-bold transition border bg-emerald-500 text-white border-emerald-500 shadow-lg shadow-emerald-500/20 hover:bg-emerald-500/90">
+                    <i class="fa-solid fa-plus"></i> Add
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Loading Indicator -->
+    <div id="loading" class="hidden text-center py-16">
+        <div class="inline-flex items-center justify-center w-14 h-14 rounded-full border border-hairline glass-panel mb-4">
+            <div class="animate-spin rounded-full h-7 w-7 border-b-2 border-primary"></div>
+        </div>
+        <p class="text-text-secondary">Loading {{ media_type }}s...</p>
+    </div>
+
+    <!-- Error Display -->
+    <div id="error-display" class="hidden mb-6 sm:mb-8">
+        <div class="glass-panel rounded-3xl p-5 sm:p-6 border border-red-500/30">
+            <div class="flex items-start gap-3">
+                <div class="w-11 h-11 rounded-2xl bg-red-500/15 flex items-center justify-center shrink-0">
+                    <i class="fa-solid fa-triangle-exclamation text-red-400"></i>
+                </div>
+                <div class="flex-1">
+                    <h3 class="text-lg font-bold text-red-300">Error Loading Media</h3>
+                    <p id="error-message" class="mt-2 text-sm text-red-200/90"></p>
+                    <button onclick="retryLoad()"
+                            class="mt-4 inline-flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-4 py-2.5 rounded-2xl transition font-bold shadow-lg shadow-primary/20">
+                        <i class="fa-solid fa-rotate-right"></i>
+                        Try Again
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Media Grid -->
+    <div id="media-grid"
+         class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4 sm:gap-5 mb-6 sm:mb-8">
+        <!-- Media items will be loaded here -->
+    </div>
+
+    <!-- No Results -->
+    <div id="no-results" class="hidden text-center py-16">
+        <div class="glass-panel rounded-3xl p-8 max-w-xl mx-auto">
+            <div class="mx-auto w-16 h-16 rounded-2xl bg-surface flex items-center justify-center mb-4 border border-hairline">
+                <i class="fa-solid fa-box-open text-3xl text-text-secondary"></i>
+            </div>
+            <h3 class="text-xl font-bold text-text mb-2">No {{ media_type }}s found</h3>
+            <p class="text-sm text-text-secondary mb-6">
+                {% if media_type == 'movie' %}
+                No movies match your search criteria.
+                {% else %}
+                No TV shows match your search criteria.
+                {% endif %}
+            </p>
+            <button onclick="clearSearch()"
+                    class="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-5 py-3 rounded-2xl transition font-bold shadow-lg shadow-primary/20">
+                <i class="fa-solid fa-clapperboard"></i>
+                Show All {{ media_type|title }}s
+            </button>
+        </div>
+    </div>
+
+    <!-- Pagination -->
+    <div id="pagination" class="hidden mt-6 sm:mt-8">
+        <div class="glass-panel rounded-3xl p-3 sm:p-4 overflow-x-auto">
+            <div class="flex justify-center items-center gap-2 min-w-max px-1" id="pagination-inner"></div>
+        </div>
+    </div>
+
+    <!-- Media Info -->
+    <div id="media-info" class="hidden mt-6">
+        <div class="glass-panel rounded-3xl p-4 sm:p-5">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 text-sm text-text-secondary">
+                <span id="results-info"></span>
+                <span id="db-info"></span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let currentPage = 1;
+    let currentSearch = '';
+    let isLoading = false;
+    const mediaType = '{{ media_type }}';
+    const isCustom = {{ 'true' if custom else 'false' }};
+
+    function showLoading() {
+        isLoading = true;
+        document.getElementById('loading').classList.remove('hidden');
+        document.getElementById('media-grid').classList.add('hidden');
+        document.getElementById('no-results').classList.add('hidden');
+        document.getElementById('pagination').classList.add('hidden');
+        document.getElementById('media-info').classList.add('hidden');
+        document.getElementById('error-display').classList.add('hidden');
+    }
+
+    function hideLoading() {
+        isLoading = false;
+        document.getElementById('loading').classList.add('hidden');
+        document.getElementById('media-grid').classList.remove('hidden');
+    }
+
+    function showError(message) {
+        document.getElementById('error-message').textContent = message;
+        document.getElementById('error-display').classList.remove('hidden');
+        document.getElementById('loading').classList.add('hidden');
+        document.getElementById('media-grid').classList.add('hidden');
+        document.getElementById('no-results').classList.add('hidden');
+        document.getElementById('pagination').classList.add('hidden');
+        document.getElementById('media-info').classList.add('hidden');
+    }
+
+    function syncPageUrl(page, search) {
+        const params = new URLSearchParams();
+        params.set('media_type', mediaType);
+        if (isCustom) params.set('custom', '1');
+        if (page > 1) params.set('page', page);
+        if (search) params.set('search', search);
+        history.replaceState(null, '', `${location.pathname}?${params.toString()}`);
+    }
+
+    async function loadMedia(page = 1, search = '') {
+        if (isLoading) return;
+
+        showLoading();
+        currentPage = page;
+        currentSearch = search;
+        syncPageUrl(page, search);
+
+        try {
+            const url = `/api/media/list?media_type=${mediaType}&page=${page}&page_size=24&search=${encodeURIComponent(search)}&custom=${isCustom ? 1 : 0}`;
+            const response = await fetch(url, {
+                method: 'GET',
+                credentials: 'same-origin',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                if (response.status === 401) {
+                    window.location.href = '/login';
+                    return;
+                }
+                throw new Error(`Server responded with ${response.status}: ${response.statusText}`);
+            }
+
+            const data = await response.json();
+            hideLoading();
+
+            const grid = document.getElementById('media-grid');
+            const mediaKey = mediaType === 'movie' ? 'movies' : 'tv_shows';
+            const mediaItems = data[mediaKey] || [];
+
+            if (mediaItems.length === 0) {
+                grid.innerHTML = '';
+                document.getElementById('no-results').classList.remove('hidden');
+                document.getElementById('pagination').classList.add('hidden');
+                document.getElementById('media-info').classList.add('hidden');
+                return;
+            }
+
+            document.getElementById('no-results').classList.add('hidden');
+            grid.innerHTML = mediaItems.map(item => createMediaCard(item)).join('');
+            updatePagination(data.current_page || page, data.total_pages || 1);
+            updateMediaInfo(data);
+
+        } catch (error) {
+            console.error('Error loading media:', error);
+            hideLoading();
+            showError(`Failed to load ${mediaType}s: ${error.message}`);
+            showToast(`Failed to load ${mediaType}s.`, 'error', 'Load Error');
+        }
+    }
+
+
+    function collectQualities(item) {
+        const out = [];
+        (item.telegram || []).forEach(q => out.push(q));
+        (item.seasons || []).forEach(s => (s.episodes || []).forEach(e => (e.telegram || []).forEach(q => out.push(q))));
+        return out;
+    }
+
+    function sizeToBytes(str) {
+        if (!str) return 0;
+        const m = String(str).trim().match(/([\d.]+)\s*([A-Za-z]+)/);
+        if (!m) return 0;
+        const mult = { B: 1, KB: 1024, MB: 1024 ** 2, GB: 1024 ** 3, TB: 1024 ** 4 };
+        return parseFloat(m[1]) * (mult[m[2].toUpperCase()] || 1);
+    }
+
+    function bytesToSize(bytes) {
+        if (!bytes) return '';
+        const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+        let i = 0, v = bytes;
+        while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+        return `${v.toFixed(v >= 100 || i === 0 ? 0 : 1)} ${units[i]}`;
+    }
+
+    function allQualityLabels(qualities) {
+        const norm = { '2160p': '4K', '4k': '4K', '1080p': '1080p', '720p': '720p', '480p': '480p', '360p': '360p' };
+        const rank = { '4K': 5, '1080p': 4, '720p': 3, '480p': 2, '360p': 1 };
+        const set = new Set();
+        qualities.forEach(q => { const k = String(q.quality || '').toLowerCase(); if (norm[k]) set.add(norm[k]); });
+        return Array.from(set).sort((a, b) => (rank[b] || 0) - (rank[a] || 0));
+    }
+
+    function mediaBadges(item) {
+        const qs = collectQualities(item);
+        if (!qs.length) return '';
+        const isSplit = qs.some(q => q.group_key || (q.parts && q.parts.length));
+        const totalBytes = qs.reduce((sum, q) => sum + sizeToBytes(q.size), 0);
+        const labels = allQualityLabels(qs);
+        const size = bytesToSize(totalBytes);
+        const qpills = labels.map((l, i) =>
+            `<span class="px-1.5 py-[3px] rounded-md ${i === 0 ? 'bg-primary text-white' : 'bg-white/20 text-white'} text-[10px] font-extrabold leading-none backdrop-blur-sm">${l}</span>`
+        ).join('');
+        const split = isSplit
+            ? `<span class="px-1.5 py-[3px] rounded-md bg-purple-600/90 text-white text-[10px] font-extrabold leading-none"><i class="fa-solid fa-puzzle-piece"></i></span>` : '';
+        const sizeTag = size
+            ? `<span class="px-1.5 py-[3px] rounded-md bg-black/70 text-white text-[10px] font-bold leading-none whitespace-nowrap"><i class="fa-solid fa-hard-drive mr-1 opacity-70"></i>${size}</span>` : '';
+        return `
+            <div class="absolute inset-x-0 bottom-0 px-2 pb-2 pt-10 bg-gradient-to-t from-black/85 via-black/40 to-transparent pointer-events-none">
+                <div class="flex items-end justify-between gap-2">
+                    <span class="flex items-center gap-1 flex-wrap">${qpills}${split}</span>
+                    ${sizeTag}
+                </div>
+            </div>`;
+    }
+
+    function createMediaCard(item) {
+    const title = item.title || item.name || 'Unknown Title';
+    const year = item.release_year || 'Unknown Year';
+    const rating = item.rating ? `⭐ ${parseFloat(item.rating).toFixed(1)}` : '';
+    const poster = item.poster || 'https://via.placeholder.com/300x450/e5e7eb/9ca3af?text=No+Image';
+
+    // Escape title for data attribute safety
+    const safeTitle = title.replace(/"/g, '&quot;');
+
+    return `
+        <div class="group overflow-hidden rounded-3xl glass-panel border border-hairline hover:border-primary/30 transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl">
+            <div class="relative overflow-hidden">
+                <img src="${poster}" alt="${title}" class="w-full aspect-[2/3] object-cover transition duration-300 group-hover:scale-105" onerror="this.src='https://via.placeholder.com/300x450/e5e7eb/9ca3af?text=No+Image'" loading="lazy">
+                <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+
+                <div class="absolute top-3 left-3">
+                    <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-black/60 text-white text-[11px] font-bold border border-hairline">
+                        <i class="fa-solid fa-calendar-days"></i> ${year}
+                    </span>
+                </div>
+                ${Number(item.tmdb_id) < 0 ? `
+                <div class="absolute top-3 right-3">
+                    <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-500/90 text-white text-[11px] font-bold border border-amber-400/40">
+                        <i class="fa-solid fa-star"></i> Custom
+                    </span>
+                </div>` : ''}
+                ${mediaBadges(item)}
+            </div>
+
+            <div class="p-4">
+                <h3 class="font-bold text-sm sm:text-base text-text line-clamp-2 min-h-[2.75rem]" title="${title}">${title}</h3>
+                <div class="mt-2 flex items-center justify-between text-xs text-text-secondary">
+                    <span>DB #${item.db_index ?? '-'}</span>
+                    <span>${mediaType === 'movie' ? 'Movie' : 'TV Show'}</span>
+                </div>
+
+                <div class="mt-4 flex gap-2">
+                    <a href="/media/edit?tmdb_id=${encodeURIComponent(item.tmdb_id)}&db_index=${encodeURIComponent(item.db_index)}&media_type=${encodeURIComponent(mediaType)}&page=${currentPage}${currentSearch ? `&search=${encodeURIComponent(currentSearch)}` : ''}"
+                       class="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 rounded-2xl bg-primary hover:bg-primary/90 text-white text-xs font-bold transition shadow-lg shadow-primary/20">
+                        <i class="fa-solid fa-pen-to-square"></i> Edit
+                    </a>
+                    <button onclick="deleteMedia(this)"
+                            data-tmdb-id="${item.tmdb_id}" 
+                            data-db-index="${item.db_index ?? ''}" 
+                            data-title="${safeTitle}"
+                            class="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-2xl glass-panel hover:bg-red-500/10 text-red-300 text-xs font-bold transition border border-hairline">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+    }
+
+    function updatePagination(currentPage, totalPages) {
+        const pagination = document.getElementById('pagination');
+        const paginationInner = document.getElementById('pagination-inner');
+
+        if (totalPages <= 1) {
+            pagination.classList.add('hidden');
+            paginationInner.innerHTML = '';
+            return;
+        }
+
+        pagination.classList.remove('hidden');
+        let paginationHTML = '';
+
+        if (currentPage > 1) {
+            paginationHTML += `
+                <button onclick='loadMedia(${currentPage - 1}, ${JSON.stringify(currentSearch)})'
+                        class="px-4 py-2 rounded-2xl glass-panel hover:bg-surface-2 text-text text-sm font-bold transition border border-hairline">
+                    Previous
+                </button>
+            `;
+        }
+
+        const startPage = Math.max(1, currentPage - 2);
+        const endPage = Math.min(totalPages, currentPage + 2);
+
+        if (startPage > 1) {
+            paginationHTML += `
+                <button onclick='loadMedia(1, ${JSON.stringify(currentSearch)})'
+                        class="px-4 py-2 rounded-2xl glass-panel hover:bg-surface-2 text-text text-sm font-bold transition border border-hairline">
+                    1
+                </button>
+            `;
+            if (startPage > 2) {
+                paginationHTML += `<span class="px-2 text-text-secondary text-sm">...</span>`;
+            }
+        }
+
+        for (let i = startPage; i <= endPage; i++) {
+            const isActive = i === currentPage;
+            paginationHTML += `
+                <button onclick='loadMedia(${i}, ${JSON.stringify(currentSearch)})'
+                        class="px-4 py-2 rounded-2xl text-sm font-bold transition border
+                               ${isActive
+                                   ? 'bg-primary text-white border-primary shadow-lg shadow-primary/20'
+                                   : 'glass-panel hover:bg-surface-2 text-text border-hairline'}">
+                    ${i}
+                </button>
+            `;
+        }
+
+        if (endPage < totalPages) {
+            if (endPage < totalPages - 1) {
+                paginationHTML += `<span class="px-2 text-text-secondary text-sm">...</span>`;
+            }
+            paginationHTML += `
+                <button onclick='loadMedia(${totalPages}, ${JSON.stringify(currentSearch)})'
+                        class="px-4 py-2 rounded-2xl glass-panel hover:bg-surface-2 text-text text-sm font-bold transition border border-hairline">
+                    ${totalPages}
+                </button>
+            `;
+        }
+
+        if (currentPage < totalPages) {
+            paginationHTML += `
+                <button onclick='loadMedia(${currentPage + 1}, ${JSON.stringify(currentSearch)})'
+                        class="px-4 py-2 rounded-2xl glass-panel hover:bg-surface-2 text-text text-sm font-bold transition border border-hairline">
+                    Next
+                </button>
+            `;
+        }
+
+        paginationInner.innerHTML = paginationHTML;
+    }
+
+    function updateMediaInfo(data) {
+        const mediaInfo = document.getElementById('media-info');
+        const resultsInfo = document.getElementById('results-info');
+        const dbInfo = document.getElementById('db-info');
+
+        const totalCount = data.total_count || 0;
+        const pageSize = 24;
+        const current = data.current_page || 1;
+        const startItem = totalCount === 0 ? 0 : ((current - 1) * pageSize) + 1;
+        const endItem = Math.min(current * pageSize, totalCount);
+
+        resultsInfo.textContent = `Showing ${startItem}-${endItem} of ${totalCount} ${mediaType}s`;
+
+        if (data.databases_checked && data.databases_checked.length > 0) {
+            dbInfo.textContent = `Databases checked: ${data.databases_checked.join(', ')}`;
+        } else {
+            dbInfo.textContent = '';
+        }
+
+        mediaInfo.classList.remove('hidden');
+    }
+
+    function searchMedia() {
+        const searchInput = document.getElementById('search-input');
+        const search = searchInput.value.trim();
+        loadMedia(1, search);
+    }
+
+    function clearSearch() {
+        document.getElementById('search-input').value = '';
+        loadMedia(1, '');
+    }
+
+    function retryLoad() {
+        loadMedia(currentPage, currentSearch);
+    }
+
+    async function deleteMedia(buttonElement) {
+    const tmdbId = buttonElement.getAttribute('data-tmdb-id');
+    const dbIndex = buttonElement.getAttribute('data-db-index');
+    const title = buttonElement.getAttribute('data-title');
+
+    if (!confirm(`Are you sure you want to delete "${title}"?\n\nThis action cannot be undone.`)) return;
+
+    try {
+        const response = await fetch(`/api/media/delete?tmdb_id=${encodeURIComponent(tmdbId)}&db_index=${encodeURIComponent(dbIndex)}&media_type=${encodeURIComponent(mediaType)}`, {
+            method: 'DELETE',
+            credentials: 'same-origin',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (response.ok) {
+            showToast(`"${title}" deleted successfully`, 'success', 'Deleted');
+            loadMedia(currentPage, currentSearch); // Refresh grid
+        } else {
+            const error = await response.json().catch(() => ({}));
+            showToast(error.detail || `Error deleting "${title}"`, 'error', 'Delete Failed');
+        }
+    } catch (error) {
+        console.error('Error deleting media:', error);
+        showToast(`Error deleting "${title}": ${error.message}`, 'error', 'Network Error');
+    }
+}
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const params = new URLSearchParams(location.search);
+        const startPage = Math.max(1, parseInt(params.get('page') || '1', 10) || 1);
+        const startSearch = params.get('search') || '';
+
+        const searchInput = document.getElementById('search-input');
+        if (startSearch) searchInput.value = startSearch;
+        loadMedia(startPage, startSearch);
+
+        searchInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                searchMedia();
+            }
+        });
+
+        let searchTimeout;
+        searchInput.addEventListener('input', (e) => {
+            clearTimeout(searchTimeout);
+            const searchValue = e.target.value.trim();
+
+            if (searchValue.length === 0) {
+                searchTimeout = setTimeout(() => {
+                    loadMedia(1, '');
+                }, 250);
+            }
+        });
+    });
+</script>
+
+<style>
+    .line-clamp-2 {
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+
+    .aspect-\[2\/3\] {
+        aspect-ratio: 2 / 3;
+    }
+
+    /* Better mobile scrolling for pagination */
+    #pagination .overflow-x-auto {
+        scrollbar-width: thin;
+    }
+
+    #pagination .overflow-x-auto::-webkit-scrollbar {
+        height: 6px;
+    }
+
+    #pagination .overflow-x-auto::-webkit-scrollbar-thumb {
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.2);
+    }
+
+    .ma-input {
+        width: 100%;
+        background: var(--background, var(--bg));
+        border: 1px solid var(--border);
+        color: var(--text);
+        border-radius: 0.9rem;
+        padding: 0.7rem 0.9rem;
+        font-size: 0.9rem;
+        outline: none;
+    }
+    .ma-input:focus { border-color: var(--primary); }
+    .ma-label { display:block; font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-secondary,var(--text-sec)); margin-bottom:0.35rem; }
+    .ma-tab { flex:1; padding:0.55rem; border-radius:0.75rem; font-weight:700; font-size:0.85rem; border:1px solid var(--border); background:transparent; color:var(--text); cursor:pointer; }
+    .ma-tab.active { background:var(--primary); color:#fff; border-color:var(--primary); }
+    .ma-catalog-picker { max-height:10rem; overflow-y:auto; border:1px solid var(--border); border-radius:0.85rem; padding:.4rem; display:flex; flex-direction:column; gap:.25rem; background:var(--background, var(--bg)); }
+    .ma-cat-row { display:flex; align-items:center; gap:.55rem; padding:.45rem .6rem; border-radius:.6rem; cursor:pointer; transition:background .15s ease; }
+    .ma-cat-row:hover { background:color-mix(in srgb, var(--primary) 10%, transparent); }
+    .ma-cat-row.disabled { opacity:.4; pointer-events:none; }
+    .ma-cat-row input { width:1rem; height:1rem; accent-color:var(--primary); cursor:pointer; flex-shrink:0; }
+    .ma-cat-excl { font-size:.65rem; font-weight:800; padding:.15rem .4rem; border-radius:9999px; background:color-mix(in srgb, rgb(239 68 68) 16%, transparent); color:rgb(248 113 113); border:1px solid color-mix(in srgb, rgb(239 68 68) 30%, transparent); }
+    .ma-search-results { max-height:16rem; overflow-y:auto; margin-top:.5rem; display:flex; flex-direction:column; gap:.4rem; }
+    .ma-result-row { display:flex; align-items:center; gap:.7rem; padding:.5rem; border-radius:.7rem; border:1px solid var(--border); background:var(--background, var(--bg)); cursor:pointer; text-align:left; transition:border-color .15s ease; }
+    .ma-result-row:hover { border-color:var(--primary); }
+    .ma-result-poster { width:2.5rem; height:3.75rem; object-fit:cover; border-radius:.4rem; flex-shrink:0; background:var(--surface,#222); }
+    .ma-result-meta { min-width:0; flex:1; }
+    .ma-src-badge { font-size:.6rem; font-weight:800; padding:.1rem .4rem; border-radius:9999px; background:color-mix(in srgb, var(--primary) 16%, transparent); color:var(--primary); border:1px solid color-mix(in srgb, var(--primary) 30%, transparent); text-transform:uppercase; }
+    .ma-linked-chip { display:inline-flex; align-items:center; gap:.5rem; padding:.35rem .7rem; border-radius:9999px; font-size:.78rem; font-weight:700; background:color-mix(in srgb, rgb(16 185 129) 14%, transparent); color:rgb(52 211 153); border:1px solid color-mix(in srgb, rgb(16 185 129) 30%, transparent); }
+    .ma-unlink-btn { background:none; border:none; color:inherit; font-size:1.1rem; line-height:1; cursor:pointer; padding:0 .1rem; }
+</style>
+
+<!-- Manual Add modal -->
+<div id="manual-add-modal" class="fixed inset-0 z-50 hidden" aria-modal="true" role="dialog">
+    <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="closeManualAdd()"></div>
+    <div class="absolute inset-0 flex items-start sm:items-center justify-center p-2 sm:p-4 overflow-y-auto">
+        <div class="glass-panel rounded-3xl w-full max-w-2xl my-4">
+            <div class="flex items-center justify-between gap-3 px-5 sm:px-6 py-4 border-b border-hairline">
+                <h2 class="text-lg sm:text-xl font-extrabold text-text"><i class="fa-solid fa-plus text-emerald-400"></i> Add Content Manually</h2>
+                <button onclick="closeManualAdd()" class="text-text-secondary hover:text-text text-3xl leading-none">&times;</button>
+            </div>
+
+            <div class="px-5 sm:px-6 py-5 space-y-5 max-h-[75vh] overflow-y-auto">
+                <!-- Type -->
+                <div>
+                    <label class="ma-label">Type</label>
+                    <div class="flex gap-2">
+                        <button type="button" class="ma-tab" data-ma-type="movie" onclick="maSetType('movie')"><i class="fa-solid fa-film"></i> Movie</button>
+                        <button type="button" class="ma-tab" data-ma-type="tv" onclick="maSetType('tv')"><i class="fa-solid fa-tv"></i> TV Show</button>
+                    </div>
+                </div>
+
+                <!-- Search TMDB/Cinemeta to auto-fill -->
+                <div>
+                    <label class="ma-label">Search title (TMDB / Cinemeta) — optional</label>
+                    <div class="flex flex-col sm:flex-row gap-2">
+                        <input id="ma-search-query" class="ma-input" placeholder="Title, IMDb id/link or TMDB id/link">
+                        <button type="button" onclick="maSearchTitles()" class="px-4 py-2.5 rounded-xl bg-primary text-white font-bold text-sm shrink-0"><i class="fa-solid fa-magnifying-glass"></i> Search</button>
+                    </div>
+                    <p id="ma-search-state" class="text-xs text-text-secondary mt-1 hidden"></p>
+                    <div id="ma-search-results" class="ma-search-results hidden"></div>
+                    <div id="ma-linked-badge" class="hidden mt-2">
+                        <span class="ma-linked-chip">
+                            <i class="fa-solid fa-link"></i>
+                            <span id="ma-linked-text"></span>
+                            <button type="button" onclick="maUnlink()" title="Unlink and enter manually" class="ma-unlink-btn">&times;</button>
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Title details -->
+                <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                    <div class="sm:col-span-2">
+                        <label class="ma-label">Title *</label>
+                        <input id="ma-m-title" class="ma-input" placeholder="Custom title">
+                    </div>
+                    <div>
+                        <label class="ma-label">Year (optional)</label>
+                        <input id="ma-m-year" type="number" class="ma-input" placeholder="Telegram upload year">
+                    </div>
+                    <div>
+                        <label class="ma-label">Rating (optional)</label>
+                        <input id="ma-m-rating" type="number" step="0.1" min="0" max="10" class="ma-input" placeholder="Random">
+                    </div>
+                </div>
+                <div>
+                    <label class="ma-label">Genres (optional, comma-separated)</label>
+                    <input id="ma-m-genres" class="ma-input" placeholder="Left empty = random">
+                </div>
+                <div>
+                    <label class="ma-label">Description (optional)</label>
+                    <textarea id="ma-m-description" rows="2" class="ma-input" placeholder="Left empty = random"></textarea>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="ma-label">Poster URL (optional)</label>
+                        <input id="ma-m-poster" type="url" class="ma-input" placeholder="Left empty = generated from title">
+                    </div>
+                    <div>
+                        <label class="ma-label">Backdrop URL (optional)</label>
+                        <input id="ma-m-backdrop" type="url" class="ma-input" placeholder="Left empty = generated from title">
+                    </div>
+                </div>
+                <p class="text-xs text-text-secondary -mt-2">Only <span class="text-text font-semibold">Title *</span>, stream link and quality are required. Empty optional fields are auto-filled &mdash; poster &amp; backdrop become a random gradient cover with the title text.</p>
+
+                <!-- TV episode fields -->
+                <div id="ma-tv-fields" class="hidden grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div>
+                        <label class="ma-label">Season *</label>
+                        <input id="ma-season" type="number" min="0" class="ma-input" placeholder="1">
+                    </div>
+                    <div>
+                        <label class="ma-label">Episode *</label>
+                        <input id="ma-episode" type="number" min="0" class="ma-input" placeholder="1">
+                    </div>
+                    <div class="col-span-2">
+                        <label class="ma-label">Episode Title (optional)</label>
+                        <input id="ma-episode-title" class="ma-input" placeholder="Left empty = S01E01 style">
+                    </div>
+                </div>
+
+                <!-- Stream -->
+                <div class="space-y-3">
+                    <div class="flex items-center justify-between gap-2">
+                        <label class="ma-label" style="margin-bottom:0">Stream link(s) *</label>
+                        <button type="button" onclick="maAddPart()" class="text-xs font-bold text-primary shrink-0"><i class="fa-solid fa-plus"></i> Add split part</button>
+                    </div>
+                    <div id="ma-parts" class="space-y-2"></div>
+                    <p class="text-xs text-text-secondary">Add more parts only for a split file (they join into one stream, in order).</p>
+                    <p id="ma-resolve-state" class="text-xs text-text-secondary hidden"></p>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                            <label class="ma-label">Quality *</label>
+                            <select id="ma-quality" class="ma-input">
+                                <option value="">Select</option>
+                                <option>480p</option><option>720p</option><option selected>1080p</option>
+                                <option>2160p</option><option value="__custom">Custom…</option>
+                            </select>
+                        </div>
+                        <div class="sm:col-span-2">
+                            <label class="ma-label">File name</label>
+                            <input id="ma-name" class="ma-input" placeholder="Auto-detected on resolve">
+                        </div>
+                    </div>
+                    <input id="ma-quality-custom" class="ma-input hidden" placeholder="Custom quality label (e.g. 4K HDR)">
+                </div>
+
+                <!-- Custom Catalog selector -->
+                <div>
+                    <label class="ma-label">Add to Custom Catalog</label>
+                    <div id="ma-catalog-list" class="ma-catalog-picker">
+                        <p class="text-xs text-text-secondary">Loading catalogs...</p>
+                    </div>
+                    <p class="text-xs text-text-secondary mt-1">Exclusive catalogs don't allow other selections.</p>
+                </div>
+            </div>
+
+            <div class="flex flex-col sm:flex-row justify-end gap-3 px-5 sm:px-6 py-4 border-t border-hairline">
+                <button onclick="closeManualAdd()" class="px-5 py-2.5 rounded-2xl glass-panel border border-hairline text-text font-bold text-sm">Cancel</button>
+                <button id="ma-submit" onclick="submitManualAdd()" class="px-5 py-2.5 rounded-2xl bg-emerald-500 text-white font-bold text-sm">Add Content</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let maType = mediaType;
+    let maSelectedId = null;
+    let maSearchList = [];
+
+    function maEsc(s) {
+        return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    async function maSearchTitles() {
+        const q = document.getElementById('ma-search-query').value.trim();
+        const state = document.getElementById('ma-search-state');
+        const box = document.getElementById('ma-search-results');
+        if (!q) { showToast('Enter a title, IMDb or TMDB id/link.', 'error', 'Error'); return; }
+        state.textContent = 'Searching...';
+        state.classList.remove('hidden');
+        box.classList.add('hidden');
+        box.innerHTML = '';
+        try {
+            const params = new URLSearchParams({ media_type: maType, query: q });
+            const yearVal = document.getElementById('ma-m-year').value.trim();
+            if (yearVal) params.set('year', yearVal);
+            const res = await fetch(`/api/media/rescan/search?${params.toString()}`);
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.detail || 'Search failed');
+            maSearchList = data.results || [];
+            if (!maSearchList.length) {
+                state.textContent = 'No matches found.';
+                return;
+            }
+            state.textContent = `Found ${maSearchList.length} match${maSearchList.length > 1 ? 'es' : ''}. Pick one to auto-fill.`;
+            box.innerHTML = maSearchList.map((r, i) => `
+                <button type="button" class="ma-result-row" onclick="maPickResult(${i})">
+                    <img class="ma-result-poster" src="${maEsc(r.poster) || '/static/placeholder.jpg'}" onerror="this.src='/static/placeholder.jpg'">
+                    <span class="ma-result-meta">
+                        <span class="flex items-center gap-2">
+                            <span class="text-sm font-bold text-white truncate">${maEsc(r.title)}</span>
+                            <span class="ma-src-badge">${maEsc(r.source)}</span>
+                        </span>
+                        <span class="text-xs text-text-secondary block truncate">${maEsc(r.year || '—')} · IMDb: ${maEsc(r.imdb_id || 'N/A')} · TMDB: ${maEsc(r.tmdb_id || 'N/A')}</span>
+                    </span>
+                </button>`).join('');
+            box.classList.remove('hidden');
+        } catch (e) {
+            state.textContent = e.message || 'Search failed.';
+        }
+    }
+
+    async function maPickResult(index) {
+        const item = maSearchList[index];
+        if (!item) return;
+        const selectedId = item.tmdb_id || item.imdb_id;
+        if (!selectedId) { showToast('This result has no usable id.', 'error', 'Error'); return; }
+        const state = document.getElementById('ma-search-state');
+        state.textContent = 'Loading metadata...';
+        state.classList.remove('hidden');
+        try {
+            const params = new URLSearchParams({ media_type: maType, selected_id: String(selectedId) });
+            const res = await fetch(`/api/media/manual-add/resolve-meta?${params.toString()}`);
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.detail || 'Could not load metadata');
+            const m = data.metadata || {};
+            document.getElementById('ma-m-title').value = m.title || '';
+            document.getElementById('ma-m-year').value = m.release_year || '';
+            document.getElementById('ma-m-rating').value = m.rating || '';
+            document.getElementById('ma-m-genres').value = Array.isArray(m.genres) ? m.genres.join(', ') : (m.genres || '');
+            document.getElementById('ma-m-description').value = m.description || '';
+            document.getElementById('ma-m-poster').value = m.poster || '';
+            document.getElementById('ma-m-backdrop').value = m.backdrop || '';
+
+            maSelectedId = String(selectedId);
+            document.getElementById('ma-linked-text').textContent = `${m.title || 'Selected'} (${item.source})`;
+            document.getElementById('ma-linked-badge').classList.remove('hidden');
+            document.getElementById('ma-search-results').classList.add('hidden');
+            state.classList.add('hidden');
+        } catch (e) {
+            state.textContent = e.message || 'Could not load metadata.';
+        }
+    }
+
+    function maUnlink() {
+        maSelectedId = null;
+        document.getElementById('ma-linked-badge').classList.add('hidden');
+    }
+
+    async function loadMaCatalogs() {
+        const box = document.getElementById('ma-catalog-list');
+        if (!box) return;
+        box.innerHTML = '<p class="text-xs text-text-secondary">Loading...</p>';
+        try {
+            const res = await fetch('/api/media/manual-add/catalogs');
+            const data = await res.json().catch(() => ({}));
+            const catalogs = data.catalogs || [];
+            if (!catalogs.length) {
+                box.innerHTML = '<p class="text-xs text-text-secondary">No custom catalogs found.</p>';
+                return;
+            }
+            box.innerHTML = catalogs.map((c, i) => {
+                const safe = (s) => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+                return `<label class="ma-cat-row" data-exclusive="${c.exclusive ? '1' : '0'}">
+                    <input type="checkbox" value="${safe(c._id)}" onchange="onMaCatalogCheck(this)">
+                    <span class="text-sm font-semibold text-white truncate">${safe(c.name)}</span>
+                    ${c.exclusive ? '<span class="ma-cat-excl">Exclusive</span>' : ''}
+                </label>`;
+            }).join('');
+        } catch (e) {
+            box.innerHTML = '<p class="text-xs text-text-secondary">Failed to load catalogs.</p>';
+        }
+    }
+
+    function onMaCatalogCheck(input) {
+        const box = document.getElementById('ma-catalog-list');
+        const rows = box.querySelectorAll('.ma-cat-row');
+        const row = input.closest('.ma-cat-row');
+        const isExclusive = row?.dataset.exclusive === '1';
+
+        if (input.checked && isExclusive) {
+            rows.forEach(r => {
+                if (r !== row) {
+                    r.classList.add('disabled');
+                    r.querySelector('input').checked = false;
+                }
+            });
+        } else if (!input.checked && isExclusive) {
+            rows.forEach(r => r.classList.remove('disabled'));
+        } else if (input.checked && !isExclusive) {
+            rows.forEach(r => {
+                if (r.dataset.exclusive === '1') {
+                    r.classList.add('disabled');
+                    r.querySelector('input').checked = false;
+                }
+            });
+        } else {
+            const anyNonExclChecked = [...box.querySelectorAll('.ma-cat-row:not([data-exclusive="1"]) input:checked')].length > 0;
+            if (!anyNonExclChecked) {
+                rows.forEach(r => r.classList.remove('disabled'));
+            }
+        }
+    }
+
+    function getMaSelectedCatalogIds() {
+        const box = document.getElementById('ma-catalog-list');
+        if (!box) return [];
+        return [...box.querySelectorAll('input:checked')].map(i => i.value);
+    }
+
+    function maResetParts() {
+        document.getElementById('ma-parts').innerHTML =
+            `<div class="flex flex-col sm:flex-row gap-2" data-part>
+                <input class="ma-input ma-part-url" placeholder="https://t.me/c/123456/789">
+                <button type="button" onclick="maResolve()" class="px-4 py-2.5 rounded-xl glass-panel border border-hairline text-text font-bold text-sm shrink-0">Resolve</button>
+             </div>`;
+    }
+
+    function maAddPart() {
+        const div = document.createElement('div');
+        div.className = 'flex flex-col sm:flex-row gap-2';
+        div.setAttribute('data-part', '');
+        div.innerHTML = `<input class="ma-input ma-part-url" placeholder="Split part link (in order)">
+            <button type="button" onclick="this.closest('[data-part]').remove()" class="px-4 py-2.5 rounded-xl border border-hairline text-red-300 font-bold text-sm shrink-0">Remove</button>`;
+        document.getElementById('ma-parts').appendChild(div);
+    }
+
+    function maCollectParts() {
+        return [...document.querySelectorAll('#ma-parts .ma-part-url')]
+            .map(i => i.value.trim()).filter(Boolean).map(url => ({ url }));
+    }
+
+    function openManualAdd() {
+        maSetType(mediaType);
+        ['ma-name','ma-season','ma-episode','ma-episode-title','ma-m-title','ma-m-year','ma-m-rating','ma-m-genres','ma-m-description','ma-m-poster','ma-m-backdrop','ma-quality-custom','ma-search-query'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+        maResetParts();
+        document.getElementById('ma-quality').value = '1080p';
+        document.getElementById('ma-quality-custom').classList.add('hidden');
+        document.getElementById('ma-resolve-state').classList.add('hidden');
+        document.getElementById('ma-search-state').classList.add('hidden');
+        document.getElementById('ma-search-results').classList.add('hidden');
+        document.getElementById('ma-search-results').innerHTML = '';
+        maSelectedId = null;
+        maSearchList = [];
+        document.getElementById('ma-linked-badge').classList.add('hidden');
+        document.getElementById('manual-add-modal').classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+        loadMaCatalogs();
+    }
+
+    function closeManualAdd() {
+        document.getElementById('manual-add-modal').classList.add('hidden');
+        document.body.style.overflow = '';
+    }
+
+    function maSetType(type) {
+        maType = type;
+        document.querySelectorAll('[data-ma-type]').forEach(b => b.classList.toggle('active', b.dataset.maType === type));
+        document.getElementById('ma-tv-fields').classList.toggle('hidden', type !== 'tv');
+    }
+
+    async function maResolve() {
+        const first = document.querySelector('#ma-parts .ma-part-url');
+        const url = first ? first.value.trim() : '';
+        const state = document.getElementById('ma-resolve-state');
+        if (!url) { showToast('Paste a Telegram message link first.', 'error', 'Error'); return; }
+        state.textContent = 'Resolving...';
+        state.classList.remove('hidden');
+        try {
+            const res = await fetch('/api/media/resolve-telegram', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ url })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.detail || 'Could not resolve link');
+            const d = data.data || {};
+            document.getElementById('ma-name').value = d.name || '';
+            if (d.quality) {
+                const sel = document.getElementById('ma-quality');
+                const custom = document.getElementById('ma-quality-custom');
+                const opt = [...sel.options].find(o => o.value.toLowerCase() === String(d.quality).toLowerCase());
+                if (opt) {
+                    sel.value = opt.value;
+                    custom.classList.add('hidden');
+                } else {
+                    sel.value = '__custom';
+                    custom.value = d.quality;
+                    custom.classList.remove('hidden');
+                }
+            }
+            if (maType === 'tv') {
+                if (d.season != null && !document.getElementById('ma-season').value) document.getElementById('ma-season').value = d.season;
+                if (d.episode != null && !document.getElementById('ma-episode').value) document.getElementById('ma-episode').value = d.episode;
+            }
+            state.textContent = `Found: ${d.name || 'file'} (${d.size || '—'})`;
+        } catch (e) {
+            state.textContent = e.message || 'Could not resolve link.';
+            showToast(e.message || 'Could not resolve link.', 'error', 'Error');
+        }
+    }
+
+    function maQuality() {
+        const sel = document.getElementById('ma-quality');
+        if (sel.value === '__custom') return document.getElementById('ma-quality-custom').value.trim();
+        return sel.value;
+    }
+
+    async function submitManualAdd() {
+        const btn = document.getElementById('ma-submit');
+        const parts = maCollectParts();
+        const quality = maQuality();
+        const title = document.getElementById('ma-m-title').value.trim();
+        if (!title) { showToast('Enter a title.', 'error', 'Error'); return; }
+        if (!parts.length) { showToast('Paste at least one Telegram message link.', 'error', 'Error'); return; }
+        if (!quality) { showToast('Select a quality.', 'error', 'Error'); return; }
+
+        const payload = {
+            media_type: maType,
+            stream: { quality, name: document.getElementById('ma-name').value.trim() || undefined, parts },
+            catalog_ids: getMaSelectedCatalogIds(),
+            manual_metadata: {
+                title,
+                year: document.getElementById('ma-m-year').value.trim(),
+                rate: document.getElementById('ma-m-rating').value.trim(),
+                genres: document.getElementById('ma-m-genres').value.trim(),
+                description: document.getElementById('ma-m-description').value.trim(),
+                poster: document.getElementById('ma-m-poster').value.trim(),
+                backdrop: document.getElementById('ma-m-backdrop').value.trim(),
+            }
+        };
+
+        if (maSelectedId) payload.selected_id = maSelectedId;
+
+        if (maType === 'tv') {
+            const s = document.getElementById('ma-season').value.trim();
+            const e = document.getElementById('ma-episode').value.trim();
+            if (s === '' || e === '') { showToast('Season and episode are required.', 'error', 'Error'); return; }
+            payload.season_number = Number(s);
+            payload.episode_number = Number(e);
+            payload.episode_title = document.getElementById('ma-episode-title').value.trim() || undefined;
+        }
+
+        btn.disabled = true;
+        try {
+            const res = await fetch('/api/media/manual-add', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.detail || 'Failed to add content');
+            showToast(data.message || 'Added successfully.', 'success', 'Added');
+            closeManualAdd();
+            if (data.media_type === mediaType) {
+                loadMedia(currentPage, currentSearch);
+            }
+        } catch (e) {
+            showToast(e.message || 'Failed to add content.', 'error', 'Error');
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        document.getElementById('ma-quality').addEventListener('change', (e) => {
+            document.getElementById('ma-quality-custom').classList.toggle('hidden', e.target.value !== '__custom');
+        });
+    });
+</script>
+{% endblock %}
