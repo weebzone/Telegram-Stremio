@@ -1,0 +1,58 @@
+    <!-- ══ Channel Scanner ══════════════════════════════════════════════ -->
+    <div class="tool-card">
+        <div class="flex items-center justify-between flex-wrap gap-2">
+            <h2 style="margin-bottom:0"><i class="fa-solid fa-satellite-dish"></i> Channel Scanner</h2>
+            <span id="scan-status-pill" class="status-pill status-idle">Idle</span>
+        </div>
+
+        <p class="hint mt-3 mb-4">
+            Index files from your AUTH channels. Scans resume automatically; use Rescan to re-index from scratch.
+        </p>
+
+        <label class="s-label">Select channels</label>
+        <div class="chip-list" id="channel-list">
+            <div class="hint" id="channels-loading"><i class="fa-solid fa-spinner fa-spin"></i> Loading channels…</div>
+        </div>
+
+        <div class="flex items-center gap-2 mt-3">
+            <button class="btn btn-ghost" type="button" onclick="selectAllChannels(true)"><i class="fa-solid fa-check-double"></i> Select all</button>
+            <button class="btn btn-ghost" type="button" onclick="selectAllChannels(false)"><i class="fa-solid fa-xmark"></i> Clear</button>
+        </div>
+
+        <hr class="divider">
+
+        <!-- live progress -->
+        <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
+            <div class="text-sm font-bold" id="scan-current">No scan running</div>
+            <div class="text-sm" style="color:var(--text-sec)">
+                <i class="fa-regular fa-clock"></i> <span id="scan-elapsed">0s</span>
+            </div>
+        </div>
+        <div class="progress-track mb-4">
+            <div class="progress-fill" id="scan-bar"></div>
+        </div>
+
+        <div class="stat-grid mb-4">
+            <div class="stat-box"><div class="v" id="sc-processed">0</div><div class="l">Processed</div></div>
+            <div class="stat-box"><div class="v" style="color:#22c55e" id="sc-indexed">0</div><div class="l">Indexed</div></div>
+            <div class="stat-box"><div class="v" id="sc-dup">0</div><div class="l">Skipped (dup)</div></div>
+            <div class="stat-box"><div class="v" id="sc-meta">0</div><div class="l">Skipped (meta)</div></div>
+            <div class="stat-box"><div class="v" id="sc-nonvid">0</div><div class="l">Non-video</div></div>
+            <div class="stat-box"><div class="v" style="color:#3b82f6" id="sc-sub-added">0</div><div class="l">Subtitles added</div></div>
+            <div class="stat-box"><div class="v" id="sc-sub-skipped">0</div><div class="l">Subtitles skipped</div></div>
+            <div class="stat-box"><div class="v" style="color:#ef4444" id="sc-errors">0</div><div class="l">Errors</div></div>
+        </div>
+
+        <div class="flex items-center gap-2 flex-wrap">
+            <button class="btn btn-primary" id="scan-start-btn" onclick="startScan('scan')">
+                <i class="fa-solid fa-play"></i> <span id="scan-start-label">Start Scan</span>
+            </button>
+            <button class="btn btn-warning" id="rescan-btn" onclick="confirmRescan()">
+                <i class="fa-solid fa-arrows-rotate"></i> Rescan (wipe & re-index)
+            </button>
+            <button class="btn btn-danger" id="scan-cancel-btn" onclick="cancelScan()" disabled>
+                <i class="fa-solid fa-stop"></i> Stop
+            </button>
+        </div>
+        <p class="hint mt-3" id="scan-error" style="color:#ef4444;display:none"></p>
+    </div>

@@ -1,0 +1,58 @@
+    <!-- ══ Database Check ════════════════════════════════════════════════ -->
+    <div class="tool-card">
+        <div class="flex items-center justify-between flex-wrap gap-2">
+            <h2 style="margin-bottom:0"><i class="fa-solid fa-stethoscope"></i> Database Check &amp; Dead Links</h2>
+            <span id="dbc-status-pill" class="status-pill status-idle">Idle</span>
+        </div>
+
+        <p class="hint mt-3 mb-4">
+            Verify indexed files still exist on Telegram, then purge dead entries below.
+        </p>
+
+        <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
+            <div class="text-sm font-bold" id="dbc-current">No check running</div>
+            <div class="text-sm" style="color:var(--text-sec)">
+                <i class="fa-solid fa-gauge-high"></i> <span id="dbc-speed">0</span>/s ·
+                <i class="fa-regular fa-clock"></i> <span id="dbc-elapsed">0s</span>
+            </div>
+        </div>
+        <div class="progress-track mb-4">
+            <div class="progress-fill" id="dbc-bar"></div>
+        </div>
+
+        <div class="stat-grid mb-4">
+            <div class="stat-box"><div class="v" id="dbc-checked">0</div><div class="l">Checked</div></div>
+            <div class="stat-box"><div class="v" style="color:#22c55e" id="dbc-alive">0</div><div class="l">Alive</div></div>
+            <div class="stat-box"><div class="v" style="color:#ef4444" id="dbc-dead">0</div><div class="l">Dead</div></div>
+            <div class="stat-box"><div class="v" id="dbc-errors">0</div><div class="l">Errors</div></div>
+            <div class="stat-box"><div class="v" id="dbc-purged">0</div><div class="l">Purged</div></div>
+        </div>
+
+        <div class="flex items-center gap-2 flex-wrap">
+            <button class="btn btn-primary" id="dbc-start-btn" onclick="startDbCheck()">
+                <i class="fa-solid fa-play"></i> Run DB Check
+            </button>
+            <button class="btn btn-danger" id="dbc-cancel-btn" onclick="cancelDbCheck()" disabled>
+                <i class="fa-solid fa-stop"></i> Stop
+            </button>
+        </div>
+
+        <hr class="divider">
+
+        <!-- Dead links -->
+        <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <label class="s-label" style="margin-bottom:0">Dead links found</label>
+            <div class="flex items-center gap-2">
+                <button class="btn btn-ghost" type="button" onclick="loadFlaggedDeadLinks()">
+                    <i class="fa-solid fa-rotate"></i> Load flagged
+                </button>
+                <button class="btn btn-danger" id="purge-btn" onclick="purgeDeadLinks()" disabled>
+                    <i class="fa-solid fa-trash"></i> <span id="purge-label">Purge dead links</span>
+                </button>
+            </div>
+        </div>
+        <p class="hint mb-3">"Load flagged" lists links the background checker found. Purging removes them.</p>
+        <div class="dead-list" id="dead-list">
+            <div class="hint">No dead links to show yet. Run a DB Check or load flagged links.</div>
+        </div>
+    </div>

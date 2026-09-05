@@ -1,0 +1,1102 @@
+{% extends "base.html" %}
+{% block title %}Tools — TG Stremio{% endblock %}
+
+{% block content %}
+
+<style>
+.tool-card {
+    background: color-mix(in srgb, var(--card) 94%, var(--bg));
+    border: 1px solid var(--border);
+    border-radius: 1.5rem;
+    padding: 1.5rem 1.75rem;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+}
+.tool-card h2 {
+    font-size: 1rem; font-weight: 800;
+    letter-spacing: 0.05em; text-transform: uppercase;
+    color: var(--primary); margin-bottom: 1.25rem;
+    display: flex; align-items: center; gap: 0.5rem;
+}
+.s-label {
+    display: block; font-size: 0.78rem; font-weight: 700;
+    color: var(--text-sec); text-transform: uppercase;
+    letter-spacing: 0.04em; margin-bottom: 0.5rem;
+}
+.btn {
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    padding: 0.6rem 1.25rem; border-radius: 9999px;
+    font-size: 0.85rem; font-weight: 700; cursor: pointer;
+    border: 1px solid transparent; transition: all 0.15s; white-space: nowrap;
+}
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-primary { background: var(--primary); color: #fff; box-shadow: 0 0 18px color-mix(in srgb,var(--primary) 40%,transparent); }
+.btn-danger  { background: rgba(239,68,68,0.12); border-color: rgba(239,68,68,0.3); color: #ef4444; }
+.btn-danger:hover:not(:disabled) { background: rgba(239,68,68,0.25); }
+.btn-ghost   { background: color-mix(in srgb,var(--text-sec) 12%,transparent); color: var(--text); }
+.btn-warning { background: rgba(245,158,11,0.14); border-color: rgba(245,158,11,0.35); color: #f59e0b; }
+.btn-warning:hover:not(:disabled) { background: rgba(245,158,11,0.28); }
+
+/* channel chips */
+.chip-list { display: flex; flex-direction: column; gap: 0.5rem; max-height: 240px; overflow-y: auto; }
+.chip {
+    display: flex; align-items: center; gap: 0.75rem;
+    padding: 0.7rem 1rem; border-radius: 0.9rem;
+    border: 1px solid var(--border);
+    background: color-mix(in srgb, var(--bg) 60%, transparent);
+    cursor: pointer; transition: border-color 0.15s, background 0.15s;
+}
+.chip:hover { border-color: var(--primary); }
+.chip.selected { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 12%, transparent); }
+.chip input { width: 1.05rem; height: 1.05rem; accent-color: var(--primary); }
+.chip .c-name { font-weight: 700; font-size: 0.9rem; }
+.chip .c-id { font-size: 0.72rem; color: var(--text-sec); }
+
+/* progress */
+.progress-track {
+    width: 100%; height: 0.65rem; border-radius: 9999px;
+    background: color-mix(in srgb, var(--text-sec) 18%, transparent);
+    overflow: hidden;
+}
+.progress-fill {
+    height: 100%; border-radius: 9999px; background: var(--primary);
+    width: 0%; transition: width 0.4s ease;
+}
+.progress-fill.indeterminate {
+    width: 35% !important;
+    animation: indet 1.2s ease-in-out infinite;
+}
+@keyframes indet { 0% { margin-left: -35%; } 100% { margin-left: 100%; } }
+
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px,1fr)); gap: 0.75rem; }
+.stat-box {
+    background: color-mix(in srgb, var(--bg) 55%, transparent);
+    border: 1px solid var(--border); border-radius: 0.9rem;
+    padding: 0.75rem 0.9rem;
+}
+.stat-box .v { font-size: 1.3rem; font-weight: 800; }
+.stat-box .l { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-sec); }
+
+.status-pill {
+    display: inline-flex; align-items: center; gap: 0.4rem;
+    padding: 0.25rem 0.8rem; border-radius: 9999px;
+    font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em;
+}
+.status-idle      { background: color-mix(in srgb,var(--text-sec) 15%,transparent); color: var(--text-sec); }
+.status-running   { background: rgba(34,197,94,0.15);  color: #22c55e; }
+.status-paused    { background: rgba(245,158,11,0.15); color: #f59e0b; }
+.status-cancelled { background: rgba(245,158,11,0.15); color: #f59e0b; }
+.status-completed { background: rgba(34,197,94,0.15);  color: #22c55e; }
+.status-error     { background: rgba(239,68,68,0.15);  color: #ef4444; }
+
+.dead-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
+    padding: 0.6rem 0.9rem; border-radius: 0.75rem;
+    border: 1px solid var(--border);
+    background: color-mix(in srgb, var(--bg) 55%, transparent);
+}
+.dead-list { display: flex; flex-direction: column; gap: 0.4rem; max-height: 320px; overflow-y: auto; }
+.divider { border: none; border-top: 1px solid var(--border); margin: 1.25rem 0; }
+.hint { font-size: 0.78rem; color: var(--text-sec); }
+
+.ba-cell { display: inline-flex; align-items: center; gap: 0.3rem; font-weight: 800; font-size: 0.75rem; }
+.ba-ok { color: #22c55e; }
+.ba-no { color: #ef4444; }
+.ba-warn { color: #f59e0b; }
+.ba-muted { color: var(--text-sec); }
+.ba-locked { opacity: 0.6; }
+.ba-roles { display: inline-flex; gap: 0.25rem; flex-wrap: wrap; }
+.ba-role {
+    font-size: 0.6rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em;
+    padding: 0.05rem 0.4rem; border-radius: 9999px;
+    background: color-mix(in srgb, var(--primary) 14%, transparent); color: var(--primary);
+}
+.ba-bot-chip input { width: 1.05rem; height: 1.05rem; accent-color: var(--primary); flex-shrink: 0; }
+
+.ba-ch-list { display: flex; flex-direction: column; gap: 0.6rem; }
+.ba-ch-card {
+    border: 1px solid var(--border); border-radius: 0.9rem;
+    padding: 0.85rem 1rem; background: color-mix(in srgb, var(--bg) 55%, transparent);
+}
+.ba-ch-card.selected { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 10%, transparent); }
+.ba-ch-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.6rem; flex-wrap: wrap; }
+.ba-ch-sel { display: flex; align-items: flex-start; gap: 0.6rem; cursor: pointer; min-width: 0; flex: 1; }
+.ba-ch-sel input { width: 1.15rem; height: 1.15rem; accent-color: var(--primary); flex-shrink: 0; margin-top: 0.15rem; }
+.ba-ch-name { font-weight: 800; font-size: 0.9rem; word-break: break-word; }
+.ba-ch-id { font-size: 0.7rem; color: var(--text-sec); word-break: break-all; }
+.ba-bot-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 0.4rem 0.9rem; margin-top: 0.7rem;
+}
+.ba-bstat { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; font-size: 0.78rem; }
+.ba-bstat .n { font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ba-res-row {
+    display: flex; flex-direction: column; align-items: stretch; gap: 0.4rem;
+    padding: 0.6rem 0.9rem; border-radius: 0.75rem;
+    border: 1px solid var(--border); background: color-mix(in srgb, var(--bg) 55%, transparent);
+}
+
+@media (max-width: 640px) {
+    .tool-card { padding: 1.1rem 1rem; border-radius: 1.1rem; }
+    .ba-bot-grid { grid-template-columns: 1fr; }
+    #ba-bots .chip { width: 100%; }
+    .ba-actions .btn { width: 100%; justify-content: center; }
+}
+</style>
+
+<div class="mb-6">
+    <h1 class="text-3xl font-extrabold">Tools</h1>
+    <p class="mt-1 text-sm" style="color:var(--text-sec)">Scan, index, and maintain your library.</p>
+</div>
+
+<div class="space-y-6">
+
+{% include "tools/partials/manual_session_card.html" %}
+{% include "tools/partials/scan_card.html" %}
+{% include "tools/partials/bot_admin_card.html" %}
+{% include "tools/partials/dbcheck_card.html" %}
+{% include "tools/partials/duplicates_card.html" %}
+</div>
+
+<script>
+/* ─────────────── Manual Upload Session ─────────────── */
+let msResults = [];
+let msSelected = null;
+
+async function searchManualSession() {
+    const q = document.getElementById('ms-query').value.trim();
+    const state = document.getElementById('ms-search-state');
+    const box = document.getElementById('ms-results');
+    if (!q) { showToast('Type a title, IMDb or TMDB id/link.', 'error', 'Search'); return; }
+    state.style.display = '';
+    state.textContent = 'Searching your library and IMDb / TMDB…';
+    box.style.display = 'none';
+    box.innerHTML = '';
+    document.getElementById('ms-selected-box').classList.add('hidden');
+    msSelected = null;
+    try {
+        const res = await fetch('/api/admin/tools/manual-session/search?query=' + encodeURIComponent(q));
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Search failed');
+        msResults = data.results || [];
+        if (!msResults.length) {
+            state.textContent = 'No matching title found. Try a different name, or an IMDb / TMDB id or link.';
+            return;
+        }
+        state.textContent = `Found ${msResults.length} title${msResults.length > 1 ? 's' : ''}. Select one:`;
+        box.innerHTML = msResults.map((r, i) => {
+            const badge = r.in_library
+                ? `<span class="c-id">${escapeHtml(String(r.year || '—'))} · In library · TMDB ${escapeHtml(String(r.tmdb_id))} · DB #${escapeHtml(String(r.db_index))}</span>`
+                : `<span class="c-id">${escapeHtml(String(r.year || '—'))} · New · ${escapeHtml(String(r.source || '').toUpperCase())} · ${escapeHtml(String(r.selected_id || ''))}</span>`;
+            return `
+            <label class="chip" onclick="pickManualResult(${i})">
+                <img src="${escapeHtmlAttr(r.poster) || '/static/placeholder.jpg'}" onerror="this.src='/static/placeholder.jpg'"
+                     style="width:2.25rem;height:3.25rem;object-fit:cover;border-radius:0.35rem;flex-shrink:0;background:var(--card)">
+                <span class="min-w-0">
+                    <span class="c-name block truncate">${escapeHtml(r.title)}
+                        <span class="status-pill ${r.media_type === 'tv' ? 'status-running' : 'status-idle'}" style="margin-left:.4rem">${r.media_type === 'tv' ? 'TV' : 'Movie'}</span>
+                    </span>
+                    ${badge}
+                </span>
+            </label>`;
+        }).join('');
+        box.style.display = '';
+    } catch (e) {
+        state.textContent = e.message || 'Search failed.';
+    }
+}
+
+function pickManualResult(i) {
+    const r = msResults[i];
+    if (!r) return;
+    msSelected = r;
+    const isPersonal = !!r.is_personal;
+    const isTv = r.media_type === 'tv';
+
+    document.getElementById('ms-sel-poster').src = r.poster || '/static/placeholder.jpg';
+    document.getElementById('ms-sel-title').textContent = r.title;
+    const locationText = r.in_library ? `TMDB ${r.tmdb_id} · DB #${r.db_index}` : `New · ${String(r.source || '').toUpperCase()} ${r.selected_id || ''}`;
+    document.getElementById('ms-sel-sub').textContent =
+        `${isTv ? 'TV Show' : 'Movie'} · ${isPersonal ? 'Personal' : 'TMDB/IMDb'} · ${r.year || '—'} · ${locationText}`;
+
+    document.getElementById('ms-real-note').classList.toggle('hidden', isPersonal);
+    document.getElementById('ms-real-tv-season').classList.toggle('hidden', isPersonal || !isTv);
+    document.getElementById('ms-personal-fields').classList.toggle('hidden', !isPersonal);
+    document.getElementById('ms-tv-fields').classList.toggle('hidden', !(isPersonal && isTv));
+
+    document.getElementById('ms-season').value = '';
+    document.getElementById('ms-episode').value = '';
+    document.getElementById('ms-quality').value = '';
+    document.getElementById('ms-real-season').value = '';
+    document.getElementById('ms-selected-box').classList.remove('hidden');
+    document.getElementById('ms-results').style.display = 'none';
+}
+
+async function startManualSession() {
+    if (!msSelected) { showToast('Select a title first.', 'error', 'Session'); return; }
+    const payload = {
+        tmdb_id: msSelected.tmdb_id,
+        db_index: msSelected.db_index,
+        media_type: msSelected.media_type,
+        selected_id: msSelected.selected_id,
+        in_library: msSelected.in_library !== false,
+    };
+    if (!msSelected.in_library && msSelected.media_type === 'tv') {
+        const rs = document.getElementById('ms-real-season').value.trim();
+        if (rs !== '') payload.season = rs;
+    }
+    if (msSelected.is_personal) {
+        if (msSelected.media_type === 'tv') {
+            const s = document.getElementById('ms-season').value.trim();
+            if (s === '') { showToast('Season number is required for personal TV shows.', 'error', 'Session'); return; }
+            payload.season = s;
+            const ep = document.getElementById('ms-episode').value.trim();
+            if (ep !== '') payload.episode = ep;
+        }
+        const q = document.getElementById('ms-quality').value.trim();
+        if (q !== '') payload.quality = q;
+    } else if (msSelected.media_type === 'tv') {
+        const rs = document.getElementById('ms-real-season').value.trim();
+        if (rs !== '') payload.season = rs;
+    }
+    try {
+        const res = await fetch('/api/admin/tools/manual-session', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Could not start session');
+        showToast('Session started. Forward files to your manual channel.', 'success', 'Session');
+        renderManualSession(data.session);
+    } catch (e) {
+        showToast(e.message || 'Could not start session.', 'error', 'Session');
+    }
+}
+
+async function endManualSession() {
+    try {
+        const res = await fetch('/api/admin/tools/manual-session', { method: 'DELETE' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Could not end session');
+        showToast('Session ended.', 'info', 'Session');
+        renderManualSession(null);
+    } catch (e) {
+        showToast(e.message || 'Could not end session.', 'error', 'Session');
+    }
+}
+
+function renderManualSession(session) {
+    const pill = document.getElementById('ms-status-pill');
+    const active = document.getElementById('ms-active');
+    const setup = document.getElementById('ms-setup');
+
+    if (session && session.tmdb_id !== undefined && session.tmdb_id !== null) {
+        pill.className = 'status-pill status-running';
+        pill.textContent = 'Active';
+        active.classList.remove('hidden');
+        setup.classList.add('hidden');
+
+        const isTv = session.media_type === 'tv';
+        document.getElementById('ms-active-title').textContent =
+            `${session.title || 'Title'}${session.year ? ' (' + session.year + ')' : ''}`;
+
+        let detail = isTv ? 'TV Show' : 'Movie';
+        if (session.is_personal) {
+            detail += ' · Personal';
+            if (isTv) {
+                detail += ` · Season ${session.season}`;
+                detail += (session.episode !== null && session.episode !== undefined)
+                    ? ` · Episode ${session.episode} (all files → this episode)`
+                    : ' · each file → next episode';
+            } else {
+                detail += ' · each file → a new quality';
+            }
+            detail += ' · forward to MANUAL channel only';
+        } else {
+            detail += ' · TMDB/IMDb · auto-detected from each file';
+            if (isTv && session.season !== null && session.season !== undefined) {
+                detail += ` · fallback Season ${session.season}`;
+            }
+            detail += ' · forward to AUTH or MANUAL channel';
+        }
+        document.getElementById('ms-active-detail').textContent = detail;
+    } else {
+        pill.className = 'status-pill status-idle';
+        pill.textContent = 'No session';
+        active.classList.add('hidden');
+        setup.classList.remove('hidden');
+        document.getElementById('ms-results').style.display = 'none';
+        document.getElementById('ms-selected-box').classList.add('hidden');
+        document.getElementById('ms-search-state').style.display = 'none';
+        msSelected = null;
+    }
+}
+
+async function loadManualSession() {
+    try {
+        const res = await fetch('/api/admin/tools/manual-session');
+        const data = await res.json();
+        renderManualSession(data.session);
+    } catch (e) { /* ignore */ }
+}
+
+/* ─────────────── State ─────────────── */
+let scanTimer = null;
+let dbcTimer = null;
+let dupTimer = null;
+let dupPurgeTimer = null;
+let dupPurgeActive = false;
+let dupGroups = [];
+let deadSource = "dbcheck";   // where the current dead list came from
+let purgeIds = [];            // explicit ids to purge when source = flagged
+
+/* ─────────────── Channels ─────────────── */
+async function loadChannels() {
+    const list = document.getElementById('channel-list');
+    try {
+        const res = await fetch('/api/admin/tools/channels');
+        const data = await res.json();
+        const channels = (data && data.data) || [];
+        if (!channels.length) {
+            list.innerHTML = `<div class="hint">No AUTH channels configured. Add them in <a href="/admin/settings" style="color:var(--primary)">Settings</a>.</div>`;
+            return;
+        }
+        list.innerHTML = channels.map(c => `
+            <label class="chip" data-id="${escapeHtmlAttr(c.id)}">
+                <input type="checkbox" value="${escapeHtmlAttr(c.id)}" onchange="onChipChange(this)">
+                <span class="min-w-0">
+                    <span class="c-name block">${escapeHtml(c.name)}</span>
+                    <span class="c-id">${escapeHtml(c.id)}</span>
+                </span>
+            </label>
+        `).join('');
+    } catch (e) {
+        list.innerHTML = `<div class="hint" style="color:#ef4444">Failed to load channels.</div>`;
+    }
+}
+
+function onChipChange(input) {
+    input.closest('.chip').classList.toggle('selected', input.checked);
+}
+function selectAllChannels(state) {
+    document.querySelectorAll('#channel-list input[type=checkbox]').forEach(cb => {
+        cb.checked = state;
+        onChipChange(cb);
+    });
+}
+function getSelectedChannels() {
+    return [...document.querySelectorAll('#channel-list input[type=checkbox]:checked')].map(cb => cb.value);
+}
+
+/* ─────────────── Scan control ─────────────── */
+async function startScan(mode) {
+    const channels = getSelectedChannels();
+    if (mode === 'scan' && !channels.length) {
+        // allow plain resume with no selection only if resumable
+        showToast('Select at least one channel to scan.', 'error', 'No channels');
+        return;
+    }
+    try {
+        const res = await fetch('/api/admin/tools/scan/start', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mode, channels })
+        });
+        const data = await res.json();
+        if (res.ok) {
+            showToast(data.message || 'Scan started.', 'success', 'Scanner');
+            startScanPolling();
+        } else {
+            showToast(data.detail || 'Could not start scan.', 'error', 'Error');
+        }
+    } catch (e) {
+        showToast('Network error.', 'error', 'Error');
+    }
+}
+
+function confirmRescan() {
+    const channels = getSelectedChannels();
+    if (!channels.length) {
+        showToast('Select the channels you want to rescan.', 'error', 'No channels');
+        return;
+    }
+    if (!confirm(`Rescan will DELETE all existing DB entries for ${channels.length} selected channel(s) and re-index from scratch.\n\nProceed?`)) return;
+    startScan('rescan');
+}
+
+async function cancelScan() {
+    try {
+        const res = await fetch('/api/admin/tools/scan/cancel', { method: 'POST' });
+        const data = await res.json();
+        showToast(data.message || 'Stop requested.', data.ok ? 'info' : 'error', 'Scanner');
+    } catch (e) {
+        showToast('Network error.', 'error', 'Error');
+    }
+}
+
+function startScanPolling() {
+    if (scanTimer) clearInterval(scanTimer);
+    pollScan();
+    scanTimer = setInterval(pollScan, 1500);
+}
+
+async function pollScan() {
+    try {
+        const res = await fetch('/api/admin/tools/scan/status');
+        const data = await res.json();
+        renderScan(data.data || {});
+    } catch (e) { /* ignore transient errors */ }
+}
+
+function renderScan(s) {
+    const pill = document.getElementById('scan-status-pill');
+    const status = s.status || 'idle';
+    pill.className = 'status-pill status-' + status;
+    pill.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+
+    const c = s.counters || {};
+    setText('sc-processed', c.processed || 0);
+    setText('sc-indexed', c.indexed || 0);
+    setText('sc-dup', c.skipped_dup || 0);
+    setText('sc-meta', c.skipped_meta || 0);
+    setText('sc-nonvid', c.skipped_nonvid || 0);
+    setText('sc-sub-added', c.subtitles_added || 0);
+    setText('sc-sub-skipped', c.subtitles_skipped || 0);
+    setText('sc-errors', c.errors || 0);
+    setText('scan-elapsed', s.elapsed || '0s');
+
+    const bar = document.getElementById('scan-bar');
+    const startBtn = document.getElementById('scan-start-btn');
+    const cancelBtn = document.getElementById('scan-cancel-btn');
+    const rescanBtn = document.getElementById('rescan-btn');
+    const startLabel = document.getElementById('scan-start-label');
+    const errEl = document.getElementById('scan-error');
+
+    if (s.is_running) {
+        const name = s.current_channel_name || s.current_channel || '';
+        if (s.has_progress && s.current_target_id) {
+            bar.classList.remove('indeterminate');
+            bar.style.width = (s.progress || 0) + '%';
+            document.getElementById('scan-current').textContent =
+                `Scanning ${name} · ${s.current_id}/${s.current_target_id} (${s.progress || 0}%)`;
+        } else {
+            bar.classList.add('indeterminate');
+            document.getElementById('scan-current').textContent =
+                `Scanning ${name}` + (s.current_id ? ` · up to msg #${s.current_id}` : '');
+        }
+        startBtn.disabled = true; rescanBtn.disabled = true; cancelBtn.disabled = false;
+        errEl.style.display = 'none';
+    } else {
+        bar.classList.remove('indeterminate');
+        startBtn.disabled = false; rescanBtn.disabled = false; cancelBtn.disabled = true;
+
+        if (s.resumable) {
+            startLabel.textContent = 'Resume Scan';
+            bar.style.width = '60%';
+            document.getElementById('scan-current').textContent =
+                `Paused — ${ (s.pending||[]).length } channel(s) remaining. Resume to continue.`;
+        } else {
+            startLabel.textContent = 'Start Scan';
+            bar.style.width = (status === 'completed') ? '100%' : '0%';
+            document.getElementById('scan-current').textContent =
+                status === 'completed' ? 'Scan complete.' :
+                status === 'error' ? 'Scan failed.' : 'No scan running';
+        }
+
+        if (s.error) { errEl.style.display = ''; errEl.textContent = s.error; }
+        else errEl.style.display = 'none';
+
+        if (scanTimer && ['completed','cancelled','error','paused','idle'].includes(status)) {
+            clearInterval(scanTimer); scanTimer = null;
+        }
+    }
+}
+
+/* ─────────────── DB Check control ─────────────── */
+async function startDbCheck() {
+    try {
+        const res = await fetch('/api/admin/tools/dbcheck/start', { method: 'POST' });
+        const data = await res.json();
+        if (res.ok) {
+            showToast('DB check started.', 'success', 'DB Check');
+            startDbcPolling();
+        } else {
+            showToast(data.detail || 'Could not start.', 'error', 'Error');
+        }
+    } catch (e) { showToast('Network error.', 'error', 'Error'); }
+}
+
+async function cancelDbCheck() {
+    try {
+        const res = await fetch('/api/admin/tools/dbcheck/cancel', { method: 'POST' });
+        const data = await res.json();
+        showToast(data.message || 'Stop requested.', data.ok ? 'info' : 'error', 'DB Check');
+    } catch (e) { showToast('Network error.', 'error', 'Error'); }
+}
+
+function startDbcPolling() {
+    if (dbcTimer) clearInterval(dbcTimer);
+    pollDbc();
+    dbcTimer = setInterval(pollDbc, 1500);
+}
+
+async function pollDbc() {
+    try {
+        const res = await fetch('/api/admin/tools/dbcheck/status');
+        const data = await res.json();
+        renderDbc(data.data || {});
+    } catch (e) { /* ignore */ }
+}
+
+function renderDbc(s) {
+    const pill = document.getElementById('dbc-status-pill');
+    const status = s.status || 'idle';
+    pill.className = 'status-pill status-' + status;
+    pill.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+
+    setText('dbc-checked', s.checked || 0);
+    setText('dbc-alive', s.alive || 0);
+    setText('dbc-dead', s.dead || 0);
+    setText('dbc-errors', s.errors || 0);
+    setText('dbc-purged', s.purged || 0);
+    setText('dbc-speed', s.speed || 0);
+    setText('dbc-elapsed', s.elapsed || '0s');
+
+    const bar = document.getElementById('dbc-bar');
+    const startBtn = document.getElementById('dbc-start-btn');
+    const cancelBtn = document.getElementById('dbc-cancel-btn');
+
+    if (s.is_running) {
+        document.getElementById('dbc-current').textContent = `Checking… ${s.checked || 0} verified`;
+        bar.classList.add('indeterminate');
+        startBtn.disabled = true; cancelBtn.disabled = false;
+    } else {
+        bar.classList.remove('indeterminate');
+        bar.style.width = (status === 'completed' || status === 'cancelled') ? '100%' : '0%';
+        startBtn.disabled = false; cancelBtn.disabled = true;
+        document.getElementById('dbc-current').textContent =
+            status === 'completed' ? `Done — ${s.dead || 0} dead found.` :
+            status === 'cancelled' ? 'Stopped.' :
+            status === 'error' ? 'Check failed.' : 'No check running';
+
+        if (dbcTimer && ['completed','cancelled','error','idle'].includes(status)) {
+            clearInterval(dbcTimer); dbcTimer = null;
+        }
+    }
+
+    // refresh dead list from this run's findings
+    if ((s.dead_entries || []).length || status === 'completed') {
+        deadSource = 'dbcheck';
+        purgeIds = [];
+        renderDeadList(s.dead_entries || []);
+    }
+}
+
+/* ─────────────── Dead links ─────────────── */
+function renderDeadList(entries) {
+    const list = document.getElementById('dead-list');
+    const purgeBtn = document.getElementById('purge-btn');
+    const purgeLabel = document.getElementById('purge-label');
+
+    if (!entries.length) {
+        list.innerHTML = `<div class="hint">No dead links to show.</div>`;
+        purgeBtn.disabled = true;
+        purgeLabel.textContent = 'Purge dead links';
+        return;
+    }
+    list.innerHTML = entries.map(e => `
+        <div class="dead-row">
+            <span class="min-w-0 truncate">
+                <i class="fa-solid fa-link-slash" style="color:#ef4444"></i>
+                ${escapeHtml(e.title || 'Unknown')}
+                ${e.quality ? `<span class="c-id">· ${escapeHtml(e.quality)}</span>` : ''}
+            </span>
+        </div>
+    `).join('');
+    purgeBtn.disabled = false;
+    purgeLabel.textContent = `Purge ${entries.length} dead link${entries.length === 1 ? '' : 's'}`;
+}
+
+async function loadFlaggedDeadLinks() {
+    try {
+        const res = await fetch('/api/admin/dead-links');
+        const data = await res.json();
+        const links = (data && data.data) || [];
+        deadSource = 'flagged';
+        purgeIds = links.map(l => l.quality_id).filter(Boolean);
+        renderDeadList(links.map(l => ({ title: l.title, quality: l.quality })));
+        showToast(`${links.length} flagged dead link(s) loaded.`, 'info', 'Dead Links');
+    } catch (e) { showToast('Failed to load flagged links.', 'error', 'Error'); }
+}
+
+async function purgeDeadLinks() {
+    if (!confirm('Permanently remove these dead links from the database?')) return;
+    const btn = document.getElementById('purge-btn');
+    btn.disabled = true;
+    const body = (deadSource === 'flagged')
+        ? { source: 'flagged' }
+        : { source: 'dbcheck' };
+    try {
+        const res = await fetch('/api/admin/tools/dead-links/purge', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        if (res.ok && data.ok) {
+            showToast(data.message || 'Purged.', 'success', 'Dead Links');
+            renderDeadList([]);
+            pollDbc();
+        } else {
+            showToast(data.message || data.detail || 'Nothing to purge.', 'error', 'Dead Links');
+            btn.disabled = false;
+        }
+    } catch (e) {
+        showToast('Network error.', 'error', 'Error');
+        btn.disabled = false;
+    }
+}
+
+/* ─────────────── Duplicate check & cleanup ─────────────── */
+async function startDuplicateCheck() {
+    try {
+        const res = await fetch('/api/admin/tools/duplicates/start', { method: 'POST' });
+        const data = await res.json();
+        if (res.ok) {
+            showToast('Duplicate scan started.', 'success', 'Duplicates');
+            startDupPolling();
+        } else {
+            showToast(data.detail || 'Could not start.', 'error', 'Error');
+        }
+    } catch (e) { showToast('Network error.', 'error', 'Error'); }
+}
+
+async function cancelDuplicateCheck() {
+    try {
+        const res = await fetch('/api/admin/tools/duplicates/cancel', { method: 'POST' });
+        const data = await res.json();
+        showToast(data.message || 'Stop requested.', data.ok ? 'info' : 'error', 'Duplicates');
+    } catch (e) { showToast('Network error.', 'error', 'Error'); }
+}
+
+function startDupPolling() {
+    if (dupTimer) clearInterval(dupTimer);
+    pollDup();
+    dupTimer = setInterval(pollDup, 1500);
+}
+
+async function pollDup() {
+    try {
+        const res = await fetch('/api/admin/tools/duplicates/status');
+        const data = await res.json();
+        renderDup(data.data || {});
+    } catch (e) { /* ignore */ }
+}
+
+function renderDup(s) {
+    const pill = document.getElementById('dup-status-pill');
+    const status = s.status || 'idle';
+    pill.className = 'status-pill status-' + status;
+    pill.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+
+    setText('dup-scanned', s.scanned || 0);
+    setText('dup-groups', s.group_count || 0);
+    setText('dup-count', s.duplicate_count || 0);
+    setText('dup-purged', s.purged || 0);
+
+    const startBtn = document.getElementById('dup-start-btn');
+    const cancelBtn = document.getElementById('dup-cancel-btn');
+    if (s.is_running) {
+        startBtn.disabled = true; cancelBtn.disabled = false;
+        document.getElementById('dup-current').textContent = `Scanning… ${s.scanned || 0} titles checked`;
+    } else {
+        startBtn.disabled = false; cancelBtn.disabled = true;
+        document.getElementById('dup-current').textContent =
+            status === 'completed' ? `Done — ${s.group_count || 0} duplicate group(s) found.` :
+            status === 'cancelled' ? 'Stopped.' :
+            status === 'error' ? 'Scan failed.' : 'No scan running';
+        if (dupTimer && ['completed','cancelled','error','idle'].includes(status)) {
+            clearInterval(dupTimer); dupTimer = null;
+        }
+    }
+
+    renderDupPurge(s);
+    dupGroups = s.groups || [];
+    renderDupList();
+}
+
+/* Cleanup progress bar (poll-driven) */
+function renderDupPurge(s) {
+    const box = document.getElementById('dup-purge-progress');
+    const pStatus = s.purge_status || 'idle';
+    const selBtn = document.getElementById('dup-selected-btn');
+    const allBtn = document.getElementById('dup-all-btn');
+    const startBtn = document.getElementById('dup-start-btn');
+
+    if (pStatus === 'running') {
+        dupPurgeActive = true;
+        box.classList.remove('hidden');
+        setText('dup-purge-done', s.purge_done || 0);
+        setText('dup-purge-total', s.purge_total || 0);
+        setText('dup-purge-elapsed', s.purge_elapsed || '0s');
+        setText('dup-purge-eta', s.purge_eta || '—');
+        document.getElementById('dup-purge-bar').style.width = (s.purge_progress || 0) + '%';
+        selBtn.disabled = true; allBtn.disabled = true; startBtn.disabled = true;
+        if (!dupPurgeTimer) startDupPurgePolling();
+        return;
+    }
+
+    if (dupPurgeActive && (pStatus === 'completed' || pStatus === 'error')) {
+        dupPurgeActive = false;
+        if (dupPurgeTimer) { clearInterval(dupPurgeTimer); dupPurgeTimer = null; }
+        setText('dup-purge-done', s.purge_done || 0);
+        setText('dup-purge-total', s.purge_total || 0);
+        setText('dup-purge-elapsed', s.purge_elapsed || '0s');
+        setText('dup-purge-eta', '—');
+        document.getElementById('dup-purge-bar').style.width = '100%';
+        document.getElementById('dup-purge-label').innerHTML = pStatus === 'completed'
+            ? '<i class="fa-solid fa-check"></i> Cleanup complete'
+            : '<i class="fa-solid fa-triangle-exclamation"></i> Cleanup failed';
+        showToast(
+            pStatus === 'completed' ? `Removed ${s.purge_total || 0} duplicate(s).` : (s.error || 'Cleanup failed.'),
+            pStatus === 'completed' ? 'success' : 'error', 'Duplicates'
+        );
+        setTimeout(() => document.getElementById('dup-purge-progress').classList.add('hidden'), 2500);
+    }
+}
+
+function renderDupList() {
+    const list = document.getElementById('dup-list');
+    const selBtn = document.getElementById('dup-selected-btn');
+    const allBtn = document.getElementById('dup-all-btn');
+    const purging = dupPurgeActive;
+
+    if (!dupGroups.length) {
+        list.innerHTML = `<div class="hint">No duplicates to show.</div>`;
+        selBtn.disabled = true; allBtn.disabled = true;
+        return;
+    }
+    list.innerHTML = dupGroups.map(g => `
+        <div class="dead-row" style="flex-direction:column;align-items:stretch;gap:0.5rem">
+            <div class="min-w-0 truncate font-bold">
+                <i class="fa-solid fa-clone" style="color:#f59e0b"></i>
+                ${escapeHtml(g.title || 'Unknown')}
+                <span class="c-id">· ${escapeHtml(g.quality || '')} · ${g.entries.length} copies</span>
+            </div>
+            ${g.entries.map((e, i) => `
+                <label class="flex items-center gap-2 text-sm" style="padding-left:1.25rem">
+                    <input type="checkbox" class="dup-cb" data-id="${escapeHtmlAttr(e.id)}"
+                        ${i === g.entries.length - 1 ? '' : 'checked'}>
+                    <span class="min-w-0 truncate">${escapeHtml(e.name || 'file')}
+                        <span class="c-id">· ${escapeHtml(e.size || '')}${i === g.entries.length - 1 ? ' · newest' : ''}</span>
+                    </span>
+                </label>
+            `).join('')}
+        </div>
+    `).join('');
+    selBtn.disabled = purging; allBtn.disabled = purging;
+}
+
+async function purgeDuplicates(deleteAll) {
+    let body;
+    if (deleteAll) {
+        if (!confirm('Keep the newest copy of every group and permanently delete the rest (including the Telegram files)?')) return;
+        body = { delete_all: true };
+    } else {
+        const ids = Array.from(document.querySelectorAll('#dup-list .dup-cb:checked')).map(cb => cb.dataset.id);
+        if (!ids.length) { showToast('Select at least one copy to delete.', 'error', 'Duplicates'); return; }
+        if (!confirm(`Permanently delete ${ids.length} selected cop${ids.length === 1 ? 'y' : 'ies'} (including the Telegram files)?`)) return;
+        body = { stream_ids: ids };
+    }
+    document.getElementById('dup-selected-btn').disabled = true;
+    document.getElementById('dup-all-btn').disabled = true;
+    document.getElementById('dup-start-btn').disabled = true;
+
+    const box = document.getElementById('dup-purge-progress');
+    box.classList.remove('hidden');
+    document.getElementById('dup-purge-label').innerHTML = '<i class="fa-solid fa-broom"></i> Removing duplicates…';
+    document.getElementById('dup-purge-bar').style.width = '0%';
+    setText('dup-purge-done', 0);
+    setText('dup-purge-eta', '—');
+
+    try {
+        const res = await fetch('/api/admin/tools/duplicates/purge', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        if (res.ok && data.ok) {
+            setText('dup-purge-total', data.total || 0);
+            showToast(data.message || 'Cleanup started.', 'info', 'Duplicates');
+            dupPurgeActive = true;
+            startDupPurgePolling();
+        } else {
+            box.classList.add('hidden');
+            showToast(data.message || data.detail || 'Nothing removed.', 'error', 'Duplicates');
+            document.getElementById('dup-selected-btn').disabled = false;
+            document.getElementById('dup-all-btn').disabled = false;
+            document.getElementById('dup-start-btn').disabled = false;
+        }
+    } catch (e) {
+        box.classList.add('hidden');
+        showToast('Network error.', 'error', 'Error');
+        document.getElementById('dup-selected-btn').disabled = false;
+        document.getElementById('dup-all-btn').disabled = false;
+        document.getElementById('dup-start-btn').disabled = false;
+    }
+}
+
+function startDupPurgePolling() {
+    if (dupPurgeTimer) clearInterval(dupPurgeTimer);
+    pollDup();
+    dupPurgeTimer = setInterval(pollDup, 700);
+}
+
+let baData = null;
+let baApplyTimer = null;
+
+const BA_STAT = {
+    admin:      '<span class="ba-cell ba-ok"><i class="fa-solid fa-circle-check"></i> Admin</span>',
+    member:     '<span class="ba-cell ba-warn"><i class="fa-solid fa-circle"></i> Member</span>',
+    restricted: '<span class="ba-cell ba-warn"><i class="fa-solid fa-ban"></i> Restricted</span>',
+    banned:     '<span class="ba-cell ba-no"><i class="fa-solid fa-ban"></i> Banned</span>',
+    missing:    '<span class="ba-cell ba-no"><i class="fa-solid fa-circle-xmark"></i> Not in</span>',
+};
+const BA_SESSION = {
+    owner:             '<span class="ba-cell ba-ok"><i class="fa-solid fa-crown"></i> Owner</span>',
+    admin_can_promote: '<span class="ba-cell ba-ok"><i class="fa-solid fa-user-shield"></i> Admin · can add</span>',
+    admin_no_promote:  '<span class="ba-cell ba-warn"><i class="fa-solid fa-user-shield"></i> No add-admin</span>',
+    not_admin:         '<span class="ba-cell ba-no"><i class="fa-solid fa-lock"></i> Not admin</span>',
+    unknown:           '<span class="ba-cell ba-muted"><i class="fa-solid fa-question"></i> Unknown</span>',
+};
+
+async function loadBotAdmin() {
+    const body = document.getElementById('ba-body');
+    if (!body) return;
+    const loading = document.getElementById('ba-loading');
+    const errEl = document.getElementById('ba-error');
+    const pill = document.getElementById('ba-status-pill');
+    loading.style.display = ''; errEl.style.display = 'none'; body.style.display = 'none';
+    pill.className = 'status-pill status-running'; pill.textContent = 'Scanning';
+    try {
+        const res = await fetch('/api/admin/tools/bot-admin/scan');
+        const data = await res.json();
+        loading.style.display = 'none';
+        if (data.status !== 'success') {
+            errEl.style.display = ''; errEl.textContent = data.message || 'Scan failed.';
+            pill.className = 'status-pill status-error'; pill.textContent = 'Error';
+            return;
+        }
+        baData = data.data;
+        renderBotAdmin();
+        body.style.display = '';
+        pill.className = 'status-pill status-idle'; pill.textContent = 'Ready';
+    } catch (e) {
+        loading.style.display = 'none';
+        errEl.style.display = ''; errEl.textContent = 'Network error while scanning.';
+        pill.className = 'status-pill status-error'; pill.textContent = 'Error';
+    }
+}
+
+function renderBotAdmin() {
+    const bots = (baData && baData.bots) || [];
+    const channels = (baData && baData.channels) || [];
+
+    document.getElementById('ba-bots').innerHTML = bots.map(b => `
+        <label class="chip ba-bot-chip" style="width:auto">
+            <input type="checkbox" class="ba-bot-cb" value="${escapeHtmlAttr(String(b.user_id))}" checked>
+            <span class="min-w-0">
+                <span class="c-name block">${escapeHtml(b.name)}${b.is_main ? ' <span class="c-id">(main)</span>' : ''}</span>
+                <span class="c-id">${b.username ? '@' + escapeHtml(b.username) : escapeHtml(String(b.user_id))}</span>
+            </span>
+        </label>
+    `).join('') || '<span class="hint">No bots detected.</span>';
+
+    const wrap = document.getElementById('ba-channels');
+    if (!channels.length) {
+        wrap.innerHTML = `<div class="hint" style="padding:0.5rem 0">
+            No bot-served channels configured. Add auth / manual / anime / announce / skip channels in
+            <a href="/admin/settings" style="color:var(--primary)">Settings</a>.</div>`;
+        return;
+    }
+
+    wrap.innerHTML = channels.map(ch => {
+        const roles = (ch.roles || []).map(r => `<span class="ba-role">${escapeHtml(r)}</span>`).join('');
+        const session = BA_SESSION[ch.session_status] || BA_SESSION.unknown;
+        const disabled = ch.manageable ? '' : 'disabled';
+        const reason = (!ch.manageable && ch.reason)
+            ? `<div class="hint" style="color:#f59e0b;margin-top:0.5rem"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(ch.reason)}</div>` : '';
+        const botStats = bots.map(b => `
+            <div class="ba-bstat">
+                <span class="n">${escapeHtml(b.name)}</span>
+                ${BA_STAT[ch.bots[String(b.user_id)]] || BA_STAT.missing}
+            </div>`).join('');
+        const orphans = (ch.orphans || []).length
+            ? `<div class="hint" style="margin-top:0.5rem"><i class="fa-solid fa-user-slash ba-warn"></i> Orphan admins: ${
+                ch.orphans.map(o => escapeHtml(o.name || String(o.user_id))).join(', ')}</div>` : '';
+        return `
+        <div class="ba-ch-card${ch.manageable ? '' : ' ba-locked'}">
+            <div class="ba-ch-top">
+                <label class="ba-ch-sel">
+                    <input type="checkbox" class="ba-ch-cb" value="${escapeHtmlAttr(ch.id)}" ${disabled} onchange="onBaChipChange(this)">
+                    <span class="min-w-0">
+                        <span class="ba-ch-name">${escapeHtml(ch.name)}</span>
+                        <span class="ba-ch-id block">${escapeHtml(ch.id)}</span>
+                    </span>
+                </label>
+                <span style="flex-shrink:0">${session}</span>
+            </div>
+            <div class="ba-roles" style="margin-top:0.5rem">${roles}</div>
+            <div class="ba-bot-grid">${botStats}</div>
+            ${orphans}
+            ${reason}
+        </div>`;
+    }).join('');
+}
+
+function onBaChipChange(input) {
+    input.closest('.ba-ch-card').classList.toggle('selected', input.checked);
+}
+function selectAllBaChannels(state) {
+    document.querySelectorAll('#ba-channels .ba-ch-cb:not([disabled])').forEach(cb => {
+        cb.checked = state; onBaChipChange(cb);
+    });
+}
+function getSelectedBaChannels() {
+    return [...document.querySelectorAll('#ba-channels .ba-ch-cb:checked')].map(cb => cb.value);
+}
+function getSelectedBaBots() {
+    return [...document.querySelectorAll('#ba-bots .ba-bot-cb:checked')].map(cb => cb.value);
+}
+
+async function applyBotAdmin() {
+    const channels = getSelectedBaChannels();
+    const botIds = getSelectedBaBots();
+    const demote = document.getElementById('ba-demote-orphans').checked;
+
+    if (!channels.length) { showToast('Select at least one channel.', 'error', 'Bot Admin'); return; }
+    if (!botIds.length) { showToast('Select at least one bot to add.', 'error', 'Bot Admin'); return; }
+
+    let msg = `Add ${botIds.length} bot(s) as admin to ${channels.length} channel(s)?`;
+    if (demote) msg += '\n\nOrphan bot-admins (not in your token list) will also be demoted.';
+    if (!confirm(msg)) return;
+
+    const btn = document.getElementById('ba-apply-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Applying…';
+    document.getElementById('ba-results').style.display = 'none';
+    try {
+        const res = await fetch('/api/admin/tools/bot-admin/apply', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ channel_ids: channels, bot_ids: botIds, demote_orphans: demote })
+        });
+        const data = await res.json();
+        if (!res.ok || (data.status !== 'started' && data.status !== 'success')) {
+            showToast(data.detail || data.message || 'Could not start.', 'error', 'Bot Admin');
+            resetBaApplyBtn();
+            return;
+        }
+        const total = data.total || channels.length;
+        const prog = document.getElementById('ba-progress');
+        prog.style.display = '';
+        setText('ba-prog-total', total);
+        setText('ba-prog-done', 0);
+        document.getElementById('ba-prog-bar').style.width = '0%';
+        startBaApplyPolling();
+    } catch (e) {
+        showToast('Could not reach the server.', 'error', 'Bot Admin');
+        resetBaApplyBtn();
+    }
+}
+
+function resetBaApplyBtn() {
+    const btn = document.getElementById('ba-apply-btn');
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa-solid fa-user-plus"></i> Add selected bots as admin';
+}
+
+function startBaApplyPolling() {
+    if (baApplyTimer) clearInterval(baApplyTimer);
+    pollBaApply();
+    baApplyTimer = setInterval(pollBaApply, 1500);
+}
+
+async function pollBaApply() {
+    let data;
+    try {
+        const res = await fetch('/api/admin/tools/bot-admin/apply/status');
+        data = (await res.json()).data;
+    } catch (e) { return; }
+    if (!data) return;
+
+    const total = data.total || 0;
+    const done = data.done || 0;
+    setText('ba-prog-total', total);
+    setText('ba-prog-done', done);
+    document.getElementById('ba-prog-bar').style.width = (total ? Math.round((done / total) * 100) : 0) + '%';
+
+    if (data.running) return;
+
+    if (baApplyTimer) { clearInterval(baApplyTimer); baApplyTimer = null; }
+    setTimeout(() => { document.getElementById('ba-progress').style.display = 'none'; }, 1200);
+    resetBaApplyBtn();
+
+    if (data.state === 'error') {
+        showToast(data.error || 'Apply failed.', 'error', 'Bot Admin');
+    } else {
+        showToast('Done. See the report below.', 'success', 'Bot Admin');
+    }
+    renderBotAdminResults(data.results || []);
+    loadBotAdmin();
+}
+
+function renderBotAdminResults(results) {
+    const box = document.getElementById('ba-results');
+    if (!results.length) { box.style.display = 'none'; return; }
+    const icon = { added: '<i class="fa-solid fa-circle-check ba-ok"></i>', already: '<i class="fa-solid fa-circle-check ba-muted"></i>', demoted: '<i class="fa-solid fa-user-minus ba-warn"></i>', skipped: '<i class="fa-solid fa-forward ba-warn"></i>', error: '<i class="fa-solid fa-circle-xmark ba-no"></i>' };
+    box.style.display = '';
+    box.innerHTML = results.map(ch => `
+        <div class="ba-res-row">
+            <div class="font-bold"><i class="fa-solid fa-hashtag ba-muted"></i> ${escapeHtml(ch.name)}</div>
+            ${(ch.items || []).map(it => `
+                <div style="display:flex;gap:0.5rem;align-items:flex-start;padding-left:1rem">
+                    ${icon[it.status] || ''}
+                    <span class="min-w-0"><span class="font-bold">${escapeHtml(it.bot)}</span>
+                        <span class="c-id">— ${escapeHtml(it.message || it.status)}</span></span>
+                </div>
+            `).join('')}
+        </div>
+    `).join('');
+}
+
+/* ─────────────── Utils ─────────────── */
+function setText(id, val) { const el = document.getElementById(id); if (el) el.textContent = val; }
+function escapeHtml(str) {
+    return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+}
+function escapeHtmlAttr(str) {
+    return String(str || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+}
+
+/* ─────────────── Init ─────────────── */
+loadManualSession();
+loadChannels();
+pollScan().then(() => {
+    const pill = document.getElementById('scan-status-pill');
+    if (pill.classList.contains('status-running')) startScanPolling();
+});
+pollDbc().then(() => {
+    const pill = document.getElementById('dbc-status-pill');
+    if (pill.classList.contains('status-running')) startDbcPolling();
+});
+pollDup().then(() => {
+    const pill = document.getElementById('dup-status-pill');
+    if (pill.classList.contains('status-running')) startDupPolling();
+});
+if (document.getElementById('ba-body')) loadBotAdmin();
+</script>
+
+{% endblock %}

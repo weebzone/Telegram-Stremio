@@ -1,0 +1,101 @@
+    <!-- ══ Manual Upload Session ═════════════════════════════════════════ -->
+    <div class="tool-card">
+        <div class="flex items-center justify-between flex-wrap gap-2">
+            <h2 style="margin-bottom:0"><i class="fa-solid fa-cloud-arrow-up"></i> Manual Upload Session</h2>
+            <span id="ms-status-pill" class="status-pill status-idle">No session</span>
+        </div>
+
+        <p class="hint mt-3 mb-4">
+            Pick a title, start a session, then forward files — each one attaches automatically.
+        </p>
+
+        <!-- Active session banner -->
+        <div id="ms-active" class="hidden mb-4" style="border:1px solid rgba(34,197,94,0.35);background:rgba(34,197,94,0.10);border-radius:0.9rem;padding:0.9rem 1.1rem">
+            <div class="flex items-center justify-between flex-wrap gap-2">
+                <div class="min-w-0">
+                    <div class="text-sm font-bold" id="ms-active-title">—</div>
+                    <div class="hint" id="ms-active-detail"></div>
+                </div>
+                <button class="btn btn-danger" onclick="endManualSession()"><i class="fa-solid fa-stop"></i> End session</button>
+            </div>
+            <p class="hint mt-2" style="color:#22c55e">
+                <i class="fa-solid fa-circle-check"></i> Session is live — forward the files now, then click <strong>End session</strong> when finished.
+            </p>
+        </div>
+
+        <!-- Setup (hidden while a session is active) -->
+        <div id="ms-setup">
+            <label class="s-label">Find a title (your library, IMDb / Cinemeta or TMDB)</label>
+            <div class="flex flex-col sm:flex-row gap-2">
+                <input id="ms-query" class="flex-1" placeholder="Title (with or without year), IMDb id/link, or TMDB id/link"
+                       style="background:color-mix(in srgb,var(--bg) 60%,transparent);border:1px solid var(--border);border-radius:0.9rem;padding:0.7rem 1rem;color:var(--text);outline:none"
+                       onkeydown="if(event.key==='Enter'){event.preventDefault();searchManualSession();}">
+                <button class="btn btn-primary" onclick="searchManualSession()"><i class="fa-solid fa-magnifying-glass"></i> Search</button>
+            </div>
+            <p id="ms-search-state" class="hint mt-2" style="display:none"></p>
+
+            <div id="ms-results" class="chip-list mt-3" style="display:none"></div>
+
+            <!-- Selected + options -->
+            <div id="ms-selected-box" class="hidden mt-4" style="border:1px solid var(--border);border-radius:0.9rem;padding:0.9rem 1.1rem">
+                <div class="flex items-center gap-3">
+                    <img id="ms-sel-poster" src="" alt="" style="width:2.75rem;height:4rem;object-fit:cover;border-radius:0.4rem;flex-shrink:0;background:var(--card)">
+                    <div class="min-w-0 flex-1">
+                        <div class="text-sm font-bold truncate" id="ms-sel-title">—</div>
+                        <div class="hint" id="ms-sel-sub"></div>
+                    </div>
+                </div>
+
+                <!-- Real (TMDB/IMDb) title: metadata read from each file -->
+                <div id="ms-real-note" class="hidden mt-3">
+                    <p class="hint" style="border:1px solid rgba(59,130,246,0.3);background:rgba(59,130,246,0.08);border-radius:0.75rem;padding:0.7rem 0.9rem">
+                        <i class="fa-solid fa-wand-magic-sparkles" style="color:#3b82f6"></i>
+                        Season, episode and quality are read from each file's name/caption automatically.
+                        Forward files to your <strong>auth</strong> or <strong>manual</strong> channel.
+                    </p>
+                    <div id="ms-real-tv-season" class="hidden mt-3">
+                        <label class="s-label">Fallback season (optional)</label>
+                        <input id="ms-real-season" type="number" min="0" placeholder="Only if files have no season, e.g. anime absolute numbers"
+                               style="width:100%;background:color-mix(in srgb,var(--bg) 60%,transparent);border:1px solid var(--border);border-radius:0.9rem;padding:0.6rem 0.9rem;color:var(--text);outline:none">
+                        <p class="hint mt-2">
+                            <i class="fa-solid fa-circle-info"></i> Leave empty when files already contain <code>S01E05</code>-style numbering.
+                            Set it for absolute-numbered files like <code>One Piece - 1142 (1080p).mkv</code> — the episode (1142)
+                            is read from the name and placed in this season.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Personal title: manual metadata -->
+                <div id="ms-personal-fields" class="hidden mt-3">
+                    <div id="ms-tv-fields" class="hidden grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="s-label">Season <span style="color:#ef4444">*</span></label>
+                            <input id="ms-season" type="number" min="0" placeholder="e.g. 1"
+                                   style="width:100%;background:color-mix(in srgb,var(--bg) 60%,transparent);border:1px solid var(--border);border-radius:0.9rem;padding:0.6rem 0.9rem;color:var(--text);outline:none">
+                        </div>
+                        <div>
+                            <label class="s-label">Episode (optional)</label>
+                            <input id="ms-episode" type="number" min="0" placeholder="Empty = next episode"
+                                   style="width:100%;background:color-mix(in srgb,var(--bg) 60%,transparent);border:1px solid var(--border);border-radius:0.9rem;padding:0.6rem 0.9rem;color:var(--text);outline:none">
+                        </div>
+                        <p class="hint col-span-2" style="margin-top:-0.25rem">
+                            Set an <strong>episode</strong> to pile every forwarded file onto that one episode (multiple qualities).
+                            Leave it <strong>empty</strong> so each file becomes the next episode (E1, E2, E3…).
+                        </p>
+                    </div>
+                    <div class="mt-3">
+                        <label class="s-label">Quality (optional)</label>
+                        <input id="ms-quality" placeholder="Auto-detected from video; fallback HD (e.g. 1080p)"
+                               style="width:100%;background:color-mix(in srgb,var(--bg) 60%,transparent);border:1px solid var(--border);border-radius:0.9rem;padding:0.6rem 0.9rem;color:var(--text);outline:none">
+                    </div>
+                    <p class="hint mt-2">
+                        <i class="fa-solid fa-circle-info"></i> Personal files carry no metadata — forward them to your
+                        <strong>manual channel only</strong>.
+                    </p>
+                </div>
+
+                <button class="btn btn-primary mt-3" onclick="startManualSession()"><i class="fa-solid fa-play"></i> Start session</button>
+            </div>
+        </div>
+
+    </div>

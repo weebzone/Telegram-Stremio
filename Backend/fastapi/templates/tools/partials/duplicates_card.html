@@ -1,0 +1,60 @@
+    <!-- Duplicate check & cleanup -->
+    <div class="tool-card">
+        <div class="flex items-center justify-between flex-wrap gap-2">
+            <h2 style="margin-bottom:0"><i class="fa-solid fa-clone"></i> Duplicate Check &amp; Cleanup</h2>
+            <span id="dup-status-pill" class="status-pill status-idle">Idle</span>
+        </div>
+
+        <p class="hint mt-3 mb-4">
+            Find and remove streams stored more than once. Deleting also removes the Telegram file.
+        </p>
+
+        <div class="stat-grid mb-4">
+            <div class="stat-box"><div class="v" id="dup-scanned">0</div><div class="l">Scanned</div></div>
+            <div class="stat-box"><div class="v" id="dup-groups">0</div><div class="l">Groups</div></div>
+            <div class="stat-box"><div class="v" style="color:#f59e0b" id="dup-count">0</div><div class="l">Redundant</div></div>
+            <div class="stat-box"><div class="v" id="dup-purged">0</div><div class="l">Removed</div></div>
+        </div>
+
+        <div class="flex items-center gap-2 flex-wrap mb-2">
+            <button class="btn btn-primary" id="dup-start-btn" onclick="startDuplicateCheck()">
+                <i class="fa-solid fa-magnifying-glass"></i> Scan for duplicates
+            </button>
+            <button class="btn btn-danger" id="dup-cancel-btn" onclick="cancelDuplicateCheck()" disabled>
+                <i class="fa-solid fa-stop"></i> Stop
+            </button>
+        </div>
+        <div id="dup-current" class="text-sm mb-2" style="color:var(--text-sec)">No scan running</div>
+
+        <div id="dup-purge-progress" class="hidden mb-2">
+            <div class="flex items-center justify-between mb-1 text-sm flex-wrap gap-2">
+                <span class="font-bold" id="dup-purge-label"><i class="fa-solid fa-broom"></i> Removing duplicates…</span>
+                <span style="color:var(--text-sec)">
+                    <span id="dup-purge-done">0</span>/<span id="dup-purge-total">0</span> ·
+                    <i class="fa-regular fa-clock"></i> <span id="dup-purge-elapsed">0s</span> ·
+                    ETA <span id="dup-purge-eta">—</span>
+                </span>
+            </div>
+            <div class="progress-track"><div class="progress-fill" id="dup-purge-bar"></div></div>
+        </div>
+
+        <hr class="divider">
+
+        <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <label class="s-label" style="margin-bottom:0">Duplicate groups</label>
+            <div class="flex items-center gap-2">
+                <button class="btn btn-ghost" type="button" id="dup-selected-btn" onclick="purgeDuplicates(false)" disabled>
+                    <i class="fa-solid fa-trash"></i> Delete selected
+                </button>
+                <button class="btn btn-danger" type="button" id="dup-all-btn" onclick="purgeDuplicates(true)" disabled>
+                    <i class="fa-solid fa-broom"></i> Delete all
+                </button>
+            </div>
+        </div>
+        <p class="hint mb-3">Pick copies to delete, or "Delete all" to keep only the newest of each group.</p>
+        <div class="dead-list" id="dup-list">
+            <div class="hint">No duplicates to show yet. Run a scan above.</div>
+        </div>
+    </div>
+
+</div>

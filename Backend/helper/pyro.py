@@ -239,3 +239,12 @@ async def setup_bot_commands(bot: Client):
         LOGGER.info("Bot commands updated successfully.")
     except Exception as e:
         LOGGER.error(f"Error setting up bot commands: {e}")
+
+
+def get_scan_client():
+    from Backend.pyrofork.bot import StreamBot, multi_clients
+    if StreamBot is not None:
+        return StreamBot
+    if multi_clients:
+        return multi_clients.get(0) or next(iter(multi_clients.values()))
+    return None

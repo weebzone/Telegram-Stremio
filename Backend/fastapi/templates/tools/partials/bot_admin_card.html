@@ -1,0 +1,81 @@
+    <!-- ══ Bot Admin Manager ════════════════════════════════════════════ -->
+    <div class="tool-card">
+        <div class="flex items-center justify-between flex-wrap gap-2">
+            <h2 style="margin-bottom:0"><i class="fa-solid fa-user-shield"></i> Bot Admin Manager</h2>
+            <span id="ba-status-pill" class="status-pill status-idle">Idle</span>
+        </div>
+
+        <p class="hint mt-3 mb-4">
+            Promote your bots to admin in the channels they serve, using your session account.
+        </p>
+
+        {% if not userbot_configured or not multi_token_available %}
+        <div style="border:1px solid var(--border);background:color-mix(in srgb,var(--bg) 55%,transparent);border-radius:0.9rem;padding:1rem 1.1rem">
+            <p class="hint" style="margin:0">
+                <i class="fa-solid fa-circle-info"></i>
+                {% if not userbot_configured %}
+                This tool needs a connected <strong>Telegram user session</strong>. Only a user account can
+                promote bots to admin. Connect one from
+                <a href="/admin/settings" style="color:var(--primary)">Settings → Telegram User Session</a>.
+                {% else %}
+                This tool needs <strong>more than one bot token</strong>. Add extra tokens under
+                <a href="/admin/settings" style="color:var(--primary)">Settings → Multi-Token Clients</a> to enable it.
+                {% endif %}
+            </p>
+        </div>
+        {% else %}
+
+        <div class="flex items-center gap-2 flex-wrap mb-3">
+            <button class="btn btn-ghost" type="button" id="ba-scan-btn" onclick="loadBotAdmin()">
+                <i class="fa-solid fa-arrows-rotate"></i> Re-scan
+            </button>
+            <span class="hint" style="display:flex;align-items:center;gap:0.9rem;flex-wrap:wrap">
+                <span><span class="ba-ok">✓</span> Admin</span>
+                <span><span class="ba-no">✗</span> Not in channel</span>
+                <span><span class="ba-warn">●</span> Member (not admin)</span>
+                <span><i class="fa-solid fa-lock ba-muted"></i> Can't manage</span>
+            </span>
+        </div>
+
+        <div id="ba-loading" class="hint"><i class="fa-solid fa-spinner fa-spin"></i> Scanning channels &amp; bots…</div>
+        <div id="ba-error" class="hint" style="color:#ef4444;display:none"></div>
+
+        <div id="ba-body" style="display:none">
+            <label class="s-label">Bots to add</label>
+            <div id="ba-bots" class="flex items-center gap-2 flex-wrap mb-4"></div>
+
+            <div class="flex items-center justify-between gap-2 flex-wrap mb-2">
+                <label class="s-label" style="margin-bottom:0">Channels</label>
+                <div class="flex items-center gap-2">
+                    <button class="btn btn-ghost" type="button" onclick="selectAllBaChannels(true)"><i class="fa-solid fa-check-double"></i> All</button>
+                    <button class="btn btn-ghost" type="button" onclick="selectAllBaChannels(false)"><i class="fa-solid fa-xmark"></i> Clear</button>
+                </div>
+            </div>
+            <div id="ba-channels" class="ba-ch-list"></div>
+
+            <label class="chip mt-4" style="cursor:pointer">
+                <input type="checkbox" id="ba-demote-orphans">
+                <span class="min-w-0">
+                    <span class="c-name block">Also remove orphan bot-admins</span>
+                    <span class="c-id">Revoke admin from bots that are admin in a channel but are no longer in your token list (they stay as members, not banned).</span>
+                </span>
+            </label>
+
+            <div id="ba-progress" class="mt-4" style="display:none">
+                <div class="flex items-center justify-between mb-2 text-sm flex-wrap gap-2">
+                    <span class="font-bold"><i class="fa-solid fa-user-shield"></i> Applying…</span>
+                    <span style="color:var(--text-sec)"><span id="ba-prog-done">0</span>/<span id="ba-prog-total">0</span> channels</span>
+                </div>
+                <div class="progress-track"><div class="progress-fill" id="ba-prog-bar"></div></div>
+            </div>
+
+            <div class="ba-actions flex items-center gap-2 flex-wrap mt-4">
+                <button class="btn btn-primary" id="ba-apply-btn" onclick="applyBotAdmin()">
+                    <i class="fa-solid fa-user-plus"></i> Add selected bots as admin
+                </button>
+            </div>
+
+            <div id="ba-results" class="dead-list mt-4" style="display:none"></div>
+        </div>
+        {% endif %}
+    </div>

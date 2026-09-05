@@ -15,9 +15,6 @@ from Backend.fastapi.routes.api_routes import (
     assign_plan_api,
     auto_catalog_sync_status_api,
     auto_sync_custom_catalogs_api,
-    cancel_dbcheck_api,
-    cancel_duplicate_check_api,
-    cancel_scan_api,
     clear_cache_api,
     clear_stream_analytics_api,
     create_custom_catalog_api,
@@ -27,8 +24,6 @@ from Backend.fastapi.routes.api_routes import (
     set_token_expiry_api,
     subscription_preflight_api,
     backfill_subscriber_names_api,
-    dbcheck_status_api,
-    duplicate_check_status_api,
     delete_custom_catalog_api,
     delete_media_api,
     delete_movie_quality_api,
@@ -66,15 +61,7 @@ from Backend.fastapi.routes.api_routes import (
     get_subscription_plans_api,
     get_settings_api,
     get_logs_api,
-    get_manual_session_api,
     get_system_stats_api,
-    get_tools_channels_api,
-    bot_admin_scan_api,
-    bot_admin_apply_api,
-    bot_admin_apply_status_api,
-    clear_manual_session_api,
-    search_manual_session_api,
-    set_manual_session_api,
     health_api,
     health_report_api,
     setup_status_api,
@@ -85,8 +72,6 @@ from Backend.fastapi.routes.api_routes import (
     manual_add_media_api,
     list_manual_add_catalogs_api,
     resolve_manual_metadata_api,
-    purge_dead_links_api,
-    purge_duplicates_api,
     remove_custom_catalog_item_api,
     resolve_telegram_api,
     resolve_subtitle_api,
@@ -96,15 +81,11 @@ from Backend.fastapi.routes.api_routes import (
     remove_subtitle_api,
     restart_app_api,
     revoke_token_api,
-    scan_status_api,
     search_catalog_media_api,
     set_media_visibility_api,
     search_media_rescan_api,
     speed_test_api,
     speed_test_stream_api,
-    start_dbcheck_api,
-    start_duplicate_check_api,
-    start_scan_api,
     update_auto_catalog_settings_api,
     update_custom_catalog_api,
     update_media_api,
@@ -117,6 +98,7 @@ from Backend.fastapi.routes.stream_routes import decay_client_failures
 from Backend.fastapi.routes.stream_routes import router as stream_router
 from Backend.fastapi.routes.stremio_routes import router as stremio_router
 from Backend.fastapi.routes.webdav_routes import router as webdav_router
+from Backend.fastapi.routes.tools import router as tools_router, tools_page
 from Backend.fastapi.routes.template_routes import (
     admin_access_page,
     admin_dashboard_page,
@@ -134,7 +116,6 @@ from Backend.fastapi.routes.template_routes import (
     settings_page,
     set_theme,
     stremio_guide_page,
-    tools_page,
 )
 from Backend.fastapi.security.credentials import require_auth
 from Backend.pyrofork.bot import work_loads_summary
@@ -169,6 +150,7 @@ async def _startup():
 
 #----- Streaming and Stremio routers
 app.include_router(stream_router)
+app.include_router(tools_router)
 app.include_router(stremio_router)
 app.include_router(webdav_router)
 
@@ -679,6 +661,11 @@ async def remove_custom_catalog_item(
 
 
 #----- Settings
+
+@app.get("/admin/tools", response_class=HTMLResponse)
+async def admin_tools(request: Request, _: bool = Depends(require_auth)):
+    return await tools_page(request, _)
+
 @app.get("/admin/settings", response_class=HTMLResponse)
 async def admin_settings(request: Request, _: bool = Depends(require_auth)):
     return await settings_page(request, _)
@@ -764,87 +751,6 @@ async def admin_logs_download(_: bool = Depends(require_auth)):
 async def admin_restart(_: bool = Depends(require_auth)):
     return await restart_app_api()
 
-
-#----- Tools (WebUI replacement for /scan, /rescan, /dbcheck bot commands)
-@app.get("/admin/tools", response_class=HTMLResponse)
-async def admin_tools(request: Request, _: bool = Depends(require_auth)):
-    return await tools_page(request, _)
-
-@app.get("/api/admin/tools/channels")
-async def tools_channels(_: bool = Depends(require_auth)):
-    return await get_tools_channels_api()
-
-@app.get("/api/admin/tools/bot-admin/scan")
-async def tools_bot_admin_scan(_: bool = Depends(require_auth)):
-    return await bot_admin_scan_api()
-
-@app.post("/api/admin/tools/bot-admin/apply")
-async def tools_bot_admin_apply(payload: dict, _: bool = Depends(require_auth)):
-    return await bot_admin_apply_api(payload)
-
-@app.get("/api/admin/tools/bot-admin/apply/status")
-async def tools_bot_admin_apply_status(_: bool = Depends(require_auth)):
-    return await bot_admin_apply_status_api()
-
-@app.get("/api/admin/tools/manual-session")
-async def tools_manual_session_get(_: bool = Depends(require_auth)):
-    return await get_manual_session_api()
-
-@app.get("/api/admin/tools/manual-session/search")
-async def tools_manual_session_search(query: str = Query(""), _: bool = Depends(require_auth)):
-    return await search_manual_session_api(query)
-
-@app.post("/api/admin/tools/manual-session")
-async def tools_manual_session_set(payload: dict, _: bool = Depends(require_auth)):
-    return await set_manual_session_api(payload)
-
-@app.delete("/api/admin/tools/manual-session")
-async def tools_manual_session_clear(_: bool = Depends(require_auth)):
-    return await clear_manual_session_api()
-
-@app.post("/api/admin/tools/scan/start")
-async def tools_scan_start(payload: dict, _: bool = Depends(require_auth)):
-    return await start_scan_api(payload)
-
-@app.post("/api/admin/tools/scan/cancel")
-async def tools_scan_cancel(_: bool = Depends(require_auth)):
-    return await cancel_scan_api()
-
-@app.get("/api/admin/tools/scan/status")
-async def tools_scan_status(_: bool = Depends(require_auth)):
-    return await scan_status_api()
-
-@app.post("/api/admin/tools/dbcheck/start")
-async def tools_dbcheck_start(_: bool = Depends(require_auth)):
-    return await start_dbcheck_api()
-
-@app.post("/api/admin/tools/dbcheck/cancel")
-async def tools_dbcheck_cancel(_: bool = Depends(require_auth)):
-    return await cancel_dbcheck_api()
-
-@app.get("/api/admin/tools/dbcheck/status")
-async def tools_dbcheck_status(_: bool = Depends(require_auth)):
-    return await dbcheck_status_api()
-
-@app.post("/api/admin/tools/dead-links/purge")
-async def tools_purge_dead_links(payload: dict | None = None, _: bool = Depends(require_auth)):
-    return await purge_dead_links_api(payload)
-
-@app.post("/api/admin/tools/duplicates/start")
-async def tools_duplicates_start(_: bool = Depends(require_auth)):
-    return await start_duplicate_check_api()
-
-@app.post("/api/admin/tools/duplicates/cancel")
-async def tools_duplicates_cancel(_: bool = Depends(require_auth)):
-    return await cancel_duplicate_check_api()
-
-@app.get("/api/admin/tools/duplicates/status")
-async def tools_duplicates_status(_: bool = Depends(require_auth)):
-    return await duplicate_check_status_api()
-
-@app.post("/api/admin/tools/duplicates/purge")
-async def tools_duplicates_purge(payload: dict | None = None, _: bool = Depends(require_auth)):
-    return await purge_duplicates_api(payload)
 
 
 @app.exception_handler(401)
