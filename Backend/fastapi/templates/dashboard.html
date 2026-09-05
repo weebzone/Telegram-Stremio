@@ -412,7 +412,14 @@
     }
 
     function getStreamTitle(stream) {
-        return stream?.title || stream?.meta?.title || 'Unknown Stream';
+        return stream?.title || stream?.file_name || stream?.meta?.title || stream?.meta?.file_name || 'Unknown Stream';
+    }
+
+    function getStreamFileName(stream) {
+        const fn = stream?.file_name || stream?.meta?.file_name || '';
+        const title = stream?.title || stream?.meta?.title || '';
+        if (fn && title && fn !== title) return fn;
+        return '';
     }
 
     function getClientLabel(stream) {
@@ -444,6 +451,7 @@
     function renderStreamCard(stream) {
         const status = getStatusBadge(stream?.status);
         const title = escapeHtml(getStreamTitle(stream));
+        const fileName = escapeHtml(getStreamFileName(stream));
         const streamId = escapeHtml(stream?.stream_id ? String(stream.stream_id).slice(0, 12) + '…' : 'Unknown');
         const label = escapeHtml(getClientLabel(stream));
         const totalBytes = formatBytes(stream?.total_bytes || 0);
@@ -451,12 +459,16 @@
             ? Number(stream.avg_mbps).toFixed(3) + ' MB/s' : '—';
         const started = formatTimestamp(stream?.start_ts);
         const liveDuration = getLiveDuration(stream);
+        const fileLine = fileName
+            ? `<p class="text-[11px] text-text-secondary mt-0.5 truncate" title="${fileName}"><i class="fa-solid fa-file-video mr-1 opacity-70"></i>${fileName}</p>`
+            : '';
 
         return `
             <div class="stream-card rounded-[2rem] p-5">
                 <div class="flex justify-between items-start gap-3">
                     <div class="min-w-0 pr-2">
                         <h5 class="font-bold text-sm text-text truncate">${title}</h5>
+                        ${fileLine}
                         <div class="mt-1 flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-widest text-text-secondary">
                             <span>${label}</span>
                             <span>•</span>

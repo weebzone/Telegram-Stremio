@@ -2502,12 +2502,12 @@ class Database:
                 "status":      stats.get("status", "finished"),
                 "parallelism": stats.get("parallelism"),
                 "chunk_size":  stats.get("chunk_size"),
-                "logged_at":   datetime.utcnow(),
+                "logged_at":   datetime.now(timezone.utc),
             }
             await self.dbs["tracking"]["stream_analytics"].insert_one(record)
             token = stats.get("meta", {}).get("token")
             if token:
-                upd = {"last_active": datetime.utcnow()}
+                upd = {"last_active": datetime.now(timezone.utc)}
                 if record.get("title"):
                     upd["last_title"] = record["title"]
                 if record.get("user_name"):
@@ -2564,8 +2564,11 @@ class Database:
             ).sort("logged_at", DESCENDING).limit(limit)
             recent = await recent_cursor.to_list(None)
             for r in recent:
-                if "logged_at" in r:
-                    r["logged_at"] = r["logged_at"].isoformat()
+                if "logged_at" in r and r["logged_at"] is not None:
+                    ts = r["logged_at"]
+                    if getattr(ts, "tzinfo", None) is None:
+                        ts = ts.replace(tzinfo=timezone.utc)
+                    r["logged_at"] = ts.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
             #----- Most-streamed titles
             top_titles = await col.aggregate([
