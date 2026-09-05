@@ -14,12 +14,12 @@ from fastapi.responses import StreamingResponse
 
 from Backend import db
 from Backend.fastapi.security.tokens import verify_token
-from Backend.helper.analytics import client_ip_from, record_stream_start
-from Backend.helper.custom_dl import ACTIVE_STREAMS, RECENT_STREAMS, ByteStreamer
-from Backend.helper.encrypt import decode_string
-from Backend.helper.utils import track_usage
-from Backend.helper.virtual_dl import resolve_virtual_parts, virtual_stream_generator
-from Backend.helper.zip_stream import resolve_zip_entry
+from Backend.helper.system.analytics import client_ip_from, record_stream_start
+from Backend.helper.streaming.custom_dl import ACTIVE_STREAMS, RECENT_STREAMS, ByteStreamer
+from Backend.helper.core.encrypt import decode_string
+from Backend.helper.core.utils import track_usage
+from Backend.helper.streaming.virtual_dl import resolve_virtual_parts, virtual_stream_generator
+from Backend.helper.streaming.zip_stream import resolve_zip_entry
 from Backend.logger import LOGGER
 import Backend.pyrofork.bot as botmod
 from Backend.pyrofork.bot import (

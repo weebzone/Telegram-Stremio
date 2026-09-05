@@ -13,16 +13,16 @@ from pyrogram.errors import UserNotParticipant
 
 from Backend import __version__, db
 from Backend.config import Telegram
-from Backend.helper.analytics import client_ip_from, record_client
+from Backend.helper.system.analytics import client_ip_from, record_client
 from Backend.fastapi.security.tokens import verify_token
 from Backend.fastapi.themes import DEFAULT_THEME, DEFAULT_STYLE, get_theme, __x7
-from Backend.helper.fanart import fanart_artwork
-from Backend.helper.global_search import global_search, is_global_search_enabled
+from Backend.helper.content.fanart import fanart_artwork
+from Backend.helper.content.global_search import global_search, is_global_search_enabled
 from Backend.helper.metadata.providers.cinemeta import get_detail, get_season
 from Backend.helper.metadata import resolve_cover_url, COMBINED_SEASON, COMBINED_EPISODE_BASE
-from Backend.helper.split_files import parse_combined_episodes, combined_name_key
-from Backend.helper.settings_manager import SettingsManager
-from Backend.helper.subtitles import get_subtitles_for, stremio_subtitle_entries
+from Backend.helper.telegram.split_files import parse_combined_episodes, combined_name_key
+from Backend.helper.settings.manager import SettingsManager
+from Backend.helper.content.subtitles import get_subtitles_for, stremio_subtitle_entries
 from Backend.logger import LOGGER
 from Backend.pyrofork.bot import StreamBot, get_streambot_url
 

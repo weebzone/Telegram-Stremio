@@ -1,0 +1,87 @@
+<!-- Plan Modal -->
+<div id="plan-modal" class="fixed inset-0 hidden z-50 modal-backdrop items-center justify-center p-4">
+    <div class="modal-glass">
+        <div class="flex items-start justify-between gap-4 mb-5">
+            <div>
+                <h3 class="text-xl font-bold section-title" id="plan-modal-title">Add New Plan</h3>
+                <p class="text-sm text-soft mt-1">Create or update a subscription plan.</p>
+            </div>
+            <button onclick="closePlanModal()" class="glass-btn rounded-full w-10 h-10 flex items-center justify-center">
+                <i class="fas fa-xmark"></i>
+            </button>
+        </div>
+
+        <form id="plan-form" onsubmit="submitPlanForm(event)" class="space-y-4">
+            <input type="hidden" id="plan-id">
+
+            <div class="modal-field">
+                <label for="plan-days">Duration (Days)</label>
+                <input type="number" id="plan-days" class="glass-input" required min="1">
+            </div>
+
+            <div class="modal-field">
+                <label for="plan-price">Price</label>
+                <input type="number" id="plan-price" class="glass-input" required min="0" step="0.01">
+            </div>
+            <div>
+                <label for="plan-currency">Currency</label>
+                <select id="plan-currency" class="glass-input">
+                    <option value="INR">INR (₹)</option>
+                    <option value="USD">USD ($)</option>
+                    <option value="EUR">EUR (€)</option>
+                    <option value="GBP">GBP (£)</option>
+                    <option value="JPY">JPY (¥)</option>
+                    <option value="AUD">AUD (A$)</option>
+                    <option value="CAD">CAD (C$)</option>
+                    <option value="SGD">SGD (S$)</option>
+                    <option value="AED">AED (د.إ)</option>
+                    <option value="BRL">BRL (R$)</option>
+                </select>
+            </div>
+
+            <div class="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-2">
+                <button type="button" onclick="closePlanModal()" class="glass-btn rounded-2xl px-5 py-3 text-sm font-bold">
+                    Cancel
+                </button>
+                <button type="submit" class="glass-btn glass-btn-primary rounded-2xl px-5 py-3 text-sm font-bold">
+                    Save Plan
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- User Action Modal -->
+<div id="user-modal" class="fixed inset-0 hidden z-50 modal-backdrop items-center justify-center p-4">
+    <div class="modal-glass">
+        <div class="flex items-start justify-between gap-4 mb-5">
+            <div>
+                <h3 class="text-xl font-bold section-title" id="user-modal-title">Manage User</h3>
+                <div class="text-sm text-soft mt-1" id="user-modal-desc"></div>
+            </div>
+            <button onclick="closeUserModal()" class="glass-btn rounded-full w-10 h-10 flex items-center justify-center">
+                <i class="fas fa-xmark"></i>
+            </button>
+        </div>
+
+        <form id="user-form" onsubmit="submitUserForm(event)" class="space-y-4">
+            <input type="hidden" id="manage-user-id">
+            <input type="hidden" id="manage-action">
+
+            <div class="modal-field" id="days-input-group">
+                <label for="manage-days">Days to <span id="days-action-label"></span></label>
+                <input type="number" id="manage-days" class="glass-input" min="1" value="30">
+            </div>
+
+            <div class="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-2">
+                <button type="button" onclick="closeUserModal()" class="glass-btn rounded-2xl px-5 py-3 text-sm font-bold">
+                    Cancel
+                </button>
+                <button type="submit" class="glass-btn glass-btn-primary rounded-2xl px-5 py-3 text-sm font-bold" id="btn-user-save">
+                    Confirm
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+

@@ -7,12 +7,12 @@ from typing import Any, Dict, List, Optional
 from pyrogram.errors import FloodWait, ChannelPrivate, ChatAdminRequired
 
 from Backend.logger import LOGGER
-from Backend.helper.encrypt import encode_string, decode_string
+from Backend.helper.core.encrypt import encode_string, decode_string
 from Backend.helper.metadata import metadata, extract_default_id
-from Backend.helper.pyro import clean_filename, finalize_media_name, get_readable_file_size
-from Backend.helper.skip_channel import is_skip_channel, route_to_skip_channel
-from Backend.helper.split_files import parse_split_info
-from Backend.helper.subtitles import ingest_subtitle, is_subtitle_file
+from Backend.helper.telegram.pyro import clean_filename, finalize_media_name, get_readable_file_size
+from Backend.helper.telegram.skip_channel import is_skip_channel, route_to_skip_channel
+from Backend.helper.telegram.split_files import parse_split_info
+from Backend.helper.content.subtitles import ingest_subtitle, is_subtitle_file
 from Backend.helper.tools.utils import _now, _fmt_elapsed
 
 SCAN_BATCH_SIZE = 200

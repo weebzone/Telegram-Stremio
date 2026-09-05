@@ -11,10 +11,10 @@ from pydantic import ValidationError
 from pymongo import ASCENDING, DESCENDING
 
 from Backend.config import Telegram
-from Backend.helper.encrypt import decode_string, encode_string
-from Backend.helper.modal import Episode, MovieSchema, QualityDetail, QualityPart, Season, TVShowSchema
-from Backend.helper.settings_manager import SettingsManager
-from Backend.helper.task_manager import delete_message
+from Backend.helper.core.encrypt import decode_string, encode_string
+from Backend.helper.core.modal import Episode, MovieSchema, QualityDetail, QualityPart, Season, TVShowSchema
+from Backend.helper.settings.manager import SettingsManager
+from Backend.helper.system.task_manager import delete_message
 from Backend.logger import LOGGER
 
 
@@ -1142,7 +1142,7 @@ class Database:
             payload["zip"] = True
         encoded = await encode_string(payload)
         total_bytes = sum(p.get("size_bytes", 0) for p in sorted_parts)
-        from Backend.helper.pyro import get_readable_file_size 
+        from Backend.helper.telegram.pyro import get_readable_file_size 
         size_str = get_readable_file_size(total_bytes)
         return encoded, size_str
 

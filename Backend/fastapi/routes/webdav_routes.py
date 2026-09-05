@@ -33,9 +33,9 @@ from fastapi import APIRouter, HTTPException, Request, Response
 from Backend.config import Telegram
 from Backend.fastapi.routes import stream_routes as sr
 from Backend.fastapi.security.tokens import verify_token
-from Backend.helper.encrypt import decode_string
-from Backend.helper.settings_manager import SettingsManager
-from Backend.helper.webdav_fs import VNode, fs, normalize_path
+from Backend.helper.core.encrypt import decode_string
+from Backend.helper.settings.manager import SettingsManager
+from Backend.helper.streaming.webdav_fs import VNode, fs, normalize_path
 from Backend.logger import LOGGER
 
 router = APIRouter(tags=["WebDAV"])

@@ -6,7 +6,7 @@ from fastapi import HTTPException
 from pyrogram.enums import ChatMemberStatus, ChatMembersFilter
 from pyrogram.types import ChatPrivileges
 
-from Backend.helper.settings_manager import SettingsManager
+from Backend.helper.settings.manager import SettingsManager
 from Backend.logger import LOGGER
 from Backend.pyrofork.bot import multi_clients
 import Backend.pyrofork.bot as botmod

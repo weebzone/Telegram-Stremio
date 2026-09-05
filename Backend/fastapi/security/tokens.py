@@ -4,7 +4,7 @@ from fastapi import HTTPException
 
 from Backend import db
 from Backend.config import Telegram
-from Backend.helper.settings_manager import SettingsManager
+from Backend.helper.settings.manager import SettingsManager
 
 DAILY_LIMIT_VIDEO = "https://bit.ly/3YZFKT5"
 MONTHLY_LIMIT_VIDEO = "https://bit.ly/4rfjtgd"

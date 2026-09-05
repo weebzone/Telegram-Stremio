@@ -4,7 +4,7 @@ from pyrogram.types import ChatMemberUpdated
 
 from Backend import db
 from Backend.config import Telegram
-from Backend.helper.settings_manager import SettingsManager
+from Backend.helper.settings.manager import SettingsManager
 from Backend.logger import LOGGER
 
 

@@ -1,0 +1,900 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Dashboard - Telegram Stremio{% endblock %}
+
+{% block content %}
+<style>
+  .glass-card {
+    background: color-mix(in srgb, var(--card) 94%, var(--bg));
+    border: 1px solid color-mix(in srgb, var(--border) 95%, transparent);
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.22);
+  }
+
+  .glass-card-soft {
+    background: color-mix(in srgb, var(--card) 86%, var(--bg));
+    border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  }
+
+  .section-title {
+    color: var(--text);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+  }
+
+  .muted {
+    color: var(--text-sec);
+  }
+
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.45rem 0.85rem;
+    border-radius: 9999px;
+    font-size: 0.82rem;
+    font-weight: 800;
+    border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+    background: color-mix(in srgb, var(--bg) 66%, transparent);
+    color: var(--text);
+    white-space: nowrap;
+  }
+
+  .metric-card {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .metric-card::before {
+    content: "";
+    position: absolute;
+    inset: -30% auto auto -10%;
+    width: 140px;
+    height: 140px;
+    border-radius: 9999px;
+    background: color-mix(in srgb, var(--primary) 12%, transparent);
+    filter: blur(18px);
+    pointer-events: none;
+  }
+
+  .metric-icon {
+    width: 3.25rem;
+    height: 3.25rem;
+    border-radius: 1.1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: color-mix(in srgb, var(--primary) 14%, transparent);
+    color: var(--primary);
+    border: 1px solid color-mix(in srgb, var(--primary) 18%, transparent);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
+  }
+
+  .btn-ui {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.55rem;
+    border-radius: 1rem;
+    padding: 0.82rem 1.1rem;
+    font-size: 0.92rem;
+    font-weight: 800;
+    transition: all 0.2s ease;
+    border: 1px solid transparent;
+    white-space: nowrap;
+  }
+
+  .btn-ui:hover { transform: translateY(-1px); }
+
+  .btn-danger {
+    background: color-mix(in srgb, rgb(239 68 68) 16%, transparent);
+    color: rgb(248 113 113);
+    border-color: color-mix(in srgb, rgb(239 68 68) 26%, transparent);
+  }
+
+  .btn-primary {
+    background: var(--primary);
+    color: white;
+    box-shadow: 0 10px 24px color-mix(in srgb, var(--primary) 26%, transparent);
+  }
+
+  .btn-ghost {
+    background: color-mix(in srgb, var(--bg) 74%, transparent);
+    color: var(--text);
+    border-color: color-mix(in srgb, var(--border) 95%, transparent);
+  }
+
+  .workload-row,
+  .table-row-card {
+    background: color-mix(in srgb, var(--bg) 68%, transparent);
+    border: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
+  }
+
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem 0.65rem;
+    border-radius: 9999px;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+  }
+
+  .status-good {
+    background: color-mix(in srgb, rgb(34 197 94) 16%, transparent);
+    color: rgb(74 222 128);
+    border: 1px solid color-mix(in srgb, rgb(34 197 94) 22%, transparent);
+  }
+
+  .status-warn {
+    background: color-mix(in srgb, rgb(234 179 8) 16%, transparent);
+    color: rgb(250 204 21);
+    border: 1px solid color-mix(in srgb, rgb(234 179 8) 22%, transparent);
+  }
+
+  .status-bad {
+    background: color-mix(in srgb, rgb(239 68 68) 16%, transparent);
+    color: rgb(248 113 113);
+    border: 1px solid color-mix(in srgb, rgb(239 68 68) 22%, transparent);
+  }
+
+  .table-shell {
+    overflow: hidden;
+  }
+
+  .table-scroll {
+    overflow-x: auto;
+    max-height: 62vh;
+    overflow-y: auto;
+  }
+
+  .table-ui {
+    width: 100%;
+    min-width: 920px;
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+
+  .table-ui thead th {
+    color: var(--text-sec);
+    font-size: 0.72rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    padding: 1rem 1.25rem;
+    background: color-mix(in srgb, var(--card) 92%, var(--bg));
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 92%, transparent);
+    position: sticky;
+    top: 0;
+    z-index: 2;
+  }
+
+  .table-ui tbody td {
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+    color: var(--text);
+    vertical-align: middle;
+  }
+
+  .table-ui tbody tr:hover td {
+    background: color-mix(in srgb, var(--card) 18%, transparent);
+  }
+
+  .stream-id {
+    max-width: 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: inline-block;
+    vertical-align: bottom;
+  }
+
+  .title-cell {
+    max-width: 210px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .empty-state {
+    color: var(--text-sec);
+    text-align: center;
+    padding: 2rem 1rem;
+  }
+
+  .mobile-list {
+    display: none;
+  }
+
+  .mobile-card {
+    background: color-mix(in srgb, var(--bg) 70%, transparent);
+    border: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
+    border-radius: 1.25rem;
+    padding: 1rem;
+  }
+
+  .mobile-kv {
+    display: grid;
+    grid-template-columns: 110px 1fr;
+    gap: 0.45rem 0.75rem;
+    font-size: 0.86rem;
+  }
+
+  .mobile-kv .key {
+    color: var(--text-sec);
+  }
+
+  .bot-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+  }
+
+  .bot-card {
+    background: color-mix(in srgb, var(--bg) 68%, transparent);
+    border: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
+    border-radius: 1.1rem;
+    padding: 0.85rem;
+  }
+
+  .bot-stat-num {
+    font-size: 1.15rem;
+    font-weight: 900;
+    line-height: 1.1;
+  }
+
+  .bot-stat-label {
+    font-size: 0.6rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--text-sec);
+    margin-top: .15rem;
+  }
+
+  .analytics-mobile-card {
+    padding: 0.75rem 0.85rem;
+    border-radius: 1rem;
+  }
+
+  .scroll-cap {
+    max-height: 62vh;
+    overflow-y: auto;
+    padding-right: 2px;
+  }
+
+  @media (min-width: 640px) {
+    .bot-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  }
+
+  @media (min-width: 1024px) {
+    .bot-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  }
+
+  .loading-dot {
+    display: inline-block;
+    width: .5rem;
+    height: .5rem;
+    border-radius: 9999px;
+    background: var(--primary);
+    box-shadow: 0 0 12px color-mix(in srgb, var(--primary) 40%, transparent);
+    animation: pulseDot 1.2s infinite ease-in-out;
+  }
+
+  @keyframes pulseDot {
+    0%, 100% { opacity: .45; transform: scale(.9); }
+    50% { opacity: 1; transform: scale(1.1); }
+  }
+
+  @media (max-width: 1024px) {
+    .table-ui { min-width: 840px; }
+  }
+
+  @media (max-width: 768px) {
+    .desktop-table {
+      display: none;
+    }
+
+    .mobile-list {
+      display: grid;
+      gap: 0.9rem;
+    }
+
+    .mobile-kv {
+      grid-template-columns: 95px 1fr;
+    }
+
+    .btn-ui {
+      width: 100%;
+    }
+  }
+</style>
+
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8 text-text">
+    <div class="glass-card rounded-3xl p-5 sm:p-6 lg:p-8 mb-6 sm:mb-8">
+        <div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
+            <div>
+                <div class="flex flex-wrap items-center gap-2 mb-3">
+                    <span class="pill"><span class="loading-dot"></span> Live admin panel</span>
+                </div>
+                <h1 class="section-title text-2xl sm:text-3xl lg:text-4xl">Admin Dashboard</h1>
+                <p class="muted mt-2 text-sm sm:text-base">Monitor system health, stream analytics, and flagged dead links from one responsive control panel.</p>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full lg:w-auto">
+                <button onclick="clearCache()" class="btn-ui btn-danger">
+                    <i class="fas fa-trash-alt"></i>
+                    Clear File Cache
+                </button>
+                <button onclick="clearAnalytics()" class="btn-ui btn-ghost">
+                    <i class="fas fa-chart-line"></i>
+                    Clear Analytics
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8" id="stats-container">
+        <div class="glass-card metric-card rounded-3xl p-5 sm:p-6">
+            <div class="flex items-start gap-4">
+                <div class="metric-icon">
+                    <i class="fas fa-memory text-xl"></i>
+                </div>
+                <div class="min-w-0">
+                    <p class="muted text-sm font-semibold">Cached File IDs</p>
+                    <p class="text-3xl sm:text-4xl font-black tracking-tight mt-2 text-text" id="stat-cache-size">-</p>
+                    <p class="muted text-xs sm:text-sm mt-2">Current file-id cache entries in memory.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="glass-card metric-card rounded-3xl p-5 sm:p-6">
+            <div class="flex items-start gap-4">
+                <div class="metric-icon">
+                    <i class="fas fa-robot text-xl"></i>
+                </div>
+                <div class="min-w-0">
+                    <p class="muted text-sm font-semibold">Connected Bots</p>
+                    <p class="text-3xl sm:text-4xl font-black tracking-tight mt-2 text-text" id="stat-bot-count">-</p>
+                    <p class="muted text-xs sm:text-sm mt-2">Active Telegram bot clients available right now.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="glass-card rounded-3xl overflow-hidden mb-6 sm:mb-8">
+        <div class="px-5 sm:px-6 lg:px-8 py-4 sm:py-5 border-b border-hairline bg-surface flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+                <h2 class="section-title text-xl sm:text-2xl">Health &amp; Diagnostics</h2>
+                <p class="muted text-sm mt-1">Live bot load, plus database, TMDB and public-URL checks.</p>
+            </div>
+            <div class="flex items-center gap-2">
+                <span id="hz-overall-badge" class="hz-badge s-warning">checking…</span>
+                <button onclick="fetchHealthReport(true)" class="btn-ui btn-ghost"><i class="fa-solid fa-stethoscope"></i> Recheck</button>
+            </div>
+        </div>
+
+        <div class="p-4 sm:p-5 lg:p-6">
+            <div id="hz-infra" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
+                <div class="empty-state">Running checks…</div>
+            </div>
+            <h3 class="hz-subhead"><i class="fa-solid fa-robot"></i> Telegram Clients <span class="pill" style="margin-left:.35rem"><span class="loading-dot"></span> live</span></h3>
+            <div id="stat-workloads">
+                <div class="empty-state">Loading bot data...</div>
+            </div>
+        </div>
+    </div>
+
+    <style>
+      .hz-badge { padding: 0.2rem 0.7rem; border-radius: 999px; font-size: 0.7rem; font-weight: 800; text-transform: uppercase; }
+      .s-ok { background: #22c55e22; color: #22c55e; }
+      .s-degraded, .s-warning, .s-not_configured { background: #f59e0b22; color: #f59e0b; }
+      .s-down, .s-error, .s-critical { background: #ef444422; color: #ef4444; }
+      .hz-card { border: 1px solid var(--hairline, rgba(255,255,255,0.08)); background: var(--surface, rgba(255,255,255,0.03)); border-radius: 1rem; padding: 1rem 1.1rem; }
+      .hz-top { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+      .hz-name { font-weight: 800; font-size: .92rem; display: flex; align-items: center; gap: .5rem; }
+      .hz-msg { color: var(--text-sec); font-size: .8rem; margin-top: .5rem; word-break: break-word; }
+      .hz-item { display: flex; align-items: center; justify-content: space-between; gap: .6rem; font-size: .82rem; border-top: 1px solid var(--hairline, rgba(255,255,255,0.06)); padding-top: .45rem; margin-top: .45rem; }
+      .hz-item .lbl { display: flex; align-items: center; gap: .45rem; font-weight: 600; }
+      .hz-item .meta { color: var(--text-sec); font-size: .74rem; text-align: right; }
+      .hz-subhead { font-weight: 800; font-size: 0.95rem; margin: 0.25rem 0 0.85rem; display: flex; align-items: center; gap: .5rem; }
+      .mini-dot { width: .55rem; height: .55rem; border-radius: 999px; display: inline-block; }
+      .hz-usebar { height: 5px; border-radius: 999px; background: var(--hairline, rgba(255,255,255,0.12)); overflow: hidden; width: 90px; margin-top: 3px; margin-left: auto; }
+      .hz-usebar > span { display: block; height: 100%; background: var(--primary); }
+      .bot-table-wrap { overflow-x: auto; }
+      .bot-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+      .bot-table th { text-align: center; font-size: 0.68rem; text-transform: uppercase; letter-spacing: .05em; color: var(--text-sec); padding: 0.55rem 0.75rem; border-bottom: 1px solid var(--hairline, rgba(255,255,255,0.12)); }
+      .bot-table th:first-child { text-align: left; }
+      .bot-table td { padding: 0.6rem 0.75rem; text-align: center; border-bottom: 1px solid var(--hairline, rgba(255,255,255,0.06)); }
+      .bot-table tr:last-child td { border-bottom: none; }
+      .bot-table .bt-name { text-align: left; font-weight: 700; display: flex; align-items: center; gap: 0.5rem; }
+      .ins-stat { background: var(--surface, rgba(255,255,255,0.03)); border: 1px solid var(--hairline, rgba(255,255,255,0.08)); border-radius: 1rem; padding: 0.9rem 1rem; text-align: center; }
+      .ins-v { font-size: 1.5rem; font-weight: 800; }
+      .ins-l { font-size: 0.7rem; text-transform: uppercase; letter-spacing: .05em; color: var(--text-sec); margin-top: 0.2rem; }
+      .ins-col { background: var(--surface, rgba(255,255,255,0.03)); border: 1px solid var(--hairline, rgba(255,255,255,0.08)); border-radius: 1rem; padding: 1rem; }
+      .ins-h { font-weight: 800; font-size: 0.95rem; margin-bottom: 0.85rem; }
+      .ins-list { display: flex; flex-direction: column; gap: 0.55rem; }
+      .ins-row { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; font-size: 0.85rem; }
+      .ins-row .name { color: var(--text); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .ins-row .val { color: var(--text-sec); font-size: 0.75rem; flex-shrink: 0; }
+      .ins-bar { height: 6px; border-radius: 999px; background: var(--primary); opacity: 0.75; margin-top: 3px; }
+      .ins-empty { color: var(--text-sec); font-size: 0.82rem; }
+    </style>
+
+    <div class="glass-card rounded-3xl overflow-hidden mb-6 sm:mb-8">
+        <div class="px-5 sm:px-6 lg:px-8 py-4 sm:py-5 border-b border-hairline bg-surface flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+                <h2 class="section-title text-xl sm:text-2xl">Streaming Insights</h2>
+                <p class="muted text-sm mt-1">Most-watched titles, heaviest viewers and daily activity.</p>
+            </div>
+            <span class="pill">Overview</span>
+        </div>
+        <div class="p-4 sm:p-5 lg:p-6">
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+                <div class="ins-stat"><div class="ins-v" id="ins-total-streams">—</div><div class="ins-l">Total Streams</div></div>
+                <div class="ins-stat"><div class="ins-v" id="ins-total-data">—</div><div class="ins-l">Data Transferred</div></div>
+                <div class="ins-stat"><div class="ins-v" id="ins-avg-speed">—</div><div class="ins-l">Avg Speed</div></div>
+                <div class="ins-stat"><div class="ins-v" id="ins-active-users">—</div><div class="ins-l">Active Viewers</div></div>
+            </div>
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                <div class="ins-col"><h3 class="ins-h">🔥 Top Titles</h3><div id="ins-top-titles" class="ins-list"></div></div>
+                <div class="ins-col"><h3 class="ins-h">👤 Top Viewers</h3><div id="ins-top-users" class="ins-list"></div></div>
+                <div class="ins-col"><h3 class="ins-h">📅 Last 14 Days</h3><div id="ins-per-day" class="ins-list"></div></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="glass-card rounded-3xl overflow-hidden mb-6 sm:mb-8">
+        <div class="px-5 sm:px-6 lg:px-8 py-4 sm:py-5 border-b border-hairline bg-surface flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+                <h2 class="section-title text-xl sm:text-2xl">Recent Stream Analytics</h2>
+                <p class="muted text-sm mt-1">Data transferred, speed, duration, and status for recent streams.</p>
+            </div>
+            <span class="pill">Recent activity</span>
+        </div>
+
+        <div class="p-4 sm:p-5 lg:p-6">
+            <div class="desktop-table table-shell">
+                <div class="table-scroll">
+                    <table class="table-ui">
+                        <thead>
+                            <tr>
+                                <th>Stream ID</th>
+                                <th>Title</th>
+                                <th class="text-center">Bot (DC)</th>
+                                <th class="text-right">Transferred</th>
+                                <th class="text-right">Avg / Peak</th>
+                                <th class="text-center">Duration</th>
+                                <th class="text-center">Status</th>
+                                <th class="text-right">Time</th>
+                            </tr>
+                        </thead>
+                        <tbody id="analytics-tbody">
+                            <tr>
+                                <td colspan="8" class="empty-state">
+                                    <i class="fas fa-spinner fa-spin mr-2 text-primary"></i> Loading analytics...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="analytics-mobile" class="mobile-list scroll-cap">
+                <div class="empty-state">
+                    <i class="fas fa-spinner fa-spin mr-2 text-primary"></i> Loading analytics...
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="glass-card rounded-3xl overflow-hidden">
+        <div class="px-5 sm:px-6 lg:px-8 py-4 sm:py-5 border-b border-hairline bg-surface flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+                <h2 class="section-title text-xl sm:text-2xl">Flagged Dead Links</h2>
+                <p class="muted text-sm mt-1">Purge broken qualities so users no longer see dead content.</p>
+            </div>
+            <span class="pill">Database cleanup</span>
+        </div>
+
+        <div class="p-4 sm:p-5 lg:p-6">
+            <div class="desktop-table table-shell">
+                <div class="table-scroll">
+                    <table class="table-ui">
+                        <thead>
+                            <tr>
+                                <th>Title</th>
+                                <th>Type</th>
+                                <th>Quality Details</th>
+                                <th class="text-center">Date Added</th>
+                                <th class="text-center">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dead-links-tbody">
+                            <tr>
+                                <td colspan="5" class="empty-state">
+                                    <i class="fas fa-spinner fa-spin mr-2 text-primary"></i> Loading dead links...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="dead-links-mobile" class="mobile-list scroll-cap">
+                <div class="empty-state">
+                    <i class="fas fa-spinner fa-spin mr-2 text-primary"></i> Loading dead links...
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function escapeHtml(value) {
+        return String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    function getStatusBadge(status) {
+        const s = String(status || '').toLowerCase();
+        if (s === 'degraded' || s === 'cancelled') return 'status-badge status-warn';
+        if (s === 'failing' || s === 'error') return 'status-badge status-bad';
+        return 'status-badge status-good';
+    }
+
+    async function fetchStats() {
+        try {
+            const res = await fetch('/api/admin/system-stats');
+            if (!res.ok) return;
+
+            const data = await res.json();
+            document.getElementById('stat-cache-size').textContent = data.cache_size ?? '-';
+            document.getElementById('stat-bot-count').textContent = data.total_bots ?? '-';
+
+            const workloadsWrap = document.getElementById('stat-workloads');
+            const bots = data.bot_workloads || [];
+            if (bots.length) {
+                const rows = bots.map(b => {
+                    const idx = Number(b.client_index);
+                    const name = idx < 0 ? 'Userbot' : ('Bot ' + (idx + 1));
+                    const dc = (b.dc ?? b.dc_id);
+                    const color = b.status === 'healthy' ? '#22c55e' : (b.status === 'degraded' ? '#f59e0b' : '#ef4444');
+                    return `<tr>
+                        <td class="bt-name"><span class="mini-dot" style="background:${color}"></span> ${escapeHtml(name)}</td>
+                        <td>${dc != null ? 'DC ' + escapeHtml(dc) : '—'}</td>
+                        <td>${escapeHtml(b.current_load ?? 0)}</td>
+                        <td>${Number(b.avg_mbps ?? 0).toFixed(1)}</td>
+                    </tr>`;
+                }).join('');
+                workloadsWrap.innerHTML = `<div class="bot-table-wrap"><table class="bot-table">
+                    <thead><tr><th>Client</th><th>DC</th><th>Load</th><th>Avg MB/s</th></tr></thead>
+                    <tbody>${rows}</tbody></table></div>`;
+            } else {
+                workloadsWrap.innerHTML = '<div class="empty-state">No bot data available</div>';
+            }
+        } catch (err) {
+            console.error(err);
+            showToast('Failed to load system stats.', 'error', 'Load Error');
+        }
+    }
+
+    function hzBadge(status) { return `<span class="hz-badge s-${status}">${escapeHtml(String(status).replace('_', ' '))}</span>`; }
+    function hzMini(ok) { return `<span class="mini-dot" style="background:${ok ? '#22c55e' : '#ef4444'}"></span>`; }
+
+    function hzInfraCard(sec) {
+        const icon = { databases: 'fa-database', tmdb: 'fa-film', base_url: 'fa-link' }[sec.key] || 'fa-circle-check';
+        let body;
+        if (sec.key === 'databases') {
+            body = (sec.items || []).map(i => `
+                <div class="hz-item">
+                    <div class="lbl">${hzMini(i.status === 'ok')} ${escapeHtml(i.name)}</div>
+                    <div class="meta">${i.status === 'ok'
+                        ? `${escapeHtml(i.size_mb)} MB<div class="hz-usebar"><span style="width:${Math.min(100, i.usage_pct || 0)}%"></span></div>`
+                        : escapeHtml(i.message || 'unreachable')}</div>
+                </div>`).join('') || '<div class="hz-msg">No databases.</div>';
+        } else {
+            body = `<div class="hz-msg">${escapeHtml(sec.message || '')}${sec.url ? '<br><span style="opacity:.7">' + escapeHtml(sec.url) + '</span>' : ''}</div>`;
+        }
+        return `<div class="hz-card">
+            <div class="hz-top"><span class="hz-name"><i class="fa-solid ${icon}"></i> ${escapeHtml(sec.label)}</span>${hzBadge(sec.status)}</div>
+            ${body}
+        </div>`;
+    }
+
+    async function fetchHealthReport(force) {
+        try {
+            const res = await fetch('/api/admin/health/report' + (force ? '?fresh=1' : ''));
+            const data = await res.json();
+            if (data.status !== 'success') return;
+            const d = data.data || {};
+            const overall = d.overall || 'warning';
+            const label = { ok: 'Healthy', warning: 'Attention', critical: 'Critical' }[overall] || overall;
+            const badge = document.getElementById('hz-overall-badge');
+            if (badge) { badge.className = 'hz-badge s-' + overall; badge.textContent = label; }
+            const infra = (d.sections || []).filter(s => s.key !== 'bots');
+            document.getElementById('hz-infra').innerHTML = infra.map(hzInfraCard).join('');
+            if (force) showToast('Health re-checked.', 'success', 'Health');
+        } catch (e) { /* ignore transient errors */ }
+    }
+
+    function fmtBytes(bytes) {
+        let b = Number(bytes || 0);
+        const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+        let i = 0;
+        while (b >= 1024 && i < units.length - 1) { b /= 1024; i++; }
+        return b.toFixed(b >= 10 || i === 0 ? 0 : 1) + ' ' + units[i];
+    }
+
+    function insText(id, val) {
+        const el = document.getElementById(id);
+        if (el) el.textContent = val;
+    }
+
+    function insRow(name, val, frac) {
+        const pct = Math.max(4, Math.round((frac || 0) * 100));
+        return `<div>
+            <div class="ins-row"><span class="name" title="${escapeHtml(name)}">${escapeHtml(name)}</span><span class="val">${escapeHtml(val)}</span></div>
+            <div class="ins-bar" style="width:${pct}%"></div>
+        </div>`;
+    }
+
+    function renderInsights(d) {
+        const s = d.summary || {};
+        insText('ins-total-streams', s.total_streams ?? 0);
+        insText('ins-total-data', fmtBytes(s.total_bytes));
+        insText('ins-avg-speed', (Number(s.avg_speed || 0)).toFixed(1) + ' MB/s');
+        insText('ins-active-users', s.active_users ?? 0);
+
+        const titles = d.top_titles || [];
+        const maxT = Math.max(1, ...titles.map(t => t.streams || 0));
+        document.getElementById('ins-top-titles').innerHTML = titles.length
+            ? titles.map(t => insRow(t.title || '—', `${t.streams} plays · ${fmtBytes(t.total_bytes)}`, t.streams / maxT)).join('')
+            : '<div class="ins-empty">No data yet.</div>';
+
+        const users = d.top_users || [];
+        const maxU = Math.max(1, ...users.map(u => u.total_bytes || 0));
+        document.getElementById('ins-top-users').innerHTML = users.length
+            ? users.map(u => insRow(u.user || '—', `${fmtBytes(u.total_bytes)} · ${u.streams} streams`, u.total_bytes / maxU)).join('')
+            : '<div class="ins-empty">No data yet.</div>';
+
+        const days = d.per_day || [];
+        const maxD = Math.max(1, ...days.map(x => x.streams || 0));
+        document.getElementById('ins-per-day').innerHTML = days.length
+            ? days.map(x => insRow(x.date, `${x.streams} · ${fmtBytes(x.total_bytes)}`, x.streams / maxD)).join('')
+            : '<div class="ins-empty">No data yet.</div>';
+    }
+
+    async function fetchAnalytics() {
+        try {
+            const res = await fetch('/api/admin/stream-analytics');
+            const tbody = document.getElementById('analytics-tbody');
+            const mobile = document.getElementById('analytics-mobile');
+
+            if (!res.ok) {
+                showToast('Failed to load stream analytics.', 'error', 'Load Error');
+                return;
+            }
+
+            const data = await res.json();
+            renderInsights(data.data || {});
+            const streams = data?.data?.recent || [];
+
+            if (!streams.length) {
+                tbody.innerHTML = '<tr><td colspan="8" class="empty-state">No recent streams recorded.</td></tr>';
+                mobile.innerHTML = '<div class="empty-state">No recent streams recorded.</div>';
+                return;
+            }
+
+            let tableHtml = '';
+            let mobileHtml = '';
+
+            streams.forEach(s => {
+                const avg = Number(s.avg_mbps ?? 0);
+                const peak = Number(s.peak_mbps ?? 0);
+                const bytesStr = ((Number(s.total_bytes ?? 0)) / (1024 * 1024)).toFixed(1) + ' MB';
+                const timeStr = s.logged_at ? new Date(s.logged_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—';
+                const durationStr = s.duration_sec ? `${Number(s.duration_sec).toFixed(1)}s` : '—';
+                const titleStr = s.title || s.meta?.title || '—';
+                const status = s.status || 'unknown';
+
+                tableHtml += `
+                    <tr>
+                        <td><span class="stream-id muted font-mono text-xs" title="${escapeHtml(s.stream_id)}">${escapeHtml(s.stream_id)}</span></td>
+                        <td><div class="title-cell font-semibold" title="${escapeHtml(titleStr)}">${escapeHtml(titleStr)}</div></td>
+                        <td class="text-center">Bot ${Number(s.client_index ?? 0) + 1} <span class="muted text-xs ml-1">(DC${escapeHtml(s.dc_id)})</span></td>
+                        <td class="text-right font-semibold">${bytesStr}</td>
+                        <td class="text-right font-semibold">${avg.toFixed(1)} <span class="muted">/ ${peak.toFixed(1)} MB/s</span></td>
+                        <td class="text-center muted">${durationStr}</td>
+                        <td class="text-center"><span class="${getStatusBadge(status)}">${escapeHtml(status)}</span></td>
+                        <td class="text-right muted text-xs">${timeStr}</td>
+                    </tr>
+                `;
+
+                mobileHtml += `
+                    <div class="mobile-card analytics-mobile-card">
+                        <div class="flex items-center justify-between gap-2">
+                            <div class="font-semibold text-text truncate">${escapeHtml(titleStr)}</div>
+                            <span class="${getStatusBadge(status)}">${escapeHtml(status)}</span>
+                        </div>
+                        <div class="flex flex-wrap gap-x-3 gap-y-1 muted text-xs mt-2">
+                            <span>Bot ${Number(s.client_index ?? 0) + 1} · DC${escapeHtml(s.dc_id)}</span>
+                            <span class="font-semibold text-text">${bytesStr}</span>
+                            <span>${avg.toFixed(1)}/${peak.toFixed(1)} MB/s</span>
+                            <span>${durationStr}</span>
+                            <span>${timeStr}</span>
+                        </div>
+                    </div>
+                `;
+            });
+
+            tbody.innerHTML = tableHtml;
+            mobile.innerHTML = mobileHtml;
+        } catch (err) {
+            console.error(err);
+            showToast('Failed to load stream analytics.', 'error', 'Load Error');
+        }
+    }
+
+    async function fetchDeadLinks() {
+        try {
+            const res = await fetch('/api/admin/dead-links');
+            const tbody = document.getElementById('dead-links-tbody');
+            const mobile = document.getElementById('dead-links-mobile');
+
+            if (!res.ok) {
+                showToast('Failed to load dead links.', 'error', 'Load Error');
+                return;
+            }
+
+            const data = await res.json();
+            const links = data?.data || [];
+
+            if (!links.length) {
+                tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No dead links found. All files are healthy!</td></tr>';
+                mobile.innerHTML = '<div class="empty-state">No dead links found. All files are healthy!</div>';
+                return;
+            }
+
+            let tableHtml = '';
+            let mobileHtml = '';
+
+            links.forEach(l => {
+                const isMovie = l.type === 'movie';
+                const typeBadge = isMovie
+                    ? '<span class="status-badge status-good">Movie</span>'
+                    : '<span class="status-badge status-warn">TV Series</span>';
+
+                const dateAdded = l.date_added ? new Date(l.date_added).toLocaleDateString() : '—';
+                const qualityIdEsc = String(l.quality_id || '').replace(/'/g, "\\'");
+
+                tableHtml += `
+                    <tr>
+                        <td>
+                            <div class="font-semibold text-text">${escapeHtml(l.title)}</div>
+                            <div class="muted text-xs mt-1">${escapeHtml(l.year || '')}</div>
+                        </td>
+                        <td>${typeBadge}</td>
+                        <td>
+                            <div class="font-semibold text-red-400">${escapeHtml(l.quality || 'Unknown')}</div>
+                            <div class="muted text-xs mt-1">${escapeHtml(l.size || 'Unknown size')}</div>
+                        </td>
+                        <td class="text-center muted text-xs">${dateAdded}</td>
+                        <td class="text-center">
+                            <button onclick="deleteDeadLink(${l.tmdb_id}, ${l.db_index}, '${escapeHtml(l.type)}', '${qualityIdEsc}', ${l.season || -1}, ${l.episode || -1})"
+                                    class="btn-ui btn-danger px-3 py-2 text-sm w-auto"
+                                    title="Delete from Database">
+                                <i class="fas fa-trash"></i>
+                                Delete
+                            </button>
+                        </td>
+                    </tr>
+                `;
+
+                mobileHtml += `
+                    <div class="mobile-card">
+                        <div class="flex items-start justify-between gap-3 mb-3">
+                            <div>
+                                <div class="font-bold text-text">${escapeHtml(l.title)}</div>
+                                <div class="muted text-xs mt-1">${escapeHtml(l.year || '')}</div>
+                            </div>
+                            ${typeBadge}
+                        </div>
+
+                        <div class="mobile-kv mb-4">
+                            <div class="key">Quality</div><div class="text-red-400 font-semibold">${escapeHtml(l.quality || 'Unknown')}</div>
+                            <div class="key">Size</div><div>${escapeHtml(l.size || 'Unknown size')}</div>
+                            <div class="key">Date Added</div><div>${dateAdded}</div>
+                        </div>
+
+                        <button onclick="deleteDeadLink(${l.tmdb_id}, ${l.db_index}, '${escapeHtml(l.type)}', '${qualityIdEsc}', ${l.season || -1}, ${l.episode || -1})"
+                                class="btn-ui btn-danger">
+                            <i class="fas fa-trash"></i>
+                            Delete Dead Link
+                        </button>
+                    </div>
+                `;
+            });
+
+            tbody.innerHTML = tableHtml;
+            mobile.innerHTML = mobileHtml;
+        } catch (err) {
+            console.error(err);
+            showToast('Failed to load dead links.', 'error', 'Load Error');
+        }
+    }
+
+    async function clearCache() {
+        if (!confirm("Are you sure you want to clear the Telegram FileId cache? This will force bots to re-fetch metadata on the next stream.")) return;
+
+        try {
+            const res = await fetch('/api/admin/clear-cache', { method: 'POST' });
+            if (res.ok) {
+                const data = await res.json();
+                showToast(data.message || 'Cache cleared successfully.', 'success', 'Cache Cleared');
+                fetchStats();
+            } else {
+                showToast('Failed to clear cache.', 'error', 'Request Failed');
+            }
+        } catch (err) {
+            showToast('Error clearing cache.', 'error', 'Network Error');
+        }
+    }
+
+    async function clearAnalytics() {
+        if (!confirm("Are you sure you want to clear all stream analytics history? This cannot be undone.")) return;
+
+        try {
+            const res = await fetch('/api/admin/clear-analytics', { method: 'POST' });
+            if (res.ok) {
+                const data = await res.json();
+                showToast(data.message || 'Analytics cleared successfully.', 'success', 'Analytics Cleared');
+                fetchAnalytics();
+            } else {
+                const err = await res.json().catch(() => ({}));
+                showToast(err.detail || 'Failed to clear analytics.', 'error', 'Request Failed');
+            }
+        } catch (err) {
+            showToast('Error clearing analytics.', 'error', 'Network Error');
+        }
+    }
+
+    async function deleteDeadLink(tmdb_id, db_index, type, quality_id, season, episode) {
+        if (!confirm("Are you sure you want to purge this dead link from the database? Users will no longer see this quality in Stremio.")) return;
+
+        try {
+            let endpoint = '';
+            if (type === 'movie') {
+                endpoint = `/api/media/delete-quality?tmdb_id=${tmdb_id}&db_index=${db_index}&id=${quality_id}`;
+            } else {
+                endpoint = `/api/media/delete-tv-quality?tmdb_id=${tmdb_id}&db_index=${db_index}&season=${season}&episode=${episode}&id=${quality_id}`;
+            }
+
+            const res = await fetch(endpoint, { method: 'DELETE' });
+            if (res.ok) {
+                showToast('Dead link deleted successfully.', 'success', 'Cleanup Complete');
+                fetchDeadLinks();
+            } else {
+                showToast('Failed to delete the dead link.', 'error', 'Delete Failed');
+            }
+        } catch (err) {
+            showToast('Error communicating with server.', 'error', 'Network Error');
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        fetchStats();
+        fetchHealthReport();
+        fetchAnalytics();
+        fetchDeadLinks();
+        setInterval(fetchStats, 5000);          // realtime bot load
+        setInterval(fetchHealthReport, 20000);  // infra checks (cached server-side)
+        setInterval(fetchAnalytics, 15000);
+    });
+</script>
+{% endblock %}

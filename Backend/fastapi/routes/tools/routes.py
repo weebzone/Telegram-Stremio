@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from Backend.fastapi.security.credentials import require_auth
-from Backend.helper.pyro import get_scan_client
+from Backend.helper.telegram.pyro import get_scan_client
 from Backend.helper.tools.bot_admin import (
     bot_admin_apply,
     bot_admin_apply_status,

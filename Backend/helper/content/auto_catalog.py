@@ -1,0 +1,754 @@
+import asyncio
+from datetime import datetime
+from typing import Dict, List, Optional, Set, Tuple
+
+import httpx
+
+from Backend.helper.metadata import tmdb_api_key
+from Backend.logger import LOGGER
+
+AUTO_CATALOG_REGION = "IN"
+AUTO_SYNC_CONCURRENCY = 5
+
+#----- User can choose exactly which auto catalogs are enabled.
+AUTO_CATALOG_DEFINITIONS = [
+    {"key": "bollywood", "name": "Bollywood", "group": "Language"},
+    {"key": "hollywood", "name": "Hollywood", "group": "Language"},
+    {"key": "anime", "name": "Anime", "group": "Language"},
+    {"key": "kdrama", "name": "K-Drama", "group": "Language"},
+    {"key": "bengali", "name": "Bengali", "group": "Language"},
+    {"key": "south_indian", "name": "South Indian", "group": "Language"},
+    {"key": "tamil", "name": "Tamil", "group": "Language"},
+    {"key": "telugu", "name": "Telugu", "group": "Language"},
+    {"key": "malayalam", "name": "Malayalam", "group": "Language"},
+    {"key": "kannada", "name": "Kannada", "group": "Language"},
+    {"key": "japanese", "name": "Japanese", "group": "Language"},
+    {"key": "korean", "name": "Korean", "group": "Language"},
+
+    {"key": "top_rated", "name": "Top Rated", "group": "Smart"},
+    {"key": "recently_added", "name": "Recently Added", "group": "Smart"},
+
+    {"key": "netflix", "name": "Netflix", "group": "OTT"},
+    {"key": "prime_video", "name": "Prime Video", "group": "OTT"},
+    {"key": "hotstar", "name": "Hotstar", "group": "OTT"},
+    {"key": "apple_tv", "name": "Apple TV", "group": "OTT"},
+    {"key": "hulu", "name": "Hulu", "group": "OTT"},
+    {"key": "hbo", "name": "HBO", "group": "OTT"},
+    {"key": "jiocinema", "name": "JioCinema", "group": "OTT"},
+    {"key": "zee5", "name": "ZEE5", "group": "OTT"},
+    {"key": "sonyliv", "name": "SonyLIV", "group": "OTT"},
+    {"key": "mx_player", "name": "MX Player", "group": "OTT"},
+    {"key": "crunchyroll", "name": "Crunchyroll", "group": "OTT"},
+]
+
+CATALOG_BY_KEY = {item["key"]: item for item in AUTO_CATALOG_DEFINITIONS}
+
+_LANGUAGE_CATALOGS = {
+    "hi": ["Bollywood"],
+    "en": ["Hollywood"],
+    "ja": ["Japanese"],
+    "ko": ["Korean"],
+    "bn": ["Bengali"],
+    "te": ["South Indian", "Telugu"],
+    "ta": ["South Indian", "Tamil"],
+    "ml": ["South Indian", "Malayalam"],
+    "kn": ["South Indian", "Kannada"],
+}
+
+_PROVIDER_ALIASES = {
+    "netflix": "Netflix",
+    "amazon prime video": "Prime Video",
+    "prime video": "Prime Video",
+    "amazon video": "Prime Video",
+    "hotstar": "Hotstar",
+    "disney plus hotstar": "Hotstar",
+    "disney+ hotstar": "Hotstar",
+    "jiohotstar": "Hotstar",
+    "hulu": "Hulu",
+    "apple tv": "Apple TV",
+    "apple tv plus": "Apple TV",
+    "apple tv+": "Apple TV",
+    "hbo max": "HBO",
+    "max": "HBO",
+    "jio cinema": "JioCinema",
+    "jiocinema": "JioCinema",
+    "zee5": "ZEE5",
+    "sony liv": "SonyLIV",
+    "sonyliv": "SonyLIV",
+    "mx player": "MX Player",
+    "crunchyroll": "Crunchyroll",
+}
+
+_auto_sync_lock = asyncio.Lock()
+_auto_sync_task: Optional[asyncio.Task] = None
+
+INSTANT_SYNC_CONCURRENCY = 3
+_instant_sync_semaphore = asyncio.Semaphore(INSTANT_SYNC_CONCURRENCY)
+
+
+def _media_type(doc: dict) -> str:
+    return "tv" if doc.get("media_type") in ["tv", "series"] else "movie"
+
+
+def _catalog_key(name: str) -> str:
+    value = (name or "").strip().lower().replace("&", "and")
+    value = "_".join(value.split())
+    value = "".join(ch for ch in value if ch.isalnum() or ch == "_")
+    return f"auto_{value}"
+
+
+def _doc_identity(doc: dict) -> Tuple[str, int, int]:
+    return (_media_type(doc), int(doc.get("tmdb_id")), int(doc.get("db_index", 1)))
+
+
+def _doc_item(doc: dict) -> dict:
+    media_type, tmdb_id, db_index = _doc_identity(doc)
+    return {
+        "tmdb_id": tmdb_id,
+        "db_index": db_index,
+        "media_type": media_type,
+        "added_at": datetime.utcnow(),
+        "updated_on": doc.get("updated_on"),
+        "visibility": doc.get("visibility") or "public",
+        "allowed_tokens": doc.get("allowed_tokens") or [],
+    }
+
+
+def _provider_bucket(provider_name: str) -> Optional[str]:
+    value = (provider_name or "").strip().lower()
+    if not value:
+        return None
+    for needle, bucket in _PROVIDER_ALIASES.items():
+        if needle in value:
+            return bucket
+    return None
+
+
+def _extract_provider_names(watch_data: dict) -> List[str]:
+    results = (watch_data or {}).get("results") or {}
+    region_data = results.get(AUTO_CATALOG_REGION) or results.get("US") or {}
+    names: List[str] = []
+    for group in ["flatrate", "ads", "free", "rent", "buy"]:
+        for provider in region_data.get(group, []) or []:
+            name = provider.get("provider_name")
+            if name:
+                names.append(name)
+    return names
+
+
+def _is_already_synced(doc: dict) -> bool:
+    auto_catalog = doc.get("auto_catalog") or {}
+    if not auto_catalog.get("synced"):
+        return False
+
+    synced_at = auto_catalog.get("synced_at")
+    source_updated_on = auto_catalog.get("source_updated_on")
+    doc_updated_on = doc.get("updated_on")
+
+    if not synced_at:
+        return False
+    if doc_updated_on and source_updated_on and doc_updated_on != source_updated_on:
+        return False
+    return True
+
+
+async def has_auto_catalog_settings(db) -> bool:
+    state = await db.dbs["tracking"]["state"].find_one({"_id": "auto_catalog_settings"})
+    return bool(state and isinstance(state.get("enabled_keys"), list))
+
+
+async def get_auto_catalog_settings(db) -> dict:
+    state = await db.dbs["tracking"]["state"].find_one({"_id": "auto_catalog_settings"}) or {}
+    configured = isinstance(state.get("enabled_keys"), list)
+
+    enabled_keys = state.get("enabled_keys") if configured else []
+
+    enabled_set = {key for key in enabled_keys if key in CATALOG_BY_KEY}
+    definitions = []
+    for item in AUTO_CATALOG_DEFINITIONS:
+        definitions.append({
+            **item,
+            "enabled": item["key"] in enabled_set,
+        })
+
+    return {
+        "configured": configured,
+        "enabled_keys": sorted(enabled_set),
+        "definitions": definitions,
+        "region": AUTO_CATALOG_REGION,
+    }
+
+
+async def update_auto_catalog_settings(db, enabled_keys: List[str]) -> dict:
+    clean_keys = sorted({str(key) for key in enabled_keys if str(key) in CATALOG_BY_KEY})
+    now = datetime.utcnow()
+    await db.dbs["tracking"]["state"].update_one(
+        {"_id": "auto_catalog_settings"},
+        {"$set": {"enabled_keys": clean_keys, "updated_at": now}},
+        upsert=True,
+    )
+    return await get_auto_catalog_settings(db)
+
+
+async def _enabled_catalog_names(db) -> Set[str]:
+    settings = await get_auto_catalog_settings(db)
+    keys = settings.get("enabled_keys") or []
+    return {CATALOG_BY_KEY[key]["name"] for key in keys if key in CATALOG_BY_KEY}
+
+
+def classify_media_from_tmdb(doc: dict, details: dict, watch_data: dict, enabled_names: Set[str]) -> dict:
+    tags: Set[str] = set()
+    providers: Set[str] = set()
+
+    media_type = _media_type(doc)
+    original_language = details.get("original_language") or doc.get("original_language") or ""
+
+    if doc.get("is_anime"):
+        tags.add("Anime")
+
+    origin_country = details.get("origin_country") or doc.get("origin_country") or []
+    production_countries = [
+        c.get("iso_3166_1")
+        for c in details.get("production_countries", []) or []
+        if c.get("iso_3166_1")
+    ] or (doc.get("production_countries") or [])
+
+    for tag in _LANGUAGE_CATALOGS.get(original_language, []):
+        tags.add(tag)
+
+    if original_language == "hi" and ("IN" in origin_country or "IN" in production_countries or not origin_country):
+        tags.add("Bollywood")
+
+    if original_language == "ko" and media_type == "tv":
+        tags.add("K-Drama")
+
+    genre_names = [g.get("name", "") for g in details.get("genres", []) or []]
+    genre_lower = {g.lower() for g in genre_names}
+
+    keyword_payload = details.get("keywords") or {}
+    keywords = keyword_payload.get("keywords") or keyword_payload.get("results") or []
+    keyword_names = {k.get("name", "").lower() for k in keywords if isinstance(k, dict)}
+
+    if original_language == "ja" and ("animation" in genre_lower or "anime" in keyword_names):
+        tags.add("Anime")
+
+    try:
+        if float(doc.get("rating") or 0) >= 7.5:
+            tags.add("Top Rated")
+    except Exception:
+        pass
+
+    if doc.get("release_year"):
+        try:
+            if int(doc.get("release_year")) >= datetime.utcnow().year - 1:
+                tags.add("Recently Added")
+        except Exception:
+            pass
+
+    provider_names = _extract_provider_names(watch_data)
+    if provider_names:
+        for provider_name in provider_names:
+            bucket = _provider_bucket(provider_name)
+            if bucket:
+                providers.add(bucket)
+    else:
+        for stored in (doc.get("watch_providers") or []):
+            if stored:
+                providers.add(stored)
+
+    for bucket in providers:
+        tags.add(bucket)
+
+    return {
+        "original_language": original_language,
+        "origin_country": origin_country,
+        "production_countries": production_countries,
+        "watch_providers": sorted(providers),
+        "auto_tags": sorted(tags),
+    }
+
+
+_TMDB_FIND_CACHE: dict = {}
+_TMDB_DETAILS_CACHE: dict = {}
+_TMDB_PROVIDERS_CACHE: dict = {}
+_TMDB_INFLIGHT: Dict[tuple, asyncio.Future] = {}
+
+
+#----- Cache TMDB responses and de-duplicate concurrent identical requests (mirrors metadata.py)
+async def _cached_call(store: dict, key, ns: str, producer):
+    if key in store:
+        return store[key]
+    flight_key = (ns, key)
+    fut = _TMDB_INFLIGHT.get(flight_key)
+    if fut is not None:
+        return await fut
+    fut = asyncio.get_running_loop().create_future()
+    _TMDB_INFLIGHT[flight_key] = fut
+    try:
+        result = await producer()
+    except Exception as e:
+        _TMDB_INFLIGHT.pop(flight_key, None)
+        if not fut.done():
+            fut.set_exception(e)
+            fut.exception()
+        raise
+    store[key] = result
+    _TMDB_INFLIGHT.pop(flight_key, None)
+    if not fut.done():
+        fut.set_result(result)
+    return result
+
+
+async def _fetch_tmdb_data(client: httpx.AsyncClient, doc: dict) -> tuple[dict, dict]:
+    api_key = tmdb_api_key()
+    if not api_key:
+        return {}, {}
+
+    media_type = _media_type(doc)
+    tmdb_id = doc.get("tmdb_id")
+
+    #----- Resolve tmdb_id from imdb_id when missing (cached by media_type + imdb_id)
+    if not tmdb_id and doc.get("imdb_id"):
+        imdb_id = doc.get("imdb_id")
+
+        async def _find():
+            resp = await client.get(
+                f"https://api.themoviedb.org/3/find/{imdb_id}",
+                params={"api_key": api_key, "external_source": "imdb_id"},
+            )
+            if resp.status_code != 200:
+                return None
+            result_key = "tv_results" if media_type == "tv" else "movie_results"
+            results = resp.json().get(result_key) or []
+            return results[0].get("id") if results else None
+
+        tmdb_id = await _cached_call(_TMDB_FIND_CACHE, (media_type, imdb_id), "find", _find)
+
+    if not tmdb_id:
+        return {}, {}
+
+    #----- Details (+keywords) and watch providers, each cached by media_type + tmdb_id
+    async def _details():
+        resp = await client.get(
+            f"https://api.themoviedb.org/3/{media_type}/{tmdb_id}",
+            params={"api_key": api_key, "language": "en-US", "append_to_response": "keywords"},
+        )
+        return resp.json() if resp.status_code == 200 else {}
+
+    async def _providers():
+        resp = await client.get(
+            f"https://api.themoviedb.org/3/{media_type}/{tmdb_id}/watch/providers",
+            params={"api_key": api_key},
+        )
+        return resp.json() if resp.status_code == 200 else {}
+
+    details, providers = await asyncio.gather(
+        _cached_call(_TMDB_DETAILS_CACHE, (media_type, tmdb_id), "details", _details),
+        _cached_call(_TMDB_PROVIDERS_CACHE, (media_type, tmdb_id), "providers", _providers),
+        return_exceptions=True,
+    )
+    details = details if not isinstance(details, Exception) else {}
+    providers = providers if not isinstance(providers, Exception) else {}
+    return details, providers
+
+
+async def _iter_all_media(db, *, force_refresh: bool = False):
+    for db_index in range(1, db.current_db_index + 1):
+        db_key = f"storage_{db_index}"
+        if db_key not in db.dbs:
+            continue
+
+        for collection_name in ["movie", "tv"]:
+            cursor = db.dbs[db_key][collection_name].find({"tmdb_id": {"$exists": True, "$ne": None}})
+            async for doc in cursor:
+                doc["db_index"] = db_index
+                doc["media_type"] = "tv" if collection_name == "tv" else "movie"
+                if not force_refresh and _is_already_synced(doc):
+                    yield collection_name, db_index, doc, True
+                else:
+                    yield collection_name, db_index, doc, False
+
+
+async def _classify_one(db, client: httpx.AsyncClient, semaphore: asyncio.Semaphore, doc: dict, enabled_names: Set[str]) -> tuple[dict, dict]:
+    async with semaphore:
+        try:
+            details, watch_data = await asyncio.wait_for(_fetch_tmdb_data(client, doc), timeout=30)
+            classification = classify_media_from_tmdb(doc, details or {}, watch_data or {}, enabled_names)
+
+            now = datetime.utcnow()
+            update_data = {
+                "original_language": classification.get("original_language"),
+                "origin_country": classification.get("origin_country", []),
+                "production_countries": classification.get("production_countries", []),
+                "watch_providers": classification.get("watch_providers", []),
+                "auto_tags": classification.get("auto_tags", []),
+                "auto_tags_updated_at": now,
+                "auto_catalog": {
+                    "synced": True,
+                    "synced_at": now,
+                    "source_updated_on": doc.get("updated_on"),
+                },
+            }
+            persisted = await asyncio.wait_for(
+                db.update_document(_media_type(doc), int(doc.get("tmdb_id")), int(doc.get("db_index", 1)), update_data),
+                timeout=30,
+            )
+            if persisted is False:
+                LOGGER.warning(
+                    "Auto catalog sync flag not persisted for "
+                    f"{doc.get('title')} (tmdb_id={doc.get('tmdb_id')}, "
+                    f"db_index={doc.get('db_index')}); document not found in that storage DB."
+                )
+            return doc, classification
+        except Exception as e:
+            LOGGER.warning(f"Auto catalog classification failed for {doc.get('title')} ({doc.get('tmdb_id')}): {e}")
+            return doc, {"auto_tags": doc.get("auto_tags", []) or []}
+
+
+async def sync_single_media(db, *, tmdb_id, media_type: str) -> dict:
+    if tmdb_id in (None, "", 0):
+        return {"ok": False, "reason": "no_tmdb_id"}
+
+    try:
+        tmdb_id = int(tmdb_id)
+    except (TypeError, ValueError):
+        return {"ok": False, "reason": "bad_tmdb_id"}
+
+    if not await has_auto_catalog_settings(db):
+        return {"ok": False, "reason": "not_configured"}
+
+    enabled_names = await _enabled_catalog_names(db)
+    if not enabled_names:
+        return {"ok": False, "reason": "no_enabled_catalogs"}
+
+    if _auto_sync_lock.locked():
+        return {"ok": False, "reason": "sync_running"}
+
+    located = await db.find_media_doc(media_type, tmdb_id)
+    if not located:
+        return {"ok": False, "reason": "not_found"}
+
+    doc, db_index = located
+    doc["db_index"] = db_index
+    doc["media_type"] = "tv" if media_type in ["tv", "series"] else "movie"
+
+    timeout = httpx.Timeout(18.0, connect=10.0)
+    semaphore = asyncio.Semaphore(1)
+    async with _instant_sync_semaphore:
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+            media_doc, classification = await _classify_one(db, client, semaphore, doc, enabled_names)
+
+    tags = [] if media_doc.get("exclusive_catalog_id") else [
+        tag for tag in (classification.get("auto_tags") or []) if tag in enabled_names
+    ]
+    if tags:
+        item = _doc_item(media_doc)
+        await _flush_quick_items(db, {tag: [item] for tag in tags})
+
+    LOGGER.info(
+        f"Auto catalog instant index: '{media_doc.get('title')}' "
+        f"(tmdb_id={tmdb_id}) -> {tags or 'no matching catalogs'}"
+    )
+    return {"ok": True, "tags": tags}
+
+
+def start_single_media_catalog_sync(db, *, tmdb_id, media_type: str) -> None:
+    #----- Fire-and-forget launcher for instant per-item categorization
+    async def runner():
+        try:
+            await sync_single_media(db, tmdb_id=tmdb_id, media_type=media_type)
+        except Exception:
+            LOGGER.exception("Instant auto catalog index failed")
+
+    try:
+        asyncio.create_task(runner())
+    except RuntimeError:
+        #----- No running loop (shouldn't happen inside the bot); ignore.
+        LOGGER.warning("Instant auto catalog index skipped: no running event loop.")
+
+
+async def _flush_quick_items(db, catalog_items: Dict[str, List[dict]]) -> None:
+    collection = db.dbs["tracking"]["custom_catalogs"]
+    now = datetime.utcnow()
+
+    for name, items in catalog_items.items():
+        auto_key = _catalog_key(name)
+        await collection.update_one(
+            {"auto_key": auto_key},
+            {
+                "$setOnInsert": {
+                    "name": name,
+                    "visible": True,
+                    "visibility": "public",
+                    "allowed_tokens": [],
+                    "auto": True,
+                    "auto_key": auto_key,
+                    "items": [],
+                    "item_count": 0,
+                    "created_at": now,
+                },
+                "$set": {
+                    "updated_at": now,
+                    "last_auto_sync": now,
+                },
+            },
+            upsert=True,
+        )
+
+        for item in items:
+            await collection.update_one(
+                {
+                    "auto_key": auto_key,
+                    "items": {
+                        "$not": {
+                            "$elemMatch": {
+                                "tmdb_id": item["tmdb_id"],
+                                "db_index": item["db_index"],
+                                "media_type": item["media_type"],
+                            }
+                        }
+                    },
+                },
+                {
+                    "$push": {"items": {"$each": [item], "$position": 0}},
+                    "$set": {"updated_at": now},
+                    "$inc": {"item_count": 1},
+                },
+            )
+
+
+async def _rebuild_auto_catalogs(db, catalog_items: Dict[str, List[dict]], enabled_names: Set[str]) -> None:
+    collection = db.dbs["tracking"]["custom_catalogs"]
+    now = datetime.utcnow()
+
+    for name, items in catalog_items.items():
+        seen = set()
+        unique_items = []
+        for item in items:
+            key = (item["media_type"], item["tmdb_id"], item["db_index"])
+            if key in seen:
+                continue
+            seen.add(key)
+            unique_items.append(item)
+
+        unique_items.sort(key=lambda it: it.get("updated_on") or it.get("added_at") or datetime.min, reverse=True)
+
+        await collection.update_one(
+            {"auto_key": _catalog_key(name)},
+            {
+                "$set": {
+                    "name": name,
+                    "visible": True,
+                    "auto": True,
+                    "auto_key": _catalog_key(name),
+                    "items": unique_items,
+                    "item_count": len(unique_items),
+                    "updated_at": now,
+                    "last_auto_sync": now,
+                },
+                "$setOnInsert": {"created_at": now, "visibility": "public", "allowed_tokens": []},
+            },
+            upsert=True,
+        )
+
+
+    active_keys = {_catalog_key(name) for name in enabled_names}
+    await collection.update_many(
+        {"auto": True, "auto_key": {"$nin": list(active_keys)}},
+        {"$set": {"visible": False, "items": [], "item_count": 0, "updated_at": now}},
+    )
+
+
+async def _write_status(db, data: dict) -> None:
+    await db.dbs["tracking"]["state"].update_one(
+        {"_id": "auto_catalog_sync"},
+        {"$set": data},
+        upsert=True,
+    )
+
+
+async def run_auto_catalog_sync(db, *, force: bool = False, force_refresh: bool = False, delay_seconds: int = 0) -> dict:
+    if delay_seconds:
+        await asyncio.sleep(delay_seconds)
+
+    if _auto_sync_lock.locked() and not force:
+        return {"running": True, "message": "Auto catalog sync is already running."}
+
+    async with _auto_sync_lock:
+        started_at = datetime.utcnow()
+        await _write_status(db, {
+            "running": True,
+            "mode": "sync",
+            "message": "Auto catalog sync running...",
+            "started_at": started_at,
+            "finished_at": None,
+            "scanned": 0,
+            "skipped": 0,
+            "classified": 0,
+            "tagged": 0,
+            "catalogs": 0,
+        })
+
+        catalog_items: Dict[str, List[dict]] = {}
+        scanned = 0
+        skipped = 0
+        classified = 0
+        tagged = 0
+        settings_configured = await has_auto_catalog_settings(db)
+        enabled_names = await _enabled_catalog_names(db)
+
+        if not settings_configured or not enabled_names:
+            finished_at = datetime.utcnow()
+            summary = {
+                "running": False,
+                "mode": "sync",
+                "message": "Auto catalog skipped. Save auto catalog selection first.",
+                "scanned": 0,
+                "skipped": 0,
+                "classified": 0,
+                "tagged": 0,
+                "catalogs": 0,
+                "enabled_catalogs": [],
+                "started_at": started_at,
+                "finished_at": finished_at,
+                "error": None,
+            }
+            await _write_status(db, summary)
+            LOGGER.info(f"Auto catalog sync skipped: {summary}")
+            return summary
+
+        if not tmdb_api_key():
+            LOGGER.warning(
+                "Auto catalog: no TMDB API key configured — only 'Top Rated' and "
+                "'Recently Added' will populate; language & OTT catalogs need a TMDB key."
+            )
+
+        #----- Group a title's stored/fresh tags into the catalogs it belongs to
+        def collect(media_doc: dict, tags: List[str]) -> None:
+            nonlocal tagged
+            if media_doc.get("exclusive_catalog_id"):
+                return
+            active = [tag for tag in (tags or []) if tag in enabled_names]
+            if active:
+                tagged += 1
+            item = _doc_item(media_doc)
+            for tag in active:
+                catalog_items.setdefault(tag, []).append(item)
+
+        try:
+            timeout = httpx.Timeout(18.0, connect=10.0)
+            limits = httpx.Limits(max_connections=AUTO_SYNC_CONCURRENCY * 2 + 4, max_keepalive_connections=AUTO_SYNC_CONCURRENCY)
+            semaphore = asyncio.Semaphore(AUTO_SYNC_CONCURRENCY)
+
+            async with httpx.AsyncClient(timeout=timeout, limits=limits, follow_redirects=True) as client:
+                pending = []
+                async for _, _, doc, already_synced in _iter_all_media(db, force_refresh=force_refresh):
+                    scanned += 1
+
+                    #----- Already-tagged titles skip TMDB; reuse their stored tags
+                    if already_synced:
+                        skipped += 1
+                        collect(doc, doc.get("auto_tags") or [])
+                        continue
+
+                    classified += 1
+                    pending.append(_classify_one(db, client, semaphore, doc, enabled_names))
+
+                    if len(pending) >= 40:
+                        for media_doc, classification in await asyncio.gather(*pending):
+                            collect(media_doc, classification.get("auto_tags"))
+                        pending = []
+                        await _write_status(db, {
+                            "running": True,
+                            "mode": "sync",
+                            "started_at": started_at,
+                            "scanned": scanned,
+                            "skipped": skipped,
+                            "classified": classified,
+                            "tagged": tagged,
+                            "catalogs": len(catalog_items),
+                        })
+
+                if pending:
+                    for media_doc, classification in await asyncio.gather(*pending):
+                        collect(media_doc, classification.get("auto_tags"))
+
+            #----- Always rebuild fully so removed titles / disabled catalogs are pruned
+            await _rebuild_auto_catalogs(db, catalog_items, enabled_names)
+
+            finished_at = datetime.utcnow()
+            summary = {
+                "running": False,
+                "mode": "sync",
+                "scanned": scanned,
+                "skipped": skipped,
+                "classified": classified,
+                "tagged": tagged,
+                "catalogs": len(catalog_items),
+                "enabled_catalogs": sorted(enabled_names),
+                "started_at": started_at,
+                "finished_at": finished_at,
+                "error": None,
+            }
+            await _write_status(db, summary)
+            LOGGER.info(f"Auto catalog sync complete: {summary}")
+            return summary
+        except Exception as exc:
+            finished_at = datetime.utcnow()
+            summary = {
+                "running": False,
+                "mode": "sync",
+                "scanned": scanned,
+                "skipped": skipped,
+                "classified": classified,
+                "tagged": tagged,
+                "catalogs": len(catalog_items),
+                "enabled_catalogs": sorted(enabled_names),
+                "started_at": started_at,
+                "finished_at": finished_at,
+                "error": str(exc),
+            }
+            await _write_status(db, summary)
+            LOGGER.error(f"Auto catalog sync failed: {summary}")
+            raise
+
+
+async def start_auto_catalog_sync_background(db, *, force_refresh: bool = False, force: bool = False, delay_seconds: int = 0) -> dict:
+    global _auto_sync_task
+
+    if _auto_sync_lock.locked() or (_auto_sync_task and not _auto_sync_task.done()):
+        return {"running": True, "message": "Auto catalog sync is already running."}
+
+    started_at = datetime.utcnow()
+    await _write_status(db, {
+        "running": True,
+        "mode": "sync",
+        "message": "Auto catalog sync queued...",
+        "started_at": started_at,
+        "finished_at": None,
+        "scanned": 0,
+        "skipped": 0,
+        "classified": 0,
+        "tagged": 0,
+        "catalogs": 0,
+    })
+
+    async def runner():
+        try:
+            await run_auto_catalog_sync(db, force=force, force_refresh=force_refresh, delay_seconds=delay_seconds)
+        except Exception:
+            LOGGER.exception("Background auto catalog sync crashed")
+
+    _auto_sync_task = asyncio.create_task(runner())
+    return {
+        "running": True,
+        "message": "Sync started in background.",
+        "mode": "sync",
+        "started_at": started_at,
+    }
+
+
+async def get_auto_catalog_sync_status(db) -> dict:
+    state = await db.dbs["tracking"]["state"].find_one({"_id": "auto_catalog_sync"}) or {}
+    state.pop("_id", None)
+    return state

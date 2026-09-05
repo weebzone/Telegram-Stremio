@@ -24,7 +24,7 @@ from Backend.helper.metadata.common import (
     score_candidate,
     score_candidate_aliases,
 )
-from Backend.helper.settings_manager import SettingsManager
+from Backend.helper.settings.manager import SettingsManager
 from Backend.logger import LOGGER
 
 _tmdb_client: aioTMDb | None = None

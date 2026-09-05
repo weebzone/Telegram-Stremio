@@ -1,0 +1,635 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Telegram Stremio{% endblock %}
+
+{% block content %}
+<div class="min-h-screen pb-12">
+    <header class="mb-8 sm:mb-10">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+                <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-primary to-accent">
+                    System Overview
+                </h1>
+                <p class="text-text-secondary text-xs sm:text-sm mt-1">Real-time performance and live stream activity</p>
+            </div>
+
+            <button onclick="refreshDashboard()"
+                class="w-full md:w-auto flex items-center justify-center space-x-2 px-6 py-3 rounded-2xl bg-primary/10 border border-primary/20 hover:bg-primary hover:text-background transition-all group active:scale-95">
+                <i id="refresh-icon" class="fa-solid fa-arrows-rotate group-hover:rotate-180 transition-transform duration-700"></i>
+                <span class="font-bold text-sm uppercase tracking-wider">Refresh Data</span>
+            </button>
+        </div>
+    </header>
+
+    <div id="setup-card" class="mb-8"></div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div class="glass-panel p-5 rounded-[2rem] flex items-center gap-4">
+            <div class="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary shadow-glow">
+                <i class="fa-solid fa-clock"></i>
+            </div>
+            <div>
+                <p class="text-[10px] uppercase font-bold text-text-secondary tracking-widest">Uptime</p>
+                <p id="sys-uptime" class="text-lg font-bold text-text">{{ system_stats.uptime or 'N/A' }}</p>
+            </div>
+        </div>
+
+        <div class="glass-panel p-5 rounded-[2rem] flex items-center gap-4">
+            <div class="w-12 h-12 rounded-2xl bg-accent/10 flex items-center justify-center text-accent shadow-[0_0_15px_color-mix(in_srgb,var(--accent)_35%,transparent)]">
+                <i class="fa-solid fa-robot"></i>
+            </div>
+            <div>
+                <p class="text-[10px] uppercase font-bold text-text-secondary tracking-widest">Active Bots</p>
+                <p id="sys-bots-count" class="text-lg font-bold text-text">{{ system_stats.connected_bots|default(0) }} Nodes</p>
+            </div>
+        </div>
+
+        <div class="glass-panel p-5 rounded-[2rem] flex items-center gap-4">
+            <div class="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary shadow-glow">
+                <i class="fa-solid fa-tower-broadcast"></i>
+            </div>
+            <div>
+                <p class="text-[10px] uppercase font-bold text-text-secondary tracking-widest">Live Streams</p>
+                <p id="sys-live-streams" class="text-lg font-bold text-text">{{ system_stats.total_active_streams }} Active</p>
+            </div>
+        </div>
+
+        <div class="glass-panel p-5 rounded-[2rem] flex items-center gap-4">
+            <div class="w-12 h-12 rounded-2xl bg-surface flex items-center justify-center text-text-secondary">
+                <i class="fa-solid fa-code-branch"></i>
+            </div>
+            <div>
+                <p class="text-[10px] uppercase font-bold text-text-secondary tracking-widest">Version</p>
+                <p id="sys-version" class="text-lg font-bold text-text">v{{ system_stats.version or '1.0.0' }}</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid lg:grid-cols-3 gap-8">
+        <div class="lg:col-span-2 space-y-8">
+            <style>
+                .ua-dot { width:.7rem;height:.7rem;border-radius:9999px;background:var(--text-secondary);flex-shrink:0; }
+                .ua-dot.on { background:#22c55e;box-shadow:0 0 8px #22c55e; }
+                .ua-vpn { font-size:.6rem;font-weight:900;padding:.15rem .45rem;border-radius:9999px;background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.3);white-space:nowrap; }
+                .ua-clean { font-size:.6rem;font-weight:900;padding:.15rem .45rem;border-radius:9999px;background:rgba(34,197,94,.15);color:#22c55e;border:1px solid rgba(34,197,94,.3);white-space:nowrap; }
+                .ua-skel { height:132px;border-radius:1rem;border:1px solid var(--hairline);background:linear-gradient(90deg, color-mix(in srgb,var(--text) 6%,transparent) 25%, color-mix(in srgb,var(--text) 14%,transparent) 37%, color-mix(in srgb,var(--text) 6%,transparent) 63%);background-size:400% 100%;animation:ua-shimmer 1.4s ease infinite; }
+                @keyframes ua-shimmer { 0%{background-position:100% 0;} 100%{background-position:-100% 0;} }
+                .ua-now { margin-top:.5rem;font-size:.8rem;font-weight:800;color:#22c55e; }
+                .ua-meta { margin-top:.6rem;display:grid;grid-template-columns:1fr 1fr;gap:.3rem .6rem;font-size:.72rem; }
+                .ua-meta span { color:var(--text-secondary);display:flex;align-items:center;gap:.35rem;min-width:0; }
+                .ua-meta span span { color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+            </style>
+
+            <script>
+                function uaEsc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+                function uaFlag(cc) { if (!cc || cc.length !== 2) return ''; return String.fromCodePoint(...[...cc.toUpperCase()].map(c => 127397 + c.charCodeAt(0))); }
+                function uaAgo(iso) {
+                    if (!iso) return '—';
+                    const t = new Date(iso.endsWith('Z') ? iso : iso + 'Z').getTime();
+                    const d = (Date.now() - t) / 1000;
+                    if (d < 60) return 'just now';
+                    if (d < 3600) return Math.floor(d / 60) + 'm ago';
+                    if (d < 86400) return Math.floor(d / 3600) + 'h ago';
+                    return Math.floor(d / 86400) + 'd ago';
+                }
+                let uaPage = 1;
+                const uaPerPage = 5;
+                window.__UA_INITIAL__ = {{ user_activity_initial | tojson }};
+                function renderUaPagination(data) {
+                    const el = document.getElementById('ua-pagination');
+                    if (!el) return;
+                    const pages = data.total_pages || 1, cur = data.page || 1;
+                    if (pages <= 1) { el.innerHTML = ''; return; }
+                    el.innerHTML = `
+                        <button onclick="loadUserActivity(${cur - 1})" ${cur <= 1 ? 'disabled' : ''} class="px-3 py-1.5 rounded-xl glass-panel border border-hairline text-sm font-bold disabled:opacity-40"><i class="fa-solid fa-chevron-left"></i></button>
+                        <span class="text-sm text-text-secondary">Page ${cur} of ${pages} · ${data.total} users</span>
+                        <button onclick="loadUserActivity(${cur + 1})" ${cur >= pages ? 'disabled' : ''} class="px-3 py-1.5 rounded-xl glass-panel border border-hairline text-sm font-bold disabled:opacity-40"><i class="fa-solid fa-chevron-right"></i></button>`;
+                }
+                function renderUserActivity(data) {
+                    const box = document.getElementById('ua-list');
+                    const users = data.users || [];
+                    document.getElementById('ua-online').textContent = (data.online_count || 0) + ' online';
+                    if (!users.length) { box.innerHTML = '<p class="text-text-secondary text-sm">No user activity recorded yet.</p>'; renderUaPagination(data); return; }
+                    box.innerHTML = users.map(u => {
+                        const loc = [u.country, u.city].filter(Boolean).join(': ') || 'Unknown';
+                        const nowLine = u.now_playing
+                            ? `<div class="ua-now"><i class="fas fa-play"></i> Now Playing — ${uaEsc(u.now_playing)}</div>`
+                            : `<div class="text-text-secondary text-xs mt-2 truncate"><i class="fas fa-clock-rotate-left"></i> ${uaEsc(u.last_title || 'No history')}</div>`;
+                        const fl = uaFlag(u.country_code);
+                        return `<div class="glass-panel p-4 rounded-2xl border border-hairline">
+                            <div class="flex items-center justify-between gap-2">
+                                <div class="flex items-center gap-2 min-w-0">
+                                    <span class="ua-dot ${u.online ? 'on' : ''}"></span>
+                                    <span class="font-bold truncate">${uaEsc(u.name)}</span>
+                                </div>
+                                <span class="${u.proxy ? 'ua-vpn' : 'ua-clean'}"><i class="fas fa-shield-halved"></i> ${u.proxy ? 'VPN' : 'Clean'}</span>
+                            </div>
+                            ${nowLine}
+                            <div class="ua-meta">
+                                <span><i class="fas fa-signal"></i> <span>${u.online ? 'Online' : uaAgo(u.last_active)}</span></span>
+                                <span><i class="fas fa-location-dot"></i> <span>${fl ? fl + ' ' : ''}${uaEsc(loc)}</span></span>
+                                <span><i class="fas fa-network-wired"></i> <span>${uaEsc(u.isp || '—')}</span></span>
+                                <span><i class="fas fa-mobile-screen-button"></i> <span>${uaEsc(u.app)}${u.device ? ' · ' + uaEsc(u.device) : ''}</span></span>
+                                <span><i class="fas fa-globe"></i> <span>${uaEsc(u.ip || '—')}</span></span>
+                                <span><i class="fas fa-film"></i> <span>${u.streams} streams</span></span>
+                            </div>
+                        </div>`;
+                    }).join('');
+                    renderUaPagination(data);
+                }
+                function uaSkeleton() { return '<div class="ua-skel"></div>'; }
+                async function loadUserActivity(page, silent) {
+                    if (page) uaPage = page;
+                    const box = document.getElementById('ua-list');
+                    if (!box) return;
+                    if (!silent) box.innerHTML = uaSkeleton();
+                    try {
+                        const res = await fetch(`/api/admin/user-activity?page=${uaPage}&per_page=${uaPerPage}`);
+                        renderUserActivity(await res.json());
+                    } catch (e) {
+                        box.innerHTML = '<p class="text-text-secondary text-sm">Unable to load user activity.</p>';
+                    }
+                }
+                function uaInit() {
+                    if (window.__UA_INITIAL__ && (window.__UA_INITIAL__.users || []).length) renderUserActivity(window.__UA_INITIAL__);
+                    else loadUserActivity();
+                    setInterval(() => loadUserActivity(null, true), 15000);
+                }
+                if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', uaInit); else uaInit();
+            </script>
+
+            <section>
+                <h3 class="flex items-center gap-2 text-lg font-bold mb-4 ml-2">
+                    <i class="fa-solid fa-database text-primary"></i> Storage Nodes
+                </h3>
+
+                <div class="grid md:grid-cols-2 gap-4">
+                    {% for db_stat in system_stats.databases %}
+                    <div class="glass-panel p-6 rounded-[2rem] border-hairline bg-card/10">
+                        <div class="flex justify-between items-start mb-6">
+                            <h4 class="font-bold text-text">{{ db_stat.db_name.replace("storage_", "Node ") }}</h4>
+                            <span class="text-[10px] bg-primary/10 text-primary px-2 py-1 rounded-lg font-bold uppercase">Online</span>
+                        </div>
+
+                        <div class="space-y-4">
+                            <div class="flex justify-between text-sm">
+                                <span class="text-text-secondary">Movies / TV</span>
+                                <span class="font-bold text-text">{{ db_stat.movie_count }} / {{ db_stat.tv_count }}</span>
+                            </div>
+
+                            <div class="space-y-2">
+                                <div class="flex justify-between text-xs font-bold uppercase tracking-widest">
+                                    <span class="text-text-secondary">Disk Usage</span>
+                                    <span class="text-primary">{{ "%.1f"|format(db_stat.storageSize / 1024 / 1024) }} MB</span>
+                                </div>
+                                <div class="w-full h-1.5 bg-surface rounded-full overflow-hidden">
+                                    {% set storage_percent = (db_stat.storageSize / (500 * 1024 * 1024) * 100) | round %}
+                                    <div class="h-full bg-gradient-to-r from-primary to-accent transition-all duration-1000" style="width: {{ storage_percent }}%"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </section>
+
+            <section class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <a href="/media/manage?media_type=movie" class="glass-panel p-6 rounded-[2rem] hover:bg-primary/5 transition-all group border border-hairline">
+                    <div class="flex items-center gap-4">
+                        <div class="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
+                            <i class="fa-solid fa-film text-2xl"></i>
+                        </div>
+                        <div>
+                            <h4 class="font-bold text-text">Manage Movies</h4>
+                            <p class="text-xs text-text-secondary">Organize and edit library</p>
+                        </div>
+                        <i class="fa-solid fa-chevron-right ml-auto text-muted group-hover:text-primary group-hover:translate-x-1 transition-all"></i>
+                    </div>
+                </a>
+
+                <a href="/media/manage?media_type=tv" class="glass-panel p-6 rounded-[2rem] hover:bg-accent/5 transition-all group border border-hairline">
+                    <div class="flex items-center gap-4">
+                        <div class="w-14 h-14 rounded-2xl bg-accent/10 flex items-center justify-center text-accent group-hover:scale-110 transition-transform">
+                            <i class="fa-solid fa-tv text-2xl"></i>
+                        </div>
+                        <div>
+                            <h4 class="font-bold text-text">Manage TV Shows</h4>
+                            <p class="text-xs text-text-secondary">Handle series and episodes</p>
+                        </div>
+                        <i class="fa-solid fa-chevron-right ml-auto text-muted group-hover:text-accent group-hover:translate-x-1 transition-all"></i>
+                    </div>
+                </a>
+            </section>
+
+            <a href="/admin/access" class="glass-panel p-6 rounded-[2rem] hover:bg-primary/5 transition-all group border border-hairline flex items-center gap-4">
+                <div class="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
+                    <i class="fa-solid fa-key text-2xl"></i>
+                </div>
+                <div>
+                    <h4 class="font-bold text-text">Tokens &amp; Access</h4>
+                    <p class="text-xs text-text-secondary">Create tokens, set data limits, and manage subscriptions</p>
+                </div>
+                <i class="fa-solid fa-chevron-right ml-auto text-muted group-hover:text-primary group-hover:translate-x-1 transition-all"></i>
+            </a>
+
+            <div class="glass-panel rounded-[2.5rem] overflow-hidden">
+                <div class="p-6 border-b border-hairline">
+                    <div class="flex items-center justify-between gap-3 mb-2">
+                        <h3 class="flex items-center gap-2 text-lg font-bold">
+                            <i class="fa-solid fa-users text-primary"></i> User Activity
+                            <span id="ua-online" class="text-[10px] font-bold uppercase tracking-[0.2em] text-primary bg-primary/10 px-3 py-1 rounded-full">0 online</span>
+                        </h3>
+                        <button onclick="loadUserActivity()" class="text-sm font-semibold text-text-secondary hover:text-primary transition">
+                            <i class="fa-solid fa-rotate"></i> Refresh
+                        </button>
+                    </div>
+                    <p class="text-sm text-text-secondary">Who's watching, where from, and on what</p>
+                </div>
+                <div class="p-6">
+                    <div id="ua-list" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                        <div class="ua-skel"></div>
+                    </div>
+                    <div id="ua-pagination" class="flex items-center justify-center gap-3 mt-6"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="lg:col-span-1">
+            <div class="glass-panel rounded-[2.5rem] overflow-hidden h-full">
+                <div class="p-6 border-b border-hairline">
+                    <div class="flex items-center justify-between gap-3 mb-2">
+                        <h3 class="flex items-center gap-2 text-lg font-bold">
+                            <i class="fa-solid fa-circle-play text-red-500 animate-pulse"></i> Live Network
+                        </h3>
+                        <span id="live-stream-count" class="text-[10px] font-bold uppercase tracking-[0.2em] text-primary bg-primary/10 px-3 py-1 rounded-full">
+                            {{ system_stats.total_active_streams or 0 }} Active
+                        </span>
+                    </div>
+                    <p class="text-sm text-text-secondary">Current sessions only</p>
+                </div>
+
+                <div class="p-6 space-y-6">
+                    <div class="grid grid-cols-2 gap-3">
+                        <div class="glass-panel p-4 rounded-2xl">
+                            <p class="text-[10px] uppercase font-bold tracking-widest text-text-secondary">Live Now</p>
+                            <p id="live-now-count" class="text-2xl font-extrabold mt-1 text-text">{{ system_stats.total_active_streams or 0 }}</p>
+                        </div>
+                        <div class="glass-panel p-4 rounded-2xl">
+                            <p class="text-[10px] uppercase font-bold tracking-widest text-text-secondary">Recent</p>
+                            <p id="recent-stream-count" class="text-2xl font-extrabold mt-1 text-text">0</p>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="flex items-center justify-between mb-3">
+                            <h4 class="text-sm font-bold text-text">Active Streams</h4>
+                            <span class="text-[10px] uppercase tracking-widest text-text-secondary">Real-time</span>
+                        </div>
+                        <div id="active-streams-container" class="space-y-4">
+                            {% if system_stats.active_streams %}
+                                {% for stream in system_stats.active_streams %}
+                                <div class="stream-card rounded-[2rem] p-5">
+                                    <div class="flex justify-between items-start gap-3">
+                                        <div class="min-w-0 pr-2">
+                                            <h5 class="font-bold text-sm text-text truncate">{{ stream.title or stream.meta.get('title') or 'Unknown Stream' }}</h5>
+                                            <div class="mt-1 flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-widest text-text-secondary">
+                                                <span>Bot {{ (stream.client_index or 0) + 1 }}</span>
+                                                <span>•</span>
+                                                <span>DC {{ stream.dc_id or '-' }}</span>
+                                                <span>•</span>
+                                                <span class="font-mono">{{ stream.stream_id[:12] if stream.stream_id else 'Unknown' }}{% if stream.stream_id %}…{% endif %}</span>
+                                            </div>
+                                        </div>
+                                        <span class="text-[10px] font-bold px-2 py-1 rounded-lg uppercase whitespace-nowrap stream-badge-live">
+                                            Live
+                                        </span>
+                                    </div>
+
+                                    <div class="grid grid-cols-2 gap-3 mt-4 pt-4 border-t border-hairline">
+                                        <div class="text-center">
+                                            <p class="text-[9px] text-text-secondary uppercase tracking-widest font-bold">Speed</p>
+                                            <p class="text-xs font-bold text-text">{{ "%.3f"|format(stream.avg_mbps or 0) }} MB/s</p>
+                                        </div>
+                                        <div class="text-center">
+                                            <p class="text-[9px] text-text-secondary uppercase tracking-widest font-bold">Total</p>
+                                            <p class="text-xs font-bold text-text">{{ "%.1f"|format((stream.total_bytes or 0) / 1024 / 1024) }} MB</p>
+                                        </div>
+                                        <div class="text-center">
+                                            <p class="text-[9px] text-text-secondary uppercase tracking-widest font-bold">Duration</p>
+                                            <p class="text-xs font-bold text-text live-duration" data-start-ts="{{ stream.start_ts or 0 }}">0s</p>
+                                        </div>
+                                        <div class="text-center">
+                                            <p class="text-[9px] text-text-secondary uppercase tracking-widest font-bold">Status</p>
+                                            <p class="text-xs font-bold text-text">{{ stream.status or 'active' }}</p>
+                                        </div>
+                                    </div>
+
+                                    <div class="mt-4 pt-4 border-t border-hairline space-y-2">
+                                        <div class="flex items-center justify-between text-xs gap-3">
+                                            <span class="text-text-secondary">Started</span>
+                                            <span class="text-text text-right truncate max-w-[65%] live-started" data-start-ts="{{ stream.start_ts or 0 }}">—</span>
+                                        </div>
+                                        <div class="flex items-center justify-between text-xs gap-3">
+                                            <span class="text-text-secondary">Stream ID</span>
+                                            <span class="font-mono text-text text-right truncate max-w-[65%]">{{ stream.stream_id or 'Unknown' }}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            {% else %}
+                                <div class="glass-panel p-8 rounded-[2rem] text-center border-dashed border-hairline">
+                                    <i class="fa-solid fa-satellite-dish text-4xl text-muted mb-3"></i>
+                                    <p class="text-sm text-text-secondary font-medium">No active streams right now</p>
+                                    <p class="text-xs text-text-secondary mt-1">The live network is idle at the moment.</p>
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .shadow-glow {
+        filter: drop-shadow(0 0 8px color-mix(in srgb, var(--primary) 45%, transparent));
+    }
+
+    .stream-card {
+        background: color-mix(in srgb, var(--card) 55%, transparent);
+        border: 1px solid var(--border);
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.16);
+    }
+
+    .stream-badge-live {
+        background: color-mix(in srgb, var(--primary) 18%, transparent);
+        color: var(--primary);
+    }
+
+    .stream-badge-recent {
+        background: color-mix(in srgb, var(--accent) 16%, transparent);
+        color: var(--accent);
+    }
+</style>
+
+<script>
+    const streamState = { activeStreams: [] };
+
+    function escapeHtml(unsafe) {
+        if (unsafe === null || unsafe === undefined) return '';
+        return String(unsafe)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    function formatBytes(bytes) {
+        const value = Number(bytes || 0);
+        if (!value) return '0 B';
+        const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+        const index = Math.min(Math.floor(Math.log(value) / Math.log(1024)), units.length - 1);
+        return (value / Math.pow(1024, index)).toFixed(index === 0 ? 0 : 2) + ' ' + units[index];
+    }
+
+    function formatDuration(seconds) {
+        const total = Math.floor(Math.max(0, Number(seconds || 0)));
+        const h = Math.floor(total / 3600);
+        const m = Math.floor((total % 3600) / 60);
+        const s = total % 60;
+        if (h > 0) return `${h}h ${m}m ${s}s`;
+        if (m > 0) return `${m}m ${s}s`;
+        return `${s}s`;
+    }
+
+    function formatTimestamp(ts) {
+        const value = Number(ts || 0);
+        if (!value) return '—';
+        const date = new Date(value * 1000);
+        return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString();
+    }
+
+    function getStreamTitle(stream) {
+        return stream?.title || stream?.meta?.title || 'Unknown Stream';
+    }
+
+    function getClientLabel(stream) {
+        const parts = [];
+        if (stream?.client_index !== null && stream?.client_index !== undefined) {
+            parts.push('Bot ' + (Number(stream.client_index) + 1));
+        }
+        if (stream?.dc_id !== null && stream?.dc_id !== undefined) {
+            parts.push('DC ' + stream.dc_id);
+        }
+        return parts.length ? parts.join(' • ') : 'Unknown node';
+    }
+
+    function getStatusBadge(status) {
+        const n = String(status || '').toLowerCase();
+        if (n === 'active') return { className: 'stream-badge-live', text: 'Live' };
+        if (n === 'cancelled') return { className: 'bg-yellow-500/15 text-yellow-300', text: 'Cancelled' };
+        if (n === 'completed' || n === 'finished') return { className: 'bg-green-500/15 text-green-300', text: 'Completed' };
+        if (n === 'failed' || n === 'error') return { className: 'bg-red-500/15 text-red-300', text: n.charAt(0).toUpperCase() + n.slice(1) };
+        return { className: 'stream-badge-recent', text: n ? n.charAt(0).toUpperCase() + n.slice(1) : 'Live' };
+    }
+
+    function getLiveDuration(stream) {
+        const startTs = Number(stream?.start_ts || 0);
+        if (!startTs) return '0s';
+        return formatDuration(Date.now() / 1000 - startTs);
+    }
+
+    function renderStreamCard(stream) {
+        const status = getStatusBadge(stream?.status);
+        const title = escapeHtml(getStreamTitle(stream));
+        const streamId = escapeHtml(stream?.stream_id ? String(stream.stream_id).slice(0, 12) + '…' : 'Unknown');
+        const label = escapeHtml(getClientLabel(stream));
+        const totalBytes = formatBytes(stream?.total_bytes || 0);
+        const avgSpeed = stream?.avg_mbps !== null && stream?.avg_mbps !== undefined
+            ? Number(stream.avg_mbps).toFixed(3) + ' MB/s' : '—';
+        const started = formatTimestamp(stream?.start_ts);
+        const liveDuration = getLiveDuration(stream);
+
+        return `
+            <div class="stream-card rounded-[2rem] p-5">
+                <div class="flex justify-between items-start gap-3">
+                    <div class="min-w-0 pr-2">
+                        <h5 class="font-bold text-sm text-text truncate">${title}</h5>
+                        <div class="mt-1 flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-widest text-text-secondary">
+                            <span>${label}</span>
+                            <span>•</span>
+                            <span>${streamId}</span>
+                        </div>
+                    </div>
+                    <span class="text-[10px] font-bold px-2 py-1 rounded-lg uppercase whitespace-nowrap ${status.className}">
+                        ${escapeHtml(status.text)}
+                    </span>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3 mt-4 pt-4 border-t border-hairline">
+                    <div class="text-center">
+                        <p class="text-[9px] text-text-secondary uppercase tracking-widest font-bold">Speed</p>
+                        <p class="text-xs font-bold text-text">${avgSpeed}</p>
+                    </div>
+                    <div class="text-center">
+                        <p class="text-[9px] text-text-secondary uppercase tracking-widest font-bold">Total</p>
+                        <p class="text-xs font-bold text-text">${escapeHtml(totalBytes)}</p>
+                    </div>
+                    <div class="text-center">
+                        <p class="text-[9px] text-text-secondary uppercase tracking-widest font-bold">Duration</p>
+                        <p class="text-xs font-bold text-text live-duration">${escapeHtml(liveDuration)}</p>
+                    </div>
+                    <div class="text-center">
+                        <p class="text-[9px] text-text-secondary uppercase tracking-widest font-bold">Started</p>
+                        <p class="text-xs font-bold text-text truncate live-started">${escapeHtml(started)}</p>
+                    </div>
+                </div>
+
+                <div class="mt-4 pt-4 border-t border-hairline space-y-2">
+                    <div class="flex items-center justify-between text-xs gap-3">
+                        <span class="text-text-secondary">Stream ID</span>
+                        <span class="font-mono text-text text-right truncate max-w-[65%]">${streamId}</span>
+                    </div>
+                    <div class="flex items-center justify-between text-xs gap-3">
+                        <span class="text-text-secondary">Status</span>
+                        <span class="text-text text-right truncate max-w-[65%]">${escapeHtml(stream?.status || 'active')}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderEmptyState(icon, title, subtitle) {
+        return `
+            <div class="glass-panel p-8 rounded-[2rem] text-center border-dashed border-hairline">
+                <i class="${icon} text-4xl text-muted mb-3"></i>
+                <p class="text-sm text-text-secondary font-medium">${escapeHtml(title)}</p>
+                <p class="text-xs text-text-secondary mt-1">${escapeHtml(subtitle)}</p>
+            </div>
+        `;
+    }
+
+    async function loadStreamStats() {
+        const activeContainer = document.getElementById('active-streams-container');
+        const liveCount = document.getElementById('live-stream-count');
+        const liveNowCount = document.getElementById('live-now-count');
+        const recentCount = document.getElementById('recent-stream-count');
+
+        try {
+            const response = await fetch('/stream/stats', { cache: 'no-store' });
+            if (!response.ok) throw new Error('Failed to load stream stats');
+
+            const data = await response.json();
+            const activeStreams = Array.isArray(data.active_streams) ? data.active_streams : [];
+            const recentStreams = Array.isArray(data.recent_streams) ? data.recent_streams : [];
+
+            streamState.activeStreams = activeStreams;
+
+            if (liveCount) liveCount.textContent = activeStreams.length + ' Active';
+            if (liveNowCount) liveNowCount.textContent = String(activeStreams.length);
+            if (recentCount) recentCount.textContent = String(recentStreams.length);
+
+            if (activeContainer) {
+                activeContainer.innerHTML = activeStreams.length
+                    ? activeStreams.map(stream => renderStreamCard(stream)).join('')
+                    : renderEmptyState('fa-solid fa-satellite-dish', 'No active streams right now', 'The live network is idle at the moment.');
+            }
+        } catch (error) {
+            console.error(error);
+            if (activeContainer) {
+                activeContainer.innerHTML = renderEmptyState('fa-solid fa-triangle-exclamation', 'Unable to load live network', 'Please try refreshing the page.');
+            }
+        }
+    }
+
+    function refreshLiveDurations() {
+        document.querySelectorAll('#active-streams-container .stream-card').forEach((card, index) => {
+            const durationEl = card.querySelector('.live-duration');
+            const stream = streamState.activeStreams[index];
+            if (durationEl && stream) durationEl.textContent = getLiveDuration(stream);
+        });
+    }
+
+    async function refreshDashboard() {
+        const icon = document.getElementById('refresh-icon');
+        if (icon) icon.classList.add('animate-spin');
+
+        try {
+            const response = await fetch('/api/system/stats', { cache: 'no-store' });
+            if (response.ok) {
+                const stats = await response.json();
+
+                const elUptime = document.getElementById('sys-uptime');
+                if (elUptime) elUptime.innerText = stats.uptime || 'N/A';
+
+                const elBotCount = document.getElementById('sys-bots-count');
+                if (elBotCount) elBotCount.innerText = (stats.connected_bots ?? 0) + ' Nodes';
+
+                const elLive = document.getElementById('sys-live-streams');
+                if (elLive) elLive.innerText = (stats.total_active_streams ?? 0) + ' Active';
+
+                const elVersion = document.getElementById('sys-version');
+                if (elVersion) elVersion.innerText = 'v' + (stats.version || '1.0.0');
+            }
+
+            await loadStreamStats();
+        } catch (error) {
+            console.error('Failed to refresh dashboard:', error);
+            showToast('Dashboard refresh failed.', 'error', 'Refresh failed');
+        } finally {
+            setTimeout(() => { if (icon) icon.classList.remove('animate-spin'); }, 450);
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        loadStreamStats();
+        loadSetupStatus();
+        setInterval(loadStreamStats, 30000);
+        setInterval(refreshLiveDurations, 1000);
+    });
+
+    async function loadSetupStatus() {
+        const wrap = document.getElementById('setup-card');
+        if (!wrap) return;
+        try {
+            const res = await fetch('/api/admin/setup-status');
+            if (!res.ok) return;
+            const data = await res.json();
+            const d = data.data || {};
+            const checks = d.checks || [];
+            if (!checks.length || d.complete) { wrap.innerHTML = ''; return; }
+
+            const rows = checks.map(c => `
+                <a href="/admin/settings" class="flex items-start gap-3 p-3 rounded-2xl transition hover:bg-primary/5 ${c.done ? 'opacity-60' : ''}">
+                    <span class="mt-0.5 w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${c.done ? 'bg-green-500/20 text-green-400' : 'bg-amber-500/20 text-amber-400'}">
+                        <i class="fa-solid ${c.done ? 'fa-check' : 'fa-arrow-right'} text-xs"></i>
+                    </span>
+                    <span>
+                        <span class="font-bold text-sm ${c.done ? 'line-through text-text-secondary' : 'text-text'}">${escapeHtmlSetup(c.label)}</span>
+                        <span class="block text-xs text-text-secondary mt-0.5">${escapeHtmlSetup(c.hint)}</span>
+                    </span>
+                </a>`).join('');
+
+            const pct = Math.round((d.done / d.total) * 100);
+            wrap.innerHTML = `
+                <div class="glass-panel rounded-[2rem] p-6 border border-primary/20">
+                    <div class="flex items-center justify-between gap-3 mb-4">
+                        <div>
+                            <h2 class="text-lg font-extrabold text-text flex items-center gap-2"><i class="fa-solid fa-rocket text-primary"></i> Finish setting up</h2>
+                            <p class="text-xs text-text-secondary mt-1">${d.done} of ${d.total} steps done — complete these to go live.</p>
+                        </div>
+                        <div class="text-2xl font-black text-primary">${pct}%</div>
+                    </div>
+                    <div class="w-full h-2 rounded-full bg-white/10 overflow-hidden mb-4"><div class="h-full bg-primary" style="width:${pct}%"></div></div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">${rows}</div>
+                </div>`;
+        } catch (e) { /* ignore */ }
+    }
+
+    function escapeHtmlSetup(v) {
+        return String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+    }
+</script>
+{% endblock %}

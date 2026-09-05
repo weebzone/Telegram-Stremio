@@ -1,0 +1,75 @@
+    <!-- Users -->
+    <section class="section-panel p-4 sm:p-5 lg:p-6">
+        <div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 mb-5">
+            <div>
+                <h2 class="text-lg sm:text-xl font-bold section-title">User Subscriptions</h2>
+                <p class="text-sm section-muted mt-1">Search, filter, paginate, and manage subscription access.</p>
+            </div>
+
+            <div class="w-full lg:w-auto grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <input
+                    id="sub-search"
+                    type="text"
+                    placeholder="Search by name, username or ID..."
+                    class="glass-input"
+                    oninput="subPage=1; renderSubPage()"
+                >
+                <select id="sub-filter" class="glass-select" onchange="subPage=1; renderSubPage()">
+                    <option value="all">All Status</option>
+                    <option value="active">Active</option>
+                    <option value="expired">Expired</option>
+                </select>
+                <select id="sub-page-size" class="glass-select" onchange="subPage=1; renderSubPage()">
+                    <option value="10">10 / page</option>
+                    <option value="25">25 / page</option>
+                    <option value="50">50 / page</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Desktop table -->
+        <div class="desktop-table-wrap table-shell">
+            <div class="overflow-x-auto no-scrollbar">
+                <table class="subs-table min-w-[780px] text-sm">
+                    <thead>
+                        <tr>
+                            <th class="px-6 py-4 text-left font-semibold">User Details</th>
+                            <th class="px-6 py-4 text-center font-semibold">Status</th>
+                            <th class="px-6 py-4 text-center font-semibold">Expiry</th>
+                            <th class="px-6 py-4 text-right font-semibold">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="subscribers-tbody">
+                        <tr>
+                            <td colspan="4" class="px-6 py-8 text-center text-soft">
+                                <i class="fas fa-spinner fa-spin mr-2"></i> Loading...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Mobile cards -->
+        <div id="subscribers-mobile" class="mobile-grid mt-1">
+            <div class="empty-state text-center px-4 py-8 text-soft">
+                <i class="fas fa-spinner fa-spin mr-2"></i> Loading...
+            </div>
+        </div>
+
+        <!-- Pagination -->
+        <div class="pagination-shell mt-5" id="sub-pagination">
+            <div id="sub-page-info" class="pagination-text text-sm"></div>
+            <div class="controls">
+                <button id="sub-btn-prev" onclick="subChangePage(-1)"
+                    class="glass-btn pagination-btn rounded-xl px-4 py-2.5 text-sm font-semibold">
+                    ‹ Prev
+                </button>
+                <span id="sub-page-num" class="text-sm font-bold text-center section-title px-2"></span>
+                <button id="sub-btn-next" onclick="subChangePage(1)"
+                    class="glass-btn pagination-btn rounded-xl px-4 py-2.5 text-sm font-semibold">
+                    Next ›
+                </button>
+            </div>
+        </div>
+    </section>

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from Backend.helper.pyro import get_scan_client
-from Backend.helper.settings_manager import SettingsManager
+from Backend.helper.telegram.pyro import get_scan_client
+from Backend.helper.settings.manager import SettingsManager
 from Backend.logger import LOGGER
 
 

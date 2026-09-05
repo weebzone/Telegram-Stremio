@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Status — TG Stremio{% endblock %}
+{% block content %}
+<div class="max-w-3xl mx-auto py-10">
+  <h1 class="text-3xl font-extrabold mb-4">Service Status</h1>
+  <div class="tool-card p-6 rounded-2xl border" style="border-color:var(--border);background:var(--card)">
+    <p class="text-lg font-bold">Status: {{ stats.status }}</p>
+    <p class="mt-2" style="color:var(--text-sec)">Uptime: {{ stats.uptime }}</p>
+    <p style="color:var(--text-sec)">Total content: {{ stats.total_content }}</p>
+    <p style="color:var(--text-sec)">Databases online: {{ stats.databases_online }}</p>
+  </div>
+</div>
+{% endblock %}

@@ -11,31 +11,13 @@ from pyrogram.types import (
 
 from Backend import db
 from Backend.config import Telegram
-from Backend.helper.settings_manager import SettingsManager
+from Backend.helper.settings.manager import SettingsManager
 from Backend.logger import LOGGER
-
-def _currency_symbol(code):
-    return {"INR": "₹", "USD": "$", "EUR": "€", "GBP": "£", "JPY": "¥", "AUD": "A$", "CAD": "C$", "SGD": "S$", "AED": "د.إ", "BRL": "R$"}.get((code or "INR").upper(), f"{(code or 'INR')} ")
-
-
-
-#----- Configured approvers, falling back to the owner
-def _approver_ids() -> list:
-    return SettingsManager.current().approver_ids or [Telegram.OWNER_ID]
-
-
-#----- Resolve a target user's mention and username string for admin captions
-async def _resolve_target_info(client: Client, target_user_id: int):
-    try:
-        target_user = await client.get_users(target_user_id)
-        return target_user.mention, (f"@{target_user.username}" if target_user.username else "N/A")
-    except Exception:
-        return f"User {target_user_id}", "N/A"
-
+from Backend.pyrofork.plugins.common import approver_ids, currency_symbol, resolve_target_info
 
 #----- Formatted plan/user block shared by approve and reject captions
 def _plan_info_text(mention: str, username_str: str, user_id: int, duration, price, currency="INR") -> str:
-    sym = _currency_symbol(currency)
+    sym = currency_symbol(currency)
     return (
         f"👤 <b>User:</b> {mention}\n"
         f"🆔 <b>User ID:</b> <code>{user_id}</code>\n"
@@ -93,11 +75,11 @@ async def plan_selection(client: Client, callback_query: CallbackQuery):
 
     text = (
         f"<b>✅ Plan Selected: {plan['days']} Days</b>\n\n"
-        f"<b>💰 Price:</b> {_currency_symbol(plan.get('currency'))}{plan['price']}\n"
+        f"<b>💰 Price:</b> {currency_symbol(plan.get('currency'))}{plan['price']}\n"
         f"<b>📅 Expiry (if approved now):</b> {expiry_str}\n\n"
         f"<b>📋 How to Pay:</b>\n"
     )
-    text += f"{payment_instructions}\n\n" if payment_instructions else f"Pay {_currency_symbol(plan.get('currency'))}{plan['price']} to the admin.\n\n"
+    text += f"{payment_instructions}\n\n" if payment_instructions else f"Pay {currency_symbol(plan.get('currency'))}{plan['price']} to the admin.\n\n"
     text += (
         "<b>After paying:</b> send your payment screenshot directly here "
         "(in this chat). The admin will review and activate your subscription."
@@ -110,7 +92,7 @@ async def plan_selection(client: Client, callback_query: CallbackQuery):
     try:
         if payment_qr_url:
             try:
-                await client.send_photo(chat_id=user_id, photo=payment_qr_url, caption=f"📷 Scan to pay {_currency_symbol(plan.get('currency'))}{plan['price']}")
+                await client.send_photo(chat_id=user_id, photo=payment_qr_url, caption=f"📷 Scan to pay {currency_symbol(plan.get('currency'))}{plan['price']}")
             except Exception as qe:
                 LOGGER.warning(f"Could not send payment QR to {user_id}: {qe}")
         await client.send_message(chat_id=user_id, text=text, reply_markup=ForceReply(selective=True))
@@ -172,12 +154,12 @@ async def handle_payment_screenshot(client: Client, message: Message):
             f"<b>🔗 Username:</b> {username_str}\n\n"
             f"<b>📦 Plan Details:</b>\n"
             f"  • Duration: <b>{duration} days</b>\n"
-            f"  • Price: <b>{_currency_symbol(currency)}{price}</b>\n\n"
+            f"  • Price: <b>{currency_symbol(currency)}{price}</b>\n\n"
             f"Please review the screenshot above and approve or reject."
         )
 
         admin_messages = []
-        for approver_id in _approver_ids():
+        for approver_id in approver_ids():
             try:
                 sent = await message.copy(approver_id, caption=admin_text, reply_markup=keyboard)
                 admin_messages.append({"chat_id": approver_id, "message_id": sent.id})
@@ -211,7 +193,7 @@ async def handle_payment_screenshot(client: Client, message: Message):
 #----- Approver taps Approve/Reject: update subscription and all admin captions
 @Client.on_callback_query(filters.regex(r"^(approve|reject)_(\d+)$"))
 async def admin_review(client: Client, callback_query: CallbackQuery):
-    if callback_query.from_user.id not in _approver_ids():
+    if callback_query.from_user.id not in approver_ids():
         return await callback_query.answer("You are not authorized to perform this action.", show_alert=True)
 
     action = callback_query.matches[0].group(1)
@@ -266,7 +248,7 @@ async def admin_review(client: Client, callback_query: CallbackQuery):
             )
         await client.send_message(target_user_id, success_text)
 
-        mention, username_str = await _resolve_target_info(client, target_user_id)
+        mention, username_str = await resolve_target_info(client, target_user_id)
         info_text = _plan_info_text(mention, username_str, target_user_id, duration, price)
         await _apply_admin_captions(client, callback_query, admin_messages, f"✅ <b>Approved by {admin_name}</b>\n\n{info_text}")
 
@@ -278,7 +260,7 @@ async def admin_review(client: Client, callback_query: CallbackQuery):
             target_user_id,
             "❌ <b>Payment Rejected</b>\n\nYour recent payment submission was rejected by the admin. Please contact the admin or try submitting again."
         )
-        mention, username_str = await _resolve_target_info(client, target_user_id)
+        mention, username_str = await resolve_target_info(client, target_user_id)
         info_text = _plan_info_text(mention, username_str, target_user_id, duration, price)
         await _apply_admin_captions(client, callback_query, admin_messages, f"❌ <b>Rejected by {admin_name}</b>\n\n{info_text}")
 

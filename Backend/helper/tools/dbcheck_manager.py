@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 from pyrogram.errors import FloodWait
 
 from Backend.logger import LOGGER
-from Backend.helper.encrypt import decode_string
+from Backend.helper.core.encrypt import decode_string
 from Backend.helper.tools.utils import _now, _fmt_elapsed
 
 DBCHECK_CONCURRENCY = 5

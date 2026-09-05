@@ -4,7 +4,7 @@ from pyrogram import Client
 
 from Backend.config import Telegram
 from Backend.fastapi.routes.stream_routes import _streamer_by_client
-from Backend.helper.settings_manager import SettingsManager
+from Backend.helper.settings.manager import SettingsManager
 from Backend.logger import LOGGER
 from Backend.pyrofork.bot import StreamBot, client_dc_map, multi_clients, work_loads
 

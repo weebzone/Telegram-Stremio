@@ -1,0 +1,1206 @@
+{% extends "base.html" %}
+
+{% block title %}Custom Catalogs - Telegram Stremio{% endblock %}
+
+{% block content %}
+<style>
+  .catalog-page {
+    --soft-bg: color-mix(in srgb, var(--bg) 78%, transparent);
+    --card-bg: color-mix(in srgb, var(--card) 92%, var(--bg));
+    --card-bg-strong: color-mix(in srgb, var(--card) 82%, transparent);
+    --line: color-mix(in srgb, var(--border) 90%, transparent);
+    --primary-soft: color-mix(in srgb, var(--primary) 15%, transparent);
+    --accent-soft: color-mix(in srgb, var(--accent) 14%, transparent);
+  }
+
+  .glass-card {
+    position: relative;
+    overflow: hidden;
+    background: var(--card-bg);
+    border: 1px solid var(--line);
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.18);
+  }
+
+  .glass-card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(circle at 12% 0%, var(--primary-soft), transparent 36%),
+      radial-gradient(circle at 95% 10%, var(--accent-soft), transparent 34%);
+    opacity: .9;
+  }
+
+  .glass-card > * { position: relative; z-index: 1; }
+
+  .hero-card {
+    min-height: 15rem;
+    display: grid;
+    place-items: stretch;
+  }
+
+  .hero-orb {
+    width: 4.25rem;
+    height: 4.25rem;
+    border-radius: 9999px;
+    background: linear-gradient(135deg, var(--primary), var(--accent));
+    box-shadow: 0 0 45px color-mix(in srgb, var(--primary) 45%, transparent);
+    display: grid;
+    place-items: center;
+    color: var(--bg);
+  }
+
+  .section-title {
+    color: var(--text);
+    font-weight: 900;
+    letter-spacing: -0.035em;
+  }
+
+  .muted { color: var(--text-sec); }
+
+  .field-label {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 800;
+    margin-bottom: 0.55rem;
+    color: var(--text);
+  }
+
+  .field-input,
+  .field-select {
+    width: 100%;
+    border-radius: 1rem;
+    border: 1px solid var(--line);
+    background: color-mix(in srgb, var(--bg) 84%, var(--card) 16%);
+    color: var(--text);
+    padding: 0.9rem 1rem;
+    outline: none;
+    transition: all .2s ease;
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text) 5%, transparent);
+  }
+
+  .field-input::placeholder { color: color-mix(in srgb, var(--text-sec) 82%, transparent); }
+
+  .field-input:focus,
+  .field-select:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 18%, transparent);
+  }
+
+  .btn-ui {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: .55rem;
+    border-radius: 1rem;
+    padding: .85rem 1.15rem;
+    font-weight: 900;
+    transition: all .2s ease;
+    border: 1px solid transparent;
+    white-space: nowrap;
+  }
+
+  .btn-ui:hover { transform: translateY(-1px); }
+  .btn-ui:active { transform: translateY(0) scale(.99); }
+
+  .btn-primary {
+    background: linear-gradient(135deg, var(--primary), var(--accent));
+    color: var(--bg);
+    box-shadow: 0 14px 28px color-mix(in srgb, var(--primary) 24%, transparent);
+  }
+
+  .btn-ghost {
+    background: color-mix(in srgb, var(--bg) 70%, transparent);
+    color: var(--text);
+    border-color: var(--line);
+  }
+
+  .btn-danger {
+    background: color-mix(in srgb, rgb(239 68 68) 16%, var(--card));
+    color: rgb(248 113 113);
+    border-color: color-mix(in srgb, rgb(239 68 68) 32%, var(--border));
+  }
+
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: .45rem;
+    padding: .42rem .85rem;
+    border-radius: 9999px;
+    font-size: .78rem;
+    font-weight: 900;
+    border: 1px solid var(--line);
+    background: color-mix(in srgb, var(--bg) 66%, transparent);
+    color: var(--text);
+  }
+
+  .stat-card,
+  .catalog-card,
+  .media-card,
+  .empty-state {
+    background: color-mix(in srgb, var(--bg) 72%, var(--card) 28%);
+    border: 1px solid var(--line);
+    border-radius: 1.45rem;
+    transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease, background .2s ease;
+  }
+
+  .catalog-card:hover,
+  .media-card:hover {
+    transform: translateY(-2px);
+    border-color: color-mix(in srgb, var(--primary) 42%, var(--border));
+    box-shadow: 0 16px 34px rgba(0,0,0,.16);
+  }
+
+  .catalog-card.active {
+    border-color: var(--primary);
+    background:
+      linear-gradient(135deg, color-mix(in srgb, var(--primary) 13%, transparent), transparent),
+      color-mix(in srgb, var(--bg) 70%, var(--card) 30%);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 14%, transparent);
+  }
+
+  .poster {
+    width: 4.25rem;
+    height: 6.35rem;
+    object-fit: cover;
+    border-radius: 1rem;
+    border: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
+    background: color-mix(in srgb, var(--bg) 80%, transparent);
+    flex-shrink: 0;
+  }
+
+  .switch {
+    width: 3.1rem;
+    height: 1.7rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--border) 80%, transparent);
+    position: relative;
+    cursor: pointer;
+    transition: .2s ease;
+    border: 1px solid var(--line);
+    flex-shrink: 0;
+  }
+
+  /* Toggle row (visibility exclusive / search) */
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+    border-radius: 1rem;
+    padding: .75rem .85rem;
+    background: color-mix(in srgb, var(--bg) 64%, transparent);
+    border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+    cursor: pointer;
+  }
+
+  .switch::after {
+    content: "";
+    width: 1.25rem;
+    height: 1.25rem;
+    border-radius: 999px;
+    background: var(--text);
+    position: absolute;
+    left: .18rem;
+    top: .17rem;
+    transition: .2s ease;
+    box-shadow: 0 4px 12px rgba(0,0,0,.24);
+  }
+
+  .switch-input:checked + .switch {
+    background: linear-gradient(135deg, var(--primary), var(--accent));
+  }
+
+  .switch-input:checked + .switch::after {
+    left: 1.55rem;
+    background: var(--bg);
+  }
+
+  .mini-tab {
+    border-radius: 999px;
+    padding: .48rem .9rem;
+    border: 1px solid var(--line);
+    color: var(--text-sec);
+    background: color-mix(in srgb, var(--bg) 56%, transparent);
+    font-weight: 900;
+    font-size: .8rem;
+  }
+
+  .mini-tab.active {
+    color: var(--bg);
+    border-color: transparent;
+    background: linear-gradient(135deg, var(--primary), var(--accent));
+  }
+
+  .skeleton {
+    min-height: 5.5rem;
+    border-radius: 1.45rem;
+    background: linear-gradient(90deg,
+      color-mix(in srgb, var(--bg) 72%, var(--card) 28%),
+      color-mix(in srgb, var(--primary) 9%, var(--card)),
+      color-mix(in srgb, var(--bg) 72%, var(--card) 28%));
+    background-size: 220% 100%;
+    animation: shimmer 1.2s infinite linear;
+    border: 1px solid var(--line);
+  }
+
+  @keyframes shimmer {
+    to { background-position: -220% 0; }
+  }
+
+  /* ── Collapsible catalog list ── */
+  .catalog-list-wrapper {
+    position: relative;
+    transition: max-height 0.35s ease;
+  }
+  .catalog-list-wrapper.collapsed {
+    max-height: 286px;
+    overflow: hidden;
+  }
+  .catalog-list-wrapper.collapsed::after {
+    content: "";
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 76px;
+    background: linear-gradient(to bottom,
+      transparent,
+      color-mix(in srgb, var(--bg) 94%, var(--card) 6%));
+    pointer-events: none;
+    border-radius: 0 0 1.45rem 1.45rem;
+  }
+
+  #catalog-expand-btn {
+    font-size: .8rem;
+    letter-spacing: .03em;
+    margin-top: .55rem;
+  }
+
+  /* ── Auto-catalog group toggle ── */
+  .group-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    width: 100%;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    text-align: left;
+  }
+  .group-card-header:focus { outline: none; }
+
+  .group-chevron {
+    display: inline-flex;
+    color: var(--text-sec);
+    flex-shrink: 0;
+    transition: transform 0.22s ease;
+  }
+  .auto-group-card.expanded .group-chevron {
+    transform: rotate(90deg);
+  }
+
+  /* CSS grid trick for smooth height transition without knowing exact height */
+  .group-items {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 0.28s ease, opacity 0.22s ease;
+    opacity: 0;
+  }
+  .group-items > .group-items-inner { overflow: hidden; }
+  .auto-group-card.expanded .group-items {
+    grid-template-rows: 1fr;
+    opacity: 1;
+  }
+
+  .token-picker {
+    max-height: 12rem;
+    overflow-y: auto;
+    border: 1px solid var(--line);
+    border-radius: 1rem;
+    padding: .5rem;
+    display: flex;
+    flex-direction: column;
+    gap: .35rem;
+    background: color-mix(in srgb, var(--bg) 70%, transparent);
+  }
+  .token-row {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    padding: .5rem .65rem;
+    border-radius: .75rem;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: background .15s ease;
+  }
+  .token-row:hover { background: color-mix(in srgb, var(--primary) 10%, transparent); }
+  .token-row input { width: 1.05rem; height: 1.05rem; accent-color: var(--primary); cursor: pointer; flex-shrink: 0; }
+  .vis-chip {
+    display: inline-flex; align-items: center; gap: .4rem;
+    padding: .3rem .7rem; border-radius: 9999px; font-size: .72rem; font-weight: 900;
+    border: 1px solid var(--line);
+  }
+  .vis-public { color: rgb(52 211 153); background: color-mix(in srgb, rgb(16 185 129) 14%, transparent); border-color: color-mix(in srgb, rgb(16 185 129) 30%, transparent); }
+  .vis-tokens { color: rgb(96 165 250); background: color-mix(in srgb, rgb(59 130 246) 14%, transparent); border-color: color-mix(in srgb, rgb(59 130 246) 30%, transparent); }
+  .vis-owner  { color: rgb(248 113 113); background: color-mix(in srgb, rgb(239 68 68) 14%, transparent); border-color: color-mix(in srgb, rgb(239 68 68) 30%, transparent); }
+
+  .auto-chip {
+    display: inline-flex; align-items: center; gap: .45rem;
+    padding: .5rem .85rem; border-radius: 9999px; font-weight: 800; font-size: .82rem;
+    border: 1px solid var(--line); color: var(--text-sec);
+    background: color-mix(in srgb, var(--bg) 60%, transparent);
+    cursor: pointer; transition: all .15s ease;
+  }
+  .auto-chip .dot { width: .6rem; height: .6rem; border-radius: 9999px; background: var(--border); transition: all .15s ease; }
+  .auto-chip:hover { border-color: color-mix(in srgb, var(--primary) 45%, var(--border)); }
+  .auto-chip.on {
+    color: var(--bg); border-color: transparent;
+    background: linear-gradient(135deg, var(--primary), var(--accent));
+  }
+  .auto-chip.on .dot { background: var(--bg); box-shadow: 0 0 8px color-mix(in srgb, var(--bg) 60%, transparent); }
+
+  .order-row {
+    display: flex; align-items: center; gap: .85rem;
+    border-radius: 1rem; padding: .7rem .9rem;
+    background: color-mix(in srgb, var(--bg) 66%, transparent);
+    border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  }
+  .drag-idx {
+    width: 1.9rem; height: 1.9rem; flex-shrink: 0;
+    display: grid; place-items: center; border-radius: 9999px;
+    font-weight: 900; font-size: .8rem; color: var(--text-sec);
+    background: color-mix(in srgb, var(--primary) 12%, transparent);
+  }
+  .order-arrow {
+    width: 1.9rem; height: 1.5rem; border-radius: .55rem; font-size: .7rem; font-weight: 900;
+    border: 1px solid var(--line); background: color-mix(in srgb, var(--bg) 60%, transparent);
+    color: var(--text); cursor: pointer; transition: all .15s ease;
+  }
+  .order-arrow:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); }
+  .order-arrow:disabled { opacity: .35; cursor: not-allowed; }
+
+  @media (max-width: 640px) {
+    .hero-card { min-height: 13rem; }
+    .btn-ui { width: 100%; }
+  }
+</style>
+
+<div class="catalog-page max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8 space-y-6">
+  <div class="glass-card hero-card rounded-3xl p-5 sm:p-7 lg:p-8">
+    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+      <div class="flex flex-col sm:flex-row sm:items-center gap-5">
+        <div class="hero-orb text-3xl">🎞️</div>
+        <div>
+          <div class="flex flex-wrap items-center gap-2 mb-3">
+            <span class="pill">Custom Stremio sections</span>
+          </div>
+          <h1 class="section-title text-2xl sm:text-4xl lg:text-5xl">Catalogs</h1>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-3 gap-3 min-w-full sm:min-w-[26rem] lg:min-w-[30rem]">
+        <div class="stat-card p-4 text-center">
+          <p id="stat-total" class="section-title text-2xl">0</p>
+          <p class="muted text-xs font-bold mt-1">Catalogs</p>
+        </div>
+        <div class="stat-card p-4 text-center">
+          <p id="stat-visible" class="section-title text-2xl">0</p>
+          <p class="muted text-xs font-bold mt-1">Visible</p>
+        </div>
+        <div class="stat-card p-4 text-center">
+          <p id="stat-items" class="section-title text-2xl">0</p>
+          <p class="muted text-xs font-bold mt-1">Titles</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+
+  <div class="glass-card rounded-3xl p-5 sm:p-6">
+    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+      <div>
+        <div class="flex flex-wrap gap-2 mb-3">
+          <span class="pill">✨ Auto catalogs</span>
+          <span id="auto-sync-status" class="pill">Checking status...</span>
+        </div>
+        <h2 class="section-title text-xl sm:text-3xl">Auto Catalogs</h2>
+        <p class="muted text-sm mt-2">Toggles save instantly. Sync rebuilds them across your library.</p>
+      </div>
+      <div class="flex flex-col sm:flex-row gap-3">
+        <button id="auto-sync-btn" onclick="runAutoSync()" class="btn-ui btn-primary lg:w-auto">⚡ Sync</button>
+      </div>
+    </div>
+
+    <div id="auto-settings-list" class="mt-5 pt-5 border-t grid grid-cols-1 lg:grid-cols-3 gap-4" style="border-color: color-mix(in srgb, var(--border) 80%, transparent);">
+      <div class="skeleton"></div>
+      <div class="skeleton"></div>
+      <div class="skeleton"></div>
+    </div>
+  </div>
+
+  <div class="glass-card rounded-3xl p-5 sm:p-6">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+      <div>
+        <div class="flex flex-wrap gap-2 mb-2"><span class="pill">↕ Ordering</span></div>
+        <h2 class="section-title text-xl sm:text-2xl">Catalog Order</h2>
+        <p class="muted text-sm mt-1">Arrange how catalogs appear in Stremio.</p>
+      </div>
+      <button id="save-order-btn" onclick="saveCatalogOrder()" class="btn-ui btn-primary sm:w-auto hidden">💾 Save Order</button>
+    </div>
+    <div id="catalog-order-list" class="space-y-2">
+      <div class="skeleton"></div>
+      <div class="skeleton"></div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 xl:grid-cols-[0.88fr_1.12fr] gap-6">
+    <div class="space-y-6">
+      <div class="glass-card rounded-3xl p-5 sm:p-6">
+        <div class="flex items-start justify-between gap-3 mb-5">
+          <div>
+            <h2 class="section-title text-2xl">Create Catalog</h2>
+            <p class="muted text-sm mt-1">Visibility decides who sees it in Stremio.</p>
+          </div>
+          <span class="pill">New</span>
+        </div>
+
+        <form onsubmit="createCatalog(event)" class="space-y-4">
+          <div>
+            <label class="field-label">Catalog Name</label>
+            <input id="catalog-name" class="field-input" placeholder="Example: Bollywood Hits" required>
+          </div>
+
+          <div>
+            <label class="field-label">Who can see it</label>
+            <select id="catalog-visibility" class="field-select" onchange="onVisibilityModeChange('catalog')">
+              <option value="public">Everyone</option>
+              <option value="tokens">Specific users</option>
+              <option value="owner">Owner only (hidden)</option>
+            </select>
+            <p class="muted text-xs mt-2" id="catalog-visibility-hint">Shown to everyone who installed the addon.</p>
+          </div>
+
+          <div id="catalog-token-picker-wrap" class="hidden">
+            <label class="field-label">Allowed users</label>
+            <div id="catalog-token-picker" class="token-picker"></div>
+          </div>
+
+          <button class="btn-ui btn-primary w-full" type="submit">➕ Create Catalog</button>
+        </form>
+      </div>
+
+      <div class="glass-card rounded-3xl p-5 sm:p-6">
+        <div class="flex items-center justify-between gap-3 mb-5">
+          <div>
+            <h2 class="section-title text-2xl">Your Catalogs</h2>
+            <p class="muted text-sm mt-1">Select one to manage titles.</p>
+          </div>
+          <button onclick="loadCatalogs()" class="btn-ui btn-ghost px-3 py-2 text-sm">↻</button>
+        </div>
+        <div id="catalog-list-wrapper" class="catalog-list-wrapper collapsed">
+          <div id="catalog-list" class="space-y-3">
+            <div class="skeleton"></div>
+            <div class="skeleton"></div>
+          </div>
+        </div>
+        <button id="catalog-expand-btn" onclick="toggleCatalogExpand()" class="btn-ui btn-ghost w-full hidden">▾ Show all catalogs</button>
+      </div>
+    </div>
+
+    <div class="glass-card rounded-3xl p-5 sm:p-6">
+      <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-3 mb-5">
+        <div>
+          <div class="flex flex-wrap gap-2 mb-3">
+            <span id="selected-visibility-pill" class="pill hidden"></span>
+            <span id="selected-count-pill" class="pill hidden"></span>
+          </div>
+          <h2 id="selected-title" class="section-title text-2xl">Select a catalog</h2>
+          <p id="selected-subtitle" class="muted text-sm mt-1">Choose a catalog from the left side to add or remove titles.</p>
+        </div>
+        <button id="delete-catalog-btn" onclick="deleteSelectedCatalog()" class="btn-ui btn-danger hidden md:w-auto">Delete Catalog</button>
+      </div>
+
+      <div id="catalog-empty-guide" class="empty-state p-6 sm:p-8 text-center">
+        <div class="text-4xl mb-3">📚</div>
+        <h3 class="section-title text-xl">No catalog selected</h3>
+        <p class="muted mt-2 text-sm leading-6">Create a catalog or select an existing one. Then search from your existing media library and add titles instantly.</p>
+      </div>
+
+      <div id="catalog-workspace" class="hidden space-y-6">
+        <div class="catalog-card p-4 sm:p-5">
+          <div class="flex flex-col md:flex-row md:items-end gap-3">
+            <div class="flex-1">
+              <label class="field-label">Catalog visibility</label>
+              <select id="ws-visibility" class="field-select" onchange="onVisibilityModeChange('ws')">
+                <option value="public">Everyone</option>
+                <option value="tokens">Specific users</option>
+                <option value="owner">Owner only (hidden)</option>
+              </select>
+            </div>
+            <button onclick="applyCatalogVisibility()" class="btn-ui btn-primary md:w-auto">Apply to all titles</button>
+          </div>
+          <div id="ws-token-picker-wrap" class="hidden mt-3">
+            <label class="field-label">Allowed users</label>
+            <div id="ws-token-picker" class="token-picker"></div>
+          </div>
+
+          <div id="ws-exclusive-wrap" class="hidden mt-3 space-y-2">
+            <label class="toggle-row">
+              <span class="min-w-0">
+                <span class="font-bold text-sm block">🔒 Only visible in this catalog</span>
+                <span class="muted text-xs block">Removed from Default, Auto and other catalogs.</span>
+              </span>
+              <input type="checkbox" id="ws-exclusive" class="switch-input hidden" onchange="onExclusiveChange()">
+              <span class="switch"></span>
+            </label>
+            <div id="ws-search-wrap" class="hidden">
+              <label class="toggle-row">
+                <span class="min-w-0">
+                  <span class="font-bold text-sm block">🔎 Allow search</span>
+                  <span class="muted text-xs block">Let allowed users find these titles via search.</span>
+                </span>
+                <input type="checkbox" id="ws-searchable" class="switch-input hidden">
+                <span class="switch"></span>
+              </label>
+            </div>
+          </div>
+
+          <p class="muted text-xs mt-3">Applies to every title in this catalog. Fine-tune a single title from its <b>Edit</b> page.</p>
+        </div>
+
+        <div class="catalog-card p-4 sm:p-5">
+          <div class="flex flex-col sm:flex-row sm:items-end gap-3">
+            <div class="flex-1">
+              <label class="field-label">Search existing media</label>
+              <input id="search-query" class="field-input" placeholder="Search title to add..." onkeydown="if(event.key === 'Enter') searchMedia()">
+            </div>
+            <div class="sm:w-44">
+              <label class="field-label">Type</label>
+              <select id="search-media-type" class="field-select">
+                <option value="movie">Movie</option>
+                <option value="tv">Series</option>
+              </select>
+            </div>
+            <button onclick="searchMedia()" class="btn-ui btn-primary sm:w-auto">🔎 Search</button>
+          </div>
+        </div>
+
+        <div id="search-results-wrap" class="hidden">
+          <div class="flex items-center justify-between gap-3 mb-3">
+            <h3 class="section-title text-lg">Search Results</h3>
+            <button onclick="clearSearchResults()" class="mini-tab">Clear</button>
+          </div>
+          <div id="search-results" class="grid grid-cols-1 lg:grid-cols-2 gap-3"></div>
+        </div>
+
+        <div class="border-t pt-5" style="border-color: var(--line);">
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
+            <div>
+              <h3 class="section-title text-lg">Titles in this catalog</h3>
+              <p class="muted text-xs mt-1">These are shown in Stremio when the catalog is visible.</p>
+            </div>
+            <button onclick="loadCatalogItems()" class="btn-ui btn-ghost px-3 py-2 text-sm sm:w-auto">Refresh</button>
+          </div>
+          <div id="catalog-items" class="grid grid-cols-1 lg:grid-cols-2 gap-3"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let catalogs = [];
+let selectedCatalogId = null;
+let catalogListExpanded = false;
+let subscriptionOn = false;
+let availableTokens = [];
+
+const VIS_META = {
+  public: { icon: '🌐', chip: 'vis-public' },
+  tokens: { icon: '🎯', chip: 'vis-tokens' },
+  owner:  { icon: '🔒', chip: 'vis-owner' },
+};
+
+function publicLabel() { return subscriptionOn ? 'Active subscribers' : 'Everyone'; }
+
+function visibilityLabel(mode) {
+  if (mode === 'tokens') return 'Specific users';
+  if (mode === 'owner') return 'Owner only';
+  return publicLabel();
+}
+
+function visibilityHint(mode) {
+  if (mode === 'tokens') return 'Shown only to the users you select below.';
+  if (mode === 'owner') return 'Hidden from all users. Visible only to you and in this panel.';
+  return subscriptionOn ? 'Shown to all active subscribers.' : 'Shown to everyone who installed the addon.';
+}
+
+function applyPublicLabels() {
+  document.querySelectorAll('#catalog-visibility option[value="public"], #ws-visibility option[value="public"]')
+    .forEach(o => o.textContent = publicLabel());
+}
+
+async function loadSettings() {
+  try {
+    const res = await fetch('/api/admin/settings');
+    const data = await res.json().catch(() => ({}));
+    subscriptionOn = !!(data.settings && data.settings.subscription);
+  } catch (e) {}
+  applyPublicLabels();
+  onVisibilityModeChange('catalog');
+}
+
+async function loadTokens() {
+  try {
+    const res = await fetch('/api/admin/access/tokens');
+    const data = await res.json().catch(() => ({}));
+    availableTokens = (data.tokens || []).filter(t => t.token);
+  } catch (e) { availableTokens = []; }
+}
+
+function renderTokenPicker(containerId, selected) {
+  const box = document.getElementById(containerId);
+  if (!box) return;
+  const sel = new Set(selected || []);
+  if (!availableTokens.length) {
+    box.innerHTML = '<p class="muted text-xs p-2">No users/tokens found. Create access tokens on the Access page first.</p>';
+    return;
+  }
+  box.innerHTML = availableTokens.map(t => `
+    <label class="token-row">
+      <input type="checkbox" value="${escapeHtml(t.token)}" ${sel.has(t.token) ? 'checked' : ''}>
+      <span class="min-w-0">
+        <span class="font-bold text-sm block truncate">${escapeHtml(t.user_name || 'User')}</span>
+        <span class="muted text-xs block truncate">${escapeHtml((t.token || '').slice(0, 12))}…${t.user_id ? ' · ' + escapeHtml(t.user_id) : ''}</span>
+      </span>
+    </label>`).join('');
+}
+
+function getPickedTokens(containerId) {
+  return Array.from(document.querySelectorAll(`#${containerId} input:checked`)).map(i => i.value);
+}
+
+function onVisibilityModeChange(scope) {
+  const isWs = scope === 'ws';
+  const mode = document.getElementById(isWs ? 'ws-visibility' : 'catalog-visibility').value;
+  const wrap = document.getElementById(isWs ? 'ws-token-picker-wrap' : 'catalog-token-picker-wrap');
+  if (wrap) wrap.classList.toggle('hidden', mode !== 'tokens');
+  if (mode === 'tokens') {
+    const preset = isWs ? (getSelectedCatalog()?.allowed_tokens || []) : [];
+    renderTokenPicker(isWs ? 'ws-token-picker' : 'catalog-token-picker', preset);
+  }
+  if (!isWs) {
+    const hint = document.getElementById('catalog-visibility-hint');
+    if (hint) hint.textContent = visibilityHint(mode);
+  } else {
+    //----- Exclusive lock is only offered for restricted, non-auto catalogs
+    const isAuto = !!(getSelectedCatalog()?.auto);
+    const canExclusive = !isAuto && mode !== 'public';
+    const exclWrap = document.getElementById('ws-exclusive-wrap');
+    if (exclWrap) exclWrap.classList.toggle('hidden', !canExclusive);
+    if (!canExclusive) {
+      const ex = document.getElementById('ws-exclusive');
+      if (ex) ex.checked = false;
+    }
+    onExclusiveChange();
+  }
+}
+
+function onExclusiveChange() {
+  const on = !!document.getElementById('ws-exclusive')?.checked;
+  const wrapVisible = !document.getElementById('ws-exclusive-wrap')?.classList.contains('hidden');
+  const searchWrap = document.getElementById('ws-search-wrap');
+  if (searchWrap) searchWrap.classList.toggle('hidden', !(on && wrapVisible));
+}
+
+function posterOrFallback(item) {
+  return item.poster || 'https://via.placeholder.com/120x180/111827/94a3b8?text=No+Poster';
+}
+
+function escapeHtml(value) {
+  const div = document.createElement('div');
+  div.textContent = value == null ? '' : String(value);
+  return div.innerHTML;
+}
+
+function getSelectedCatalog() {
+  return catalogs.find(c => c._id === selectedCatalogId);
+}
+
+function updateStats() {
+  const total = catalogs.length;
+  const visible = catalogs.filter(c => (c.visibility || 'public') !== 'owner').length;
+  const items = catalogs.reduce((sum, c) => sum + ((c.items || []).length), 0);
+  document.getElementById('stat-total').textContent = total;
+  document.getElementById('stat-visible').textContent = visible;
+  document.getElementById('stat-items').textContent = items;
+}
+
+function mediaCard(item, actionHtml) {
+  const mediaType = item.media_type === 'tv' ? 'Series' : 'Movie';
+  const genres = Array.isArray(item.genres) ? item.genres.slice(0, 2).join(' · ') : '';
+  return `<div class="media-card p-3 flex gap-3">
+    <img src="${escapeHtml(posterOrFallback(item))}" class="poster" onerror="this.src='https://via.placeholder.com/120x180/111827/94a3b8?text=No+Poster'" alt="Poster">
+    <div class="min-w-0 flex-1">
+      <div class="flex items-start justify-between gap-2">
+        <div class="min-w-0">
+          <h4 class="font-black truncate" title="${escapeHtml(item.title)}">${escapeHtml(item.title)}</h4>
+          <p class="muted text-xs mt-1">${mediaType} · ${escapeHtml(item.release_year || 'Unknown')} · TMDb ${escapeHtml(item.tmdb_id || '')}</p>
+        </div>
+        <span class="pill text-[0.68rem] py-1 px-2">${escapeHtml(mediaType)}</span>
+      </div>
+      ${genres ? `<p class="muted text-xs mt-2 truncate">${escapeHtml(genres)}</p>` : ''}
+      <div class="mt-3">${actionHtml}</div>
+    </div>
+  </div>`;
+}
+
+function emptyState(icon, title, message) {
+  return `<div class="empty-state p-6 text-center col-span-full">
+    <div class="text-3xl mb-2">${icon}</div>
+    <h4 class="section-title text-lg">${escapeHtml(title)}</h4>
+    <p class="muted text-sm mt-1">${escapeHtml(message)}</p>
+  </div>`;
+}
+
+async function loadCatalogs() {
+  const box = document.getElementById('catalog-list');
+  box.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div>';
+  try {
+    const res = await fetch('/api/custom-catalogs');
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || 'Failed to load catalogs');
+    catalogs = data.catalogs || [];
+    if (selectedCatalogId && !catalogs.some(c => c._id === selectedCatalogId)) selectedCatalogId = null;
+    updateStats();
+    renderCatalogs();
+    updateSelectedHeader();
+  } catch (error) {
+    box.innerHTML = emptyState('⚠️', 'Unable to load catalogs', error.message || 'Please refresh and try again.');
+    showToast(error.message || 'Unable to load catalogs', 'error', 'Error');
+  }
+}
+
+function renderCatalogs() {
+  const box = document.getElementById('catalog-list');
+  const expandBtn = document.getElementById('catalog-expand-btn');
+  const wrapper = document.getElementById('catalog-list-wrapper');
+
+  if (!catalogs.length) {
+    box.innerHTML = emptyState('✨', 'No custom catalog yet', 'Create your first curated Stremio section above.');
+    if (expandBtn) expandBtn.classList.add('hidden');
+    if (wrapper) wrapper.classList.remove('collapsed');
+    return;
+  }
+
+  box.innerHTML = catalogs.map(c => {
+    const isActive = c._id === selectedCatalogId;
+    const count = (c.items || []).length;
+    const mode = c.visibility || 'public';
+    const meta = VIS_META[mode] || VIS_META.public;
+    return `<div class="catalog-card p-4 ${isActive ? 'active' : ''}">
+      <button class="text-left w-full min-w-0" onclick="selectCatalog('${c._id}')">
+        <div class="flex items-center gap-2 min-w-0">
+          <span class="text-xl">${c.auto ? '✨' : meta.icon}</span>
+          <h3 class="font-black truncate">${escapeHtml(c.name)}</h3>
+          ${c.auto ? '<span class="pill text-[0.62rem] px-2 py-0.5">Auto</span>' : ''}
+        </div>
+        <div class="flex items-center gap-2 mt-2 flex-wrap">
+          <span class="vis-chip ${meta.chip}">${meta.icon} ${escapeHtml(visibilityLabel(mode))}</span>
+          ${c.exclusive ? `<span class="vis-chip vis-owner">🔒 Exclusive${c.searchable ? ' · 🔎' : ''}</span>` : ''}
+          <span class="muted text-xs">${count} title${count === 1 ? '' : 's'}</span>
+        </div>
+      </button>
+    </div>`;
+  }).join('');
+
+  // Manage expand button: only needed when list might overflow (~3+ cards)
+  if (catalogs.length > 3) {
+    if (expandBtn) {
+      expandBtn.classList.remove('hidden');
+      expandBtn.textContent = catalogListExpanded ? '▴ Collapse list' : '▾ Show all catalogs';
+    }
+    if (wrapper) wrapper.classList.toggle('collapsed', !catalogListExpanded);
+  } else {
+    if (expandBtn) expandBtn.classList.add('hidden');
+    if (wrapper) wrapper.classList.remove('collapsed');
+  }
+}
+
+function updateSelectedHeader() {
+  const catalog = getSelectedCatalog();
+  const workspace = document.getElementById('catalog-workspace');
+  const guide = document.getElementById('catalog-empty-guide');
+  const deleteBtn = document.getElementById('delete-catalog-btn');
+  const visibilityPill = document.getElementById('selected-visibility-pill');
+  const countPill = document.getElementById('selected-count-pill');
+
+  if (!catalog) {
+    workspace.classList.add('hidden');
+    guide.classList.remove('hidden');
+    deleteBtn.classList.add('hidden');
+    visibilityPill.classList.add('hidden');
+    countPill.classList.add('hidden');
+    document.getElementById('selected-title').textContent = 'Select a catalog';
+    document.getElementById('selected-subtitle').textContent = 'Choose a catalog from the left side to add or remove titles.';
+    return;
+  }
+
+  workspace.classList.remove('hidden');
+  guide.classList.add('hidden');
+  deleteBtn.classList.remove('hidden');
+  visibilityPill.classList.remove('hidden');
+  countPill.classList.remove('hidden');
+
+  const mode = catalog.visibility || 'public';
+  const meta = VIS_META[mode] || VIS_META.public;
+  visibilityPill.className = `pill vis-chip ${meta.chip}`;
+  visibilityPill.textContent = `${meta.icon} ${visibilityLabel(mode)}`;
+  countPill.textContent = `${(catalog.items || []).length} title${(catalog.items || []).length === 1 ? '' : 's'}`;
+  document.getElementById('selected-title').textContent = catalog.name || 'Selected Catalog';
+  document.getElementById('selected-subtitle').textContent = 'Manage titles and choose who can see this catalog in Stremio.';
+
+  const sel = document.getElementById('ws-visibility');
+  if (sel) sel.value = mode;
+
+  const exToggle = document.getElementById('ws-exclusive');
+  const searchToggle = document.getElementById('ws-searchable');
+  if (exToggle) exToggle.checked = !!catalog.exclusive;
+  if (searchToggle) searchToggle.checked = !!catalog.searchable;
+
+  onVisibilityModeChange('ws');
+}
+
+async function createCatalog(event) {
+  event.preventDefault();
+  const name = document.getElementById('catalog-name').value.trim();
+  const visibility = document.getElementById('catalog-visibility').value;
+  const allowed_tokens = visibility === 'tokens' ? getPickedTokens('catalog-token-picker') : [];
+  if (!name) return showToast('Catalog name is required', 'error', 'Error');
+  if (visibility === 'tokens' && !allowed_tokens.length)
+    return showToast('Select at least one user for a restricted catalog.', 'error', 'Error');
+  const res = await fetch('/api/custom-catalogs', {
+    method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name, visibility, allowed_tokens})
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) return showToast(data.detail || 'Failed to create catalog', 'error', 'Error');
+  document.getElementById('catalog-name').value = '';
+  document.getElementById('catalog-visibility').value = 'public';
+  onVisibilityModeChange('catalog');
+  showToast('Catalog created', 'success', 'Success');
+  await loadCatalogs();
+}
+
+async function applyCatalogVisibility() {
+  const catalog = getSelectedCatalog();
+  if (!catalog) return;
+  const visibility = document.getElementById('ws-visibility').value;
+  const allowed_tokens = visibility === 'tokens' ? getPickedTokens('ws-token-picker') : [];
+  if (visibility === 'tokens' && !allowed_tokens.length)
+    return showToast('Select at least one user.', 'error', 'Error');
+  const canExclusive = !catalog.auto && visibility !== 'public';
+  const exclusive = canExclusive && !!document.getElementById('ws-exclusive')?.checked;
+  const searchable = exclusive && !!document.getElementById('ws-searchable')?.checked;
+  const res = await fetch(`/api/custom-catalogs/${catalog._id}`, {
+    method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name: catalog.name, visibility, allowed_tokens, exclusive, searchable})
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) return showToast(data.detail || 'Failed to update visibility', 'error', 'Error');
+  showToast(exclusive ? 'Exclusive lock applied — titles now show only here' : 'Visibility applied to all titles in this catalog', 'success', 'Success');
+  await loadCatalogs();
+}
+
+async function selectCatalog(id) {
+  selectedCatalogId = id;
+  renderCatalogs();
+  updateSelectedHeader();
+  await loadCatalogItems();
+}
+
+async function searchMedia() {
+  if (!selectedCatalogId) return showToast('Select a catalog first.', 'error', 'Error');
+  const q = document.getElementById('search-query').value.trim();
+  const mediaType = document.getElementById('search-media-type').value;
+  if (!q) return showToast('Type a title to search.', 'error', 'Error');
+  const wrap = document.getElementById('search-results-wrap');
+  const box = document.getElementById('search-results');
+  wrap.classList.remove('hidden');
+  box.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div>';
+  try {
+    const res = await fetch(`/api/custom-catalogs/search-media?query=${encodeURIComponent(q)}&media_type=${mediaType}`);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || 'Search failed');
+    const results = data.results || [];
+    box.innerHTML = results.length
+      ? results.map(item => mediaCard(item, `<button class="btn-ui btn-primary px-3 py-2 text-sm" onclick="addItem(${item.tmdb_id}, ${item.db_index}, '${item.media_type}')">Add</button>`)).join('')
+      : emptyState('🔍', 'No title found', 'Try a shorter title or change movie/series type.');
+  } catch (error) {
+    box.innerHTML = emptyState('⚠️', 'Search failed', error.message || 'Please try again.');
+  }
+}
+
+function clearSearchResults() {
+  document.getElementById('search-results-wrap').classList.add('hidden');
+  document.getElementById('search-results').innerHTML = '';
+}
+
+async function addItem(tmdbId, dbIndex, mediaType) {
+  const res = await fetch(`/api/custom-catalogs/${selectedCatalogId}/items`, {
+    method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({tmdb_id: tmdbId, db_index: dbIndex, media_type: mediaType})
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) return showToast(data.detail || 'Failed to add title', 'error', 'Error');
+  showToast(data.message || 'Added', 'success', 'Success');
+  await loadCatalogs();
+  await loadCatalogItems();
+}
+
+async function loadCatalogItems() {
+  if (!selectedCatalogId) return;
+  const box = document.getElementById('catalog-items');
+  box.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div>';
+  try {
+    const res = await fetch(`/api/custom-catalogs/${selectedCatalogId}/items?page_size=100`);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || 'Failed to load catalog items');
+    const items = data.items || [];
+    box.innerHTML = items.length
+      ? items.map(item => mediaCard(item, `<button class="btn-ui btn-danger px-3 py-2 text-sm" onclick="removeItem(${item.tmdb_id}, ${item.db_index}, '${item.media_type}')">Remove</button>`)).join('')
+      : emptyState('➕', 'No titles added yet', 'Use search above to add media to this catalog.');
+  } catch (error) {
+    box.innerHTML = emptyState('⚠️', 'Unable to load titles', error.message || 'Please try again.');
+  }
+}
+
+async function removeItem(tmdbId, dbIndex, mediaType) {
+  const url = `/api/custom-catalogs/${selectedCatalogId}/items?tmdb_id=${tmdbId}&db_index=${dbIndex}&media_type=${mediaType}`;
+  const res = await fetch(url, { method: 'DELETE' });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) return showToast(data.detail || 'Failed to remove title', 'error', 'Error');
+  showToast(data.message || 'Removed', 'success', 'Success');
+  await loadCatalogs();
+  await loadCatalogItems();
+}
+
+async function deleteSelectedCatalog() {
+  if (!selectedCatalogId) return;
+  if (!confirm('Delete this custom catalog? Titles will not be deleted from your media library.')) return;
+  const res = await fetch(`/api/custom-catalogs/${selectedCatalogId}`, { method: 'DELETE' });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) return showToast(data.detail || 'Failed to delete catalog', 'error', 'Error');
+  selectedCatalogId = null;
+  clearSearchResults();
+  updateSelectedHeader();
+  showToast('Catalog deleted', 'success', 'Success');
+  await loadCatalogs();
+}
+
+
+
+async function loadAutoCatalogSettings() {
+  const box = document.getElementById('auto-settings-list');
+  if (!box) return;
+  try {
+    const res = await fetch('/api/custom-catalogs/auto-sync/settings');
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || 'Failed to load auto catalog settings');
+    const defs = (data.settings && data.settings.definitions) || [];
+    if (!defs.length) {
+      box.innerHTML = `<div class="empty-state p-4 muted">No auto catalog options found.</div>`;
+      return;
+    }
+    const groups = {};
+    defs.forEach(def => { (groups[def.group] = groups[def.group] || []).push(def); });
+    box.innerHTML = Object.entries(groups).map(([group, items]) => `
+      <div class="catalog-card p-4">
+        <div class="flex items-center gap-2 mb-3">
+          <h4 class="section-title text-base">${escapeHtml(group)}</h4>
+          <span class="pill text-[0.65rem] px-2 py-0.5">${items.length}</span>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          ${items.map(item => `
+            <button type="button" class="auto-chip ${item.enabled ? 'on' : ''}"
+                    data-key="${escapeHtml(item.key)}" aria-pressed="${item.enabled}"
+                    onclick="toggleAutoCatalog(this)">
+              <span class="dot"></span>${escapeHtml(item.name)}
+            </button>`).join('')}
+        </div>
+      </div>
+    `).join('');
+  } catch (error) {
+    box.innerHTML = `<div class="empty-state p-4 text-red-400">${escapeHtml(error.message || 'Failed to load settings')}</div>`;
+  }
+}
+
+let autoSaveTimer = null;
+async function toggleAutoCatalog(btn) {
+  const on = !btn.classList.contains('on');
+  btn.classList.toggle('on', on);
+  btn.setAttribute('aria-pressed', on);
+  clearTimeout(autoSaveTimer);
+  autoSaveTimer = setTimeout(persistAutoCatalogs, 400);
+}
+
+async function persistAutoCatalogs() {
+  const enabledKeys = Array.from(document.querySelectorAll('.auto-chip.on')).map(el => el.dataset.key);
+  try {
+    const res = await fetch('/api/custom-catalogs/auto-sync/settings', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled_keys: enabledKeys })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || 'Failed to save settings');
+    showToast('Saved. Press Sync to rebuild catalogs.', 'success', 'Auto catalogs');
+  } catch (error) {
+    showToast(error.message || 'Failed to save settings', 'error', 'Error');
+    loadAutoCatalogSettings();
+  }
+}
+
+let catalogOrder = [];
+async function loadCatalogOrder() {
+  const box = document.getElementById('catalog-order-list');
+  if (!box) return;
+  try {
+    const res = await fetch('/api/custom-catalogs-order');
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || 'Failed to load order');
+    catalogOrder = data.entries || [];
+    renderCatalogOrder();
+  } catch (error) {
+    box.innerHTML = `<div class="empty-state p-4 text-red-400">${escapeHtml(error.message || 'Failed to load order')}</div>`;
+  }
+}
+
+const ORDER_GROUP_CLASS = { 'Default Movies': 'vis-tokens', 'Default TV': 'vis-tokens', 'Auto': 'vis-public', 'Custom': 'vis-owner' };
+
+function renderCatalogOrder() {
+  const box = document.getElementById('catalog-order-list');
+  if (!catalogOrder.length) { box.innerHTML = emptyState('📚', 'No catalogs', 'Create catalogs to reorder them.'); return; }
+  box.innerHTML = catalogOrder.map((e, i) => {
+    const typeLabel = e.type === 'series' ? '📺 TV' : '🎬 Movie';
+    return `<div class="order-row">
+      <span class="drag-idx">${i + 1}</span>
+      <span class="min-w-0 flex-1">
+        <span class="font-black truncate block">${escapeHtml(e.name)}</span>
+        <span class="flex items-center gap-2 mt-1">
+          <span class="vis-chip ${ORDER_GROUP_CLASS[e.group] || 'vis-tokens'}">${escapeHtml(e.group)}</span>
+          <span class="muted text-xs">${typeLabel}</span>
+        </span>
+      </span>
+      <span class="flex flex-col gap-1">
+        <button class="order-arrow" ${i === 0 ? 'disabled' : ''} onclick="moveCatalogOrder(${i}, -1)">▲</button>
+        <button class="order-arrow" ${i === catalogOrder.length - 1 ? 'disabled' : ''} onclick="moveCatalogOrder(${i}, 1)">▼</button>
+      </span>
+    </div>`;
+  }).join('');
+}
+
+function moveCatalogOrder(i, dir) {
+  const j = i + dir;
+  if (j < 0 || j >= catalogOrder.length) return;
+  [catalogOrder[i], catalogOrder[j]] = [catalogOrder[j], catalogOrder[i]];
+  renderCatalogOrder();
+  document.getElementById('save-order-btn').classList.remove('hidden');
+}
+
+async function saveCatalogOrder() {
+  const btn = document.getElementById('save-order-btn');
+  btn.disabled = true;
+  try {
+    const res = await fetch('/api/custom-catalogs-order', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order: catalogOrder.map(e => e.key) })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || 'Failed to save order');
+    showToast('Catalog order saved.', 'success', 'Order');
+    btn.classList.add('hidden');
+  } catch (error) {
+    showToast(error.message || 'Failed to save order', 'error', 'Error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+let autoSyncPollTimer = null;
+
+async function loadAutoSyncStatus() {
+  const pill = document.getElementById('auto-sync-status');
+  const syncBtn = document.getElementById('auto-sync-btn');
+  if (!pill) return;
+  try {
+    const res = await fetch('/api/custom-catalogs/auto-sync/status');
+    const data = await res.json().catch(() => ({}));
+    const status = data.status || {};
+
+    if (status.running) {
+      pill.textContent = `Sync running: ${status.scanned || 0} scanned · ${status.classified || 0} checked`;
+      if (syncBtn) syncBtn.disabled = true;
+      if (!autoSyncPollTimer) {
+        autoSyncPollTimer = setInterval(loadAutoSyncStatus, 3000);
+      }
+    } else {
+      if (status.finished_at) {
+        pill.textContent = status.error
+          ? 'Sync failed'
+          : `Synced: ${status.classified || 0} checked · ${status.skipped || 0} reused`;
+      } else {
+        pill.textContent = 'Sync runs on boot';
+      }
+      if (syncBtn) syncBtn.disabled = false;
+      if (autoSyncPollTimer) {
+        clearInterval(autoSyncPollTimer);
+        autoSyncPollTimer = null;
+        await loadCatalogs();
+      }
+    }
+  } catch (e) {
+    pill.textContent = 'Status unavailable';
+  }
+}
+
+async function runAutoSync() {
+  const btn = document.getElementById('auto-sync-btn');
+  const old = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '⏳ Syncing...';
+  try {
+    const res = await fetch('/api/custom-catalogs/auto-sync', { method: 'POST' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || 'Sync failed');
+    const result = data.result || {};
+    showToast(result.message || data.message || 'Sync started in background.', 'info', 'Sync started');
+    await loadAutoSyncStatus();
+  } catch (error) {
+    showToast(error.message || 'Sync failed', 'error', 'Error');
+  } finally {
+    btn.textContent = old;
+    await loadAutoSyncStatus();
+  }
+}
+
+function toggleAutoGroup(card) {
+  card.classList.toggle('expanded');
+}
+
+function toggleCatalogExpand() {
+  catalogListExpanded = !catalogListExpanded;
+  const wrapper = document.getElementById('catalog-list-wrapper');
+  const btn = document.getElementById('catalog-expand-btn');
+  wrapper.classList.toggle('collapsed', !catalogListExpanded);
+  if (btn) btn.textContent = catalogListExpanded ? '▴ Collapse list' : '▾ Show all catalogs';
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+  await Promise.all([loadSettings(), loadTokens()]);
+  loadCatalogs();
+  loadAutoSyncStatus();
+  loadAutoCatalogSettings();
+  loadCatalogOrder();
+});
+</script>
+{% endblock %}

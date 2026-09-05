@@ -1,8 +1,8 @@
 from fastapi import HTTPException, Request
 from starlette.status import HTTP_401_UNAUTHORIZED
 
-from Backend.helper.passwords import verify_password
-from Backend.helper.settings_manager import SettingsManager
+from Backend.helper.core.passwords import verify_password
+from Backend.helper.settings.manager import SettingsManager
 
 
 #----- Match a username/password pair against the stored admin credentials

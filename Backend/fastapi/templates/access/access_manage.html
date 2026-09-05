@@ -1,0 +1,754 @@
+{% extends "base.html" %}
+{% block title %}Tokens & Access{% endblock %}
+
+{% block content %}
+<style>
+    .access-shell { display: flex; flex-direction: column; gap: 1.5rem; }
+
+    .page-hero, .section-panel, .table-shell, .stat-card, .mobile-token-card, .empty-state, .modal-glass {
+        background: color-mix(in srgb, var(--card) 50%, transparent);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border: 1px solid var(--border);
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.22);
+    }
+    .page-hero, .section-panel, .table-shell, .stat-card, .mobile-token-card, .empty-state { border-radius: 1.5rem; }
+
+    .hero-glow { position: relative; overflow: hidden; isolation: isolate; }
+    .hero-glow::before {
+        content: ""; position: absolute; inset: -30% auto auto -10%;
+        width: 16rem; height: 16rem; border-radius: 9999px;
+        background: color-mix(in srgb, var(--primary) 18%, transparent);
+        filter: blur(52px); z-index: -1; pointer-events: none;
+    }
+    .hero-glow::after {
+        content: ""; position: absolute; inset: auto -4% -34% auto;
+        width: 14rem; height: 14rem; border-radius: 9999px;
+        background: color-mix(in srgb, var(--accent) 16%, transparent);
+        filter: blur(52px); z-index: -1; pointer-events: none;
+    }
+
+    .section-title { color: var(--text); }
+    .section-muted { color: var(--text-sec); }
+
+    .glass-btn {
+        border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+        background: color-mix(in srgb, var(--card) 92%, var(--bg));
+        color: var(--text); transition: all 0.25s ease; box-shadow: 0 8px 24px rgba(0,0,0,0.14);
+    }
+    .glass-btn:hover { transform: translateY(-1px); border-color: color-mix(in srgb, var(--primary) 35%, var(--border)); }
+
+    .glass-btn-primary {
+        background: linear-gradient(135deg, color-mix(in srgb, var(--primary) 88%, white 8%), color-mix(in srgb, var(--accent) 82%, var(--primary) 18%));
+        color: white; border: 1px solid color-mix(in srgb, var(--primary) 50%, transparent);
+    }
+    .glass-btn-primary:hover { filter: brightness(1.05); }
+    .glass-btn-success { background: linear-gradient(135deg, #22c55e, #16a34a); color: #fff; border-color: transparent; }
+    .glass-btn-warning { background: linear-gradient(135deg, #f59e0b, #d97706); color: #fff; border-color: transparent; }
+    .glass-btn-danger { background: linear-gradient(135deg, #ef4444, #dc2626); color: #fff; border-color: transparent; }
+    .glass-btn-purple { background: linear-gradient(135deg, #a855f7, #9333ea); color: #fff; border-color: transparent; }
+    .glass-btn-gold { background: linear-gradient(135deg, #f5c518, #d4a90a); color: #1a1a1a; border-color: transparent; }
+
+    .glass-input, .glass-select {
+        width: 100%; border-radius: 1rem;
+        border: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
+        background: color-mix(in srgb, var(--bg) 68%, transparent);
+        color: var(--text); padding: 0.85rem 1rem; outline: none; transition: all 0.2s ease;
+    }
+    .glass-input::placeholder { color: color-mix(in srgb, var(--text-sec) 85%, transparent); }
+    .glass-input:focus, .glass-select:focus {
+        border-color: color-mix(in srgb, var(--primary) 65%, var(--border));
+        box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 12%, transparent);
+    }
+
+    .stat-card { padding: 1.25rem; text-align: center; position: relative; overflow: hidden; }
+    .stat-card::before {
+        content: ""; position: absolute; width: 7rem; height: 7rem; border-radius: 9999px;
+        filter: blur(42px); top: -25%; right: -10%; opacity: 0.7; pointer-events: none;
+    }
+    .stat-primary::before { background: color-mix(in srgb, var(--primary) 24%, transparent); }
+    .stat-success::before { background: color-mix(in srgb, #22c55e 24%, transparent); }
+    .stat-danger::before { background: color-mix(in srgb, #ef4444 24%, transparent); }
+    .stat-value { font-size: 1.9rem; font-weight: 800; line-height: 1; position: relative; z-index: 1; }
+    .stat-label {
+        margin-top: 0.55rem; font-size: 0.76rem; font-weight: 700; letter-spacing: 0.08em;
+        text-transform: uppercase; color: var(--text-sec); position: relative; z-index: 1;
+    }
+
+    .table-shell { overflow: hidden; }
+    .access-table { width: 100%; border-collapse: separate; border-spacing: 0; }
+    .access-table thead th {
+        background: color-mix(in srgb, var(--bg) 65%, transparent);
+        color: var(--text-sec); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em;
+        border-bottom: 1px solid color-mix(in srgb, var(--border) 92%, transparent);
+    }
+    .access-table tbody tr { transition: background 0.22s ease; }
+    .access-table tbody tr:hover { background: color-mix(in srgb, var(--primary) 6%, transparent); }
+    .access-table td { border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent); color: var(--text); vertical-align: top; }
+    .access-table tbody tr:last-child td { border-bottom: none; }
+    .row-expired { background: color-mix(in srgb, #ef4444 8%, transparent); }
+
+    .status-badge {
+        display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.45rem 0.8rem;
+        border-radius: 9999px; font-size: 0.78rem; font-weight: 700; border: 1px solid transparent;
+    }
+    .status-active { background: color-mix(in srgb, #22c55e 16%, transparent); color: #86efac; border-color: color-mix(in srgb, #22c55e 28%, transparent); }
+    .status-expired { background: color-mix(in srgb, #ef4444 14%, transparent); color: #fca5a5; border-color: color-mix(in srgb, #ef4444 28%, transparent); }
+    .status-warning { background: color-mix(in srgb, #f59e0b 16%, transparent); color: #fde68a; border-color: color-mix(in srgb, #f59e0b 28%, transparent); }
+    .status-lifetime { background: color-mix(in srgb, #a855f7 16%, transparent); color: #d8b4fe; border-color: color-mix(in srgb, #a855f7 28%, transparent); }
+    .status-gold { background: color-mix(in srgb, #f5c518 18%, transparent); color: #f5c518; }
+
+    .action-chip { border-radius: 9999px; padding: 0.5rem 0.85rem; font-size: 0.72rem; font-weight: 700; border: 1px solid transparent; transition: all 0.2s ease; white-space: nowrap; }
+    .action-chip:hover { transform: translateY(-1px); }
+
+    .addon-box { padding: 0.8rem; border-radius: 1rem; background: color-mix(in srgb, var(--bg) 56%, transparent); border: 1px solid color-mix(in srgb, var(--border) 70%, transparent); }
+    .usage-box { font-size: 0.72rem; line-height: 1.5; }
+
+    .mobile-token-card { padding: 1rem; }
+    .mobile-token-card + .mobile-token-card { margin-top: 0.9rem; }
+    .mobile-grid { display: none; }
+
+    .pagination-shell { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+    .pagination-text { color: var(--text-sec); }
+    .pagination-btn { min-width: 92px; }
+
+    .modal-backdrop { background: rgba(4, 8, 18, 0.58); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+    .modal-glass { border-radius: 1.6rem; padding: 1.4rem; border: 1px solid color-mix(in srgb, var(--border) 95%, transparent); width: min(92vw, 32rem); }
+    .modal-field label { color: var(--text-sec); font-size: 0.82rem; font-weight: 700; margin-bottom: 0.55rem; display: block; }
+
+    .text-soft { color: var(--text-sec); }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+    @media (max-width: 1024px) { .access-table th, .access-table td { padding-left: 1rem; padding-right: 1rem; } }
+    @media (max-width: 767px) {
+        .desktop-table-wrap { display: none; }
+        .mobile-grid { display: block; }
+        .page-hero, .section-panel { padding: 1rem; border-radius: 1.35rem; }
+        .pagination-shell { flex-direction: column; align-items: stretch; }
+        .pagination-shell .controls { width: 100%; display: grid; grid-template-columns: 1fr auto 1fr; gap: 0.6rem; align-items: center; }
+        .pagination-btn { width: 100%; }
+    }
+</style>
+
+<div class="access-shell py-2 sm:py-4">
+    <section class="page-hero hero-glow p-5 sm:p-6 lg:p-8">
+        <div class="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+                <div class="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-bold tracking-[0.18em] uppercase mb-3"
+                     style="border-color: color-mix(in srgb, var(--primary) 28%, var(--border)); color: var(--text-sec); background: color-mix(in srgb, var(--primary) 10%, transparent);">
+                    <i class="fas fa-shield-halved text-[11px]" style="color: var(--primary);"></i>
+                    Access Control Hub
+                </div>
+                <h1 class="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight section-title">Tokens &amp; Access</h1>
+                <p class="mt-2 text-sm sm:text-base section-muted max-w-2xl">
+                    One place for everything: create addon tokens, set data limits, mark lifetime access, link users and manage subscriptions.
+                </p>
+            </div>
+
+            <div class="flex flex-wrap gap-3">
+                <button onclick="openCreateModal()" class="glass-btn glass-btn-primary rounded-2xl px-5 py-3 text-sm font-bold inline-flex items-center gap-2">
+                    <i class="fas fa-plus"></i> New Token
+                </button>
+                <button onclick="loadTokens()" class="glass-btn rounded-2xl px-5 py-3 text-sm font-bold inline-flex items-center gap-2">
+                    <i class="fas fa-rotate-right"></i> Refresh
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <section class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div class="stat-card stat-primary">
+            <div class="stat-value" style="color: var(--primary);" id="stat-total">–</div>
+            <div class="stat-label">Total Tokens</div>
+        </div>
+        <div class="stat-card stat-success">
+            <div class="stat-value" style="color: #4ade80;" id="stat-active">–</div>
+            <div class="stat-label">Active</div>
+        </div>
+        <div class="stat-card stat-danger">
+            <div class="stat-value" style="color: #f87171;" id="stat-expired">–</div>
+            <div class="stat-label">Expired / No Sub</div>
+        </div>
+    </section>
+
+    <section class="section-panel p-4 sm:p-5 lg:p-6">
+        <div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 mb-5">
+            <div>
+                <h2 class="text-lg sm:text-xl font-bold section-title">Access Tokens</h2>
+                <p class="text-sm section-muted mt-1">Search, filter, and manage every token and its access.</p>
+            </div>
+
+            <div class="w-full lg:w-auto grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <input id="search-input" type="text" placeholder="Search by name or user ID..." class="glass-input" oninput="currentPage=1; renderPage()">
+                <select id="filter-status" class="glass-select" onchange="currentPage=1; renderPage()">
+                    <option value="all">All Status</option>
+                    <option value="active">Active</option>
+                    <option value="expired">Expired</option>
+                </select>
+                <select id="page-size" class="glass-select" onchange="currentPage=1; renderPage()">
+                    <option value="10">10 / page</option>
+                    <option value="25">25 / page</option>
+                    <option value="50">50 / page</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="desktop-table-wrap table-shell">
+            <div class="overflow-x-auto no-scrollbar">
+                <table class="access-table min-w-[1180px] text-sm">
+                    <thead>
+                        <tr>
+                            <th class="px-4 py-4 text-left font-semibold">Status</th>
+                            <th class="px-4 py-4 text-left font-semibold">User</th>
+                            <th class="px-4 py-4 text-left font-semibold">Addon Link</th>
+                            <th class="px-4 py-4 text-left font-semibold">Usage / Limits</th>
+                            <th class="px-4 py-4 text-left font-semibold">Expires</th>
+                            <th class="px-4 py-4 text-center font-semibold">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="token-table-body">
+                        <tr><td colspan="6" class="text-center py-10 text-soft">Loading tokens…</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="token-mobile-list" class="mobile-grid mt-1">
+            <div class="empty-state text-center px-4 py-8 text-soft">Loading tokens…</div>
+        </div>
+
+        <div class="pagination-shell mt-5" id="pagination-bar">
+            <div id="page-info" class="pagination-text text-sm"></div>
+            <div class="controls">
+                <button id="btn-prev" onclick="changePage(-1)" class="glass-btn pagination-btn rounded-xl px-4 py-2.5 text-sm font-semibold">‹ Prev</button>
+                <span id="page-num" class="text-sm font-bold text-center section-title px-2"></span>
+                <button id="btn-next" onclick="changePage(1)" class="glass-btn pagination-btn rounded-xl px-4 py-2.5 text-sm font-semibold">Next ›</button>
+            </div>
+        </div>
+    </section>
+</div>
+
+<!-- Create Token Modal -->
+<div id="create-modal" class="fixed inset-0 hidden z-50 modal-backdrop items-center justify-center p-4">
+    <div class="modal-glass">
+        <div class="flex items-start justify-between gap-4 mb-5">
+            <div>
+                <h3 class="text-xl font-bold section-title">Create Token</h3>
+                <p class="text-sm text-soft mt-1">Generate a new Stremio addon token.</p>
+            </div>
+            <button onclick="closeModal('create-modal')" class="glass-btn rounded-full w-10 h-10 flex items-center justify-center"><i class="fas fa-xmark"></i></button>
+        </div>
+
+        <div class="space-y-4">
+            <div class="modal-field">
+                <label>Token Name</label>
+                <input type="text" id="create-name" placeholder="e.g. Living Room TV" class="glass-input">
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+                <div class="modal-field">
+                    <label>Daily Limit (GB)</label>
+                    <input type="number" id="create-daily" value="0" min="0" step="0.1" class="glass-input">
+                </div>
+                <div class="modal-field">
+                    <label>Monthly Limit (GB)</label>
+                    <input type="number" id="create-monthly" value="0" min="0" step="0.1" class="glass-input">
+                </div>
+            </div>
+            <label class="flex items-center gap-3 text-sm section-title cursor-pointer">
+                <input type="checkbox" id="create-lifetime" class="w-4 h-4" checked>
+                Never expires <span class="text-soft text-xs">(no expiry date; works even when subscription mode is ON)</span>
+            </label>
+        </div>
+
+        <div class="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-6">
+            <button onclick="closeModal('create-modal')" class="glass-btn rounded-2xl px-5 py-3 text-sm font-bold">Cancel</button>
+            <button onclick="createToken()" class="glass-btn glass-btn-primary rounded-2xl px-5 py-3 text-sm font-bold">Create Token</button>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Limits Modal -->
+<div id="limits-modal" class="fixed inset-0 hidden z-50 modal-backdrop items-center justify-center p-4">
+    <div class="modal-glass">
+        <div class="flex items-start justify-between gap-4 mb-5">
+            <div>
+                <h3 class="text-xl font-bold section-title">Edit Data Limits</h3>
+                <p class="text-sm text-soft mt-1">Set 0 for unlimited.</p>
+            </div>
+            <button onclick="closeModal('limits-modal')" class="glass-btn rounded-full w-10 h-10 flex items-center justify-center"><i class="fas fa-xmark"></i></button>
+        </div>
+        <input type="hidden" id="limits-token">
+        <div class="grid grid-cols-2 gap-3">
+            <div class="modal-field">
+                <label>Daily (GB)</label>
+                <input type="number" id="limits-daily" min="0" step="0.1" class="glass-input">
+            </div>
+            <div class="modal-field">
+                <label>Monthly (GB)</label>
+                <input type="number" id="limits-monthly" min="0" step="0.1" class="glass-input">
+            </div>
+        </div>
+        <div class="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-6">
+            <button onclick="closeModal('limits-modal')" class="glass-btn rounded-2xl px-5 py-3 text-sm font-bold">Cancel</button>
+            <button onclick="saveLimits()" class="glass-btn glass-btn-primary rounded-2xl px-5 py-3 text-sm font-bold">Save</button>
+        </div>
+    </div>
+</div>
+
+<!-- Assign Plan Modal -->
+<div id="assign-modal" class="fixed inset-0 hidden z-50 modal-backdrop items-center justify-center p-4">
+    <div class="modal-glass">
+        <div class="flex items-start justify-between gap-4 mb-5">
+            <div>
+                <h3 class="text-xl font-bold section-title" id="assign-modal-title">Assign Subscription Plan</h3>
+                <p class="text-sm text-soft mt-1" id="assign-user-label">User: –</p>
+            </div>
+            <button onclick="closeModal('assign-modal')" class="glass-btn rounded-full w-10 h-10 flex items-center justify-center"><i class="fas fa-xmark"></i></button>
+        </div>
+        <input type="hidden" id="assign-user-id">
+        <input type="hidden" id="assign-token">
+        <div class="space-y-4">
+            <div class="modal-field" id="assign-plan-field">
+                <label>Select a Plan</label>
+                <select id="assign-plan-select" class="glass-select"><option value="">— Select plan —</option></select>
+            </div>
+            <div class="modal-field">
+                <label id="assign-days-label">Or enter custom days</label>
+                <input type="number" id="assign-custom-days" placeholder="e.g. 30" min="1" class="glass-input">
+                <p class="text-xs text-soft mt-2" id="assign-days-hint">Custom days override selected plan.</p>
+            </div>
+            <div class="modal-field" id="assign-userid-field" style="display:none">
+                <label>Link Telegram User ID <span class="text-soft text-xs">(optional)</span></label>
+                <input type="number" id="assign-userid" placeholder="e.g. 123456789" class="glass-input">
+                <p class="text-xs text-soft mt-2">Attaches this token to a user so it's reused when they press /start.</p>
+            </div>
+        </div>
+        <div class="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-6">
+            <button onclick="closeModal('assign-modal')" class="glass-btn rounded-2xl px-5 py-3 text-sm font-bold">Cancel</button>
+            <button onclick="assignPlan()" class="glass-btn glass-btn-primary rounded-2xl px-5 py-3 text-sm font-bold">Assign &amp; Activate</button>
+        </div>
+    </div>
+</div>
+
+<!-- Sub Action Modal -->
+<div id="sub-action-modal" class="fixed inset-0 hidden z-50 modal-backdrop items-center justify-center p-4">
+    <div class="modal-glass">
+        <div class="flex items-start justify-between gap-4 mb-5">
+            <div>
+                <h3 class="text-xl font-bold section-title" id="sub-action-title">Manage Subscription</h3>
+                <p class="text-sm text-soft mt-1" id="sub-action-desc"></p>
+            </div>
+            <button onclick="closeModal('sub-action-modal')" class="glass-btn rounded-full w-10 h-10 flex items-center justify-center"><i class="fas fa-xmark"></i></button>
+        </div>
+        <input type="hidden" id="sub-action-user-id">
+        <input type="hidden" id="sub-action-token">
+        <input type="hidden" id="sub-action-action">
+        <div id="sub-action-days-group" class="modal-field">
+            <label>Number of Days</label>
+            <input type="number" id="sub-action-days" value="30" min="1" class="glass-input">
+        </div>
+        <div class="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-6">
+            <button onclick="closeModal('sub-action-modal')" class="glass-btn rounded-2xl px-5 py-3 text-sm font-bold">Cancel</button>
+            <button id="sub-action-btn" onclick="submitSubAction()" class="glass-btn glass-btn-success rounded-2xl px-5 py-3 text-sm font-bold">Confirm</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    let allTokens = [];
+    let currentPage = 1;
+    let subEnabled = true;
+
+    function fmtDate(iso) {
+        if (!iso) return '—';
+        const d = new Date(iso);
+        return d.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' }) +
+            ' ' + d.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' });
+    }
+
+    function escHtml(s) {
+        return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+    }
+
+    function fmtBytes(bytes) {
+        const v = Number(bytes || 0);
+        if (!v) return '0 B';
+        const u = ['B', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.min(Math.floor(Math.log(v) / Math.log(1024)), u.length - 1);
+        return (v / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 2) + ' ' + u[i];
+    }
+
+    function getFiltered() {
+        const q = document.getElementById('search-input').value.toLowerCase().trim();
+        const status = document.getElementById('filter-status').value;
+        return allTokens.filter(t => {
+            const matchQ = !q || (t.user_name && t.user_name.toLowerCase().includes(q)) || (t.user_id && String(t.user_id).includes(q));
+            const matchStatus = status === 'all' || (status === 'active' && !t.is_expired) || (status === 'expired' && t.is_expired);
+            return matchQ && matchStatus;
+        });
+    }
+
+    function statusBadge(t) {
+        if (t.is_admin) return `<span class="status-badge status-gold"><i class="fas fa-crown text-[8px]"></i> Owner</span>`;
+        return t.is_expired
+            ? `<span class="status-badge status-expired"><i class="fas fa-circle text-[8px]"></i> Expired</span>`
+            : `<span class="status-badge status-active"><i class="fas fa-circle text-[8px]"></i> Active</span>`;
+    }
+
+    function addonHtml(t) {
+        if (!t.has_token) return `<div class="addon-box"><span class="status-badge status-warning">No Token</span></div>`;
+        if (t.is_expired && !t.never_expires && !t.is_admin) {
+            return `<div class="addon-box">
+                <span class="status-badge status-expired">Expired</span>
+                ${t.addon_url ? `<button onclick="copyLink('${escHtml(t.addon_url)}')" class="mt-3 text-xs font-semibold underline opacity-70 hover:opacity-100 transition">Copy URL (admin)</button>` : ''}
+            </div>`;
+        }
+        return t.addon_url
+            ? `<div class="addon-box"><button onclick="copyLink('${escHtml(t.addon_url)}')" class="glass-btn glass-btn-primary rounded-xl px-3 py-2 text-xs font-bold inline-flex items-center gap-2"><i class="fas fa-copy"></i> Copy Install Link</button></div>`
+            : `<div class="addon-box text-soft text-xs">—</div>`;
+    }
+
+    function usageHtml(t) {
+        const dl = t.daily_limit_gb ? t.daily_limit_gb + ' GB' : '∞';
+        const ml = t.monthly_limit_gb ? t.monthly_limit_gb + ' GB' : '∞';
+        return `<div class="usage-box text-soft">
+            <div><span class="section-title font-semibold">Day:</span> ${fmtBytes(t.daily_bytes)} / ${dl}</div>
+            <div><span class="section-title font-semibold">Mon:</span> ${fmtBytes(t.monthly_bytes)} / ${ml}</div>
+        </div>`;
+    }
+
+    function expiryHtml(t) {
+        if (t.never_expires) return `<span class="text-green-300 font-semibold">Never expires</span>`;
+        if (t.expires_at) return `<span class="${t.is_expired ? 'text-red-300 font-semibold' : 'section-title'}">${fmtDate(t.expires_at)}</span>`;
+        return `<span class="text-soft italic">—</span>`;
+    }
+
+    function buildActions(t) {
+        const safeName = escHtml(t.user_name || String(t.user_id || ''));
+        let btns = '';
+
+        const tokenArg = t.token ? escHtml(t.token) : '';
+
+        if (t.has_token) {
+            btns += `<button onclick="openLimitsModal('${tokenArg}', ${t.daily_limit_gb || 0}, ${t.monthly_limit_gb || 0})" class="action-chip glass-btn">Limits</button>`;
+        }
+
+        if (subEnabled) {
+            if (t.user_id) {
+                btns += `<button onclick="openAssignModal(${t.user_id}, '${safeName}', '')" class="action-chip glass-btn-primary">Assign</button>`;
+                btns += `<button onclick="openSubModal(${t.user_id}, '${safeName}', 'extend', '')" class="action-chip glass-btn-success">Extend</button>`;
+                btns += `<button onclick="openSubModal(${t.user_id}, '${safeName}', 'reduce', '')" class="action-chip glass-btn-warning">Reduce</button>`;
+                btns += `<button onclick="openSubModal(${t.user_id}, '${safeName}', 'delete', '')" class="action-chip glass-btn-danger">Revoke</button>`;
+            } else if (t.token) {
+                btns += `<button onclick="linkUser('${tokenArg}')" class="action-chip glass-btn-purple">Link User</button>`;
+            }
+        } else if (t.has_token) {
+            btns += `<button onclick="openAssignModal(${t.user_id || null}, '${safeName}', '${tokenArg}')" class="action-chip glass-btn-primary">Set Expiry</button>`;
+            btns += `<button onclick="openSubModal(${t.user_id || null}, '${safeName}', 'extend', '${tokenArg}')" class="action-chip glass-btn-success">Extend</button>`;
+            btns += `<button onclick="openSubModal(${t.user_id || null}, '${safeName}', 'reduce', '${tokenArg}')" class="action-chip glass-btn-warning">Reduce</button>`;
+            if (!t.user_id) btns += `<button onclick="linkUser('${tokenArg}')" class="action-chip glass-btn-purple">Link User</button>`;
+        }
+
+        if (t.token) btns += `<button onclick="revokeToken('${tokenArg}')" class="action-chip glass-btn">Delete</button>`;
+        return btns;
+    }
+
+    function renderDesktopRows(slice) {
+        const tbody = document.getElementById('token-table-body');
+        if (!slice.length) { tbody.innerHTML = `<tr><td colspan="6" class="text-center py-10 text-soft">No tokens match your search.</td></tr>`; return; }
+
+        tbody.innerHTML = slice.map(t => {
+            const displayName = t.user_name || (t.user_id ? 'Telegram User' : 'Web Token');
+            const idHtml = t.user_id ? `<div class="text-xs text-soft mt-1">ID: ${t.user_id}</div>` : `<div class="text-xs text-soft mt-1">No linked user</div>`;
+            return `
+                <tr class="${t.is_expired ? 'row-expired' : ''}">
+                    <td class="px-4 py-4">${statusBadge(t)}</td>
+                    <td class="px-4 py-4"><div class="font-semibold section-title">${escHtml(displayName)}</div>${idHtml}</td>
+                    <td class="px-4 py-4">${addonHtml(t)}</td>
+                    <td class="px-4 py-4">${usageHtml(t)}</td>
+                    <td class="px-4 py-4 text-xs">${expiryHtml(t)}</td>
+                    <td class="px-4 py-4"><div class="flex flex-wrap gap-2 justify-center">${buildActions(t)}</div></td>
+                </tr>`;
+        }).join('');
+    }
+
+    function renderMobileCards(slice) {
+        const wrap = document.getElementById('token-mobile-list');
+        if (!slice.length) { wrap.innerHTML = `<div class="empty-state text-center px-4 py-8 text-soft">No tokens match your search.</div>`; return; }
+
+        wrap.innerHTML = slice.map(t => {
+            const displayName = t.user_name || (t.user_id ? 'Telegram User' : 'Web Token');
+            return `
+                <div class="mobile-token-card ${t.is_expired ? 'row-expired' : ''}">
+                    <div class="flex items-start justify-between gap-3 mb-3">
+                        <div class="min-w-0">
+                            <div class="font-semibold section-title break-words">${escHtml(displayName)}</div>
+                            <div class="text-xs text-soft mt-1 break-all">${t.user_id ? 'ID: ' + t.user_id : 'No linked user'}</div>
+                        </div>
+                        <div class="shrink-0">${statusBadge(t)}</div>
+                    </div>
+                    <div class="grid grid-cols-1 gap-3 mb-3">
+                        <div class="rounded-2xl px-4 py-3" style="background: color-mix(in srgb, var(--bg) 55%, transparent); border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);">
+                            <div class="text-[11px] uppercase tracking-[0.14em] text-soft font-bold mb-1">Addon Access</div>${addonHtml(t)}
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div class="rounded-2xl px-4 py-3" style="background: color-mix(in srgb, var(--bg) 55%, transparent); border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);">
+                                <div class="text-[11px] uppercase tracking-[0.14em] text-soft font-bold mb-1">Usage / Limits</div>${usageHtml(t)}
+                            </div>
+                            <div class="rounded-2xl px-4 py-3" style="background: color-mix(in srgb, var(--bg) 55%, transparent); border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);">
+                                <div class="text-[11px] uppercase tracking-[0.14em] text-soft font-bold mb-1">Expires</div>
+                                <div class="text-sm font-semibold ${t.is_expired ? 'text-red-300' : 'section-title'} break-words">
+                                    ${t.never_expires ? 'Never expires' : (t.expires_at ? fmtDate(t.expires_at) : '—')}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex flex-wrap gap-2">${buildActions(t)}</div>
+                </div>`;
+        }).join('');
+    }
+
+    function renderPage() {
+        const filtered = getFiltered();
+        const pageSize = parseInt(document.getElementById('page-size').value);
+        const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+        if (currentPage > totalPages) currentPage = totalPages;
+        const start = filtered.length ? (currentPage - 1) * pageSize : 0;
+        const slice = filtered.slice(start, start + pageSize);
+
+        document.getElementById('page-info').textContent = filtered.length
+            ? `Showing ${start + 1}–${Math.min(start + pageSize, filtered.length)} of ${filtered.length}` : 'Showing 0 of 0';
+        document.getElementById('page-num').textContent = `Page ${currentPage} / ${totalPages}`;
+
+        const prevBtn = document.getElementById('btn-prev'), nextBtn = document.getElementById('btn-next');
+        prevBtn.disabled = currentPage <= 1; nextBtn.disabled = currentPage >= totalPages;
+        prevBtn.style.opacity = currentPage <= 1 ? '0.45' : '1'; nextBtn.style.opacity = currentPage >= totalPages ? '0.45' : '1';
+
+        renderDesktopRows(slice);
+        renderMobileCards(slice);
+    }
+
+    function changePage(dir) {
+        const filtered = getFiltered();
+        const pageSize = parseInt(document.getElementById('page-size').value);
+        const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+        currentPage = Math.min(Math.max(1, currentPage + dir), totalPages);
+        renderPage();
+    }
+
+    async function loadTokens() {
+        document.getElementById('token-table-body').innerHTML = `<tr><td colspan="6" class="text-center py-10 text-soft">Loading…</td></tr>`;
+        try {
+            const resp = await fetch('/api/admin/access/tokens');
+            const data = await resp.json();
+            allTokens = data.tokens || [];
+            subEnabled = !!data.subscription;
+            document.getElementById('stat-total').textContent = allTokens.length;
+            document.getElementById('stat-active').textContent = allTokens.filter(t => !t.is_expired).length;
+            document.getElementById('stat-expired').textContent = allTokens.filter(t => t.is_expired).length;
+            currentPage = 1;
+            renderPage();
+        } catch (err) {
+            document.getElementById('token-table-body').innerHTML = `<tr><td colspan="6" class="text-center py-10 text-red-300">Error: ${err.message}</td></tr>`;
+            showToast('Failed to load access tokens.', 'error', 'Load Error');
+        }
+    }
+
+    async function loadPlans() {
+        try {
+            const resp = await fetch('/api/admin/subscriptions/plans');
+            if (!resp.ok) return;
+            const result = await resp.json();
+            const plans = result.data || [];
+            const sel = document.getElementById('assign-plan-select');
+            if (!sel) return;
+            sel.innerHTML = '<option value="">— Select a plan —</option>' +
+                plans.map(p => { const sym = ({INR:'₹',USD:'$',EUR:'€',GBP:'£',JPY:'¥',AUD:'A$',CAD:'C$',SGD:'S$',AED:'د.إ',BRL:'R$'}[(p.currency||'INR').toUpperCase()]||((p.currency||'INR')+' ')); return `<option value="${p.days}">${p.days} days${p.price != null ? ' — ' + sym + p.price : ''}</option>`; }).join('');
+        } catch (e) { /* ignore */ }
+    }
+
+    function openModal(id) {
+        const m = document.getElementById(id);
+        m.classList.remove('hidden'); m.classList.add('flex');
+        document.body.classList.add('overflow-hidden');
+    }
+    function closeModal(id) {
+        const m = document.getElementById(id);
+        m.classList.add('hidden'); m.classList.remove('flex');
+        document.body.classList.remove('overflow-hidden');
+    }
+
+    function openCreateModal() {
+        document.getElementById('create-name').value = '';
+        document.getElementById('create-daily').value = 0;
+        document.getElementById('create-monthly').value = 0;
+        document.getElementById('create-lifetime').checked = true;
+        openModal('create-modal');
+    }
+
+    async function createToken() {
+        const name = document.getElementById('create-name').value.trim();
+        if (!name) { showToast('Token name is required.', 'error', 'Validation'); return; }
+        const payload = {
+            name,
+            daily_limit_gb: Number(document.getElementById('create-daily').value || 0),
+            monthly_limit_gb: Number(document.getElementById('create-monthly').value || 0),
+            subscription_exempt: document.getElementById('create-lifetime').checked,
+        };
+        try {
+            const resp = await fetch('/api/tokens', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            if (resp.ok) { showToast('Token created.', 'success', 'Created'); closeModal('create-modal'); loadTokens(); }
+            else { const d = await resp.json(); showToast(d.detail || 'Failed to create token.', 'error', 'Failed'); }
+        } catch (err) { showToast('Error: ' + err.message, 'error', 'Network Error'); }
+    }
+
+    function openLimitsModal(token, daily, monthly) {
+        document.getElementById('limits-token').value = token;
+        document.getElementById('limits-daily').value = daily || 0;
+        document.getElementById('limits-monthly').value = monthly || 0;
+        openModal('limits-modal');
+    }
+
+    async function saveLimits() {
+        const token = document.getElementById('limits-token').value;
+        const payload = {
+            daily_limit_gb: Number(document.getElementById('limits-daily').value || 0),
+            monthly_limit_gb: Number(document.getElementById('limits-monthly').value || 0),
+        };
+        try {
+            const resp = await fetch('/api/tokens/' + encodeURIComponent(token), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            if (resp.ok) { showToast('Limits updated.', 'success', 'Updated'); closeModal('limits-modal'); loadTokens(); }
+            else { showToast('Failed to update limits.', 'error', 'Failed'); }
+        } catch (err) { showToast('Error: ' + err.message, 'error', 'Network Error'); }
+    }
+
+    async function revokeToken(token) {
+        if (!confirm('Delete this token? The user will lose addon access immediately.')) return;
+        try {
+            const resp = await fetch('/api/admin/access/tokens/' + encodeURIComponent(token), { method: 'DELETE' });
+            if (resp.ok) { showToast('Token deleted.', 'success', 'Access Updated'); loadTokens(); }
+            else { const d = await resp.json(); showToast(d.detail || 'Failed.', 'error', 'Delete Failed'); }
+        } catch (err) { showToast('Error: ' + err.message, 'error', 'Network Error'); }
+    }
+
+    async function linkUser(token) {
+        const userId = prompt('Enter the Telegram User ID to link this token to:');
+        if (!userId || isNaN(parseInt(userId))) { showToast('Invalid user ID.', 'error', 'Invalid Input'); return; }
+        try {
+            const resp = await fetch('/api/admin/access/tokens/' + encodeURIComponent(token) + '/link-user', {
+                method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: parseInt(userId) }),
+            });
+            if (resp.ok) { showToast(`Token linked to user ${userId}.`, 'success', 'User Linked'); loadTokens(); }
+            else { const d = await resp.json(); showToast(d.detail || 'Failed to link.', 'error', 'Link Failed'); }
+        } catch (err) { showToast('Error: ' + err.message, 'error', 'Network Error'); }
+    }
+
+    function openAssignModal(userId, userName, token) {
+        document.getElementById('assign-user-id').value = userId || '';
+        document.getElementById('assign-token').value = token || '';
+        document.getElementById('assign-user-label').textContent = userId ? `User: ${userName} (ID: ${userId})` : `Token: ${userName}`;
+        document.getElementById('assign-custom-days').value = '';
+        document.getElementById('assign-plan-select').value = '';
+
+        //----- With subscription off there are no plans — just set an expiry
+        document.getElementById('assign-plan-field').style.display = subEnabled ? '' : 'none';
+        document.getElementById('assign-modal-title').textContent = subEnabled ? 'Assign Subscription Plan' : 'Set Expiry';
+        document.getElementById('assign-days-label').textContent = subEnabled ? 'Or enter custom days' : 'Expires in (days)';
+        document.getElementById('assign-days-hint').textContent = subEnabled
+            ? 'Custom days override the selected plan. Leave empty or 0 for never expires.'
+            : 'Leave empty or 0 for never expires.';
+
+        const uidField = document.getElementById('assign-userid-field');
+        uidField.style.display = subEnabled ? 'none' : '';
+        document.getElementById('assign-userid').value = (!subEnabled && userId) ? userId : '';
+        openModal('assign-modal');
+    }
+
+    async function assignPlan() {
+        const customDays = parseInt(document.getElementById('assign-custom-days').value) || 0;
+        const planDays = parseInt(document.getElementById('assign-plan-select').value) || 0;
+        const days = customDays || planDays;  // 0 = never expires
+        try {
+            let resp;
+            if (subEnabled) {
+                const userId = parseInt(document.getElementById('assign-user-id').value);
+                resp = await fetch(`/api/admin/access/users/${userId}/assign-plan`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ days }),
+                });
+            } else {
+                const token = document.getElementById('assign-token').value;
+                const uid = parseInt(document.getElementById('assign-userid').value) || 0;
+                const body = { action: 'set', days };
+                if (uid) body.user_id = uid;
+                resp = await fetch(`/api/admin/access/tokens/${encodeURIComponent(token)}/expiry`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+                });
+            }
+            const data = await resp.json();
+            if (resp.ok) { showToast(days > 0 ? `Expiry set: ${days} days.` : 'Set to never expire.', 'success', 'Updated'); closeModal('assign-modal'); loadTokens(); }
+            else { showToast(data.detail || 'Failed to update.', 'error', 'Request Failed'); }
+        } catch (err) { showToast('Error: ' + err.message, 'error', 'Network Error'); }
+    }
+
+    function openSubModal(userId, userName, action, token) {
+        document.getElementById('sub-action-user-id').value = userId || '';
+        document.getElementById('sub-action-token').value = token || '';
+        document.getElementById('sub-action-action').value = action;
+        const noun = subEnabled ? 'Subscription' : 'Expiry';
+        const thing = subEnabled ? 'subscription' : 'access';
+        const titles = { extend: `Extend ${noun}`, reduce: `Reduce ${noun}`, delete: 'Revoke Subscription' };
+        const descs = {
+            extend: `Add days to <b>${userName}</b>'s ${thing}.`,
+            reduce: `Remove days from <b>${userName}</b>'s ${thing}.`,
+            delete: `<b>Warning:</b> Revoke <b>${userName}</b>'s subscription entirely.`,
+        };
+        document.getElementById('sub-action-title').textContent = titles[action];
+        document.getElementById('sub-action-desc').innerHTML = descs[action];
+        const daysGroup = document.getElementById('sub-action-days-group');
+        const btn = document.getElementById('sub-action-btn');
+        if (action === 'delete') { daysGroup.style.display = 'none'; btn.className = 'glass-btn glass-btn-danger rounded-2xl px-5 py-3 text-sm font-bold'; }
+        else if (action === 'reduce') { daysGroup.style.display = 'block'; btn.className = 'glass-btn glass-btn-warning rounded-2xl px-5 py-3 text-sm font-bold'; }
+        else { daysGroup.style.display = 'block'; btn.className = 'glass-btn glass-btn-success rounded-2xl px-5 py-3 text-sm font-bold'; }
+        document.getElementById('sub-action-days').value = 30;
+        openModal('sub-action-modal');
+    }
+
+    async function submitSubAction() {
+        const action = document.getElementById('sub-action-action').value;
+        const days = parseInt(document.getElementById('sub-action-days').value) || 0;
+        try {
+            let resp;
+            if (subEnabled) {
+                const userId = parseInt(document.getElementById('sub-action-user-id').value);
+                resp = await fetch(`/api/admin/subscriptions/users/${userId}/manage`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, days }),
+                });
+            } else {
+                const token = document.getElementById('sub-action-token').value;
+                resp = await fetch(`/api/admin/access/tokens/${encodeURIComponent(token)}/expiry`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, days }),
+                });
+            }
+            const data = await resp.json();
+            if (resp.ok) { showToast('Updated.', 'success', 'Updated'); closeModal('sub-action-modal'); loadTokens(); }
+            else { showToast(data.detail || 'Failed.', 'error', 'Update Failed'); }
+        } catch (err) { showToast('Error: ' + err.message, 'error', 'Network Error'); }
+    }
+
+    async function copyLink(url) {
+        try { await navigator.clipboard.writeText(url); showToast('Link copied!', 'success', 'Copied'); }
+        catch { prompt('Copy this link:', url); }
+    }
+
+    ['create-modal', 'limits-modal', 'assign-modal', 'sub-action-modal'].forEach(id => {
+        document.getElementById(id).addEventListener('click', function (e) { if (e.target === this) closeModal(id); });
+    });
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape') ['create-modal', 'limits-modal', 'assign-modal', 'sub-action-modal'].forEach(closeModal);
+    });
+
+    loadPlans();
+    loadTokens();
+</script>
+{% endblock %}

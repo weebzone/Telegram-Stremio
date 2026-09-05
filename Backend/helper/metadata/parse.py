@@ -8,7 +8,7 @@ import PTN
 from guessit import guessit as _guessit
 
 from Backend.helper.metadata.common import COMBINED_EPISODE_BASE, COMBINED_SEASON, first
-from Backend.helper.split_files import parse_combined_episodes, parse_split_info, strip_part_suffix
+from Backend.helper.telegram.split_files import parse_combined_episodes, parse_split_info, strip_part_suffix
 from Backend.logger import LOGGER
 
 _MULTIPART_RE = re.compile(r"(?:part|cd|disc|disk)[s._-]*\d+(?=\.\w+$)", re.IGNORECASE)
