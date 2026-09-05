@@ -23,44 +23,44 @@
 
     <div id="setup-card" class="mb-8"></div>
 
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <div class="glass-panel p-5 rounded-[2rem] flex items-center gap-4">
-            <div class="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary shadow-glow">
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-8">
+        <div class="glass-panel p-3.5 sm:p-5 rounded-2xl sm:rounded-[2rem] flex items-center gap-3 sm:gap-4 min-w-0">
+            <div class="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-primary/10 flex items-center justify-center text-primary shadow-glow flex-shrink-0">
                 <i class="fa-solid fa-clock"></i>
             </div>
-            <div>
-                <p class="text-[10px] uppercase font-bold text-text-secondary tracking-widest">Uptime</p>
-                <p id="sys-uptime" class="text-lg font-bold text-text">{{ system_stats.uptime or 'N/A' }}</p>
+            <div class="min-w-0">
+                <p class="text-[9px] sm:text-[10px] uppercase font-bold text-text-secondary tracking-widest">Uptime</p>
+                <p id="sys-uptime" class="text-sm sm:text-lg font-bold text-text truncate">{{ system_stats.uptime or 'N/A' }}</p>
             </div>
         </div>
 
-        <div class="glass-panel p-5 rounded-[2rem] flex items-center gap-4">
-            <div class="w-12 h-12 rounded-2xl bg-accent/10 flex items-center justify-center text-accent shadow-[0_0_15px_color-mix(in_srgb,var(--accent)_35%,transparent)]">
+        <div class="glass-panel p-3.5 sm:p-5 rounded-2xl sm:rounded-[2rem] flex items-center gap-3 sm:gap-4 min-w-0">
+            <div class="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-accent/10 flex items-center justify-center text-accent shadow-[0_0_15px_color-mix(in_srgb,var(--accent)_35%,transparent)] flex-shrink-0">
                 <i class="fa-solid fa-robot"></i>
             </div>
-            <div>
-                <p class="text-[10px] uppercase font-bold text-text-secondary tracking-widest">Active Bots</p>
-                <p id="sys-bots-count" class="text-lg font-bold text-text">{{ system_stats.connected_bots|default(0) }} Nodes</p>
+            <div class="min-w-0">
+                <p class="text-[9px] sm:text-[10px] uppercase font-bold text-text-secondary tracking-widest">Active Bots</p>
+                <p id="sys-bots-count" class="text-sm sm:text-lg font-bold text-text truncate">{{ system_stats.connected_bots|default(0) }} Nodes</p>
             </div>
         </div>
 
-        <div class="glass-panel p-5 rounded-[2rem] flex items-center gap-4">
-            <div class="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary shadow-glow">
+        <div class="glass-panel p-3.5 sm:p-5 rounded-2xl sm:rounded-[2rem] flex items-center gap-3 sm:gap-4 min-w-0">
+            <div class="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-primary/10 flex items-center justify-center text-primary shadow-glow flex-shrink-0">
                 <i class="fa-solid fa-tower-broadcast"></i>
             </div>
-            <div>
-                <p class="text-[10px] uppercase font-bold text-text-secondary tracking-widest">Live Streams</p>
-                <p id="sys-live-streams" class="text-lg font-bold text-text">{{ system_stats.total_active_streams }} Active</p>
+            <div class="min-w-0">
+                <p class="text-[9px] sm:text-[10px] uppercase font-bold text-text-secondary tracking-widest">Live Streams</p>
+                <p id="sys-live-streams" class="text-sm sm:text-lg font-bold text-text truncate">{{ system_stats.total_active_streams }} Active</p>
             </div>
         </div>
 
-        <div class="glass-panel p-5 rounded-[2rem] flex items-center gap-4">
-            <div class="w-12 h-12 rounded-2xl bg-surface flex items-center justify-center text-text-secondary">
+        <div class="glass-panel p-3.5 sm:p-5 rounded-2xl sm:rounded-[2rem] flex items-center gap-3 sm:gap-4 min-w-0">
+            <div class="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-surface flex items-center justify-center text-text-secondary flex-shrink-0">
                 <i class="fa-solid fa-code-branch"></i>
             </div>
-            <div>
-                <p class="text-[10px] uppercase font-bold text-text-secondary tracking-widest">Version</p>
-                <p id="sys-version" class="text-lg font-bold text-text">v{{ system_stats.version or '1.0.0' }}</p>
+            <div class="min-w-0">
+                <p class="text-[9px] sm:text-[10px] uppercase font-bold text-text-secondary tracking-widest">Version</p>
+                <p id="sys-version" class="text-sm sm:text-lg font-bold text-text truncate">v{{ system_stats.version or '1.0.0' }}</p>
             </div>
         </div>
     </div>
@@ -459,16 +459,12 @@
             ? Number(stream.avg_mbps).toFixed(3) + ' MB/s' : '—';
         const started = formatTimestamp(stream?.start_ts);
         const liveDuration = getLiveDuration(stream);
-        const fileLine = fileName
-            ? `<p class="text-[11px] text-text-secondary mt-0.5 truncate" title="${fileName}"><i class="fa-solid fa-file-video mr-1 opacity-70"></i>${fileName}</p>`
-            : '';
-
         return `
             <div class="stream-card rounded-[2rem] p-5">
                 <div class="flex justify-between items-start gap-3">
                     <div class="min-w-0 pr-2">
-                        <h5 class="font-bold text-sm text-text truncate">${title}</h5>
-                        ${fileLine}
+                        <h5 class="font-bold text-sm text-text truncate" title="${title}">${title}</h5>
+                        ${fileName ? `<p class="text-[10px] text-text-secondary truncate leading-tight" title="${fileName}">${fileName}</p>` : ''}
                         <div class="mt-1 flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-widest text-text-secondary">
                             <span>${label}</span>
                             <span>•</span>
