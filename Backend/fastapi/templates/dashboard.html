@@ -3,10 +3,10 @@
 {% block title %}Dashboard - Telegram Stremio{% endblock %}
 
 {% block content %}
-<div class="min-h-screen pb-12">
+<div class="min-h-screen pb-12 w-full max-w-full overflow-x-hidden">
     <header class="mb-8 sm:mb-10">
         <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
+            <div class="min-w-0">
                 <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-primary to-accent">
                     System Overview
                 </h1>
@@ -14,7 +14,7 @@
             </div>
 
             <button onclick="refreshDashboard()"
-                class="w-full md:w-auto flex items-center justify-center space-x-2 px-6 py-3 rounded-2xl bg-primary/10 border border-primary/20 hover:bg-primary hover:text-background transition-all group active:scale-95">
+                class="w-full md:w-auto flex items-center justify-center space-x-2 px-6 py-3 rounded-2xl bg-primary/10 border border-primary/20 hover:bg-primary hover:text-background transition-all group active:scale-95 flex-shrink-0">
                 <i id="refresh-icon" class="fa-solid fa-arrows-rotate group-hover:rotate-180 transition-transform duration-700"></i>
                 <span class="font-bold text-sm uppercase tracking-wider">Refresh Data</span>
             </button>
@@ -23,7 +23,7 @@
 
     <div id="setup-card" class="mb-8"></div>
 
-    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-8">
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-8">
         <div class="glass-panel p-3.5 sm:p-5 rounded-2xl sm:rounded-[2rem] flex items-center gap-3 sm:gap-4 min-w-0">
             <div class="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-primary/10 flex items-center justify-center text-primary shadow-glow flex-shrink-0">
                 <i class="fa-solid fa-clock"></i>
@@ -65,8 +65,8 @@
         </div>
     </div>
 
-    <div class="grid lg:grid-cols-3 gap-8">
-        <div class="lg:col-span-2 space-y-8">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 min-w-0">
+        <div class="lg:col-span-2 space-y-8 min-w-0">
             <style>
                 .ua-dot { width:.7rem;height:.7rem;border-radius:9999px;background:var(--text-secondary);flex-shrink:0; }
                 .ua-dot.on { background:#22c55e;box-shadow:0 0 8px #22c55e; }
@@ -75,9 +75,11 @@
                 .ua-skel { height:132px;border-radius:1rem;border:1px solid var(--hairline);background:linear-gradient(90deg, color-mix(in srgb,var(--text) 6%,transparent) 25%, color-mix(in srgb,var(--text) 14%,transparent) 37%, color-mix(in srgb,var(--text) 6%,transparent) 63%);background-size:400% 100%;animation:ua-shimmer 1.4s ease infinite; }
                 @keyframes ua-shimmer { 0%{background-position:100% 0;} 100%{background-position:-100% 0;} }
                 .ua-now { margin-top:.5rem;font-size:.8rem;font-weight:800;color:#22c55e; }
-                .ua-meta { margin-top:.6rem;display:grid;grid-template-columns:1fr 1fr;gap:.3rem .6rem;font-size:.72rem; }
+                .ua-meta { margin-top:.6rem;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:.3rem .6rem;font-size:.72rem;min-width:0; }
                 .ua-meta span { color:var(--text-secondary);display:flex;align-items:center;gap:.35rem;min-width:0; }
-                .ua-meta span span { color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+                .ua-meta span span { color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;display:inline-block;max-width:100%; }
+                .ua-card { min-width:0; }
+                .ua-card .flex { min-width:0; }
             </style>
 
             <script>
@@ -116,8 +118,8 @@
                             ? `<div class="ua-now"><i class="fas fa-play"></i> Now Playing — ${uaEsc(u.now_playing)}</div>`
                             : `<div class="text-text-secondary text-xs mt-2 truncate"><i class="fas fa-clock-rotate-left"></i> ${uaEsc(u.last_title || 'No history')}</div>`;
                         const fl = uaFlag(u.country_code);
-                        return `<div class="glass-panel p-4 rounded-2xl border border-hairline">
-                            <div class="flex items-center justify-between gap-2">
+                        return `<div class="ua-card glass-panel p-4 rounded-2xl border border-hairline min-w-0">
+                            <div class="flex items-center justify-between gap-2 min-w-0">
                                 <div class="flex items-center gap-2 min-w-0">
                                     <span class="ua-dot ${u.online ? 'on' : ''}"></span>
                                     <span class="font-bold truncate">${uaEsc(u.name)}</span>
@@ -163,24 +165,24 @@
                     <i class="fa-solid fa-database text-primary"></i> Storage Nodes
                 </h3>
 
-                <div class="grid md:grid-cols-2 gap-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 min-w-0">
                     {% for db_stat in system_stats.databases %}
-                    <div class="glass-panel p-6 rounded-[2rem] border-hairline bg-card/10">
-                        <div class="flex justify-between items-start mb-6">
-                            <h4 class="font-bold text-text">{{ db_stat.db_name.replace("storage_", "Node ") }}</h4>
-                            <span class="text-[10px] bg-primary/10 text-primary px-2 py-1 rounded-lg font-bold uppercase">Online</span>
+                    <div class="glass-panel p-6 rounded-[2rem] border-hairline bg-card/10 min-w-0">
+                        <div class="flex justify-between items-start gap-3 mb-6 min-w-0">
+                            <h4 class="font-bold text-text truncate min-w-0">{{ db_stat.db_name.replace("storage_", "Node ") }}</h4>
+                            <span class="text-[10px] bg-primary/10 text-primary px-2 py-1 rounded-lg font-bold uppercase whitespace-nowrap flex-shrink-0">Online</span>
                         </div>
 
-                        <div class="space-y-4">
-                            <div class="flex justify-between text-sm">
-                                <span class="text-text-secondary">Movies / TV</span>
-                                <span class="font-bold text-text">{{ db_stat.movie_count }} / {{ db_stat.tv_count }}</span>
+                        <div class="space-y-4 min-w-0">
+                            <div class="flex justify-between text-sm gap-2 min-w-0">
+                                <span class="text-text-secondary whitespace-nowrap">Movies / TV</span>
+                                <span class="font-bold text-text truncate">{{ db_stat.movie_count }} / {{ db_stat.tv_count }}</span>
                             </div>
 
-                            <div class="space-y-2">
-                                <div class="flex justify-between text-xs font-bold uppercase tracking-widest">
-                                    <span class="text-text-secondary">Disk Usage</span>
-                                    <span class="text-primary">{{ "%.1f"|format(db_stat.storageSize / 1024 / 1024) }} MB</span>
+                            <div class="space-y-2 min-w-0">
+                                <div class="flex justify-between text-xs font-bold uppercase tracking-widest gap-2 min-w-0">
+                                    <span class="text-text-secondary whitespace-nowrap">Disk Usage</span>
+                                    <span class="text-primary truncate">{{ "%.1f"|format(db_stat.storageSize / 1024 / 1024) }} MB</span>
                                 </div>
                                 <div class="w-full h-1.5 bg-surface rounded-full overflow-hidden">
                                     {% set storage_percent = (db_stat.storageSize / (500 * 1024 * 1024) * 100) | round %}
@@ -193,144 +195,147 @@
                 </div>
             </section>
 
-            <section class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <a href="/media/manage?media_type=movie" class="glass-panel p-6 rounded-[2rem] hover:bg-primary/5 transition-all group border border-hairline">
-                    <div class="flex items-center gap-4">
-                        <div class="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
+            <section class="grid grid-cols-1 sm:grid-cols-2 gap-4 min-w-0">
+                <a href="/media/manage?media_type=movie" class="glass-panel p-6 rounded-[2rem] hover:bg-primary/5 transition-all group border border-hairline min-w-0">
+                    <div class="flex items-center gap-4 min-w-0">
+                        <div class="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform flex-shrink-0">
                             <i class="fa-solid fa-film text-2xl"></i>
                         </div>
-                        <div>
-                            <h4 class="font-bold text-text">Manage Movies</h4>
-                            <p class="text-xs text-text-secondary">Organize and edit library</p>
+                        <div class="min-w-0">
+                            <h4 class="font-bold text-text truncate">Manage Movies</h4>
+                            <p class="text-xs text-text-secondary truncate">Organize and edit library</p>
                         </div>
-                        <i class="fa-solid fa-chevron-right ml-auto text-muted group-hover:text-primary group-hover:translate-x-1 transition-all"></i>
+                        <i class="fa-solid fa-chevron-right ml-auto text-muted group-hover:text-primary group-hover:translate-x-1 transition-all flex-shrink-0"></i>
                     </div>
                 </a>
 
-                <a href="/media/manage?media_type=tv" class="glass-panel p-6 rounded-[2rem] hover:bg-accent/5 transition-all group border border-hairline">
-                    <div class="flex items-center gap-4">
-                        <div class="w-14 h-14 rounded-2xl bg-accent/10 flex items-center justify-center text-accent group-hover:scale-110 transition-transform">
+                <a href="/media/manage?media_type=tv" class="glass-panel p-6 rounded-[2rem] hover:bg-accent/5 transition-all group border border-hairline min-w-0">
+                    <div class="flex items-center gap-4 min-w-0">
+                        <div class="w-14 h-14 rounded-2xl bg-accent/10 flex items-center justify-center text-accent group-hover:scale-110 transition-transform flex-shrink-0">
                             <i class="fa-solid fa-tv text-2xl"></i>
                         </div>
-                        <div>
-                            <h4 class="font-bold text-text">Manage TV Shows</h4>
-                            <p class="text-xs text-text-secondary">Handle series and episodes</p>
+                        <div class="min-w-0">
+                            <h4 class="font-bold text-text truncate">Manage TV Shows</h4>
+                            <p class="text-xs text-text-secondary truncate">Handle series and episodes</p>
                         </div>
-                        <i class="fa-solid fa-chevron-right ml-auto text-muted group-hover:text-accent group-hover:translate-x-1 transition-all"></i>
+                        <i class="fa-solid fa-chevron-right ml-auto text-muted group-hover:text-accent group-hover:translate-x-1 transition-all flex-shrink-0"></i>
                     </div>
                 </a>
             </section>
 
-            <a href="/admin/access" class="glass-panel p-6 rounded-[2rem] hover:bg-primary/5 transition-all group border border-hairline flex items-center gap-4">
-                <div class="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
+            <a href="/admin/access" class="glass-panel p-6 rounded-[2rem] hover:bg-primary/5 transition-all group border border-hairline flex items-center gap-4 min-w-0">
+                <div class="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform flex-shrink-0">
                     <i class="fa-solid fa-key text-2xl"></i>
                 </div>
-                <div>
-                    <h4 class="font-bold text-text">Tokens &amp; Access</h4>
-                    <p class="text-xs text-text-secondary">Create tokens, set data limits, and manage subscriptions</p>
+                <div class="min-w-0">
+                    <h4 class="font-bold text-text truncate">Tokens &amp; Access</h4>
+                    <p class="text-xs text-text-secondary truncate">Create tokens, set data limits, and manage subscriptions</p>
                 </div>
-                <i class="fa-solid fa-chevron-right ml-auto text-muted group-hover:text-primary group-hover:translate-x-1 transition-all"></i>
+                <i class="fa-solid fa-chevron-right ml-auto text-muted group-hover:text-primary group-hover:translate-x-1 transition-all flex-shrink-0"></i>
             </a>
 
-            <div class="glass-panel rounded-[2.5rem] overflow-hidden">
-                <div class="p-6 border-b border-hairline">
-                    <div class="flex items-center justify-between gap-3 mb-2">
-                        <h3 class="flex items-center gap-2 text-lg font-bold">
+            <div class="glass-panel rounded-[2.5rem] overflow-hidden min-w-0">
+                <div class="p-6 border-b border-hairline min-w-0">
+                    <div class="flex items-center flex-wrap justify-between gap-3 mb-2 min-w-0">
+                        <h3 class="flex items-center flex-wrap gap-2 text-lg font-bold min-w-0">
                             <i class="fa-solid fa-users text-primary"></i> User Activity
-                            <span id="ua-online" class="text-[10px] font-bold uppercase tracking-[0.2em] text-primary bg-primary/10 px-3 py-1 rounded-full">0 online</span>
+                            <span id="ua-online" class="text-[10px] font-bold uppercase tracking-[0.2em] text-primary bg-primary/10 px-3 py-1 rounded-full whitespace-nowrap">0 online</span>
                         </h3>
-                        <button onclick="loadUserActivity()" class="text-sm font-semibold text-text-secondary hover:text-primary transition">
+                        <button onclick="loadUserActivity()" class="text-sm font-semibold text-text-secondary hover:text-primary transition whitespace-nowrap">
                             <i class="fa-solid fa-rotate"></i> Refresh
                         </button>
                     </div>
                     <p class="text-sm text-text-secondary">Who's watching, where from, and on what</p>
                 </div>
-                <div class="p-6">
-                    <div id="ua-list" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                <div class="p-6 min-w-0">
+                    <div id="ua-list" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 min-w-0">
                         <div class="ua-skel"></div>
                     </div>
-                    <div id="ua-pagination" class="flex items-center justify-center gap-3 mt-6"></div>
+                    <div id="ua-pagination" class="flex items-center justify-center flex-wrap gap-3 mt-6"></div>
                 </div>
             </div>
         </div>
 
-        <div class="lg:col-span-1">
-            <div class="glass-panel rounded-[2.5rem] overflow-hidden h-full">
-                <div class="p-6 border-b border-hairline">
-                    <div class="flex items-center justify-between gap-3 mb-2">
-                        <h3 class="flex items-center gap-2 text-lg font-bold">
+        <div class="lg:col-span-1 min-w-0">
+            <div class="glass-panel rounded-[2.5rem] overflow-hidden h-full min-w-0">
+                <div class="p-6 border-b border-hairline min-w-0">
+                    <div class="flex items-center flex-wrap justify-between gap-3 mb-2 min-w-0">
+                        <h3 class="flex items-center gap-2 text-lg font-bold whitespace-nowrap">
                             <i class="fa-solid fa-circle-play text-red-500 animate-pulse"></i> Live Network
                         </h3>
-                        <span id="live-stream-count" class="text-[10px] font-bold uppercase tracking-[0.2em] text-primary bg-primary/10 px-3 py-1 rounded-full">
+                        <span id="live-stream-count" class="text-[10px] font-bold uppercase tracking-[0.2em] text-primary bg-primary/10 px-3 py-1 rounded-full whitespace-nowrap">
                             {{ system_stats.total_active_streams or 0 }} Active
                         </span>
                     </div>
                     <p class="text-sm text-text-secondary">Current sessions only</p>
                 </div>
 
-                <div class="p-6 space-y-6">
-                    <div class="grid grid-cols-2 gap-3">
-                        <div class="glass-panel p-4 rounded-2xl">
-                            <p class="text-[10px] uppercase font-bold tracking-widest text-text-secondary">Live Now</p>
-                            <p id="live-now-count" class="text-2xl font-extrabold mt-1 text-text">{{ system_stats.total_active_streams or 0 }}</p>
+                <div class="p-6 space-y-6 min-w-0">
+                    <div class="grid grid-cols-2 gap-3 min-w-0">
+                        <div class="glass-panel p-4 rounded-2xl min-w-0">
+                            <p class="text-[10px] uppercase font-bold tracking-widest text-text-secondary truncate">Live Now</p>
+                            <p id="live-now-count" class="text-2xl font-extrabold mt-1 text-text truncate">{{ system_stats.total_active_streams or 0 }}</p>
                         </div>
-                        <div class="glass-panel p-4 rounded-2xl">
-                            <p class="text-[10px] uppercase font-bold tracking-widest text-text-secondary">Recent</p>
-                            <p id="recent-stream-count" class="text-2xl font-extrabold mt-1 text-text">0</p>
+                        <div class="glass-panel p-4 rounded-2xl min-w-0">
+                            <p class="text-[10px] uppercase font-bold tracking-widest text-text-secondary truncate">Recent</p>
+                            <p id="recent-stream-count" class="text-2xl font-extrabold mt-1 text-text truncate">0</p>
                         </div>
                     </div>
 
-                    <div>
-                        <div class="flex items-center justify-between mb-3">
-                            <h4 class="text-sm font-bold text-text">Active Streams</h4>
-                            <span class="text-[10px] uppercase tracking-widest text-text-secondary">Real-time</span>
+                    <div class="min-w-0">
+                        <div class="flex items-center flex-wrap justify-between gap-2 mb-3 min-w-0">
+                            <h4 class="text-sm font-bold text-text whitespace-nowrap">Active Streams</h4>
+                            <span class="text-[10px] uppercase tracking-widest text-text-secondary whitespace-nowrap">Real-time</span>
                         </div>
-                        <div id="active-streams-container" class="space-y-4">
+                        <div id="active-streams-container" class="space-y-4 min-w-0">
                             {% if system_stats.active_streams %}
                                 {% for stream in system_stats.active_streams %}
-                                <div class="stream-card rounded-[2rem] p-5">
-                                    <div class="flex justify-between items-start gap-3">
-                                        <div class="min-w-0 pr-2">
+                                <div class="stream-card rounded-[2rem] p-5 min-w-0 max-w-full overflow-hidden">
+                                    <div class="flex justify-between items-start gap-3 min-w-0">
+                                        <div class="min-w-0 flex-1 pr-2">
                                             <h5 class="font-bold text-sm text-text truncate">{{ stream.title or stream.meta.get('title') or 'Unknown Stream' }}</h5>
-                                            <div class="mt-1 flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-widest text-text-secondary">
-                                                <span>Bot {{ (stream.client_index or 0) + 1 }}</span>
+                                            {% if stream.file_name and stream.file_name != (stream.title or stream.meta.get('title')) %}
+                                            <p class="text-[10px] text-text-secondary truncate leading-tight" title="{{ stream.file_name }}">{{ stream.file_name }}</p>
+                                            {% endif %}
+                                            <div class="mt-1 flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-widest text-text-secondary min-w-0">
+                                                <span class="whitespace-nowrap">Bot {{ (stream.client_index or 0) + 1 }}</span>
                                                 <span>•</span>
-                                                <span>DC {{ stream.dc_id or '-' }}</span>
+                                                <span class="whitespace-nowrap">DC {{ stream.dc_id or '-' }}</span>
                                                 <span>•</span>
-                                                <span class="font-mono">{{ stream.stream_id[:12] if stream.stream_id else 'Unknown' }}{% if stream.stream_id %}…{% endif %}</span>
+                                                <span class="font-mono truncate max-w-[120px]">{{ stream.stream_id[:12] if stream.stream_id else 'Unknown' }}{% if stream.stream_id %}…{% endif %}</span>
                                             </div>
                                         </div>
-                                        <span class="text-[10px] font-bold px-2 py-1 rounded-lg uppercase whitespace-nowrap stream-badge-live">
+                                        <span class="text-[10px] font-bold px-2 py-1 rounded-lg uppercase whitespace-nowrap stream-badge-live flex-shrink-0">
                                             Live
                                         </span>
                                     </div>
 
-                                    <div class="grid grid-cols-2 gap-3 mt-4 pt-4 border-t border-hairline">
-                                        <div class="text-center">
+                                    <div class="grid grid-cols-2 gap-3 mt-4 pt-4 border-t border-hairline min-w-0">
+                                        <div class="text-center min-w-0">
                                             <p class="text-[9px] text-text-secondary uppercase tracking-widest font-bold">Speed</p>
-                                            <p class="text-xs font-bold text-text">{{ "%.3f"|format(stream.avg_mbps or 0) }} MB/s</p>
+                                            <p class="text-xs font-bold text-text truncate">{{ "%.3f"|format(stream.avg_mbps or 0) }} MB/s</p>
                                         </div>
-                                        <div class="text-center">
+                                        <div class="text-center min-w-0">
                                             <p class="text-[9px] text-text-secondary uppercase tracking-widest font-bold">Total</p>
-                                            <p class="text-xs font-bold text-text">{{ "%.1f"|format((stream.total_bytes or 0) / 1024 / 1024) }} MB</p>
+                                            <p class="text-xs font-bold text-text truncate">{{ "%.1f"|format((stream.total_bytes or 0) / 1024 / 1024) }} MB</p>
                                         </div>
-                                        <div class="text-center">
+                                        <div class="text-center min-w-0">
                                             <p class="text-[9px] text-text-secondary uppercase tracking-widest font-bold">Duration</p>
-                                            <p class="text-xs font-bold text-text live-duration" data-start-ts="{{ stream.start_ts or 0 }}">0s</p>
+                                            <p class="text-xs font-bold text-text live-duration truncate" data-start-ts="{{ stream.start_ts or 0 }}">0s</p>
                                         </div>
-                                        <div class="text-center">
+                                        <div class="text-center min-w-0">
                                             <p class="text-[9px] text-text-secondary uppercase tracking-widest font-bold">Status</p>
-                                            <p class="text-xs font-bold text-text">{{ stream.status or 'active' }}</p>
+                                            <p class="text-xs font-bold text-text truncate">{{ stream.status or 'active' }}</p>
                                         </div>
                                     </div>
 
-                                    <div class="mt-4 pt-4 border-t border-hairline space-y-2">
-                                        <div class="flex items-center justify-between text-xs gap-3">
-                                            <span class="text-text-secondary">Started</span>
+                                    <div class="mt-4 pt-4 border-t border-hairline space-y-2 min-w-0">
+                                        <div class="flex items-center justify-between text-xs gap-3 min-w-0">
+                                            <span class="text-text-secondary whitespace-nowrap">Started</span>
                                             <span class="text-text text-right truncate max-w-[65%] live-started" data-start-ts="{{ stream.start_ts or 0 }}">—</span>
                                         </div>
-                                        <div class="flex items-center justify-between text-xs gap-3">
-                                            <span class="text-text-secondary">Stream ID</span>
+                                        <div class="flex items-center justify-between text-xs gap-3 min-w-0">
+                                            <span class="text-text-secondary whitespace-nowrap">Stream ID</span>
                                             <span class="font-mono text-text text-right truncate max-w-[65%]">{{ stream.stream_id or 'Unknown' }}</span>
                                         </div>
                                     </div>
@@ -360,6 +365,8 @@
         background: color-mix(in srgb, var(--card) 55%, transparent);
         border: 1px solid var(--border);
         box-shadow: 0 8px 32px rgba(0, 0, 0, 0.16);
+        min-width: 0;
+        max-width: 100%;
     }
 
     .stream-badge-live {
@@ -370,6 +377,20 @@
     .stream-badge-recent {
         background: color-mix(in srgb, var(--accent) 16%, transparent);
         color: var(--accent);
+    }
+
+    /* Safety net: prevents any long, unbreakable filename/ID from forcing the
+       page wider on mobile. Grid/flex tracks size to min-content by default,
+       so every nested item along the chain needs min-width:0 to let
+       `truncate` actually take effect instead of overflowing horizontally. */
+    .stream-card * ,
+    #active-streams-container,
+    #active-streams-container > * {
+        min-width: 0;
+    }
+
+    @media (max-width: 480px) {
+        .stream-card { padding: 1rem; }
     }
 </style>
 
@@ -460,48 +481,48 @@
         const started = formatTimestamp(stream?.start_ts);
         const liveDuration = getLiveDuration(stream);
         return `
-            <div class="stream-card rounded-[2rem] p-5">
-                <div class="flex justify-between items-start gap-3">
-                    <div class="min-w-0 pr-2">
+            <div class="stream-card rounded-[2rem] p-5 min-w-0 max-w-full overflow-hidden">
+                <div class="flex justify-between items-start gap-3 min-w-0">
+                    <div class="min-w-0 flex-1 pr-2">
                         <h5 class="font-bold text-sm text-text truncate" title="${title}">${title}</h5>
                         ${fileName ? `<p class="text-[10px] text-text-secondary truncate leading-tight" title="${fileName}">${fileName}</p>` : ''}
-                        <div class="mt-1 flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-widest text-text-secondary">
-                            <span>${label}</span>
+                        <div class="mt-1 flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-widest text-text-secondary min-w-0">
+                            <span class="whitespace-nowrap">${label}</span>
                             <span>•</span>
-                            <span>${streamId}</span>
+                            <span class="font-mono truncate max-w-[120px]">${streamId}</span>
                         </div>
                     </div>
-                    <span class="text-[10px] font-bold px-2 py-1 rounded-lg uppercase whitespace-nowrap ${status.className}">
+                    <span class="text-[10px] font-bold px-2 py-1 rounded-lg uppercase whitespace-nowrap flex-shrink-0 ${status.className}">
                         ${escapeHtml(status.text)}
                     </span>
                 </div>
 
-                <div class="grid grid-cols-2 gap-3 mt-4 pt-4 border-t border-hairline">
-                    <div class="text-center">
+                <div class="grid grid-cols-2 gap-3 mt-4 pt-4 border-t border-hairline min-w-0">
+                    <div class="text-center min-w-0">
                         <p class="text-[9px] text-text-secondary uppercase tracking-widest font-bold">Speed</p>
-                        <p class="text-xs font-bold text-text">${avgSpeed}</p>
+                        <p class="text-xs font-bold text-text truncate">${avgSpeed}</p>
                     </div>
-                    <div class="text-center">
+                    <div class="text-center min-w-0">
                         <p class="text-[9px] text-text-secondary uppercase tracking-widest font-bold">Total</p>
-                        <p class="text-xs font-bold text-text">${escapeHtml(totalBytes)}</p>
+                        <p class="text-xs font-bold text-text truncate">${escapeHtml(totalBytes)}</p>
                     </div>
-                    <div class="text-center">
+                    <div class="text-center min-w-0">
                         <p class="text-[9px] text-text-secondary uppercase tracking-widest font-bold">Duration</p>
-                        <p class="text-xs font-bold text-text live-duration">${escapeHtml(liveDuration)}</p>
+                        <p class="text-xs font-bold text-text live-duration truncate">${escapeHtml(liveDuration)}</p>
                     </div>
-                    <div class="text-center">
+                    <div class="text-center min-w-0">
                         <p class="text-[9px] text-text-secondary uppercase tracking-widest font-bold">Started</p>
                         <p class="text-xs font-bold text-text truncate live-started">${escapeHtml(started)}</p>
                     </div>
                 </div>
 
-                <div class="mt-4 pt-4 border-t border-hairline space-y-2">
-                    <div class="flex items-center justify-between text-xs gap-3">
-                        <span class="text-text-secondary">Stream ID</span>
+                <div class="mt-4 pt-4 border-t border-hairline space-y-2 min-w-0">
+                    <div class="flex items-center justify-between text-xs gap-3 min-w-0">
+                        <span class="text-text-secondary whitespace-nowrap">Stream ID</span>
                         <span class="font-mono text-text text-right truncate max-w-[65%]">${streamId}</span>
                     </div>
-                    <div class="flex items-center justify-between text-xs gap-3">
-                        <span class="text-text-secondary">Status</span>
+                    <div class="flex items-center justify-between text-xs gap-3 min-w-0">
+                        <span class="text-text-secondary whitespace-nowrap">Status</span>
                         <span class="text-text text-right truncate max-w-[65%]">${escapeHtml(stream?.status || 'active')}</span>
                     </div>
                 </div>
