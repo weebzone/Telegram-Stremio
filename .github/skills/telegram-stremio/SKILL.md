@@ -189,7 +189,7 @@ python bump-version.py [patch|minor|major]  # bumps pyproject.toml + Backend/__i
 - `config.env` contains real credentials — never commit (gitignored).
 - Local dev: copy `sample_config.env` → `config.env`, `uv sync`, then `uv run -m Backend`.
 - `update.py`: wipes `log.txt`, deletes `.git`, re-inits with hardcoded identity (`weebzone` / `doc.adhikari@gmail.com`), `git fetch origin && git reset --hard origin/{branch}`. Upstream resolution: DB `settings.upstream_repo/branch` > env > default `https://github.com/weebzone/Telegram-Stremio` / `master`. Runs on every `start.sh` boot and on web Restart.
-- `bump-version.py`: `python bump-version.py [patch|minor|major]` (default patch) — regex-replaces semver in both `pyproject.toml` and `Backend/__init__.py`.
+- `bump-version.py`: `python bump-version.py [patch|minor|major]` (default patch) — reads the project name via `tomllib`, regex-replaces semver in `pyproject.toml`, `Backend/__init__.py`, and the local `[[package]]` entry (`source = { virtual = "." }`) in `uv.lock` (PEP 503-normalized name lookup).
 - Heroku: `heroku.yml` → `build.docker.web = Dockerfile`.
 
 ## Conventions & gotchas
@@ -264,7 +264,7 @@ python bump-version.py [patch|minor|major]  # bumps pyproject.toml + Backend/__i
 ### `analytics.py` / `health.py` / `pinger.py` / `passwords.py` / `encrypt.py`
 - Analytics: `client_ip_from` (tries `cf-connecting-ip`, `x-real-ip`, `x-forwarded-for`, client host), `parse_app`/`parse_device` (UA maps), `lookup_ip` via `http://ip-api.com/json/{ip}`, `record_client`, `record_stream_start`, `get_activity_overview(page, per_page=5)`. `_IP_TTL = 6h`, `ONLINE_WINDOW = 120`.
 - Health: checks `databases`, `bots`, `tmdb`, `base_url`; `_FREE_TIER_BYTES = 512 MB`; TTLs 30/300/60 s; status `critical|warning|ok`.
-- Pinger: `sleep_time = 1200` s, GETs `{base_url}/api/system/stats`, aiohttp timeout 10 s.
+- Pinger: `sleep_time = 1200` s, GETs `{base_url}/status` (public status page) with `allow_redirects=True`, aiohttp timeout 15 s; skips with a warning when `base_url` is unset, warns on non-2xx/3xx responses.
 - Passwords: `pbkdf2_sha256$200000$salt$digest` (16-byte salt), `hmac.compare_digest`, legacy plaintext fallback.
 - Encrypt: `BASE62_ALPHABET` (digits, lowercase, uppercase), zlib `Z_BEST_COMPRESSION`, module-level `ThreadPoolExecutor`.
 
@@ -272,6 +272,7 @@ python bump-version.py [patch|minor|major]  # bumps pyproject.toml + Backend/__i
 - `CHUNK_SIZE = 1 MB`, `CLEAN_INTERVAL = 30 min`, `TEST_CHUNK_SIZE = 100 MB`, `STALE_STREAM_IDLE = 180`.
 - `ACTIVE_STREAMS` dict + `RECENT_STREAMS` deque(maxlen=20); stale cleaner every 30 s decrements `work_loads`.
 - Prefetch queue maxsize = prefetch; parallel chunk fetches; fetch timeout 15 s; retries `<3` / flood `<5` (backoff `min(0.5*2**(tries-1), 10)`); FILE_REFERENCE errors refresh location; consumer stalls after 90 s.
+- Registry entry (local `stream_entry` alias) fields: `start_ts`, `last_ts` (falls back to `start_ts`), `total_bytes`, `recent_measurements` deque(maxlen=3) via `setdefault`, `instant_mbps`/`avg_mbps`/`peak_mbps`, `status`, `chunk_size`; finished entry logged via `db.log_stream_stats(stream_entry)` and popped into `RECENT_STREAMS` after a 3 s delay.
 - `_prewarm_sessions()`: DCs `[1, 2, 4, 5]`, `no_updates`, up to 6 authorization retries. Speed test: ping `limit=4096`, chunk `512 KB`, `max_concurrent_chunks = 8`.
 
 ### `bot.py` / `clients.py`
@@ -325,7 +326,8 @@ python bump-version.py [patch|minor|major]  # bumps pyproject.toml + Backend/__i
 - `select_best_client(target_dc)`: score `work_loads + 3 * client_failures`; DC-preferring then round-robin tie-break. `decay_client_failures()`: every 300 s, -1 per client.
 - `get_parallel_prefetch(client_count)` = `min(max(ceil(count/5), 1), 5)`.
 - Headers: 206 + Content-Range; `Accept-Ranges: bytes`, `Cache-Control: public, max-age=3600`, CORS `*`, `Content-Disposition` with UTF-8 fallback.
-- `/thumb/{id}` TTL 3600; `/stream/stats` returns `{active, recent}` with mbps/duration fields; `_SUBTITLE_MIME` covers all 5 subtitle exts.
+- Stream `meta` includes `file_name` (from `_resolve_filename_mime`, computed before building headers) and `title` falls back to `file_name` when `_lookup_title` returns nothing.
+- `/thumb/{id}` TTL 3600; `/stream/stats` returns `{active, recent}` with mbps/duration fields plus `file_name` (title falls back to `file_name`); `_SUBTITLE_MIME` covers all 5 subtitle exts.
 
 ## Full `/api/*` route table
 
@@ -390,6 +392,8 @@ Note: `/api/media/details` is defined but **not registered** in `main.py`.
 - Dead links/analytics: `flag_dead_link`, `get_all_dead_links`, `log_stream_stats`, `get_stream_analytics`
 
 Indexes: `custom_catalogs` (updated_at desc; items.tmdb_id+media_type); subtitles (chat_id+msg_id **unique**; imdb_id+season+episode; legacy `stream_id` indexes dropped); storage `movie`/`tv`: `tmdb_id`, `imdb_id`, `kitsu_id` asc. Tracking DB also holds `stream_analytics`.
+
+Stream analytics: `log_stream_stats` stamps `logged_at` with `datetime.now(timezone.utc)` and updates the token's `last_active`/`last_title`/`user_name`; `get_stream_analytics` normalizes naive timestamps to UTC and returns `logged_at` as `%Y-%m-%dT%H:%M:%S.%f`[:-3] + `"Z"`.
 
 ## `verify_token()` order (security/tokens.py)
 
