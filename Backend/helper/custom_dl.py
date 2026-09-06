@@ -166,6 +166,7 @@ class ByteStreamer:
         }
 
         ACTIVE_STREAMS[stream_id] = registry_entry
+        stream_entry = registry_entry
         work_loads[client_index] += 1
 
         queue_maxsize = max(1, prefetch)
@@ -361,7 +362,7 @@ class ByteStreamer:
                         try:
                             if request and await request.is_disconnected():
                                 stop_event.set()
-                                ACTIVE_STREAMS[stream_id]["status"] = "cancelled"
+                                stream_entry["status"] = "cancelled"
                                 break
                         except Exception:
                             pass
@@ -371,7 +372,7 @@ class ByteStreamer:
                     except asyncio.TimeoutError:
                         LOGGER.error("Producer stall (90 s) for stream %s — aborting", stream_id)
                         stop_event.set()
-                        ACTIVE_STREAMS[stream_id]["status"] = "error"
+                        stream_entry["status"] = "error"
                         break
 
                     if off_chunk is None:
@@ -396,11 +397,12 @@ class ByteStreamer:
                         chunk_len = 0
 
                     now_ts = time.time()
-                    elapsed = now_ts - ACTIVE_STREAMS[stream_id]["last_ts"]
+                    last_ts = stream_entry.get("last_ts") or stream_entry.get("start_ts") or now_ts
+                    elapsed = now_ts - last_ts
                     if elapsed <= 0:
                         elapsed = 1e-6
 
-                    recent = ACTIVE_STREAMS[stream_id]["recent_measurements"]
+                    recent = stream_entry.setdefault("recent_measurements", deque(maxlen=3))
                     recent.append((chunk_len, elapsed))
 
                     if len(recent) >= 2:
@@ -410,18 +412,19 @@ class ByteStreamer:
                     else:
                         instant_mbps = 0.0
 
-                    ACTIVE_STREAMS[stream_id]["total_bytes"] += chunk_len
-                    ACTIVE_STREAMS[stream_id]["last_ts"] = now_ts
+                    stream_entry["total_bytes"] = stream_entry.get("total_bytes", 0) + chunk_len
+                    stream_entry["last_ts"] = now_ts
 
-                    total_time = now_ts - ACTIVE_STREAMS[stream_id]["start_ts"]
+                    start_ts = stream_entry.get("start_ts") or now_ts
+                    total_time = now_ts - start_ts
                     if total_time <= 0:
                         total_time = 1e-6
 
-                    ACTIVE_STREAMS[stream_id]["avg_mbps"] = (ACTIVE_STREAMS[stream_id]["total_bytes"] / (1024 * 1024)) / total_time
-                    ACTIVE_STREAMS[stream_id]["instant_mbps"] = instant_mbps
+                    stream_entry["avg_mbps"] = (stream_entry["total_bytes"] / (1024 * 1024)) / total_time
+                    stream_entry["instant_mbps"] = instant_mbps
 
-                    if instant_mbps > ACTIVE_STREAMS[stream_id]["peak_mbps"]:
-                        ACTIVE_STREAMS[stream_id]["peak_mbps"] = instant_mbps
+                    if instant_mbps > stream_entry.get("peak_mbps", 0.0):
+                        stream_entry["peak_mbps"] = instant_mbps
 
                     yield out_chunk
 
@@ -431,12 +434,12 @@ class ByteStreamer:
                 stop_event.set()
                 if not producer_task.done():
                     producer_task.cancel()
-                ACTIVE_STREAMS[stream_id]["status"] = "cancelled"
+                stream_entry["status"] = "cancelled"
                 raise
             except Exception as e:
                 LOGGER.exception("Consumer error for stream %s: %s", stream_id, e)
                 stop_event.set()
-                ACTIVE_STREAMS[stream_id]["status"] = "error"
+                stream_entry["status"] = "error"
                 if not producer_task.done():
                     producer_task.cancel()
             finally:
@@ -450,18 +453,18 @@ class ByteStreamer:
 
                 try:
                     end_ts = time.time()
-                    total_bytes = ACTIVE_STREAMS[stream_id]["total_bytes"]
-                    start_ts = ACTIVE_STREAMS[stream_id]["start_ts"]
+                    total_bytes = stream_entry.get("total_bytes", 0)
+                    start_ts = stream_entry.get("start_ts") or end_ts
                     duration = end_ts - start_ts if end_ts > start_ts else 0.0
                     avg_mbps = (total_bytes / (1024 * 1024)) / (duration if duration > 0 else 1e-6)
 
-                    entry = ACTIVE_STREAMS.get(stream_id, {})
-                    entry.update({
+                    stream_entry.update({
                         "end_ts": end_ts,
                         "duration": duration,
                         "avg_mbps": avg_mbps,
-                        "status": "finished" if entry.get("status") == "active" else entry.get("status", "finished"),
+                        "status": "finished" if stream_entry.get("status") == "active" else stream_entry.get("status", "finished"),
                         "parallelism": parallelism,
+                        "chunk_size": chunk_size,
                     })
 
                     prev = client_avg_mbps.get(client_index, 0.0)
@@ -469,9 +472,8 @@ class ByteStreamer:
                         client_avg_mbps[client_index] = avg_mbps
                     else:
                         client_avg_mbps[client_index] = 0.5 * prev + 0.5 * avg_mbps
-                    
-                    entry["chunk_size"] = chunk_size
-                    asyncio.create_task(db.log_stream_stats(entry))
+
+                    asyncio.create_task(db.log_stream_stats(stream_entry))
 
                     async def delayed_pop():
                         await asyncio.sleep(3)
@@ -480,7 +482,7 @@ class ByteStreamer:
                                 RECENT_STREAMS.appendleft(ACTIVE_STREAMS.pop(stream_id))
                         except Exception:
                             pass
-                    
+
                     asyncio.create_task(delayed_pop())
                 finally:
                     try:

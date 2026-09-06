@@ -321,10 +321,12 @@ async def media_streamer(request: Request, chat_id: int, msg_id: int, token: str
     stream_id = secrets.token_hex(8)
     decoded_name = unquote(request.path_params.get("name", ""))
     final_title = await _lookup_title(stream_id_hash, decoded_name)
+    file_name, mime_type = _resolve_filename_mime(file_id)
     meta = {
         "request_path": str(request.url.path),
         "client_host": request.client.host if request.client else None,
-        "title": final_title,
+        "title": final_title or file_name,
+        "file_name": file_name,
         "user_name": token_data.get("name", "Unknown") if token_data else "Unknown",
         "token": token,
     }
@@ -368,7 +370,6 @@ async def media_streamer(request: Request, chat_id: int, msg_id: int, token: str
 
     asyncio.create_task(track_usage(stream_id, token, token_data))
 
-    file_name, mime_type = _resolve_filename_mime(file_id)
     headers, status = _build_stream_headers(mime_type, file_name, req_length, range_header, start, end, file_size)
 
     if request.method == "HEAD":
@@ -393,11 +394,13 @@ async def virtual_media_streamer(request: Request, parts_payload: list, token: s
     stream_id = secrets.token_hex(8)
     decoded_name = unquote(request.path_params.get("name", ""))
     final_title = await _lookup_title(stream_id_hash, decoded_name)
+    file_name, mime_type = _resolve_filename_mime(parts[0]["file_id"])
 
     meta = {
         "request_path": str(request.url.path),
         "client_host": request.client.host if request.client else None,
-        "title": final_title,
+        "title": final_title or file_name,
+        "file_name": file_name,
         "user_name": token_data.get("name", "Unknown") if token_data else "Unknown",
         "token": token,
         "split_parts": len(parts),
@@ -408,7 +411,6 @@ async def virtual_media_streamer(request: Request, parts_payload: list, token: s
 
     asyncio.create_task(track_usage(stream_id, token, token_data))
 
-    file_name, mime_type = _resolve_filename_mime(parts[0]["file_id"])
     common_headers, status = _build_stream_headers(mime_type, file_name, req_length, range_header, start, end, file_size)
 
     if request.method == "HEAD":
@@ -459,10 +461,12 @@ async def global_media_streamer(request: Request, chat_id: int, msg_id: int, tok
     part_count = math.ceil(end / chunk_size) - math.floor(offset / chunk_size)
     stream_id = secrets.token_hex(8)
 
+    file_name, mime_type = _resolve_filename_mime(file_id)
     meta = {
         "request_path": str(request.url.path),
         "client_host": request.client.host if request.client else None,
-        "title": file_id.file_name or "global-stream",
+        "title": file_name or "global-stream",
+        "file_name": file_name,
         "user_name": token_data.get("name", "Unknown") if token_data else "Unknown",
         "token": token,
         "global_search": True,
@@ -470,7 +474,6 @@ async def global_media_streamer(request: Request, chat_id: int, msg_id: int, tok
 
     asyncio.create_task(track_usage(stream_id, token, token_data))
 
-    file_name, mime_type = _resolve_filename_mime(file_id)
     headers, status = _build_stream_headers(mime_type, file_name, req_length, range_header, start, end, file_size)
 
     if request.method == "HEAD":
@@ -512,11 +515,13 @@ async def global_virtual_media_streamer(request: Request, parts_payload: list, t
     stream_id = secrets.token_hex(8)
     decoded_name = unquote(request.path_params.get("name", ""))
     final_title = await _lookup_title(stream_id_hash, decoded_name)
+    file_name, mime_type = _resolve_filename_mime(parts[0]["file_id"])
 
     meta = {
         "request_path": str(request.url.path),
         "client_host": request.client.host if request.client else None,
-        "title": final_title,
+        "title": final_title or file_name,
+        "file_name": file_name,
         "user_name": token_data.get("name", "Unknown") if token_data else "Unknown",
         "token": token,
         "global_search": True,
@@ -525,7 +530,6 @@ async def global_virtual_media_streamer(request: Request, parts_payload: list, t
 
     asyncio.create_task(track_usage(stream_id, token, token_data))
 
-    file_name, mime_type = _resolve_filename_mime(parts[0]["file_id"])
     headers, status = _build_stream_headers(mime_type, file_name, req_length, range_header, start, end, file_size)
 
     if request.method == "HEAD":
@@ -596,7 +600,8 @@ async def _zip_media_streamer(request, parts_payload, token, token_data, stream_
     meta = {
         "request_path": str(request.url.path),
         "client_host": request.client.host if request.client else None,
-        "title": await _lookup_title(stream_id_hash, inner_name),
+        "title": (await _lookup_title(stream_id_hash, inner_name)) or inner_name,
+        "file_name": inner_name,
         "user_name": token_data.get("name", "Unknown") if token_data else "Unknown",
         "token": token,
         "zip_parts": len(parts),
@@ -669,7 +674,8 @@ async def get_stream_stats():
             "stream_id": sid,
             "msg_id": info.get("msg_id"),
             "chat_id": info.get("chat_id"),
-            "title": info.get("meta", {}).get("title"),
+            "title": info.get("meta", {}).get("title") or info.get("meta", {}).get("file_name"),
+            "file_name": info.get("meta", {}).get("file_name"),
             "client_index": info.get("client_index"),
             "dc_id": info.get("dc_id"),
             "status": info.get("status"),
@@ -686,7 +692,8 @@ async def get_stream_stats():
             "stream_id": info.get("stream_id"),
             "msg_id": info.get("msg_id"),
             "chat_id": info.get("chat_id"),
-            "title": info.get("meta", {}).get("title"),
+            "title": info.get("meta", {}).get("title") or info.get("meta", {}).get("file_name"),
+            "file_name": info.get("meta", {}).get("file_name"),
             "client_index": info.get("client_index"),
             "dc_id": info.get("dc_id"),
             "status": info.get("status"),
