@@ -34,8 +34,6 @@ ADDON_NAME = "Telegram"
 ADDON_VERSION = __version__
 PAGE_SIZE = 15
 
-
-#----- Wrap a direct stream URL with the configured proxy (plain prepend or MediaFlow)
 def build_proxy_url(original_url: str) -> str | None:
     settings = SettingsManager.current()
     base = settings.http_proxy_url

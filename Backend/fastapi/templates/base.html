@@ -479,6 +479,18 @@ tailwind.config = {
 
 <body class="pt-24 pb-12 antialiased">
 
+<div id="update-banner" class="hidden fixed top-0 left-0 right-0 z-[60] px-3 pt-3 pointer-events-none">
+  <div class="pointer-events-auto mx-auto max-w-6xl rounded-2xl border border-amber-400/40 bg-amber-500/95 text-black shadow-[0_12px_40px_rgba(0,0,0,0.35)] backdrop-blur-md px-4 py-3 sm:px-5 flex items-start sm:items-center gap-3">
+    <div class="shrink-0 w-9 h-9 rounded-xl bg-black/15 flex items-center justify-center mt-0.5 sm:mt-0">
+      <i class="fa-solid fa-arrow-up text-sm"></i>
+    </div>
+    <div class="min-w-0 flex-1 leading-snug">
+      <p class="text-sm font-bold">New version <span id="update-latest" class="font-extrabold"></span> available</p>
+      <p class="text-xs sm:text-sm opacity-90 mt-0.5">You are on <span id="update-current" class="font-semibold"></span>. Set upstream repo/branch, then restart/update.</p>
+    </div>
+  </div>
+</div>
+
 <div id="overlay" class="fixed inset-0 z-40 opacity-0 pointer-events-none"></div>
 
 <nav id="navbar"
@@ -810,6 +822,48 @@ if(navContainer) {
     }
     check();
     setInterval(check, 60000);
+})();
+
+(function versionBanner() {
+    const banner = document.getElementById('update-banner');
+    const navbar = document.getElementById('navbar');
+    function layout(show) {
+        if (!banner || !navbar) return;
+        if (show) {
+            banner.classList.remove('hidden');
+            requestAnimationFrame(() => {
+                const h = banner.offsetHeight || 72;
+                navbar.style.top = (h + 12) + 'px';
+                document.body.style.paddingTop = (h + 88) + 'px';
+            });
+        } else {
+            banner.classList.add('hidden');
+            navbar.style.top = '';
+            document.body.style.paddingTop = '';
+        }
+    }
+    async function check() {
+        try {
+            const res = await fetch('/api/admin/version');
+            if (!res.ok) return;
+            const data = await res.json();
+            const d = data.data || {};
+            if (d.update_available && d.latest) {
+                const elL = document.getElementById('update-latest');
+                const elC = document.getElementById('update-current');
+                if (elL) elL.textContent = d.latest;
+                if (elC) elC.textContent = d.current || '';
+                layout(true);
+            } else {
+                layout(false);
+            }
+        } catch (e) {}
+    }
+    check();
+    setInterval(check, 3600000);
+    window.addEventListener('resize', () => {
+        if (banner && !banner.classList.contains('hidden')) layout(true);
+    });
 })();
 {% endif %}
 
