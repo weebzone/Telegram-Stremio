@@ -2402,6 +2402,13 @@ async def health_api() -> dict:
     return {"status": "ok", "start_time": StartTime, "version": __version__}
 
 
+async def version_status_api(force: bool = False) -> dict:
+    from Backend.helper.version_check import check_upstream_version, get_version_status
+    if force:
+        await check_upstream_version(force=True)
+    return {"status": "success", "data": get_version_status()}
+
+
 #----- Full diagnostics report (DBs, bot clients, TMDB, base URL)
 async def health_report_api(force: bool = False) -> dict:
     try:

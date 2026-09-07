@@ -77,6 +77,7 @@ from Backend.fastapi.routes.api_routes import (
     set_manual_session_api,
     health_api,
     health_report_api,
+    version_status_api,
     setup_status_api,
     link_token_user_api,
     list_custom_catalogs_api,
@@ -165,6 +166,8 @@ except Exception:
 @app.on_event("startup")
 async def _startup():
     asyncio.create_task(decay_client_failures())
+    from Backend.helper.version_check import version_check_loop
+    asyncio.create_task(version_check_loop())
 
 
 #----- Streaming and Stremio routers
@@ -734,6 +737,10 @@ async def admin_health(_: bool = Depends(require_auth)):
 @app.get("/api/admin/health/report")
 async def admin_health_report(fresh: bool = Query(False), _: bool = Depends(require_auth)):
     return await health_report_api(force=fresh)
+
+@app.get("/api/admin/version")
+async def admin_version(force: bool = Query(False), _: bool = Depends(require_auth)):
+    return await version_status_api(force=force)
 
 @app.get("/api/admin/setup-status")
 async def admin_setup_status(_: bool = Depends(require_auth)):

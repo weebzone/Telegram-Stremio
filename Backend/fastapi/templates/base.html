@@ -479,6 +479,10 @@ tailwind.config = {
 
 <body class="pt-24 pb-12 antialiased">
 
+<div id="update-banner" class="hidden fixed top-0 left-0 right-0 z-[60] bg-amber-500 text-black text-center text-sm font-semibold py-2 px-4 shadow-lg">
+  New version <span id="update-latest"></span> is available (you have <span id="update-current"></span>). Please update the code by setting the correct upstream repo and branch, then restart/update.
+</div>
+
 <div id="overlay" class="fixed inset-0 z-40 opacity-0 pointer-events-none"></div>
 
 <nav id="navbar"
@@ -810,6 +814,30 @@ if(navContainer) {
     }
     check();
     setInterval(check, 60000);
+})();
+
+(function versionBanner() {
+    async function check() {
+        try {
+            const res = await fetch('/api/admin/version');
+            if (!res.ok) return;
+            const data = await res.json();
+            const d = data.data || {};
+            const banner = document.getElementById('update-banner');
+            if (!banner) return;
+            if (d.update_available && d.latest) {
+                document.getElementById('update-latest').textContent = d.latest;
+                document.getElementById('update-current').textContent = d.current || '';
+                banner.classList.remove('hidden');
+                document.body.classList.add('pt-32');
+            } else {
+                banner.classList.add('hidden');
+                document.body.classList.remove('pt-32');
+            }
+        } catch (e) {}
+    }
+    check();
+    setInterval(check, 3600000);
 })();
 {% endif %}
 
