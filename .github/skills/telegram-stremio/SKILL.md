@@ -7,7 +7,7 @@ description: 'Project skill for Telegram-Stremio, a self-hosted media server (Fa
 
 ## What this project is
 
-Self-hosted "Telegram Stremio" media server, version 5.x. Users forward movies/episodes to Telegram channels; a PyroFork bot indexes them into MongoDB; a FastAPI app serves them as a Stremio addon (`/stremio/{token}/manifest.json`) plus a web admin panel, WebDAV, and a subscriptions bot flow. Upstream: `github.com/weebzone/Telegram-Stremio`.
+Self-hosted "Telegram Stremio" media server, version 5.x (local tree at 5.0.5). Users forward movies/episodes to Telegram channels; a PyroFork bot indexes them into MongoDB; a FastAPI app serves them as a Stremio addon (`/stremio/{token}/manifest.json`) plus a web admin panel, WebDAV, and a subscriptions bot flow. Upstream: `github.com/weebzone/Telegram-Stremio`.
 
 **Key dependencies:** FastAPI, uvicorn (uvloop + httptools), Motor, PyroFork >= 2.3.61, themoviedb, GuessIt, parse-torrent-title, rapidfuzz, Jinja2, itsdangerous. Python >= 3.11, managed with `uv` (`pyproject.toml`).
 
@@ -38,6 +38,8 @@ Everything runs in **one asyncio event loop** in one process. No separate web wo
 7. `initialize_clients()` (multi-token bots; main bot = index 0)
 8. `setup_bot_commands()` → `/start`, `/set`
 9. Background tasks: in-process uvicorn `server.serve()`, `ping()`, `DeadLinkChecker` (24 h)
+
+Separately, `main.py`'s FastAPI `startup` hook spawns `decay_client_failures()` and `version_check_loop()` — those are not in `start_services()`.
 10. `subscription_task_manager.sync()` → `idle()`
 
 `stop_services()` cancels background tasks, stops `StreamBot`/`Userbot`, disconnects DB. Uvicorn config: `uvicorn.Config(app, host="0.0.0.0", port=Telegram.PORT, loop="uvloop", http="httptools")`.
@@ -49,7 +51,7 @@ Everything runs in **one asyncio event loop** in one process. No separate web wo
 | File | Responsibility |
 |---|---|
 | `main.py` | Creates `app`; mounts `/static`, Jinja templates; registers routers; ~120 `/api/*` admin endpoints guarded by `require_auth`; global 401 handler (JSON for API paths, 302 → `/login` for pages). |
-| `themes.py` | 12 color themes + 3 styles; `get_theme()`, `get_all_themes()`; defaults `graphite_amber`/`default`. |
+| `themes.py` | 15 color themes + 3 styles; `get_theme()`, `get_all_themes()`, `get_all_styles()`; defaults `graphite_amber`/`default`. |
 | `routes/stremio_routes.py` | The addon (`/stremio`): manifest, catalog, meta, subtitles. Per-token visibility filtering, poster providers, MediaFlow proxy URL building, `addon_version` expiry-epoch tag. |
 | `routes/stream_routes.py` | `/dl/{token}/{id}/{name}` (GET/HEAD), `/sub/...`, `/thumb/{id}`, `/stream/stats`. Range parsing, best-client selection, 206 headers. |
 | `routes/api_routes.py` | ~2500-line admin API: media CRUD, tokens, subscriptions, requests, catalogs, settings, scans, stats, logs, backup, restart. |
@@ -74,6 +76,7 @@ Everything runs in **one asyncio event loop** in one process. No separate web wo
 | `announcer.py`, `auto_catalog.py` | New-content announcements; TMDB-driven auto catalogs. |
 | `subtitles.py`, `nfo_generator.py`, `fanart.py` | Subtitle ingestion/matching; Kodi NFO for WebDAV; fanart.tv artwork with TTL cache. |
 | `global_search.py` | Userbot-powered on-demand search of `global_search_channels`. |
+| `version_check.py` | Compares `__version__` against the upstream GitHub repo every 12 h. Module-level `_state` cache + `asyncio.Lock`; `check_upstream_version(force)`, `get_version_status()`, `version_check_loop()` (task started in `main.py`). |
 | `session_auth.py` | In-app userbot login flow; stores session encoded in `tracking.state["user_session"]`. |
 | `subscription_task_manager.py` | Hourly subscription expiry/kick/reminder loop. |
 | `requests_manager.py`, `analytics.py`, `health.py`, `pinger.py`, `task_manager.py`, `utils.py`, `passwords.py`, `backup.py`, `modal.py`, `exceptions.py`, `custom_filter.py`, `pyro.py` | Public requests; telemetry; health checks; self-ping; bot edit/delete helpers with Userbot fallback; token usage tracking; PBKDF2 password hashing; config backup; Pydantic storage schemas; exceptions; owner filter; Telegram helpers. |
@@ -203,7 +206,7 @@ python bump-version.py [patch|minor|major]  # bumps pyproject.toml + Backend/__i
 - Restart = re-exec `uv run -m Backend` after the updater.
 - Fanart / BetterPoster / RPDB are mutually exclusive poster providers (validated in settings API).
 - Minor lint noise: duplicated `import asyncio` at top of `api_routes.py`.
-- Recent local changes: the obfuscated donation banner (`__x7` in `themes.py` + call sites in `stremio_routes.py`) was removed; empty stream results return `{"streams": []}`.
+- Local divergence from upstream: the donation stream entry (`_donation()` in `stremio_routes.py`, prepended to every stream list and returned alone when nothing matched) is removed; empty results return `{"streams": []}`. Re-check after every upstream merge — it lives in the hot path of `get_streams`.
 
 ## Troubleshooting playbook
 
