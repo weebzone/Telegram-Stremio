@@ -1,3 +1,10 @@
+"""
+tasks/task_manager.py — Telegram message edit/delete helpers with FloodWait handling.
+
+Used by the receiver, database cleanup, skip-channel routing, and manual-add
+to edit captions or delete messages safely (including userbot fallback).
+"""
+
 from asyncio import sleep
 from typing import List
 
@@ -30,10 +37,8 @@ _FALLBACK_WORTHY = (
 _SESSION_DEAD = (AuthKeyUnregistered, SessionRevoked)
 _userbot_session_dead = False
 
-
 def _userbot_usable() -> bool:
     return botmod.Userbot is not None and not _userbot_session_dead
-
 
 async def _resolve_peer(client, chat_id) -> bool:
     try:
@@ -41,7 +46,6 @@ async def _resolve_peer(client, chat_id) -> bool:
         return True
     except Exception as e:
         return False
-
 
 async def edit_message(chat_id: int, msg_id: int, new_caption: str):
     try:
@@ -77,7 +81,6 @@ async def edit_message(chat_id: int, msg_id: int, new_caption: str):
     except Exception as e:
         LOGGER.error(f"Error while editing message {msg_id} in {chat_id}: {e}")
 
-
 async def _userbot_edit(chat_id: int, msg_id: int, new_caption: str):
     global _userbot_session_dead
     try:
@@ -105,10 +108,8 @@ async def _userbot_edit(chat_id: int, msg_id: int, new_caption: str):
     except Exception as e:
         LOGGER.error(f"[USERBOT] Error while editing message {msg_id} in {chat_id}: {e}")
 
-
 async def delete_message(chat_id: int, msg_id: int):
     await delete_messages_batch(chat_id, [msg_id])
-
 
 async def delete_messages_batch(chat_id: int, msg_ids: List[int]):
     if not msg_ids:
@@ -131,7 +132,6 @@ async def delete_messages_batch(chat_id: int, msg_ids: List[int]):
             )
 
         await sleep(1)
-
 
 async def _delete_chunk(client, client_label: str, chat_id: int, msg_ids: List[int]) -> List[int]:
     global _userbot_session_dead

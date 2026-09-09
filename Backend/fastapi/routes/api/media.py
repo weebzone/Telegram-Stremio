@@ -32,7 +32,7 @@ from Backend.helper.auto_catalog import (
     start_single_media_catalog_sync,
     update_auto_catalog_settings,
 )
-from Backend.helper.backup import export_config, import_config
+from Backend.helper.tasks.backup import export_config, import_config
 from Backend.helper.streaming.byte_streamer import ByteStreamer
 from Backend.helper.streaming.speed_test import _speed_test_single_client, run_speed_test
 from Backend.helper.encrypt import decode_string, encode_string

@@ -1,3 +1,9 @@
+"""
+tasks/pinger.py — periodic HTTP self-ping to keep the dyno/process awake.
+
+Runs as a background task from __main__ when a public base URL is configured.
+"""
+
 import asyncio
 import traceback
 
@@ -6,8 +12,6 @@ import aiohttp
 from Backend.helper.settings_manager import SettingsManager
 from Backend.logger import LOGGER
 
-
-#----- Periodically self-ping the public status page to keep the instance awake
 async def ping():
     sleep_time = 1200
 

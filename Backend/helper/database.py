@@ -14,7 +14,7 @@ from Backend.config import Telegram
 from Backend.helper.encrypt import decode_string, encode_string
 from Backend.helper.modal import Episode, MovieSchema, QualityDetail, QualityPart, Season, TVShowSchema
 from Backend.helper.settings_manager import SettingsManager
-from Backend.helper.task_manager import delete_message
+from Backend.helper.tasks.task_manager import delete_message
 from Backend.logger import LOGGER
 
 

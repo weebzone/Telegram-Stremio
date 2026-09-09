@@ -28,7 +28,7 @@ from Backend.helper.pyro import (
 )
 from Backend.helper.split_files import parse_split_info, strip_part_suffix
 from Backend.logger import LOGGER
-from Backend.helper.task_manager import edit_message
+from Backend.helper.tasks.task_manager import edit_message
 
 _PRIVATE_LINK = re.compile(r"t\.me/c/(\d+)(?:/\d+)*/(\d+)")
 _PUBLIC_LINK = re.compile(r"t\.me/([A-Za-z][\w]{3,})/(?:\d+/)?(\d+)")

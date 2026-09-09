@@ -434,7 +434,7 @@ class SettingsManager:
         #----- Subscription enabled/disabled: start or stop the checker task
         if old.get("subscription") != new.get("subscription"):
             try:
-                from Backend.helper import subscription_task_manager
+                from Backend.helper.tasks import subscription_task_manager
                 from Backend.pyrofork.bot import StreamBot
 
                 if new.get("subscription"):

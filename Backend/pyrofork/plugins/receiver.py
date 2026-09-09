@@ -19,7 +19,7 @@ from Backend.helper.settings_manager import SettingsManager
 from Backend.helper.skip_channel import is_skip_channel, route_to_skip_channel
 from Backend.helper.split_files import parse_split_info
 from Backend.helper.subtitles import ingest_subtitle, is_subtitle_file, remove_subtitle
-from Backend.helper.task_manager import delete_message
+from Backend.helper.tasks.task_manager import delete_message
 from Backend.logger import LOGGER
 
 file_queue = Queue()
