@@ -1,4 +1,17 @@
-"""TMDb metadata provider."""
+"""
+tmdb.py — The Movie Database (TMDb) provider.
+
+Primary source for movies and a strong fallback for series.  Requires a
+TMDB API key (Telegram.TMDB_API or settings).
+
+Example
+-------
+    from Backend.helper.metadata.providers.tmdb import search, details
+
+    results = await search("movie", "Dune", year=2021)
+    movie = await details("movie", 438631)
+"""
+
 from __future__ import annotations
 
 from typing import Optional
@@ -71,10 +84,10 @@ def _extract_cast(details) -> list:
 
 def _tmdb_country_codes(details) -> list:
     codes: list = []
-    for code in (getattr(details, "origin_country", None) or []):
+    for code in getattr(details, "origin_country", None) or []:
         if code and code not in codes:
             codes.append(code)
-    for country in (getattr(details, "production_countries", None) or []):
+    for country in getattr(details, "production_countries", None) or []:
         code = getattr(country, "iso_3166_1", None) or (
             country.get("iso_3166_1") if isinstance(country, dict) else None
         )
@@ -118,10 +131,14 @@ async def _tmdb_alternative_titles(media_type: str, tmdb_id) -> list:
             async with API_SEMAPHORE:
                 target = client.movie(tmdb_id) if media_type == "movie" else client.tv(tmdb_id)
                 alt = await target.alternative_titles()
-            entries = list(getattr(alt, "titles", None) or []) + list(getattr(alt, "results", None) or [])
+            entries = list(getattr(alt, "titles", None) or []) + list(
+                getattr(alt, "results", None) or []
+            )
             titles = [t for t in (getattr(e, "title", "") for e in entries) if t]
         except Exception as e:
-            LOGGER.warning(f"TMDb alternative-titles fetch failed for {media_type} id={tmdb_id}: {e}")
+            LOGGER.warning(
+                f"TMDb alternative-titles fetch failed for {media_type} id={tmdb_id}: {e}"
+            )
         return titles
 
     return await cached_call(ALT_TITLES_CACHE, cache_key, "alt_titles", _produce)
@@ -136,12 +153,15 @@ async def pick_best(results, query_title: str, query_year: Optional[int], media_
     best_item, best_score = None, 0.0
     for item in results:
         r_title, r_year = tmdb_title_year(item, media_type)
-        # original_title / original_name also counts as an alias
         orig = getattr(item, "original_title", None) or getattr(item, "original_name", None) or ""
         score = score_candidate_aliases(
-            query_title, query_year, r_title, r_year,
+            query_title,
+            query_year,
+            r_title,
+            r_year,
             aliases=[orig] if orig and orig != r_title else None,
-            year_reliable=year_reliable, year_lower_bound=year_lower_bound,
+            year_reliable=year_reliable,
+            year_lower_bound=year_lower_bound,
         )
         scored.append((score, item, r_year))
         if score > best_score:
@@ -150,7 +170,6 @@ async def pick_best(results, query_title: str, query_year: Optional[int], media_
     if best_score >= STRONG_MATCH:
         return best_item
 
-    # Fetch official alternative titles for top candidates
     scored.sort(key=lambda x: x[0], reverse=True)
     for _, item, r_year in scored[:ALT_TITLE_LOOKUPS]:
         r_title, _ = tmdb_title_year(item, media_type)
@@ -160,9 +179,13 @@ async def pick_best(results, query_title: str, query_year: Optional[int], media_
         if orig:
             aliases.append(orig)
         alt_score = score_candidate_aliases(
-            query_title, query_year, r_title, r_year,
+            query_title,
+            query_year,
+            r_title,
+            r_year,
             aliases=aliases,
-            year_reliable=year_reliable, year_lower_bound=year_lower_bound,
+            year_reliable=year_reliable,
+            year_lower_bound=year_lower_bound,
         )
         if alt_score > best_score:
             best_score, best_item = alt_score, item
@@ -184,7 +207,9 @@ async def safe_search(title: str, type_: str, year: Optional[int] = None):
             if best is None and results:
                 top = results[0]
                 top_title = getattr(top, "title" if type_ == "movie" else "name", "?")
-                LOGGER.info(f"TMDb '{title}' (year={year}) top result '{top_title}' did not meet threshold")
+                LOGGER.info(
+                    f"TMDb '{title}' (year={year}) top result '{top_title}' did not meet threshold"
+                )
             return best
         except Exception as e:
             LOGGER.error(f"TMDb search failed for '{title}' [{type_}]: {e}")
@@ -249,9 +274,8 @@ def build_movie_payload(movie, quality, encoded_string) -> dict:
         "description": movie.overview or "",
         "poster": format_tmdb_image(movie.poster_path),
         "backdrop": format_tmdb_image(movie.backdrop_path, "original"),
-        "logo": get_tmdb_logo(getattr(movie, "images", None)) or logo_from_imdb(
-            getattr(getattr(movie, "external_ids", None), "imdb_id", None)
-        ),
+        "logo": get_tmdb_logo(getattr(movie, "images", None))
+        or logo_from_imdb(getattr(getattr(movie, "external_ids", None), "imdb_id", None)),
         "cast": _extract_cast(movie),
         "runtime": str(format_runtime(getattr(movie, "runtime", None))),
         "media_type": "movie",
@@ -288,9 +312,8 @@ def build_tv_payload(tv, ep, season, episode, quality, encoded_string) -> dict:
         "description": tv.overview or "",
         "poster": format_tmdb_image(tv.poster_path),
         "backdrop": format_tmdb_image(tv.backdrop_path, "original"),
-        "logo": get_tmdb_logo(getattr(tv, "images", None)) or logo_from_imdb(
-            getattr(getattr(tv, "external_ids", None), "imdb_id", None)
-        ),
+        "logo": get_tmdb_logo(getattr(tv, "images", None))
+        or logo_from_imdb(getattr(getattr(tv, "external_ids", None), "imdb_id", None)),
         "genres": [g.name for g in (tv.genres or [])],
         "media_type": "tv",
         "cast": _extract_cast(tv),
@@ -300,7 +323,9 @@ def build_tv_payload(tv, ep, season, episode, quality, encoded_string) -> dict:
         "season_number": season,
         "episode_number": episode,
         "episode_title": getattr(ep, "name", fallback_ep_title) if ep else fallback_ep_title,
-        "episode_backdrop": format_tmdb_image(getattr(ep, "still_path", None), "original") if ep else "",
+        "episode_backdrop": (
+            format_tmdb_image(getattr(ep, "still_path", None), "original") if ep else ""
+        ),
         "episode_overview": getattr(ep, "overview", "") if ep else "",
         "episode_released": (
             ep.air_date.strftime("%Y-%m-%dT05:00:00.000Z")

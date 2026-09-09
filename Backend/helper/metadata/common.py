@@ -1,4 +1,21 @@
-"""Shared helpers for metadata providers and resolvers."""
+"""
+common.py — shared constants, scoring and caching used by every metadata provider.
+
+Holds match thresholds, combined-episode constants, the global API semaphore,
+in-process caches, and helpers such as score_candidate / title_similarity /
+format_tmdb_image / resolve_cover_url.
+
+Example
+-------
+    from Backend.helper.metadata.common import (
+        score_candidate, CINEMETA_THRESHOLD, COMBINED_SEASON
+    )
+
+    score = score_candidate("Avatar", "Avatar (2009)", year=2009)
+    if score >= CINEMETA_THRESHOLD:
+        ...
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -11,7 +28,6 @@ from rapidfuzz import fuzz
 
 from Backend.logger import LOGGER
 
-# Match thresholds
 CINEMETA_THRESHOLD = 0.60
 TMDB_THRESHOLD = 0.55
 TVDB_THRESHOLD = 0.55
@@ -19,7 +35,6 @@ KITSU_THRESHOLD = 0.55
 STRONG_MATCH = 0.92
 ALT_TITLE_LOOKUPS = 5
 
-# Combined-file constants (Specials season)
 COMBINED_SEASON = 0
 COMBINED_EPISODE_BASE = 1000
 
@@ -27,7 +42,6 @@ GRADIENT_COVER_BASE = "https://gradient-cover-api.vercel.app"
 
 API_SEMAPHORE = asyncio.Semaphore(12)
 
-# Shared caches (provider modules may also keep their own)
 IMDB_CACHE: dict = {}
 TMDB_SEARCH_CACHE: dict = {}
 TMDB_DETAILS_CACHE: dict = {}
@@ -152,7 +166,6 @@ def score_candidate(
     return score
 
 
-
 def collect_title_aliases(*groups) -> list:
     """Flatten title / alias fields from provider payloads into unique strings."""
     out: list = []
@@ -163,13 +176,11 @@ def collect_title_aliases(*groups) -> list:
         if isinstance(group, str):
             items = [group]
         elif isinstance(group, dict):
-            # translations / titles maps: use all values
             items = list(group.values())
         elif isinstance(group, (list, tuple, set)):
             items = []
             for x in group:
                 if isinstance(x, dict):
-                    # TVDB-style {"name": "..."} or {"title": "..."}
                     items.append(x.get("name") or x.get("title") or x.get("alias") or "")
                 else:
                     items.append(x)
@@ -207,7 +218,10 @@ def score_candidate_aliases(
     best = 0.0
     for t in titles:
         s = score_candidate(
-            query_title, query_year, t, result_year,
+            query_title,
+            query_year,
+            t,
+            result_year,
             year_reliable=year_reliable,
             year_lower_bound=year_lower_bound,
         )
@@ -319,7 +333,6 @@ def empty_payload_base() -> dict:
     }
 
 
-
 def ensure_media_ids(payload: dict, *, seed: str = "") -> dict:
     """Guarantee usable integer tmdb_id and string imdb_id for DB / Stremio / admin UI.
 
@@ -350,8 +363,8 @@ def ensure_media_ids(payload: dict, *, seed: str = "") -> dict:
         imdb = None
 
     if tmdb is None:
-        # Stable-ish synthetic id from available seeds so re-index merges
         import hashlib
+
         base = (
             seed
             or imdb
@@ -411,14 +424,13 @@ def normalize_rating(value) -> float:
     if v <= 10:
         return round(v, 1)
     if v <= 100:
-        # percentage-style (e.g. 82.5 → 8.3)
         return round(v / 10.0, 1)
-    # Popularity / rank scores — not a star rating
     return 0.0
 
 
 def parse_year_range(start=None, end=None) -> tuple:
     """Return (start_year:int|0, end_year:int|None) from provider fields."""
+
     def _y(val):
         if val is None or val == "":
             return None

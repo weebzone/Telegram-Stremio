@@ -1,8 +1,17 @@
-"""TheTVDB v4 metadata provider.
-
-Requires a free TVDB API key (settings: tvdb_api).
-Docs: https://thetvdb.github.io/v4-api/
 """
+tvdb.py — TheTVDB v4 metadata provider.
+
+Preferred source for series (and anime when Kitsu misses).  Requires a
+free TVDB API key (settings: tvdb_api).
+
+Example
+-------
+    from Backend.helper.metadata.providers.tvdb import search, series_details
+
+    hits = await search("The Last of Us")
+    show = await series_details(tvdb_id=371980)
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -28,17 +37,20 @@ from Backend.helper.metadata.common import (
 from Backend.helper.settings_manager import SettingsManager
 from Backend.logger import LOGGER
 
+
 async def _imdb_fallback_rating(imdb_id: Optional[str], media_type: str) -> float:
     if not imdb_id:
         return 0.0
     try:
         from Backend.helper.metadata.providers import cinemeta
+
         detail = await cinemeta.cached_detail(imdb_id, media_type)
         if detail:
             return normalize_rating((detail.get("rating") or {}).get("star", 0))
     except Exception as e:
         LOGGER.debug(f"[TVDB] IMDb rating fallback failed for {imdb_id}: {e}")
     return 0.0
+
 
 BASE = "https://api4.thetvdb.com/v4"
 ARTWORK_BASE = "https://artworks.thetvdb.com"
@@ -81,7 +93,6 @@ async def _ensure_token() -> Optional[str]:
             return None
         data = resp.json() or {}
         _token = ((data.get("data") or {}).get("token")) or None
-        # Tokens are valid ~1 month; refresh earlier
         _token_expires = now + 25 * 24 * 3600
         return _token
     except Exception as e:
@@ -99,7 +110,6 @@ async def _get(path: str, params: dict | None = None) -> Optional[dict]:
         async with API_SEMAPHORE:
             resp = await client.get(f"{BASE}{path}", params=params or {}, headers=headers)
         if resp.status_code == 401:
-            # force re-login once
             global _token, _token_expires
             _token, _token_expires = None, 0.0
             token = await _ensure_token()
@@ -159,8 +169,9 @@ async def search(title: str, year: Optional[int] = None, entity: str = "series")
         best, best_score = None, 0.0
         for r in results:
             r_title = r.get("name") or r.get("translations", {}).get("eng") or ""
-            r_year = year_from_str(r.get("year") or r.get("first_air_time") or r.get("release_date"))
-            # Search hits may include aliases / overviews / translations
+            r_year = year_from_str(
+                r.get("year") or r.get("first_air_time") or r.get("release_date")
+            )
             aliases = []
             for key in ("aliases", "alias", "primary_translated", "translations"):
                 val = r.get(key)
@@ -172,11 +183,13 @@ async def search(title: str, year: Optional[int] = None, entity: str = "series")
                     aliases.extend(val)
                 else:
                     aliases.append(val)
-            # Some TVDB search rows put extra names under overviews or slug-like fields
             if r.get("slug"):
                 aliases.append(str(r["slug"]).replace("-", " "))
             score = score_candidate_aliases(
-                title, year, r_title, r_year,
+                title,
+                year,
+                r_title,
+                r_year,
                 aliases=aliases,
                 year_reliable=(entity == "movie"),
                 year_lower_bound=(entity == "series"),
@@ -184,15 +197,20 @@ async def search(title: str, year: Optional[int] = None, entity: str = "series")
             if score > best_score:
                 best_score, best = score, r
 
-        # If still borderline, pull extended aliases for top candidates
         if best and best_score < STRONG_MATCH:
             ranked = []
             for r in results[:5]:
                 r_title = r.get("name") or ""
-                r_year = year_from_str(r.get("year") or r.get("first_air_time") or r.get("release_date"))
+                r_year = year_from_str(
+                    r.get("year") or r.get("first_air_time") or r.get("release_date")
+                )
                 aliases = r.get("aliases") or []
                 sc = score_candidate_aliases(
-                    title, year, r_title, r_year, aliases=aliases,
+                    title,
+                    year,
+                    r_title,
+                    r_year,
+                    aliases=aliases,
                     year_reliable=(entity == "movie"),
                     year_lower_bound=(entity == "series"),
                 )
@@ -216,17 +234,18 @@ async def search(title: str, year: Optional[int] = None, entity: str = "series")
                     continue
                 ext_aliases = ext.get("aliases") or []
                 ext_name = ext.get("name") or r.get("name") or ""
-                ext_year = year_from_str(
-                    ext.get("year") or ext.get("firstAired") or r.get("year")
-                )
-                # Also translations list if present
+                ext_year = year_from_str(ext.get("year") or ext.get("firstAired") or r.get("year"))
                 for tr in (ext.get("translations") or {}).get("nameTranslations") or []:
                     if isinstance(tr, dict) and tr.get("name"):
                         ext_aliases = list(ext_aliases) + [tr["name"]]
                     elif isinstance(tr, str):
                         ext_aliases = list(ext_aliases) + [tr]
                 sc2 = score_candidate_aliases(
-                    title, year, ext_name, ext_year, aliases=ext_aliases,
+                    title,
+                    year,
+                    ext_name,
+                    ext_year,
+                    aliases=ext_aliases,
                     year_reliable=(entity == "movie"),
                     year_lower_bound=(entity == "series"),
                 )
@@ -273,7 +292,6 @@ async def episode_by_number(tvdb_id: int, season: int, episode: int) -> Optional
     cache_key = f"tvdb_ep::{tvdb_id}::{season}::{episode}"
 
     async def _produce():
-        # Prefer seasons endpoint then filter
         data = await _get(
             f"/series/{tvdb_id}/episodes/default",
             {"page": 0},
@@ -283,11 +301,12 @@ async def episode_by_number(tvdb_id: int, season: int, episode: int) -> Optional
             episodes = episodes.get("episodes") or []
         for ep in episodes or []:
             try:
-                if int(ep.get("seasonNumber") or -1) == int(season) and int(ep.get("number") or -1) == int(episode):
+                if int(ep.get("seasonNumber") or -1) == int(season) and int(
+                    ep.get("number") or -1
+                ) == int(episode):
                     return ep
             except (TypeError, ValueError):
                 continue
-        # Fallback: search endpoint
         data = await _get(f"/series/{tvdb_id}/episodes/default", {"page": 0})
         return None
 
@@ -305,7 +324,7 @@ async def _iter_series_episodes(tvdb_id: int, order: str = "default") -> list:
         )
         if not data:
             break
-        block = (data.get("data") or {})
+        block = data.get("data") or {}
         if isinstance(block, dict):
             eps = block.get("episodes") or []
             links = block.get("links") or (data.get("links") or {})
@@ -315,7 +334,6 @@ async def _iter_series_episodes(tvdb_id: int, order: str = "default") -> list:
         if not eps:
             break
         all_eps.extend(eps)
-        # pagination: TVDB v4 uses links.next
         next_url = None
         if isinstance(links, dict):
             next_url = links.get("next")
@@ -332,15 +350,12 @@ async def episode_translation(
     """Fetch episode translation, defaulting to English."""
     if not episode_id:
         return None
-    # Always use TVDB's English language code.
     lang = "eng"
 
     cache_key = f"tvdb_ep_tr::{episode_id}::{lang}"
 
     async def _produce():
-        data = await _get(
-            f"/episodes/{episode_id}/translations/{lang}"
-        )
+        data = await _get(f"/episodes/{episode_id}/translations/{lang}")
         return (data or {}).get("data")
 
     return await cached_call(
@@ -350,12 +365,12 @@ async def episode_translation(
         _produce,
     )
 
+
 async def episode_by_absolute(tvdb_id: int, absolute: int) -> Optional[dict]:
     cache_key = f"tvdb_abs::{tvdb_id}::{absolute}"
 
     async def _produce():
         abs_n = int(absolute)
-        # 1) absolute order endpoint (episode.number == absolute)
         try:
             eps = await _iter_series_episodes(tvdb_id, order="absolute")
             for ep in eps:
@@ -367,7 +382,6 @@ async def episode_by_absolute(tvdb_id: int, absolute: int) -> Optional[dict]:
         except Exception as e:
             LOGGER.debug(f"[TVDB] absolute order fetch failed for {tvdb_id}: {e}")
 
-        # 2) default order – match absoluteNumber / absoluteIndex
         try:
             eps = await _iter_series_episodes(tvdb_id, order="default")
             for ep in eps:
@@ -387,7 +401,7 @@ async def episode_by_absolute(tvdb_id: int, absolute: int) -> Optional[dict]:
 def _remote_ids(doc: dict) -> tuple:
     imdb_id = None
     tmdb_id = None
-    for rid in (doc.get("remoteIds") or []):
+    for rid in doc.get("remoteIds") or []:
         source = str(rid.get("sourceName") or rid.get("type") or "").lower()
         val = rid.get("id") or rid.get("value")
         if not val:
@@ -463,7 +477,6 @@ async def build_series_payload(
         series.get("firstAired") or series.get("year"),
         series.get("lastAired") or series.get("nextAired"),
     )
-    # TVDB `score` is a popularity rank, not stars — prefer siteRating if present.
     rate = normalize_rating(
         series.get("siteRating")
         or series.get("rating")
@@ -499,7 +512,11 @@ async def build_series_payload(
         "cast": [],
         "runtime": "",
         "original_language": (series.get("originalLanguage") or None),
-        "origin_country": list(series.get("originalCountry") or []) if isinstance(series.get("originalCountry"), list) else ([series["originalCountry"]] if series.get("originalCountry") else []),
+        "origin_country": (
+            list(series.get("originalCountry") or [])
+            if isinstance(series.get("originalCountry"), list)
+            else ([series["originalCountry"]] if series.get("originalCountry") else [])
+        ),
         "season_number": season,
         "episode_number": episode,
         "episode_title": ep_title,
@@ -559,7 +576,9 @@ async def build_movie_payload(movie: dict, quality, encoded_string) -> dict:
     return ensure_media_ids(payload, seed=f"tvdb:{movie.get('id')}")
 
 
-async def fetch_series_metadata(title, season, episode, encoded_string, year=None, quality=None) -> Optional[dict]:
+async def fetch_series_metadata(
+    title, season, episode, encoded_string, year=None, quality=None
+) -> Optional[dict]:
     hit = await search(title, year=year, entity="series")
     if not hit:
         return None
@@ -570,7 +589,6 @@ async def fetch_series_metadata(title, season, episode, encoded_string, year=Non
         return None
     series = await series_extended(tvdb_id)
     if not series:
-        # fall back to search hit fields
         series = {
             "id": tvdb_id,
             "name": hit.get("name"),

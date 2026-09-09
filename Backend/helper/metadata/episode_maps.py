@@ -1,14 +1,18 @@
-"""Anime episode number mapping fallbacks.
-
-Resolution order used by Kitsu absolute-episode path when ani.zip lacks
-seasonNumber/episodeNumber:
-
-  1. Anime-Lists XML  (AniDB → TVDB/TMDB S/E + offsets)
-  2. anibridge-mappings (daily JSON range maps)
-
-Both datasets are downloaded once and cached in-process (and optionally on
-disk under the working directory). Refresh is lazy + TTL-based.
 """
+episode_maps.py — absolute ↔ seasonal episode mapping helpers.
+
+Converts between absolute episode numbers (common in anime releases) and
+IMDB / TVDB seasonal numbering.  Also stores and looks up mapping tables
+from AniZip / TVDB.
+
+Example
+-------
+    from Backend.helper.metadata.episode_maps import absolute_from_imdb_episode
+
+    abs_ep = absolute_from_imdb_episode(imdb_id="tt123", season=1, episode=5)
+    # -> 17  (if the mapping says S01E05 == absolute 17)
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -25,16 +29,13 @@ import httpx
 from Backend.logger import LOGGER
 
 ANIME_LISTS_URL = (
-    "https://raw.githubusercontent.com/Anime-Lists/anime-lists/master/"
-    "anime-list-master.xml"
+    "https://raw.githubusercontent.com/Anime-Lists/anime-lists/master/" "anime-list-master.xml"
 )
 ANIBRIDGE_ZST_URL = (
-    "https://github.com/anibridge/anibridge-mappings/releases/download/v3/"
-    "mappings.json.zst"
+    "https://github.com/anibridge/anibridge-mappings/releases/download/v3/" "mappings.json.zst"
 )
 ANIBRIDGE_MIN_URL = (
-    "https://github.com/anibridge/anibridge-mappings/releases/download/v3/"
-    "mappings.min.json"
+    "https://github.com/anibridge/anibridge-mappings/releases/download/v3/" "mappings.min.json"
 )
 
 _TTL_SECONDS = 24 * 3600
@@ -56,9 +57,7 @@ class AnimeListEntry:
     tmdb_offset: int = 0
     imdb_id: Optional[str] = None
     name: str = ""
-    mappings: List[Tuple[int, int, Optional[int], Optional[int], int]] = field(
-        default_factory=list
-    )
+    mappings: List[Tuple[int, int, Optional[int], Optional[int], int]] = field(default_factory=list)
     special_map: Dict[int, int] = field(default_factory=dict)
 
 
@@ -208,9 +207,7 @@ def _parse_anime_lists_xml(raw: bytes) -> Dict[int, AnimeListEntry]:
                         season_target = None
 
                 if season_target is not None:
-                    entry.mappings.append(
-                        (anidb_season, season_target, start, end, offset)
-                    )
+                    entry.mappings.append((anidb_season, season_target, start, end, offset))
 
         out[anidb_id] = entry
     return out
@@ -255,9 +252,7 @@ async def ensure_anime_lists() -> Dict[int, AnimeListEntry]:
                 if resp.status_code == 200 and resp.content:
                     raw = resp.content
                     _write_disk("anime-list-master.xml", raw)
-                    LOGGER.info(
-                        f"[EP_MAPS] Downloaded Anime-Lists XML ({len(raw)} bytes)"
-                    )
+                    LOGGER.info(f"[EP_MAPS] Downloaded Anime-Lists XML ({len(raw)} bytes)")
             except Exception as e:
                 LOGGER.warning(f"[EP_MAPS] Anime-Lists download failed: {e}")
 
@@ -294,9 +289,6 @@ def resolve_via_anime_lists(
         "source": "anime-lists",
     }
 
-    # 1) Explicit range mappings FIRST — even when defaulttvdbseason is "a".
-    #    One Piece ships both "a" AND per-arc season ranges; ranges give real
-    #    S/E (e.g. abs 1171 → S23E16) without needing the TVDB API.
     for anidb_season, tvdb_season, start, end, offset in entry.mappings:
         if anidb_season not in (0, 1):
             continue
@@ -311,7 +303,6 @@ def resolve_via_anime_lists(
         result["episode_number"] = ep
         return result
 
-    # 2) defaulttvdbseason == "a" → absolute on TVDB (caller may resolve via API)
     if (entry.default_tvdb_season or "").lower() == "a":
         result["absolute_episode"] = absolute
         result["season_number"] = None
@@ -319,7 +310,6 @@ def resolve_via_anime_lists(
         result["tvdb_absolute"] = True
         return result
 
-    # 3) Simple default season + offset
     try:
         season = int(entry.default_tvdb_season) if entry.default_tvdb_season else 1
     except (TypeError, ValueError):
@@ -332,9 +322,7 @@ def resolve_via_anime_lists(
     return result
 
 
-_RANGE_RE = re.compile(
-    r"^(?P<start>\d+)(?:-(?P<end>\d+)?)?(?:\|(?P<ratio>-?\d+(?:\.\d+)?))?$"
-)
+_RANGE_RE = re.compile(r"^(?P<start>\d+)(?:-(?P<end>\d+)?)?(?:\|(?P<ratio>-?\d+(?:\.\d+)?))?$")
 
 
 def _parse_range_token(token: str) -> Optional[Tuple[int, Optional[int], float]]:
@@ -430,6 +418,7 @@ async def ensure_anibridge() -> dict:
         if raw:
             try:
                 import zstandard as zstd
+
                 dctx = zstd.ZstdDecompressor()
                 data = json.loads(dctx.decompress(raw))
             except Exception:
@@ -489,8 +478,9 @@ def resolve_via_anibridge(
         ordered = sorted(
             targets.items(),
             key=lambda kv: (
-                0 if str(kv[0]).startswith("tvdb_show:") else
-                1 if str(kv[0]).startswith("tmdb_show:") else 2
+                0
+                if str(kv[0]).startswith("tvdb_show:")
+                else 1 if str(kv[0]).startswith("tmdb_show:") else 2
             ),
         )
         for tgt_desc, range_map in ordered:

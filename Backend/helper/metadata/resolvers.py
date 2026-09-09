@@ -1,9 +1,21 @@
-"""Priority chains for metadata resolution.
+"""
+resolvers.py — priority chains that pick the best metadata provider.
 
 Anime  : Kitsu > TVDB > TMDB > Cinemeta
 Movies : TMDB > Cinemeta
 Series : TVDB > Cinemeta > TMDB
+
+Each resolve_* function tries providers in order and returns the first
+good match (or None).
+
+Example
+-------
+    from Backend.helper.metadata.resolvers import resolve_movie, resolve_tv
+
+    movie = await resolve_movie("Inception", encoded_string, year=2010)
+    series = await resolve_tv("Breaking Bad", encoded_string, year=2008)
 """
+
 from __future__ import annotations
 
 from typing import Optional
@@ -12,8 +24,6 @@ from Backend.helper.metadata.common import split_default_id, title_similarity, C
 from Backend.helper.metadata.providers import cinemeta, kitsu, tmdb, tvdb
 from Backend.logger import LOGGER
 
-
-# ── Movies: TMDB > Cinemeta ──────────────────────────────────────────────────
 
 async def resolve_movie(
     title: str,
@@ -24,13 +34,11 @@ async def resolve_movie(
 ) -> Optional[dict]:
     imdb_id, tmdb_id, explicit_imdb, force_tmdb = split_default_id(default_id)
 
-    # Explicit TMDB id
     if tmdb_id and force_tmdb:
         movie = await tmdb.details("movie", tmdb_id)
         if movie:
             return tmdb.build_movie_payload(movie, quality, encoded_string)
 
-    # Explicit IMDb id → Cinemeta
     if imdb_id and explicit_imdb:
         try:
             detail = await cinemeta.cached_detail(imdb_id, "movie")
@@ -39,7 +47,6 @@ async def resolve_movie(
         except Exception as e:
             LOGGER.warning(f"Cinemeta explicit movie fetch failed [{imdb_id}]: {e}")
 
-    # 1) TMDB first
     if not tmdb_id:
         hit = await tmdb.safe_search(title, "movie", year)
         if hit:
@@ -50,7 +57,6 @@ async def resolve_movie(
             LOGGER.info(f"[MOVIE] TMDB hit for '{title}' (year={year})")
             return tmdb.build_movie_payload(movie, quality, encoded_string)
 
-    # 2) Cinemeta fallback
     LOGGER.info(f"[MOVIE] TMDB miss for '{title}' -> Cinemeta")
     if not imdb_id:
         imdb_id = await cinemeta.safe_search(title, "movie", year)
@@ -60,7 +66,9 @@ async def resolve_movie(
             if detail:
                 sim = title_similarity(title, detail.get("title", ""))
                 if sim >= CINEMETA_THRESHOLD or explicit_imdb:
-                    return cinemeta.build_movie_payload(detail, imdb_id, title, quality, encoded_string)
+                    return cinemeta.build_movie_payload(
+                        detail, imdb_id, title, quality, encoded_string
+                    )
                 LOGGER.info(
                     f"[MOVIE] Cinemeta title mismatch for '{title}': "
                     f"got '{detail.get('title')}' (sim={sim:.2f})"
@@ -71,8 +79,6 @@ async def resolve_movie(
     LOGGER.info(f"[MOVIE] No metadata for '{title}' (year={year})")
     return None
 
-
-# ── Series: TVDB > Cinemeta > TMDB ────────────────────────────────────────────
 
 async def resolve_series(
     title: str,
@@ -85,7 +91,6 @@ async def resolve_series(
 ) -> Optional[dict]:
     imdb_id, tmdb_id, explicit_imdb, force_tmdb = split_default_id(default_id)
 
-    # Explicit overrides skip the chain
     if tmdb_id and force_tmdb:
         tv = await tmdb.details("tv", tmdb_id)
         if tv:
@@ -103,7 +108,6 @@ async def resolve_series(
         except Exception as e:
             LOGGER.warning(f"Cinemeta explicit TV fetch failed [{imdb_id}]: {e}")
 
-    # 1) TVDB
     try:
         result = await tvdb.fetch_series_metadata(
             title, season, episode, encoded_string, year=year, quality=quality
@@ -114,7 +118,6 @@ async def resolve_series(
     except Exception as e:
         LOGGER.warning(f"[SERIES] TVDB error for '{title}': {e}")
 
-    # 2) Cinemeta
     LOGGER.info(f"[SERIES] TVDB miss for '{title}' -> Cinemeta")
     if not imdb_id:
         imdb_id = await cinemeta.safe_search(title, "tvSeries", year)
@@ -135,7 +138,6 @@ async def resolve_series(
         except Exception as e:
             LOGGER.warning(f"Cinemeta TV fetch failed [{title}]: {e}")
 
-    # 3) TMDB
     LOGGER.info(f"[SERIES] Cinemeta miss for '{title}' -> TMDB")
     if not tmdb_id:
         hit = await tmdb.safe_search(title, "tv", year)
@@ -150,8 +152,6 @@ async def resolve_series(
     LOGGER.info(f"[SERIES] No metadata for '{title}' S{season:02d}E{episode:02d}")
     return None
 
-
-# ── Anime: Kitsu > TVDB > TMDB > Cinemeta ─────────────────────────────────────
 
 async def resolve_anime_tv(
     title: str,
@@ -170,11 +170,15 @@ async def resolve_anime_tv(
     absolute = bool(absolute or season is None)
     label = f"E{episode}" if absolute else f"S{int(season):02d}E{int(episode):02d}"
 
-    # 1) Kitsu (native absolute-episode support via ani.zip)
     try:
         result = await kitsu.fetch_anime_tv(
-            title, season, episode, encoded_string,
-            year=year, quality=quality, absolute=absolute,
+            title,
+            season,
+            episode,
+            encoded_string,
+            year=year,
+            quality=quality,
+            absolute=absolute,
         )
         if result:
             LOGGER.info(f"[ANIME] Kitsu hit for '{title}' {label}")
@@ -182,12 +186,9 @@ async def resolve_anime_tv(
     except Exception as e:
         LOGGER.warning(f"[ANIME] Kitsu error for '{title}': {e}")
 
-    # For absolute episodes without a mapped season, use season 1 + absolute number
-    # so downstream providers and Stremio still get a valid S/E pair.
     use_season = 1 if absolute else int(season)
     use_episode = int(episode)
 
-    # 2) TVDB
     try:
         result = await tvdb.fetch_series_metadata(
             title, use_season, use_episode, encoded_string, year=year, quality=quality
@@ -202,21 +203,21 @@ async def resolve_anime_tv(
     except Exception as e:
         LOGGER.warning(f"[ANIME] TVDB error for '{title}': {e}")
 
-    # 3) TMDB
     hit = await tmdb.safe_search(title, "tv", year)
     if hit:
         tv = await tmdb.details("tv", hit.id)
         if tv:
             ep = None if absolute else await tmdb.episode_details(hit.id, use_season, use_episode)
             LOGGER.info(f"[ANIME] TMDB hit for '{title}' {label}")
-            payload = tmdb.build_tv_payload(tv, ep, use_season, use_episode, quality, encoded_string)
+            payload = tmdb.build_tv_payload(
+                tv, ep, use_season, use_episode, quality, encoded_string
+            )
             if absolute:
                 payload["absolute_episode"] = use_episode
                 if not payload.get("episode_title") or payload["episode_title"].startswith("S"):
                     payload["episode_title"] = f"Episode {use_episode}"
             return payload
 
-    # 4) Cinemeta (least priority)
     imdb_id = await cinemeta.safe_search(title, "tvSeries", year)
     if imdb_id:
         try:
@@ -225,7 +226,14 @@ async def resolve_anime_tv(
             if detail:
                 LOGGER.info(f"[ANIME] Cinemeta hit for '{title}' {label}")
                 payload = cinemeta.build_tv_payload(
-                    detail, ep or {}, imdb_id, title, use_season, use_episode, quality, encoded_string
+                    detail,
+                    ep or {},
+                    imdb_id,
+                    title,
+                    use_season,
+                    use_episode,
+                    quality,
+                    encoded_string,
                 )
                 if absolute:
                     payload["absolute_episode"] = use_episode
@@ -245,7 +253,6 @@ async def resolve_anime_movie(
     year=None,
     quality=None,
 ) -> Optional[dict]:
-    # 1) Kitsu
     try:
         result = await kitsu.fetch_anime_movie(title, encoded_string, year=year, quality=quality)
         if result:
@@ -254,7 +261,6 @@ async def resolve_anime_movie(
     except Exception as e:
         LOGGER.warning(f"[ANIME] Kitsu movie error for '{title}': {e}")
 
-    # 2) TVDB
     try:
         result = await tvdb.fetch_movie_metadata(title, encoded_string, year=year, quality=quality)
         if result:
@@ -263,7 +269,6 @@ async def resolve_anime_movie(
     except Exception as e:
         LOGGER.warning(f"[ANIME] TVDB movie error for '{title}': {e}")
 
-    # 3) TMDB
     hit = await tmdb.safe_search(title, "movie", year)
     if hit:
         movie = await tmdb.details("movie", hit.id)
@@ -271,7 +276,6 @@ async def resolve_anime_movie(
             LOGGER.info(f"[ANIME] TMDB movie hit for '{title}'")
             return tmdb.build_movie_payload(movie, quality, encoded_string)
 
-    # 4) Cinemeta
     imdb_id = await cinemeta.safe_search(title, "movie", year)
     if imdb_id:
         try:

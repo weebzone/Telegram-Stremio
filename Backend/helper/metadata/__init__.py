@@ -1,19 +1,26 @@
 """
-Metadata package.
+Metadata package — public API for media identification and enrichment.
 
-Priority chains
----------------
-Anime  : Kitsu > TVDB > TMDB > Cinemeta   (anime channels only)
-Movies : TMDB > Cinemeta
-Series : TVDB > Cinemeta > TMDB
+Re-exports the main entry points used by scanners, receivers, Stremio routes
+and the admin UI:
 
-Caching
+  - metadata() / parse_media_name()          — turn a filename into structured data
+  - resolve_* / fetch_selected_*             — look up TMDB / TVDB / Kitsu / Cinemeta
+  - extract_default_id, caption_with_id      — ID helpers for captions & links
+  - resolve_cover_url, format_tmdb_image     — artwork helpers
+  - COMBINED_SEASON / COMBINED_EPISODE_BASE  — constants for multi-episode files
+
+Example
 -------
-All provider HTTP calls go through ``cached_call`` with in-process dict
-caches (search, details, episodes, mappings) plus an ``API_SEMAPHORE``
-(max 12 concurrent) so TMDB/TVDB/Kitsu/Cinemeta rate limits are respected.
-Identical concurrent lookups share one in-flight Future (no stampedes).
+    from Backend.helper.metadata import metadata, parse_media_name
+
+    info = parse_media_name("Avatar.2009.1080p.BluRay.x264.mkv")
+    # -> media_type, title, year, quality, ...
+
+    result = await metadata(chat_id, message, filename)
+    # -> full DB-ready document with ids, poster, seasons, etc.
 """
+
 from Backend.helper.metadata.common import (
     COMBINED_EPISODE_BASE,
     COMBINED_SEASON,

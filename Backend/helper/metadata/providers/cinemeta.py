@@ -1,4 +1,17 @@
-"""Cinemeta / IMDb metadata provider (via v3-cinemeta.strem.io)."""
+"""
+cinemeta.py — Cinemeta (Stremio addon) metadata provider.
+
+Used as a fallback for movies and series.  Talks to the public Cinemeta
+HTTP API; no API key required.
+
+Example
+-------
+    from Backend.helper.metadata.providers.cinemeta import get_detail, search_title_multi
+
+    detail = await get_detail("movie", "tt1375666")   # Inception
+    results = await search_title_multi("Inception", media_type="movie")
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -28,16 +41,16 @@ _client_lock = asyncio.Lock()
 
 _EMOJI_RE = re.compile(
     "["
-    "\U0001F600-\U0001F64F"
-    "\U0001F300-\U0001F5FF"
-    "\U0001F680-\U0001F6FF"
-    "\U0001F700-\U0001FAFF"
-    "\U00002702-\U000027B0"
-    "\U000024C2-\U0001F251"
-    "\u2600-\u26FF"
-    "\u2700-\u27BF"
-    "\uFE00-\uFE0F"
-    "\U0001F1E0-\U0001F1FF"
+    "\U0001f600-\U0001f64f"
+    "\U0001f300-\U0001f5ff"
+    "\U0001f680-\U0001f6ff"
+    "\U0001f700-\U0001faff"
+    "\U00002702-\U000027b0"
+    "\U000024c2-\U0001f251"
+    "\u2600-\u26ff"
+    "\u2700-\u27bf"
+    "\ufe00-\ufe0f"
+    "\U0001f1e0-\U0001f1ff"
     "]+",
     re.UNICODE,
 )
@@ -92,13 +105,15 @@ async def search_title_multi(query: str, type: str, limit: int = 8) -> List[Dict
         imdb_id = meta.get("imdb_id") or meta.get("id", "")
         if not imdb_id:
             continue
-        results.append({
-            "id": imdb_id,
-            "type": type,
-            "title": meta.get("name", ""),
-            "year": meta.get("releaseInfo", ""),
-            "poster": meta.get("poster", ""),
-        })
+        results.append(
+            {
+                "id": imdb_id,
+                "type": type,
+                "title": meta.get("name", ""),
+                "year": meta.get("releaseInfo", ""),
+                "poster": meta.get("poster", ""),
+            }
+        )
     return results
 
 
@@ -136,9 +151,13 @@ async def get_season(imdb_id: str, season_id, episode_id) -> Dict[str, Any]:
     videos = meta.get("videos") or []
     for v in videos:
         try:
-            if int(v.get("season") or -1) == int(season_id) and int(v.get("episode") or -1) == int(episode_id):
+            if int(v.get("season") or -1) == int(season_id) and int(v.get("episode") or -1) == int(
+                episode_id
+            ):
                 return {
-                    "title": v.get("title") or v.get("name") or f"S{int(season_id):02d}E{int(episode_id):02d}",
+                    "title": v.get("title")
+                    or v.get("name")
+                    or f"S{int(season_id):02d}E{int(episode_id):02d}",
                     "image": v.get("thumbnail") or "",
                     "plot": v.get("overview") or v.get("description") or "",
                     "released": v.get("released") or v.get("firstAired") or "",
@@ -165,7 +184,6 @@ async def safe_search(title: str, type_: str, year: Optional[int] = None) -> str
             try:
                 results = await search_title_multi(query=query, type=type_, limit=8)
                 for r in results:
-                    # Cinemeta search rows are thin; still score primary + any alias-like fields
                     aliases = []
                     for key in ("aka", "aliases", "alternateNames", "genres"):
                         pass  # genres are not aliases
@@ -178,10 +196,13 @@ async def safe_search(title: str, type_: str, year: Optional[int] = None) -> str
                         else:
                             aliases.append(val)
                     score = score_candidate_aliases(
-                        title, year, r.get("title", "") or r.get("name", ""),
+                        title,
+                        year,
+                        r.get("title", "") or r.get("name", ""),
                         year_from_str(r.get("year", "")),
                         aliases=aliases,
-                        year_reliable=year_reliable, year_lower_bound=is_tv,
+                        year_reliable=year_reliable,
+                        year_lower_bound=is_tv,
                     )
                     if score > best_score:
                         best_score, best_id, best_title = score, r.get("id"), r.get("title", "")

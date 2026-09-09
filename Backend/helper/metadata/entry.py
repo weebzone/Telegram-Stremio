@@ -1,4 +1,20 @@
-"""Main metadata entry point and /set candidate search."""
+"""
+entry.py — main metadata entry point and /set candidate search.
+
+Orchestrates filename parsing, provider resolution and final document
+assembly.  Called by the Telegram receiver and scan manager when a new
+media file is discovered.
+
+Example
+-------
+    from Backend.helper.metadata.entry import metadata, caption_with_id
+
+    doc = await metadata(chat_id, message, "Show.S01E05.1080p.mkv")
+    # -> dict ready to store in the DB (tmdb_id, seasons, poster, ...)
+
+    caption = caption_with_id(title, media_type, tmdb_id, imdb_id)
+"""
+
 from __future__ import annotations
 
 import traceback
@@ -95,7 +111,6 @@ async def metadata(
     if season_hint is not None and episode and not season and not isinstance(episode, list):
         season = season_hint
 
-    # GuessIt sometimes yields season=0 for absolute anime releases — treat as no season
     try:
         if season is not None and int(season) == 0:
             season = None
@@ -111,8 +126,6 @@ async def metadata(
         combined = {"season": season, "start": None, "end": None}
         episode = 1
 
-    # Absolute / orphan episode (e.g. "One Piece 1223 720.mkv",
-    # "Naruto Shippuden - 016 480p ...", "[Judas] One Piece - 1172.mkv")
     absolute = False
     if episode is None and not season:
         abs_ep = extract_absolute_episode(filename, parsed)
@@ -125,15 +138,8 @@ async def metadata(
         if episode is None:
             episode = extract_absolute_episode(filename, parsed)
 
-    # On anime channels, recover absolute from the raw filename when
-    # PTN/GuessIt treated a numbered release as a movie (no season/episode).
     anime_channel_early = _is_anime_channel(channel)
-    if (
-        anime_channel_early
-        and not season
-        and not absolute
-        and episode is None
-    ):
+    if anime_channel_early and not season and not absolute and episode is None:
         abs_ep = extract_absolute_episode(filename, parsed)
         if abs_ep is not None:
             episode = abs_ep
@@ -147,8 +153,6 @@ async def metadata(
         LOGGER.info(f"No title parsed from: {filename} (parsed={parsed})")
         return None
 
-    # Strip absolute episode / release-group noise from the search title so
-    # "One Piece - 1172" does not match "One Piece Egghead Arc Recap".
     if absolute and episode is not None:
         title = clean_anime_search_title(title, int(episode))
     else:
@@ -162,7 +166,6 @@ async def metadata(
         encoded_string = None
 
     group_key = f"{channel}:{quality}:{split_info[0]}" if split_info else None
-    # Single (non-split) .zip archives
     if group_key is None and filename and filename.lower().rstrip().endswith(".zip"):
         from Backend.helper.split_files import _normalize
 
@@ -173,29 +176,46 @@ async def metadata(
     anime_channel = _is_anime_channel(channel)
 
     try:
-        # TV path: classic SxxExx, or absolute/orphan episode on anime channels
         is_tv = bool(season and episode) or (absolute and episode and anime_channel)
         if is_tv:
             if absolute:
-                LOGGER.info(f"Fetching TV metadata (absolute): {title} E{int(episode)} (year={year})")
+                LOGGER.info(
+                    f"Fetching TV metadata (absolute): {title} E{int(episode)} (year={year})"
+                )
             else:
-                LOGGER.info(f"Fetching TV metadata: {title} S{int(season):02d}E{int(episode):02d} (year={year})")
+                LOGGER.info(
+                    f"Fetching TV metadata: {title} S{int(season):02d}E{int(episode):02d} (year={year})"
+                )
             result = None
             if not default_id and anime_channel:
                 result = await resolve_anime_tv(
-                    title, season, int(episode), encoded_string,
-                    year=year, quality=quality, absolute=absolute,
+                    title,
+                    season,
+                    int(episode),
+                    encoded_string,
+                    year=year,
+                    quality=quality,
+                    absolute=absolute,
                 )
             if result is None and not absolute:
                 result = await resolve_series(
-                    title, int(season), int(episode), encoded_string,
-                    year=year, quality=quality, default_id=default_id,
+                    title,
+                    int(season),
+                    int(episode),
+                    encoded_string,
+                    year=year,
+                    quality=quality,
+                    default_id=default_id,
                 )
-            # Absolute on non-anime channel: still try series with season 1
             if result is None and absolute:
                 result = await resolve_series(
-                    title, 1, int(episode), encoded_string,
-                    year=year, quality=quality, default_id=default_id,
+                    title,
+                    1,
+                    int(episode),
+                    encoded_string,
+                    year=year,
+                    quality=quality,
+                    default_id=default_id,
                 )
                 if result:
                     result["absolute_episode"] = int(episode)
@@ -226,11 +246,13 @@ async def metadata(
         return None
 
 
-# ── /set candidate search ─────────────────────────────────────────────────────
-
-def _candidate_entry(source, title, year, imdb_id, tmdb_id, poster, backdrop, subtitle, media_type=None) -> dict:
-    selected_id = imdb_id if (source == "imdb" and imdb_id) else (
-        str(tmdb_id) if tmdb_id else (imdb_id or None)
+def _candidate_entry(
+    source, title, year, imdb_id, tmdb_id, poster, backdrop, subtitle, media_type=None
+) -> dict:
+    selected_id = (
+        imdb_id
+        if (source == "imdb" and imdb_id)
+        else (str(tmdb_id) if tmdb_id else (imdb_id or None))
     )
     return {
         "source": source,
@@ -259,13 +281,26 @@ async def _resolve_id_candidate(default_id, media_type: str) -> dict | None:
         images = format_imdb_images(imdb_id)
         if detail and detail.get("title"):
             return _candidate_entry(
-                "imdb", detail.get("title", ""), detail.get("releaseDetailed", {}).get("year", ""),
-                imdb_id, detail.get("moviedb_id"), detail.get("poster") or images["poster"],
-                detail.get("background") or images["backdrop"], "IMDb / Cinemeta", media_type,
+                "imdb",
+                detail.get("title", ""),
+                detail.get("releaseDetailed", {}).get("year", ""),
+                imdb_id,
+                detail.get("moviedb_id"),
+                detail.get("poster") or images["poster"],
+                detail.get("background") or images["backdrop"],
+                "IMDb / Cinemeta",
+                media_type,
             )
         return _candidate_entry(
-            "imdb", "", "", imdb_id, None, images["poster"], images["backdrop"],
-            "IMDb / Cinemeta", media_type,
+            "imdb",
+            "",
+            "",
+            imdb_id,
+            None,
+            images["poster"],
+            images["backdrop"],
+            "IMDb / Cinemeta",
+            media_type,
         )
 
     if tmdb_id:
@@ -275,15 +310,22 @@ async def _resolve_id_candidate(default_id, media_type: str) -> dict | None:
         r_title, r_year = tmdb.tmdb_title_year(details, media_type)
         imdb_ext = getattr(getattr(details, "external_ids", None), "imdb_id", None)
         return _candidate_entry(
-            "tmdb", r_title, r_year or "", imdb_ext, tmdb_id,
+            "tmdb",
+            r_title,
+            r_year or "",
+            imdb_ext,
+            tmdb_id,
             format_tmdb_image(getattr(details, "poster_path", None)),
             format_tmdb_image(getattr(details, "backdrop_path", None), "original"),
-            "TMDb", media_type,
+            "TMDb",
+            media_type,
         )
     return None
 
 
-async def _search_candidates(query: str, media_type: str, year: int | None = None, limit: int = 8) -> list[dict]:
+async def _search_candidates(
+    query: str, media_type: str, year: int | None = None, limit: int = 8
+) -> list[dict]:
     query = (query or "").strip()
     if not query:
         return []
@@ -305,16 +347,26 @@ async def _search_candidates(query: str, media_type: str, year: int | None = Non
                 continue
             seen.add(("imdb", hid))
             images = format_imdb_images(hid)
-            results.append(_candidate_entry(
-                "imdb", hit.get("title", ""), hit.get("year", ""),
-                hid, None, hit.get("poster") or images["poster"], images["backdrop"],
-                "IMDb / Cinemeta", media_type,
-            ))
+            results.append(
+                _candidate_entry(
+                    "imdb",
+                    hit.get("title", ""),
+                    hit.get("year", ""),
+                    hid,
+                    None,
+                    hit.get("poster") or images["poster"],
+                    images["backdrop"],
+                    "IMDb / Cinemeta",
+                    media_type,
+                )
+            )
     except Exception as e:
         LOGGER.warning(f"IMDb {media_type} candidate search failed for '{query}': {e}")
 
     try:
-        tmdb_results = await tmdb.raw_search(query, media_type, year if media_type == "movie" else None)
+        tmdb_results = await tmdb.raw_search(
+            query, media_type, year if media_type == "movie" else None
+        )
         for item in (tmdb_results or [])[:limit]:
             tid = getattr(item, "id", None)
             if not tid or ("tmdb", str(tid)) in seen:
@@ -322,19 +374,28 @@ async def _search_candidates(query: str, media_type: str, year: int | None = Non
             seen.add(("tmdb", str(tid)))
             imdb_id = await tmdb.external_imdb_id(media_type, tid)
             r_title, r_year = tmdb.tmdb_title_year(item, media_type)
-            results.append(_candidate_entry(
-                "tmdb", r_title, r_year or "", imdb_id, tid,
-                format_tmdb_image(getattr(item, "poster_path", None)),
-                format_tmdb_image(getattr(item, "backdrop_path", None), "original"),
-                "TMDb", media_type,
-            ))
+            results.append(
+                _candidate_entry(
+                    "tmdb",
+                    r_title,
+                    r_year or "",
+                    imdb_id,
+                    tid,
+                    format_tmdb_image(getattr(item, "poster_path", None)),
+                    format_tmdb_image(getattr(item, "backdrop_path", None), "original"),
+                    "TMDb",
+                    media_type,
+                )
+            )
     except Exception as e:
         LOGGER.warning(f"TMDb {media_type} candidate search failed for '{query}': {e}")
 
     return results[:limit]
 
 
-async def search_movie_candidates(query: str, year: int | None = None, limit: int = 8) -> list[dict]:
+async def search_movie_candidates(
+    query: str, year: int | None = None, limit: int = 8
+) -> list[dict]:
     return await _search_candidates(query, "movie", year, limit)
 
 
@@ -376,7 +437,8 @@ def build_id_link(imdb_id=None, tmdb_id=None, media_type: str = "movie") -> str 
 
 def caption_with_id(caption: str, metadata_info: dict) -> str | None:
     link = build_id_link(
-        metadata_info.get("imdb_id"), metadata_info.get("tmdb_id"),
+        metadata_info.get("imdb_id"),
+        metadata_info.get("tmdb_id"),
         metadata_info.get("media_type", "movie"),
     )
     if not link:
