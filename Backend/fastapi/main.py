@@ -134,7 +134,6 @@ from Backend.fastapi.routes.template_routes import (
     media_management_page,
     media_coverage_api,
     media_coverage_refresh_api,
-    public_status_page,
     settings_page,
     set_theme,
     tools_page,
