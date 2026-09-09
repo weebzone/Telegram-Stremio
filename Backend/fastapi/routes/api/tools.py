@@ -86,7 +86,14 @@ from Backend.pyrofork.bot import (
     work_loads,
 )
 
-from Backend.fastapi.routes.api._helpers import *  # noqa: F401,F403
+from Backend.fastapi.routes.api._helpers import (
+    LOG_FILE,
+    _scan_client,
+    _is_personal_media,
+    _session_result,
+    _set_online_manual_session,
+    _normalize_media_type,
+)
 
 async def get_tools_channels_api() -> dict:
     channels = list(SettingsManager.current().auth_channels)

@@ -86,7 +86,6 @@ from Backend.pyrofork.bot import (
     work_loads,
 )
 
-from Backend.fastapi.routes.api._helpers import *  # noqa: F401,F403
 
 async def get_settings_api() -> dict:
 

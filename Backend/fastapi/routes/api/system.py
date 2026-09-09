@@ -86,7 +86,10 @@ from Backend.pyrofork.bot import (
     work_loads,
 )
 
-from Backend.fastapi.routes.api._helpers import *  # noqa: F401,F403
+from Backend.fastapi.routes.api._helpers import (
+    LOG_FILE,
+    _perform_restart,
+)
 
 async def get_system_stats_api():
     try:

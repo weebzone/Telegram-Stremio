@@ -86,7 +86,13 @@ from Backend.pyrofork.bot import (
     work_loads,
 )
 
-from Backend.fastapi.routes.api._helpers import *  # noqa: F401,F403
+from Backend.fastapi.routes.api._helpers import (
+    _DEFAULT_CATALOG_ENTRIES,
+    _require_tmdb_id,
+    _resolve_covers,
+    _clean_visibility,
+    _normalize_media_type,
+)
 
 async def list_custom_catalogs_api(
     tmdb_id: str | int | None = None,

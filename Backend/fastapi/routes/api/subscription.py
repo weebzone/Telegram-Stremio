@@ -86,7 +86,9 @@ from Backend.pyrofork.bot import (
     work_loads,
 )
 
-from Backend.fastapi.routes.api._helpers import *  # noqa: F401,F403
+from Backend.fastapi.routes.api._helpers import (
+    _fetch_tg_name,
+)
 
 async def subscription_preflight_api() -> dict:
     return {"status": "success", "uncovered": await db.count_uncovered_tokens()}

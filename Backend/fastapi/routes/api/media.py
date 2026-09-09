@@ -89,7 +89,16 @@ from Backend.pyrofork.bot import (
     work_loads,
 )
 
-from Backend.fastapi.routes.api._helpers import *  # noqa: F401,F403
+from Backend.fastapi.routes.api._helpers import (
+    _VISIBILITY_MODES,
+    _require_tmdb_id,
+    _resolve_covers,
+    _scan_client,
+    _fill_placeholder_metadata,
+    _clean_visibility,
+    _normalize_media_type,
+    _metadata_base,
+)
 
 async def list_media_api(
     media_type: str = Query("movie", regex="^(movie|tv)$"),

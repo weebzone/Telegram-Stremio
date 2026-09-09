@@ -86,7 +86,13 @@ from Backend.pyrofork.bot import (
     work_loads,
 )
 
-from Backend.fastapi.routes.api._helpers import *  # noqa: F401,F403
+from Backend.fastapi.routes.api._helpers import (
+    _managed_bots,
+    _bot_served_channels,
+    _bot_member_status,
+    _session_rights,
+    _run_bot_admin_apply,
+)
 
 async def bot_admin_scan_api() -> dict:
     if botmod.Userbot is None:

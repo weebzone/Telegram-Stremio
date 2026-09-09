@@ -86,7 +86,10 @@ from Backend.pyrofork.bot import (
     work_loads,
 )
 
-from Backend.fastapi.routes.api._helpers import *  # noqa: F401,F403
+from Backend.fastapi.routes.api._helpers import (
+    _require_tmdb_id,
+    _resolve_speed_test_target,
+)
 
 async def speed_test_api(
     quality_id: str = Query(..., description="Encoded quality ID from DB"),

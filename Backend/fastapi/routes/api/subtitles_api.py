@@ -86,7 +86,11 @@ from Backend.pyrofork.bot import (
     work_loads,
 )
 
-from Backend.fastapi.routes.api._helpers import *  # noqa: F401,F403
+from Backend.fastapi.routes.api._helpers import (
+    _require_tmdb_id,
+    _scan_client,
+    _resolve_imdb_id,
+)
 
 async def resolve_subtitle_api(payload: dict) -> dict:
     client = _scan_client()
