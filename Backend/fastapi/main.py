@@ -164,7 +164,6 @@ except Exception:
 @app.on_event("startup")
 async def _startup():
     asyncio.create_task(decay_client_failures())
-    from Backend.helper.ops.version_check import version_check_loop
     asyncio.create_task(version_check_loop())
 
 

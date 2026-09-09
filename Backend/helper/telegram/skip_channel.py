@@ -10,6 +10,7 @@ from pyrogram.types import Message
 
 from Backend.helper.settings_manager import SettingsManager
 from Backend.logger import LOGGER
+from Backend.helper.tasks.task_manager import delete_message
 
 def is_skip_channel(message: Message) -> bool:
     skip = SettingsManager.current().skip_channel
@@ -44,7 +45,6 @@ async def route_to_skip_channel(client: Client, message: Message) -> None:
 
     if settings.delete_on_metadata_fail:
         try:
-            from Backend.helper.tasks.task_manager import delete_message
             await delete_message(message.chat.id, message.id)
         except Exception as e:
             LOGGER.warning(f"[SkipChannel] Could not delete original message {message.id}: {e}")

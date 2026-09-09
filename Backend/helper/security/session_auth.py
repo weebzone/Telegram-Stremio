@@ -22,7 +22,8 @@ from pyrogram.errors import (
 import Backend.pyrofork.bot as botmod
 from Backend import db
 from Backend.config import Telegram
-from Backend.helper import global_search, task_manager
+from Backend.helper.search import global_search
+import Backend.helper.tasks.task_manager as task_manager
 from Backend.helper.security.encrypt import decode_string, encode_string
 from Backend.logger import LOGGER
 

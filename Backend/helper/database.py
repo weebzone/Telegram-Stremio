@@ -16,6 +16,7 @@ from Backend.helper.modal import Episode, MovieSchema, QualityDetail, QualityPar
 from Backend.helper.settings_manager import SettingsManager
 from Backend.helper.tasks.task_manager import delete_message
 from Backend.logger import LOGGER
+from Backend.helper.telegram.pyro import get_readable_file_size
 
 
 
@@ -1142,7 +1143,6 @@ class Database:
             payload["zip"] = True
         encoded = await encode_string(payload)
         total_bytes = sum(p.get("size_bytes", 0) for p in sorted_parts)
-        from Backend.helper.telegram.pyro import get_readable_file_size 
         size_str = get_readable_file_size(total_bytes)
         return encoded, size_str
 

@@ -75,6 +75,7 @@ from Backend.helper.media_extras.subtitles import (
     resolve_subtitle_message,
 )
 from Backend.logger import LOGGER
+from Backend.helper.ops.version_check import check_upstream_version, get_version_status
 import Backend.pyrofork.bot as botmod
 from Backend.helper.ops.announcer import delete_announcement_async
 from Backend.pyrofork.bot import (
@@ -255,7 +256,6 @@ async def health_api() -> dict:
     return {"status": "ok", "start_time": StartTime, "version": __version__}
 
 async def version_status_api(force: bool = False) -> dict:
-    from Backend.helper.ops.version_check import check_upstream_version, get_version_status
     if force:
         await check_upstream_version(force=True)
     return {"status": "success", "data": get_version_status()}
