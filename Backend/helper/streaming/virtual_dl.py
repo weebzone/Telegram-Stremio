@@ -12,7 +12,7 @@ from typing import Dict, List, Optional, Tuple
 
 from fastapi import Request
 
-from Backend.helper.streaming.custom_dl import ByteStreamer
+from Backend.helper.streaming.byte_streamer import ByteStreamer
 from Backend.logger import LOGGER
 
 

@@ -24,7 +24,7 @@ from fastapi.responses import StreamingResponse
 from Backend import db
 from Backend.fastapi.security.tokens import verify_token
 from Backend.helper.analytics import client_ip_from, record_stream_start
-from Backend.helper.streaming.custom_dl import ByteStreamer
+from Backend.helper.streaming.byte_streamer import ByteStreamer
 from Backend.helper.streaming.registry import ACTIVE_STREAMS, RECENT_STREAMS
 from Backend.helper.encrypt import decode_string
 from Backend.helper.utils import track_usage

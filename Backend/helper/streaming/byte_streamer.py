@@ -1,10 +1,9 @@
 """
-Byte-level media streaming engine for Telegram files.
+ByteStreamer — core Telegram media byte-range streaming engine.
 
-Implements the ByteStreamer class that resolves Telegram file locations,
-opens media sessions (including DC migration / AuthBytes handling), and
-performs parallel range fetches with prefetch. Stream activity is recorded
-in the shared registry (ACTIVE_STREAMS / RECENT_STREAMS).
+Resolves file locations, manages media sessions (DC migration / AuthBytes),
+and performs parallel range fetches with prefetch. Stream activity is
+recorded in the shared registry (ACTIVE_STREAMS / RECENT_STREAMS).
 """
 
 import asyncio
@@ -107,29 +106,17 @@ class ByteStreamer:
             self._file_id_cache[cache_key] = file_id
         return self._file_id_cache[cache_key]
 
-    async def prefetch_stream(
+    def _init_stream_entry(
         self,
+        stream_id: str,
         file_id: FileId,
         client_index: int,
-        offset: int,
-        first_part_cut: int,
-        last_part_cut: int,
         part_count: int,
-        chunk_size: int,
         prefetch: int,
-        parallelism: int,
-        stream_id: Optional[str] = None,
-        meta: Optional[dict] = None,
-        request: Optional[Request] = None,
-        chat_id: Optional[int] = None,
-        message_id: Optional[int] = None,
-        extra_clients: Optional[List] = None,
-    ):
-        if not stream_id:
-            stream_id = secrets.token_hex(8)
-
+        meta: Optional[dict],
+    ) -> dict:
         now = time.time()
-        registry_entry = {
+        entry = {
             "stream_id": stream_id,
             "msg_id": getattr(file_id, "local_id", None) or None,
             "chat_id": getattr(file_id, "chat_id", None),
@@ -147,15 +134,18 @@ class ByteStreamer:
             "prefetch": prefetch,
             "meta": meta or {},
         }
-
-        ACTIVE_STREAMS[stream_id] = registry_entry
-        stream_entry = registry_entry
+        ACTIVE_STREAMS[stream_id] = entry
         work_loads[client_index] += 1
+        return entry
 
-        queue_maxsize = max(1, prefetch)
-        q: asyncio.Queue = asyncio.Queue(maxsize=queue_maxsize)
-        stop_event = asyncio.Event()
-
+    async def _prepare_session_pool(
+        self,
+        file_id: FileId,
+        client_index: int,
+        chat_id: Optional[int],
+        message_id: Optional[int],
+        extra_clients: Optional[List],
+    ) -> list:
         media_session = await self._get_media_session(file_id)
         location_box: List[object] = [await self._get_location(file_id)]
 
@@ -182,18 +172,54 @@ class ByteStreamer:
 
             return _refresh
 
-        primary_refresh = await _make_refresh_fn(location_box, self, file_id)
-        session_pool = [(client_index, media_session, location_box, primary_refresh)]
+        refresh_fn = await _make_refresh_fn(location_box, self, file_id)
+        session_pool = [(client_index, media_session, location_box, refresh_fn)]
 
         if extra_clients:
-            for ec_idx, ec_streamer, ec_file_id in extra_clients:
+            for ec_idx, ec_client in extra_clients:
                 try:
+                    ec_streamer = ByteStreamer(ec_client, ec_idx)
+                    ec_file_id = await ec_streamer.get_file_properties(chat_id, message_id)
                     ec_session = await ec_streamer._get_media_session(ec_file_id)
                     ec_loc_box = [await ByteStreamer._get_location(ec_file_id)]
                     ec_refresh = await _make_refresh_fn(ec_loc_box, ec_streamer, ec_file_id)
                     session_pool.append((ec_idx, ec_session, ec_loc_box, ec_refresh))
                 except Exception as e:
                     LOGGER.warning("Skipping extra client %s (session setup failed): %s", ec_idx, e)
+        return session_pool
+
+    async def prefetch_stream(
+        self,
+        file_id: FileId,
+        client_index: int,
+        offset: int,
+        first_part_cut: int,
+        last_part_cut: int,
+        part_count: int,
+        chunk_size: int,
+        prefetch: int,
+        parallelism: int,
+        stream_id: Optional[str] = None,
+        meta: Optional[dict] = None,
+        request: Optional[Request] = None,
+        chat_id: Optional[int] = None,
+        message_id: Optional[int] = None,
+        extra_clients: Optional[List] = None,
+    ):
+        if not stream_id:
+            stream_id = secrets.token_hex(8)
+
+        stream_entry = self._init_stream_entry(
+            stream_id, file_id, client_index, part_count, prefetch, meta
+        )
+
+        queue_maxsize = max(1, prefetch)
+        q: asyncio.Queue = asyncio.Queue(maxsize=queue_maxsize)
+        stop_event = asyncio.Event()
+
+        session_pool = await self._prepare_session_pool(
+            file_id, client_index, chat_id, message_id, extra_clients
+        )
 
         async def fetch_chunk_with_retries(seq_idx: int, off: int) -> Tuple[int, Optional[bytes]]:
             slot = seq_idx % len(session_pool)

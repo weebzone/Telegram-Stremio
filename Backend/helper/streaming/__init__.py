@@ -5,7 +5,7 @@ Provides byte-range streaming over Telegram media (single files, multi-part
 virtual concatenations, and zip entries) via ByteStreamer and related helpers.
 
 Modules:
-  - custom_dl      : ByteStreamer core engine
+  - byte_streamer : ByteStreamer core engine
   - registry       : ACTIVE_STREAMS / RECENT_STREAMS + stale cleanup
   - speed_test     : client throughput measurement helpers
   - virtual_dl     : multi-part (split) stream stitching
@@ -19,7 +19,7 @@ Public surface:
   - _speed_test_single_client, run_speed_test
 """
 
-from Backend.helper.streaming.custom_dl import ByteStreamer
+from Backend.helper.streaming.byte_streamer import ByteStreamer
 from Backend.helper.streaming.registry import ACTIVE_STREAMS, RECENT_STREAMS
 from Backend.helper.streaming.speed_test import _speed_test_single_client, run_speed_test
 from Backend.helper.streaming.virtual_dl import (
