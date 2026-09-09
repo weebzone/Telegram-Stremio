@@ -137,6 +137,7 @@ from Backend.fastapi.routes.template_routes import (
 )
 from Backend.fastapi.security.credentials import require_auth
 from Backend.pyrofork.bot import work_loads_summary
+from Backend.helper.ops.version_check import version_check_loop
 
 templates = Jinja2Templates(directory="Backend/fastapi/templates")
 
