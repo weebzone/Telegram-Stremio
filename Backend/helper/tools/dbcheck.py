@@ -21,7 +21,7 @@ from typing import Any, Dict, List, Optional
 from pyrogram.errors import FloodWait
 
 from Backend.logger import LOGGER
-from Backend.helper.encrypt import decode_string
+from Backend.helper.security.encrypt import decode_string
 from Backend.helper.tools.utils import STATE_COLLECTION, now, fmt_elapsed
 
 DBCHECK_CONCURRENCY = 5

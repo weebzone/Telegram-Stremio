@@ -1,3 +1,9 @@
+"""
+security/passwords.py — admin password hashing and verification.
+
+PBKDF2-based hash_password / verify_password used by login and settings.
+"""
+
 import hashlib
 import hmac
 import secrets
@@ -5,16 +11,13 @@ import secrets
 _ALGO = "pbkdf2_sha256"
 _ITERATIONS = 200_000
 
-
 def is_hashed(stored: str) -> bool:
     return isinstance(stored, str) and stored.startswith(f"{_ALGO}$")
-
 
 def hash_password(password: str) -> str:
     salt = secrets.token_bytes(16)
     digest = hashlib.pbkdf2_hmac("sha256", (password or "").encode(), salt, _ITERATIONS)
     return f"{_ALGO}${_ITERATIONS}${salt.hex()}${digest.hex()}"
-
 
 def verify_password(password: str, stored: str) -> bool:
     if not stored:

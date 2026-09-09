@@ -5,7 +5,7 @@ from typing import Any, Dict, List
 
 import Backend.pyrofork.bot as botmod
 from Backend.config import Telegram
-from Backend.helper.passwords import hash_password
+from Backend.helper.security.passwords import hash_password
 from Backend.logger import LOGGER
 
 #----- Default values (used when nothing exists in the DB yet)

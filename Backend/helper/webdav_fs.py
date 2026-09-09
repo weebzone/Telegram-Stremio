@@ -27,7 +27,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import quote
 
 from Backend import db
-from Backend.helper.nfo_generator import episode_nfo, movie_nfo, season_nfo, tvshow_nfo
+from Backend.helper.media_extras.nfo import episode_nfo, movie_nfo, season_nfo, tvshow_nfo
 from Backend.logger import LOGGER
 
 

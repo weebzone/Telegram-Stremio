@@ -21,7 +21,7 @@ import traceback
 from typing import Optional
 
 import Backend
-from Backend.helper.encrypt import encode_string
+from Backend.helper.security.encrypt import encode_string
 from Backend.helper.metadata.common import (
     ensure_media_ids,
     COMBINED_EPISODE_BASE,
@@ -49,7 +49,7 @@ from Backend.helper.metadata.resolvers import (
     resolve_series,
 )
 from Backend.helper.settings_manager import SettingsManager
-from Backend.helper.split_files import parse_combined_episodes, parse_split_info, strip_part_suffix
+from Backend.helper.telegram.split_files import parse_combined_episodes, parse_split_info, strip_part_suffix
 from Backend.logger import LOGGER
 
 
@@ -167,7 +167,7 @@ async def metadata(
 
     group_key = f"{channel}:{quality}:{split_info[0]}" if split_info else None
     if group_key is None and filename and filename.lower().rstrip().endswith(".zip"):
-        from Backend.helper.split_files import _normalize
+        from Backend.helper.telegram.split_files import _normalize
 
         base = filename.rsplit(".", 1)[0]
         group_key = f"{channel}:{quality}:{_normalize(base)}.zip"

@@ -1,3 +1,7 @@
+"""
+ops/analytics.py — stream start recording and admin analytics aggregates.
+"""
+
 import time
 from datetime import datetime, timedelta
 
@@ -13,8 +17,6 @@ _LAST_FULL = {}
 _FULL_INTERVAL = 60
 ONLINE_WINDOW = 120
 
-#----- App/device parsed from the ADDON-PROTOCOL User-Agent (manifest/stream requests),
-#----- not the video-fetch UA which players spoof.
 _APP_MAP = [
     ("nuvio", "Nuvio"),
     ("stremio", "Stremio"),
@@ -78,8 +80,6 @@ _DEVICE_MAP = [
     ("linux", "Linux"),
 ]
 
-
-#----- Real client IP behind Cloudflare / Caddy / reverse proxies
 def client_ip_from(request) -> str:
     for h in ("cf-connecting-ip", "x-real-ip"):
         v = request.headers.get(h)
@@ -90,7 +90,6 @@ def client_ip_from(request) -> str:
         return xff.split(",")[0].strip()
     return request.client.host if request.client else ""
 
-
 def parse_app(user_agent: str) -> str:
     if not user_agent:
         return "Unknown"
@@ -100,7 +99,6 @@ def parse_app(user_agent: str) -> str:
             return name
     return "Unknown"
 
-
 def parse_device(user_agent: str) -> str:
     if not user_agent:
         return ""
@@ -109,7 +107,6 @@ def parse_device(user_agent: str) -> str:
         if needle in low:
             return name
     return ""
-
 
 async def lookup_ip(ip: str) -> dict:
     if not ip or ip.startswith(("127.", "10.", "192.168.", "172.")) or ip in ("::1", "localhost"):
@@ -140,13 +137,11 @@ async def lookup_ip(ip: str) -> dict:
     _IP_CACHE[ip] = (data, now)
     return data
 
-
 async def _record(token: str, name: str, ip: str, user_agent: str, is_client: bool) -> None:
     if not token:
         return
     coll = db.dbs["tracking"]["user_activity"]
     setf = {"last_active": datetime.utcnow(), "ip": ip or ""}
-    #----- Only the addon-protocol request carries a trustworthy app/device UA.
     if is_client:
         setf["app"] = parse_app(user_agent)
         setf["device"] = parse_device(user_agent)
@@ -161,7 +156,6 @@ async def _record(token: str, name: str, ip: str, user_agent: str, is_client: bo
         LOGGER.warning(f"[ANALYTICS] activity ping failed: {e}")
         return
 
-    #----- The IP geo/ISP/VPN lookup is the only slow part — throttle it per token.
     now_ts = time.time()
     if now_ts - _LAST_FULL.get(token, 0) < _FULL_INTERVAL:
         return
@@ -179,16 +173,11 @@ async def _record(token: str, name: str, ip: str, user_agent: str, is_client: bo
     except Exception as e:
         LOGGER.warning(f"[ANALYTICS] geo update failed: {e}")
 
-
-#----- Called from the video byte-stream (/dl/): only refreshes presence, not device.
 async def record_stream_start(token: str, name: str, ip: str, user_agent: str = "") -> None:
     await _record(token, name, ip, user_agent, is_client=False)
 
-
-#----- Called from the addon protocol (stream/manifest): captures the real app/device.
 async def record_client(token: str, name: str, ip: str, user_agent: str = "") -> None:
     await _record(token, name, ip, user_agent, is_client=True)
-
 
 async def get_activity_overview(page: int = 1, per_page: int = 5) -> dict:
     now = datetime.utcnow()

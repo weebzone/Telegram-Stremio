@@ -1,8 +1,14 @@
+"""
+media_extras/subtitles.py — subtitle file detection, ingest, and library listing.
+
+Attaches external subtitle messages to titles and serves admin subtitle APIs.
+"""
+
 import re
 from datetime import datetime
 
 from Backend import db
-from Backend.helper.encrypt import encode_string
+from Backend.helper.security.encrypt import encode_string
 from Backend.helper.tools.manual_add import parse_telegram_link
 from Backend.helper.metadata import (
     extract_default_id,
@@ -10,12 +16,11 @@ from Backend.helper.metadata import (
     fetch_tv_metadata,
     parse_media_name,
 )
-from Backend.helper.pyro import clean_filename
+from Backend.helper.telegram.pyro import clean_filename
 from Backend.logger import LOGGER
 
 SUBTITLE_EXTS = (".srt", ".vtt", ".ass", ".ssa", ".sub")
 
-#----- (ISO 639-2 code, label, match aliases: full names + ISO 639-2/639-1 codes)
 _LANGUAGES = [
     ("eng", "English", ("english", "eng", "en")),
     ("hin", "Hindi", ("hindi", "hin", "hi")),
@@ -67,10 +72,8 @@ _LANGUAGES = [
     ("swa", "Swahili", ("swahili", "swa", "sw")),
 ]
 
-
 def is_subtitle_file(name: str) -> bool:
     return bool(name) and name.lower().strip().endswith(SUBTITLE_EXTS)
-
 
 def subtitle_ext(name: str) -> str:
     low = (name or "").lower()
@@ -79,8 +82,6 @@ def subtitle_ext(name: str) -> str:
             return ext
     return ".srt"
 
-
-#----- token -> (code, label) for exact matches; full-name set for trimming
 _LANG_BY_TOKEN = {}
 _LANG_WORDS = set()
 for _code, _label, _aliases in _LANGUAGES:
@@ -92,7 +93,6 @@ for _code, _label, _aliases in _LANGUAGES:
 
 _SUB_EXT_TOKENS = {ext.lstrip(".") for ext in SUBTITLE_EXTS}
 
-#----- Trailing tokens that describe the subtitle, not its language
 _IGNORE_TOKENS = {"forced", "sdh", "cc", "full", "default", "hearing", "impaired",
                   "dubbed", "dub", "sub", "subs", "subtitle", "subtitles"}
 
@@ -101,8 +101,6 @@ _TRAILING_LANG_RE = re.compile(
     re.IGNORECASE,
 )
 
-
-#----- Detect language from filename tokens: full names first, then ISO codes, scanning from the end
 def detect_language(name: str):
     tokens = [t for t in re.split(r"[^a-z0-9]+", (name or "").lower()) if t and t not in _SUB_EXT_TOKENS]
     while tokens and tokens[-1] in _IGNORE_TOKENS:
@@ -117,8 +115,6 @@ def detect_language(name: str):
         return _LANG_BY_TOKEN[tokens[-1]]
     return "und", "Unknown"
 
-
-#----- Drop the subtitle extension and any trailing language word(s)
 def _strip_language(name: str) -> str:
     base = name or ""
     for ext in SUBTITLE_EXTS:
@@ -131,8 +127,6 @@ def _strip_language(name: str) -> str:
         base = _TRAILING_LANG_RE.sub("", base)
     return base.strip() or (name or "")
 
-
-#----- Resolve a subtitle filename to (imdb_id, media_type, season, episode)
 async def _identify(name: str):
     default_id = extract_default_id(name)
     parsed = parse_media_name(clean_filename(_strip_language(name)))
@@ -141,7 +135,6 @@ async def _identify(name: str):
     season = parsed.get("season")
     episode = parsed.get("episode")
 
-    #----- Need either a direct IMDb/TMDb id or a parsable title to match
     if not default_id and not title:
         return None
 
@@ -158,8 +151,6 @@ async def _identify(name: str):
     media_type = "tv" if info.get("media_type") in ("tv", "series") else "movie"
     return info["imdb_id"], media_type, season_out, episode_out
 
-
-#----- Match, tag and store a subtitle; returns True when stored, False when skipped
 async def ingest_subtitle(name: str, channel: int, msg_id: int) -> bool:
     try:
         identified = await _identify(name)
@@ -194,15 +185,12 @@ async def ingest_subtitle(name: str, channel: int, msg_id: int) -> bool:
         LOGGER.error(f"[SUBTITLE] ingest failed for '{name}': {e}")
         return False
 
-
 def list_languages() -> list:
     return [{"code": code, "label": label} for code, label, _ in _LANGUAGES]
-
 
 def _label_for(code: str) -> str:
     code = (code or "und").lower()
     return next((label for c, label, _ in _LANGUAGES if c == code), "Unknown")
-
 
 async def resolve_subtitle_message(client, url: str = None, chat_id=None, msg_id=None) -> dict:
     if url:
@@ -234,7 +222,6 @@ async def resolve_subtitle_message(client, url: str = None, chat_id=None, msg_id
         "lang_label": label,
     }
 
-
 async def manual_ingest_subtitle(imdb_id, media_type, season, episode, lang_code, chat_id, msg_id, name) -> dict:
     channel = int(str(chat_id).replace("-100", ""))
     msg_id = int(msg_id)
@@ -258,7 +245,6 @@ async def manual_ingest_subtitle(imdb_id, media_type, season, episode, lang_code
     )
     return doc
 
-
 async def list_title_subtitles(imdb_id: str) -> list:
     out = []
     cursor = db.dbs["tracking"]["subtitles"].find({"imdb_id": imdb_id}).sort(
@@ -270,7 +256,6 @@ async def list_title_subtitles(imdb_id: str) -> list:
         out.append(doc)
     return out
 
-
 async def get_subtitles_for(imdb_id: str, media_type: str, season, episode):
     query = {"imdb_id": imdb_id}
     if media_type == "tv":
@@ -278,15 +263,12 @@ async def get_subtitles_for(imdb_id: str, media_type: str, season, episode):
         query["episode"] = int(episode) if episode else None
     return [doc async for doc in db.dbs["tracking"]["subtitles"].find(query)]
 
-
 async def remove_subtitle(channel, msg_id) -> bool:
     result = await db.dbs["tracking"]["subtitles"].delete_one(
         {"chat_id": int(channel), "msg_id": int(msg_id)}
     )
     return result.deleted_count > 0
 
-
-#----- Shape stored subtitles into Stremio subtitle objects
 def stremio_subtitle_entries(subs: list, token: str, base_url: str) -> list:
     lang_counts = {}
     for sub in subs:

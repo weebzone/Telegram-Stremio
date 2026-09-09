@@ -1,15 +1,17 @@
+"""
+media_extras/nfo.py — NFO / Kodi-style metadata file generation for library items.
+"""
+
 from __future__ import annotations
 import html
 import re
 from typing import Any, Dict, List, Optional
 from xml.sax.saxutils import escape
 
-
 def _e(value: Any) -> str:
     if value is None:
         return ""
     return escape(str(value).strip())
-
 
 def _runtime_minutes(runtime: Optional[str]) -> Optional[int]:
     if not runtime:
@@ -25,7 +27,6 @@ def _runtime_minutes(runtime: Optional[str]) -> Optional[int]:
         return int(s)
     return None
 
-
 def _unique_list(items: Optional[List[Any]]) -> List[str]:
     if not items:
         return []
@@ -37,7 +38,6 @@ def _unique_list(items: Optional[List[Any]]) -> List[str]:
             seen.add(s.lower())
             out.append(s)
     return out
-
 
 def movie_nfo(doc: Dict[str, Any]) -> str:
     """Build a <movie> NFO for a movie document."""
@@ -104,7 +104,6 @@ def movie_nfo(doc: Dict[str, Any]) -> str:
     lines.append("  <source>Telegram-Stremio WebDAV</source>")
     lines.append("</movie>")
     return "\n".join(lines) + "\n"
-
 
 def tvshow_nfo(doc: Dict[str, Any]) -> str:
     """Build a <tvshow> NFO for a series document."""
@@ -173,7 +172,6 @@ def tvshow_nfo(doc: Dict[str, Any]) -> str:
     lines.append("</tvshow>")
     return "\n".join(lines) + "\n"
 
-
 def episode_nfo(
     show_doc: Dict[str, Any],
     season_number: int,
@@ -200,7 +198,6 @@ def episode_nfo(
     if plot:
         lines.append(f"  <plot>{_e(plot)}</plot>")
     if aired:
-        # keep as-is if already ISO-ish
         lines.append(f"  <aired>{_e(str(aired)[:10])}</aired>")
     if imdb_id:
         lines.append(f'  <uniqueid type="imdb">{_e(imdb_id)}</uniqueid>')
@@ -211,7 +208,6 @@ def episode_nfo(
     lines.append("  <source>Telegram-Stremio WebDAV</source>")
     lines.append("</episodedetails>")
     return "\n".join(lines) + "\n"
-
 
 def season_nfo(show_doc: Dict[str, Any], season_number: int) -> str:
     """Minimal season.nfo."""

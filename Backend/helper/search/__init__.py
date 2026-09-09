@@ -1,0 +1,4 @@
+"""
+search/ — grouped helper modules.
+"""
+

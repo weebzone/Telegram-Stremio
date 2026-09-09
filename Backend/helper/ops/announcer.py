@@ -1,3 +1,7 @@
+"""
+ops/announcer.py — announce new library content to configured channels.
+"""
+
 from asyncio import create_task
 from datetime import datetime
 
@@ -10,8 +14,6 @@ from Backend.helper.settings_manager import SettingsManager
 from Backend.logger import LOGGER
 from Backend.pyrofork.bot import StreamBot, get_streambot_url
 
-
-#----- Accept either a numeric channel id (-100...) or an @username
 def _resolve_chat(value: str):
     value = str(value or "").strip()
     if not value:
@@ -21,8 +23,6 @@ def _resolve_chat(value: str):
     except ValueError:
         return value
 
-
-#----- Atomically claim a title so it is announced at most once; returns True if newly claimed
 async def _claim(media_type: str, tmdb_id) -> bool:
     if not tmdb_id:
         return False
@@ -32,7 +32,6 @@ async def _claim(media_type: str, tmdb_id) -> bool:
         upsert=True,
     )
     return result.upserted_id is not None
-
 
 async def _store_announcement_msg(media_type: str, tmdb_id, chat_id, message_id: int) -> None:
     if not tmdb_id or not message_id:
@@ -45,7 +44,6 @@ async def _store_announcement_msg(media_type: str, tmdb_id, chat_id, message_id:
         )
     except Exception as e:
         LOGGER.warning(f"Failed to store announcement message id: {e}")
-
 
 def _build_caption(info: dict) -> str:
     is_tv = info.get("media_type") == "tv"
@@ -73,7 +71,6 @@ def _build_caption(info: dict) -> str:
         lines += ["", f"<i>{desc}</i>"]
     return "\n".join(lines)
 
-
 def _build_markup(info: dict):
     rows = []
     base = SettingsManager.current().base_url
@@ -88,7 +85,6 @@ def _build_markup(info: dict):
     if bot_url and bot_url != "https://t.me/":
         rows.append([InlineKeyboardButton("🤖 Get Addon", url=bot_url)])
     return InlineKeyboardMarkup(rows) if rows else None
-
 
 async def _announce(info: dict) -> None:
     settings = SettingsManager.current()
@@ -122,16 +118,12 @@ async def _announce(info: dict) -> None:
     except Exception as e:
         LOGGER.error(f"Announcement failed for '{info.get('title')}': {e}")
 
-
-#----- Fire-and-forget announcement for a freshly added title
 def announce_new_media(info: dict) -> None:
     try:
         create_task(_announce(dict(info)))
     except RuntimeError:
         LOGGER.warning("Announcement skipped: no running event loop.")
 
-
-#----- Delete the announcement message when media is removed from the library
 async def delete_announcement(media_type: str, tmdb_id) -> None:
     if not tmdb_id:
         return
@@ -156,7 +148,6 @@ async def delete_announcement(media_type: str, tmdb_id) -> None:
         LOGGER.warning(f"FloodWait deleting announcement for {key}: {e.value}s")
     except Exception as e:
         LOGGER.warning(f"Failed to delete announcement message for {key}: {e}")
-
 
 def delete_announcement_async(media_type: str, tmdb_id) -> None:
     try:

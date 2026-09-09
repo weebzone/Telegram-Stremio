@@ -10,11 +10,11 @@ from Backend import __version__, db
 from Backend.fastapi import server
 from Backend.fastapi.main import app
 from Backend.helper.tasks import subscription_task_manager
-from Backend.helper.link_checker import DeadLinkChecker
+from Backend.helper.ops.link_checker import DeadLinkChecker
 from Backend.helper.tasks.pinger import ping
-from Backend.helper.pyro import restart_notification, setup_bot_commands
+from Backend.helper.telegram.pyro import restart_notification, setup_bot_commands
 from Backend.helper.tools import dbcheck_manager, duplicate_manager, scan_manager
-from Backend.helper.session_auth import get_active_session_string
+from Backend.helper.security.session_auth import get_active_session_string
 from Backend.helper.settings_manager import SettingsManager
 from Backend.logger import LOGGER
 import Backend.pyrofork.bot as botmod

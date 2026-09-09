@@ -8,10 +8,10 @@ from Backend import StartTime, __version__, db
 from Backend.config import Telegram
 from Backend.fastapi.security.credentials import get_current_user, is_authenticated, require_auth, verify_credentials
 from Backend.fastapi.themes import DEFAULT_THEME, DEFAULT_STYLE, get_all_themes, get_all_styles, get_theme
-from Backend.helper.analytics import get_activity_overview
+from Backend.helper.ops.analytics import get_activity_overview
 from Backend.helper.streaming.registry import ACTIVE_STREAMS, RECENT_STREAMS
 from Backend.helper.metadata import resolve_cover_url
-from Backend.helper.pyro import get_readable_time
+from Backend.helper.telegram.pyro import get_readable_time
 from Backend.helper.settings_manager import SettingsManager
 import Backend.pyrofork.bot as botmod
 from Backend.pyrofork.bot import StreamBot, multi_clients, work_loads_summary

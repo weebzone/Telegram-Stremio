@@ -1,3 +1,7 @@
+"""
+search/global_search.py — cross-channel Telegram global search for media posts.
+"""
+
 import asyncio
 import re
 import time
@@ -18,9 +22,9 @@ from pyrogram.errors import (
 
 from Backend.logger import LOGGER
 from Backend.helper.settings_manager import SettingsManager
-from Backend.helper.encrypt import encode_string
-from Backend.helper.pyro import get_readable_file_size
-from Backend.helper.split_files import parse_combined_episodes, parse_split_info, strip_part_suffix
+from Backend.helper.security.encrypt import encode_string
+from Backend.helper.telegram.pyro import get_readable_file_size
+from Backend.helper.telegram.split_files import parse_combined_episodes, parse_split_info, strip_part_suffix
 import Backend.pyrofork.bot as botmod
 
 MAX_RESULTS = 50
@@ -33,7 +37,7 @@ RESULT_CACHE_SECONDS = 60
 
 _last_search_ts: Dict[str, float] = {}
 _inflight_tasks: Dict[str, asyncio.Task] = {}
-_result_cache: Dict[str, tuple] = {} 
+_result_cache: Dict[str, tuple] = {}
 _search_semaphore = asyncio.Semaphore(MAX_CONCURRENT_SEARCHES)
 _channel_semaphore = asyncio.Semaphore(MAX_CONCURRENT_CHANNELS)
 _userbot_session_dead = False
@@ -47,10 +51,8 @@ SPLIT_SCAN_WINDOW = 20
 _APOSTROPHE_RE = re.compile(r"['\u2018\u2019`\u00B4]")
 _SYMBOL_STRIP_RE = re.compile(r"[&.\-:]+")
 
-
 def is_userbot_available() -> bool:
     return botmod.Userbot is not None and not _userbot_session_dead
-
 
 def is_global_search_enabled() -> bool:
     if not is_userbot_available():
@@ -58,10 +60,8 @@ def is_global_search_enabled() -> bool:
     s = SettingsManager.current()
     return bool(s.global_search)
 
-
 def _tokens(s: str) -> set:
     return set(_TOKEN_RE.findall((s or "").lower()))
-
 
 def _title_score(
     result_title: str,
@@ -87,7 +87,6 @@ _ABS_EP_BOUNDARY_RE = re.compile(
     r"(?i)(?:^|[^0-9])(?:e|ep|episode)?\s*0*(\d{1,4})(?=[^0-9]|$)"
 )
 
-
 def _filename_has_exact_episode(filename: str, episode: int) -> bool:
     if not filename or episode is None:
         return False
@@ -99,7 +98,6 @@ def _filename_has_exact_episode(filename: str, episode: int) -> bool:
         except (TypeError, ValueError):
             continue
     return False
-
 
 def _matches_episode(parsed: dict, season: Optional[int], episode: Optional[int], filename: str = "") -> bool:
     wants_episode = season is not None or episode is not None
@@ -140,7 +138,6 @@ def _matches_episode(parsed: dict, season: Optional[int], episode: Optional[int]
             return False
     return True
 
-
 def _is_combined_filename(filename: str, parsed: Optional[dict] = None) -> bool:
     if not filename:
         return False
@@ -152,7 +149,6 @@ def _is_combined_filename(filename: str, parsed: Optional[dict] = None) -> bool:
         if any("combined" in str(item).lower() for item in (parsed.get("excess") or [])):
             return True
     return False
-
 
 def _validate_name(filename: str, expected_title: str, season: Optional[int], episode: Optional[int]) -> Optional[dict]:
     try:
@@ -177,12 +173,10 @@ def _validate_name(filename: str, expected_title: str, season: Optional[int], ep
         return None
     return parsed
 
-
 def _parse_and_validate(filename: str, expected_title: str, season: Optional[int], episode: Optional[int]) -> Optional[dict]:
     if _MULTIPART_RE.search(filename):
         return None
     return _validate_name(filename, expected_title, season, episode)
-
 
 def _split_part_info(filename: str) -> Optional[tuple]:
     if not filename:
@@ -203,10 +197,8 @@ def _split_part_info(filename: str) -> Optional[tuple]:
         return base, int(m.group(2)), display, False
     return None
 
-
 _NORMALIZE_ALT_RE = re.compile(r"[\s._-]+")
 _ZIP_SPLIT_RE = re.compile(r"^(?P<base>.+)\.zip\.(?P<num>\d{2,3})$", re.IGNORECASE)
-
 
 def _video_filename(message) -> Optional[str]:
     if message.video:
@@ -214,18 +206,15 @@ def _video_filename(message) -> Optional[str]:
     if message.document:
         mime = message.document.mime_type or ""
         name = message.document.file_name
-        # Include single .zip archives (STORED inner video is streamable)
         if mime.startswith("video/") or (name and (name.lower().endswith(_VIDEO_EXTS) or name.lower().endswith(".zip"))):
             return (message.caption or "").strip() or name or "video.mkv"
     return None
-
 
 def _raw_media_name(message) -> Optional[str]:
     media = message.video or message.document
     if not media:
         return None
     return (message.caption or "").strip() or getattr(media, "file_name", None)
-
 
 async def _gather_split_parts(client, chat_id: int, seed_id: int, base: str) -> Dict[int, dict]:
     ids = list(range(max(1, seed_id - SPLIT_SCAN_WINDOW), seed_id + SPLIT_SCAN_WINDOW + 1))
@@ -252,7 +241,6 @@ async def _gather_split_parts(client, chat_id: int, seed_id: int, base: str) -> 
         parts[info[1]] = {"msg_id": msg.id, "size_bytes": getattr(media, "file_size", 0) or 0}
     return parts
 
-
 def _resolve_channel_ids(channel_ids: List[str]) -> List[int]:
     resolved: List[int] = []
     seen: set = set()
@@ -270,7 +258,6 @@ def _resolve_channel_ids(channel_ids: List[str]) -> List[int]:
             resolved.append(canonical)
     return resolved
 
-
 async def _get_chat_title(client, chat_id: int) -> str:
     if chat_id in _chat_title_cache:
         return _chat_title_cache[chat_id]
@@ -283,14 +270,12 @@ async def _get_chat_title(client, chat_id: int) -> str:
     _chat_title_cache[chat_id] = title
     return title
 
-
 def _strip_symbols(text: str) -> str:
     if not text:
         return ""
     text = _APOSTROPHE_RE.sub("", text)
     text = _SYMBOL_STRIP_RE.sub(" ", text)
     return re.sub(r"\s+", " ", text).strip()
-
 
 def _absolute_ep_forms(episode: int) -> List[str]:
     ep = int(episode)
@@ -302,7 +287,6 @@ def _absolute_ep_forms(episode: int) -> List[str]:
         return [f"{ep:03d}", str(ep)]
     return [str(ep)]
 
-
 def _build_search_query(expected_title: str, year: Optional[int], season: Optional[int], episode: Optional[int]) -> str:
     if season is not None and episode is not None:
         return f"{expected_title} S{int(season):02d}E{int(episode):02d}"
@@ -312,7 +296,6 @@ def _build_search_query(expected_title: str, year: Optional[int], season: Option
     if year is not None:
         return f"{expected_title} {year}"
     return expected_title
-
 
 def _build_query_candidates(
     expected_title: str, year: Optional[int], season: Optional[int], episode: Optional[int]
@@ -347,7 +330,6 @@ def _build_query_candidates(
             add(stripped_title)
 
     return candidates
-
 
 async def _search_channel(
     client,
@@ -424,7 +406,6 @@ async def _search_channel(
                         "source": chat_title,
                     }
                     if is_single_zip:
-                        # Represent as a one-part zip so stream routes use the zip path
                         payload["zip"] = True
                         payload["parts"] = [{"chat_id": chat_id, "msg_id": message.id}]
                         del payload["chat_id"]
@@ -489,7 +470,6 @@ async def _search_channel(
 
         return results
 
-
 async def global_search(
     expected_title: str,
     auth_channels: List[str],
@@ -549,7 +529,6 @@ async def global_search(
     finally:
         _inflight_tasks.pop(key, None)
 
-
 async def _run_global_search(
     expected_title: str,
     query_candidates: List[str],
@@ -599,7 +578,6 @@ async def _run_global_search(
         all_results = all_results[:MAX_RESULTS]
         LOGGER.info(f"[USERBOT] Search completed: '{expected_title}' -> {len(all_results)} result(s)")
         return all_results
-
 
 async def _run_true_global_search(
     expected_title: str,

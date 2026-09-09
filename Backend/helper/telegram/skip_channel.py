@@ -1,3 +1,7 @@
+"""
+telegram/skip_channel.py — route or skip messages from configured skip channels.
+"""
+
 from asyncio import sleep as asleep
 
 from pyrogram import Client
@@ -6,7 +10,6 @@ from pyrogram.types import Message
 
 from Backend.helper.settings_manager import SettingsManager
 from Backend.logger import LOGGER
-
 
 def is_skip_channel(message: Message) -> bool:
     skip = SettingsManager.current().skip_channel
@@ -17,7 +20,6 @@ def is_skip_channel(message: Message) -> bool:
         return ref.replace("-100", "").lstrip("@") == str(message.chat.id).replace("-100", "")
     username = (getattr(message.chat, "username", None) or "").lower()
     return bool(username) and ref.lstrip("@").lower() == username
-
 
 async def route_to_skip_channel(client: Client, message: Message) -> None:
     settings = SettingsManager.current()

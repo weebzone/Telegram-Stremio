@@ -1,3 +1,7 @@
+"""
+ops/version_check.py — upstream version check loop and status for the admin UI.
+"""
+
 import asyncio
 import re
 from typing import Optional
@@ -18,7 +22,6 @@ _state = {
 _lock = asyncio.Lock()
 _CHECK_INTERVAL = 12 * 3600
 
-
 def _parse_repo(url: str) -> Optional[tuple[str, str]]:
     if not url:
         return None
@@ -28,7 +31,6 @@ def _parse_repo(url: str) -> Optional[tuple[str, str]]:
         if len(parts) >= 2:
             return parts[0], parts[1].removesuffix(".git")
     return None
-
 
 def _cmp_version(a: str, b: str) -> int:
     def parts(v):
@@ -45,7 +47,6 @@ def _cmp_version(a: str, b: str) -> int:
         if x > y:
             return 1
     return (len(pa) > len(pb)) - (len(pa) < len(pb))
-
 
 async def check_upstream_version(force: bool = False) -> dict:
     async with _lock:
@@ -87,7 +88,6 @@ async def check_upstream_version(force: bool = False) -> dict:
             LOGGER.warning(f"Version check failed: {e}")
         return dict(_state)
 
-
 def get_version_status() -> dict:
     return {
         "current": __version__,
@@ -96,7 +96,6 @@ def get_version_status() -> dict:
         "error": _state["error"],
         "checked_at": _state["checked_at"],
     }
-
 
 async def version_check_loop():
     await asyncio.sleep(30)

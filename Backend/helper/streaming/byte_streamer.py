@@ -23,7 +23,7 @@ from pyrogram.session import Auth, Session
 
 from Backend import db
 from Backend.helper.exceptions import FileNotFound
-from Backend.helper.pyro import get_file_ids
+from Backend.helper.telegram.pyro import get_file_ids
 from Backend.helper.streaming.registry import (
     ACTIVE_STREAMS,
     RECENT_STREAMS,

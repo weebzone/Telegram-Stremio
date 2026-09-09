@@ -8,17 +8,17 @@ from pyrogram.types import Message
 
 import Backend
 from Backend import db
-from Backend.helper.announcer import announce_new_media
-from Backend.helper.auto_catalog import start_single_media_catalog_sync
-from Backend.helper.encrypt import encode_string
+from Backend.helper.ops.announcer import announce_new_media
+from Backend.helper.media_extras.auto_catalog import start_single_media_catalog_sync
+from Backend.helper.security.encrypt import encode_string
 from Backend.helper.tools.manual_add import resolve_telegram_message, stamp_caption_with_id
-from Backend.helper.requests_manager import auto_fulfill
+from Backend.helper.ops.requests_manager import auto_fulfill
 from Backend.helper.metadata import extract_default_id, metadata
-from Backend.helper.pyro import clean_filename, finalize_media_name, get_readable_file_size
+from Backend.helper.telegram.pyro import clean_filename, finalize_media_name, get_readable_file_size
 from Backend.helper.settings_manager import SettingsManager
-from Backend.helper.skip_channel import is_skip_channel, route_to_skip_channel
-from Backend.helper.split_files import parse_split_info
-from Backend.helper.subtitles import ingest_subtitle, is_subtitle_file, remove_subtitle
+from Backend.helper.telegram.skip_channel import is_skip_channel, route_to_skip_channel
+from Backend.helper.telegram.split_files import parse_split_info
+from Backend.helper.media_extras.subtitles import ingest_subtitle, is_subtitle_file, remove_subtitle
 from Backend.helper.tasks.task_manager import delete_message
 from Backend.logger import LOGGER
 

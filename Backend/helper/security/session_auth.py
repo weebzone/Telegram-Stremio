@@ -1,3 +1,10 @@
+"""
+security/session_auth.py — Telegram userbot session login flow.
+
+Phone-code / 2FA login, store encrypted session string, connect/disconnect/
+remove. Used by Settings session UI and app startup.
+"""
+
 import secrets
 import time
 
@@ -16,12 +23,11 @@ import Backend.pyrofork.bot as botmod
 from Backend import db
 from Backend.config import Telegram
 from Backend.helper import global_search, task_manager
-from Backend.helper.encrypt import decode_string, encode_string
+from Backend.helper.security.encrypt import decode_string, encode_string
 from Backend.logger import LOGGER
 
 _PENDING = {}
 _PENDING_TTL = 600
-
 
 async def _cleanup_pending():
     now = time.time()
@@ -32,7 +38,6 @@ async def _cleanup_pending():
                 await entry["client"].disconnect()
             except Exception:
                 pass
-
 
 def _profile(me) -> dict:
     name = " ".join(p for p in [me.first_name, me.last_name] if p) or "Telegram User"
@@ -46,7 +51,6 @@ def _profile(me) -> dict:
         "user_id": me.id,
     }
 
-
 async def _store_session(session_string: str, profile: dict) -> None:
     encoded = await encode_string(session_string)
     doc = {
@@ -59,10 +63,8 @@ async def _store_session(session_string: str, profile: dict) -> None:
         {"_id": "user_session"}, {"$set": doc}, upsert=True
     )
 
-
 async def _read_stored() -> dict:
     return await db.dbs["tracking"]["state"].find_one({"_id": "user_session"}) or {}
-
 
 async def get_active_session_string() -> str:
     doc = await _read_stored()
@@ -72,7 +74,6 @@ async def get_active_session_string() -> str:
         return await decode_string(doc["session"])
     except Exception:
         return ""
-
 
 async def _activate(session_string: str) -> None:
     try:
@@ -89,7 +90,6 @@ async def _activate(session_string: str) -> None:
     except Exception as e:
         LOGGER.warning(f"[SESSION] Live Userbot activation failed (restart to apply): {e}")
 
-
 async def _deactivate() -> None:
     try:
         if botmod.Userbot is not None:
@@ -97,7 +97,6 @@ async def _deactivate() -> None:
     except Exception:
         pass
     botmod.Userbot = None
-
 
 async def start_login(phone: str) -> dict:
     await _cleanup_pending()
@@ -122,7 +121,6 @@ async def start_login(phone: str) -> dict:
     _PENDING[login_id] = {"client": client, "phone": phone, "hash": sent.phone_code_hash, "ts": time.time()}
     return {"login_id": login_id}
 
-
 async def submit_code(login_id: str, code: str) -> dict:
     entry = _PENDING.get(login_id)
     if not entry:
@@ -144,7 +142,6 @@ async def submit_code(login_id: str, code: str) -> dict:
         raise ValueError("The code has expired. Please request a new one.")
     return await _finalize(login_id)
 
-
 async def submit_password(login_id: str, password: str) -> dict:
     entry = _PENDING.get(login_id)
     if not entry:
@@ -155,7 +152,6 @@ async def submit_password(login_id: str, password: str) -> dict:
     except PasswordHashInvalid:
         raise ValueError("Incorrect two-step verification password.")
     return await _finalize(login_id)
-
 
 async def _finalize(login_id: str) -> dict:
     entry = _PENDING.pop(login_id, None)
@@ -170,7 +166,6 @@ async def _finalize(login_id: str) -> dict:
     await _store_session(session_string, profile)
     await _activate(session_string)
     return {"status": "ok", "profile": profile}
-
 
 async def get_session_status() -> dict:
     doc = await _read_stored()
@@ -187,12 +182,10 @@ async def get_session_status() -> dict:
         },
     }
 
-
 async def disconnect_session() -> dict:
     await db.dbs["tracking"]["state"].update_one({"_id": "user_session"}, {"$set": {"active": False}})
     await _deactivate()
     return {"ok": True}
-
 
 async def reconnect_session() -> dict:
     session_string = None
@@ -207,7 +200,6 @@ async def reconnect_session() -> dict:
     await db.dbs["tracking"]["state"].update_one({"_id": "user_session"}, {"$set": {"active": True}})
     await _activate(session_string)
     return {"ok": True}
-
 
 async def remove_session() -> dict:
     await _deactivate()

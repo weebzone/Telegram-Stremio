@@ -1,3 +1,7 @@
+"""
+ops/health.py — dependency health probes (DB, TMDB, bots) for admin reports.
+"""
+
 import asyncio
 import time
 from datetime import datetime
@@ -15,14 +19,10 @@ from Backend.pyrofork.bot import (
     work_loads,
 )
 
-#----- Rough Atlas free-tier (M0) storage ceiling, used only as a usage guide
 _FREE_TIER_BYTES = 512 * 1024 * 1024
 
-#----- Cache TTLs (seconds) so the panel can poll often without hammering DB/TMDB.
-#----- Bot clients are always computed fresh (in-memory) for realtime load.
 _TTL = {"databases": 30, "tmdb": 300, "base_url": 60}
 _cache: dict = {}
-
 
 async def _cached(key: str, producer, force: bool = False):
     now = time.monotonic()
@@ -32,7 +32,6 @@ async def _cached(key: str, producer, force: bool = False):
     result = await producer()
     _cache[key] = (now, result)
     return result
-
 
 async def _check_databases() -> dict:
     items = []
@@ -56,7 +55,6 @@ async def _check_databases() -> dict:
     status = "ok" if items and up == len(items) else ("degraded" if up else "down")
     return {"key": "databases", "label": "Databases", "status": status, "up": up, "total": len(items), "items": items}
 
-
 def _check_bots() -> dict:
     clients = []
     for idx in sorted(multi_clients.keys()):
@@ -76,7 +74,6 @@ def _check_bots() -> dict:
         "primary_connected": bool(getattr(StreamBot, "is_connected", False)),
     }
 
-
 async def _check_tmdb() -> dict:
     if not tmdb_api_key():
         return {"key": "tmdb", "label": "TMDB API", "status": "not_configured",
@@ -88,7 +85,6 @@ async def _check_tmdb() -> dict:
         return {"key": "tmdb", "label": "TMDB API", "status": "error", "message": "Unexpected TMDB response."}
     except Exception as e:
         return {"key": "tmdb", "label": "TMDB API", "status": "error", "message": str(e)[:140]}
-
 
 async def _check_base_url() -> dict:
     base = SettingsManager.current().base_url
@@ -102,7 +98,6 @@ async def _check_base_url() -> dict:
                 "message": f"Reachable (HTTP {resp.status_code}).", "url": base}
     except Exception as e:
         return {"key": "base_url", "label": "Base URL", "status": "error", "message": str(e)[:140], "url": base}
-
 
 async def run_health_checks(force: bool = False) -> dict:
     databases = await _cached("databases", _check_databases, force)

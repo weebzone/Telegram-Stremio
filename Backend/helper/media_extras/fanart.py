@@ -1,3 +1,7 @@
+"""
+media_extras/fanart.py — Fanart.tv artwork lookup and poster enrichment.
+"""
+
 import asyncio
 import random
 import time
@@ -28,10 +32,8 @@ _TV_FIELDS = {
 def _preview(url: str) -> str:
     return url.replace("/fanart/", "/preview/", 1) if url else url
 
-
 def _medium(url: str) -> str:
     return f"https://wsrv.nl/?url={quote(url, safe='')}&w=1280&output=webp&q=80" if url else url
-
 
 _CACHE_TTL = 6 * 3600
 _ERROR_TTL = 300
@@ -44,7 +46,6 @@ _client: Optional[httpx.AsyncClient] = None
 _client_lock = asyncio.Lock()
 _fetch_sem = asyncio.Semaphore(10)
 
-
 async def _get_client() -> httpx.AsyncClient:
     global _client
     async with _client_lock:
@@ -54,7 +55,6 @@ async def _get_client() -> httpx.AsyncClient:
                 follow_redirects=True,
             )
     return _client
-
 
 async def _fetch_remote(url: str, params: dict) -> dict:
     try:
@@ -74,7 +74,6 @@ async def _fetch_remote(url: str, params: dict) -> dict:
     _cache[url] = (time.monotonic(), data, ttl)
     return data
 
-
 async def _fetch(url: str, params: dict) -> dict:
     cached = _cache.get(url)
     if cached and time.monotonic() - cached[0] < cached[2]:
@@ -85,7 +84,6 @@ async def _fetch(url: str, params: dict) -> dict:
         _inflight[url] = task
         task.add_done_callback(lambda _t, _u=url: _inflight.pop(_u, None))
     return await task
-
 
 async def _resolve_tvdb(tmdb_id) -> Optional[int]:
     if not tmdb_id:
@@ -100,7 +98,6 @@ async def _resolve_tvdb(tmdb_id) -> Optional[int]:
     _tvdb_cache[tmdb_id] = tvdb
     return tvdb
 
-
 def _pick(items, shuffle: bool, interval: int, seed_key: str) -> str:
     items = [i for i in (items or []) if i.get("url")]
     if not items:
@@ -113,7 +110,6 @@ def _pick(items, shuffle: bool, interval: int, seed_key: str) -> str:
         return random.choice(pool).get("url", "")
     bucket = int(time.time() // (interval * 60))
     return random.Random(f"{seed_key}:{bucket}").choice(pool).get("url", "")
-
 
 async def fanart_artwork(imdb_id, tmdb_id, media_type) -> dict:
     settings = SettingsManager.current()

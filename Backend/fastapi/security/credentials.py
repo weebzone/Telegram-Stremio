@@ -1,7 +1,7 @@
 from fastapi import HTTPException, Request
 from starlette.status import HTTP_401_UNAUTHORIZED
 
-from Backend.helper.passwords import verify_password
+from Backend.helper.security.passwords import verify_password
 from Backend.helper.settings_manager import SettingsManager
 
 

@@ -20,13 +20,13 @@ import re
 from typing import Optional, Tuple
 
 from Backend.helper.metadata import caption_with_id, parse_media_name
-from Backend.helper.pyro import (
+from Backend.helper.telegram.pyro import (
     clean_filename,
     finalize_media_name,
     get_readable_file_size,
     is_media,
 )
-from Backend.helper.split_files import parse_split_info, strip_part_suffix
+from Backend.helper.telegram.split_files import parse_split_info, strip_part_suffix
 from Backend.logger import LOGGER
 from Backend.helper.tasks.task_manager import edit_message
 

@@ -23,11 +23,11 @@ from typing import Any, Dict, List, Optional
 from pyrogram.errors import FloodWait, ChannelPrivate, ChatAdminRequired
 
 from Backend.logger import LOGGER
-from Backend.helper.encrypt import encode_string, decode_string
+from Backend.helper.security.encrypt import encode_string, decode_string
 from Backend.helper.metadata import metadata, extract_default_id
-from Backend.helper.pyro import clean_filename, finalize_media_name, get_readable_file_size
-from Backend.helper.skip_channel import is_skip_channel, route_to_skip_channel
-from Backend.helper.split_files import parse_split_info
+from Backend.helper.telegram.pyro import clean_filename, finalize_media_name, get_readable_file_size
+from Backend.helper.telegram.skip_channel import is_skip_channel, route_to_skip_channel
+from Backend.helper.telegram.split_files import parse_split_info
 from Backend.helper.tools.utils import STATE_COLLECTION, SCAN_DOC_ID, now, fmt_elapsed
 
 SCAN_BATCH_SIZE = 200
@@ -433,7 +433,7 @@ class ScanManager:
         return last_id
 
     async def _process_message(self, client, message, chat_id: int) -> None:
-        from Backend.helper.subtitles import ingest_subtitle, is_subtitle_file
+        from Backend.helper.media_extras.subtitles import ingest_subtitle, is_subtitle_file
 
         s = self.state
         db = self._db

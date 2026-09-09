@@ -21,8 +21,8 @@ import Backend
 from Backend import StartTime, __version__, db
 from Backend.fastapi.routes.stream_routes import _streamer_by_client
 from Backend.fastapi.routes.stremio_routes import invalidate_membership_cache
-from Backend.helper.analytics import get_activity_overview
-from Backend.helper.auto_catalog import (
+from Backend.helper.ops.analytics import get_activity_overview
+from Backend.helper.media_extras.auto_catalog import (
     get_auto_catalog_settings,
     get_auto_catalog_sync_status,
     start_auto_catalog_sync_background,
@@ -32,10 +32,10 @@ from Backend.helper.auto_catalog import (
 from Backend.helper.tasks.backup import export_config, import_config
 from Backend.helper.streaming.byte_streamer import ByteStreamer
 from Backend.helper.streaming.speed_test import _speed_test_single_client, run_speed_test
-from Backend.helper.encrypt import decode_string, encode_string
-from Backend.helper.health import run_health_checks
+from Backend.helper.security.encrypt import decode_string, encode_string
+from Backend.helper.ops.health import run_health_checks
 from Backend.helper.tools.manual_add import resolve_telegram_message, stamp_caption_by_ref
-from Backend.helper.requests_manager import (
+from Backend.helper.ops.requests_manager import (
     delete_request,
     list_requests,
     popular_pending,
@@ -53,10 +53,10 @@ from Backend.helper.metadata import (
     search_movie_candidates,
     search_tv_candidates,
 )
-from Backend.helper.passwords import hash_password, verify_password
-from Backend.helper.pyro import get_readable_file_size, get_readable_time
+from Backend.helper.security.passwords import hash_password, verify_password
+from Backend.helper.telegram.pyro import get_readable_file_size, get_readable_time
 from Backend.helper.tools import dbcheck_manager, duplicate_manager, scan_manager
-from Backend.helper.session_auth import (
+from Backend.helper.security.session_auth import (
     disconnect_session,
     get_session_status,
     reconnect_session,
@@ -66,8 +66,8 @@ from Backend.helper.session_auth import (
     submit_password,
 )
 from Backend.helper.settings_manager import SettingsManager
-from Backend.helper.split_files import strip_part_suffix
-from Backend.helper.subtitles import (
+from Backend.helper.telegram.split_files import strip_part_suffix
+from Backend.helper.media_extras.subtitles import (
     list_languages,
     list_title_subtitles,
     manual_ingest_subtitle,
@@ -76,7 +76,7 @@ from Backend.helper.subtitles import (
 )
 from Backend.logger import LOGGER
 import Backend.pyrofork.bot as botmod
-from Backend.helper.announcer import delete_announcement_async
+from Backend.helper.ops.announcer import delete_announcement_async
 from Backend.pyrofork.bot import (
     StreamBot,
     client_avg_mbps,

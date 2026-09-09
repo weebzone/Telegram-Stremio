@@ -1,3 +1,7 @@
+"""
+ops/requests_manager.py — public media-request queue storage and moderation helpers.
+"""
+
 import hashlib
 import re
 from datetime import datetime
@@ -18,31 +22,24 @@ from Backend.logger import LOGGER
 STATUSES = ("pending", "uploaded", "denied", "banned")
 _IMDB_RE = re.compile(r"(tt\d{7,10})")
 
-
 def _norm_title(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", (text or "").lower()).strip()
-
 
 def _year_int(value) -> int:
     match = re.search(r"(\d{4})", str(value or ""))
     return int(match.group(1)) if match else 0
 
-
 def _coll():
     return db.dbs["tracking"]["requests"]
-
 
 def _norm_type(media_type: str) -> str:
     return "tv" if media_type in ("tv", "series") else "movie"
 
-
 def _hash_ip(ip: str) -> str:
     return hashlib.sha256((ip or "unknown").encode()).hexdigest()[:16]
 
-
 def _poster(path: str) -> str:
     return format_tmdb_image(path, "w342") if path else ""
-
 
 def _movie_entry(m) -> dict:
     date = getattr(m, "release_date", None)
@@ -55,7 +52,6 @@ def _movie_entry(m) -> dict:
         "overview": (getattr(m, "overview", None) or "")[:220],
     }
 
-
 def _tv_entry(t) -> dict:
     date = getattr(t, "first_air_date", None)
     return {
@@ -67,8 +63,6 @@ def _tv_entry(t) -> dict:
         "overview": (getattr(t, "overview", None) or "")[:220],
     }
 
-
-#----- IMDb/Cinemeta name search (no API key, tried before TMDB)
 async def _cinemeta_name_search(query: str) -> list:
     out = []
     for media_type, cm_type in (("movie", "movie"), ("tv", "series")):
@@ -90,8 +84,6 @@ async def _cinemeta_name_search(query: str) -> list:
             })
     return out
 
-
-#----- IMDb/Cinemeta lookup by imdb id (also yields tmdb id when known)
 async def _cinemeta_id_search(imdb_id: str) -> list:
     out = []
     for media_type, cm_type in (("movie", "movie"), ("tv", "series")):
@@ -112,7 +104,6 @@ async def _cinemeta_id_search(imdb_id: str) -> list:
             })
     return out
 
-
 async def _tmdb_id_search(client, tmdb_id: int) -> list:
     out = []
     try:
@@ -129,7 +120,6 @@ async def _tmdb_id_search(client, tmdb_id: int) -> list:
         pass
     return out
 
-
 async def _tmdb_imdb_search(client, imdb_id: str) -> list:
     out = []
     found = await client.find().by_imdb(imdb_id)
@@ -138,7 +128,6 @@ async def _tmdb_imdb_search(client, imdb_id: str) -> list:
     for tv in (getattr(found, "tv_results", None) or []):
         out.append(_tv_entry(tv))
     return out
-
 
 async def _tmdb_name_search(client, query: str) -> list:
     out = []
@@ -149,7 +138,6 @@ async def _tmdb_name_search(client, query: str) -> list:
         elif getattr(item, "is_tv", False):
             out.append(_tv_entry(item))
     return out
-
 
 def _dedupe(results: list) -> list:
     seen = set()
@@ -164,8 +152,6 @@ def _dedupe(results: list) -> list:
         clean.append(r)
     return clean[:15]
 
-
-#----- Search by name/IMDb id/TMDB id. IMDb (Cinemeta) is tried first; TMDB is a fallback.
 async def search_titles(query: str) -> list:
     query = (query or "").strip()
     if len(query) < 2:
@@ -202,18 +188,13 @@ async def search_titles(query: str) -> list:
 
     return _dedupe(results)
 
-
-#----- Does this title already exist in the library? Check imdb id, then tmdb id, then name.
 async def media_exists(media_type: str, tmdb_id, imdb_id, title: str, year=None) -> bool:
     media_type = _norm_type(media_type)
     try:
-        #----- 1) requested IMDb id vs library IMDb id
         if imdb_id and await db.get_media_details(imdb_id=imdb_id):
             return True
-        #----- 2) requested TMDB id vs library TMDB id
         if tmdb_id and await db.find_media_doc(media_type, int(tmdb_id)):
             return True
-        #----- 3) requested name + year vs library title + release_year
         if title:
             found = await db.search_documents(query=title, page=1, page_size=8)
             target = _norm_title(title)
@@ -230,8 +211,6 @@ async def media_exists(media_type: str, tmdb_id, imdb_id, title: str, year=None)
         LOGGER.warning(f"[REQUEST] library existence check failed: {e}")
     return False
 
-
-#----- Public submit: de-duplicated per title, honouring banned/denied/uploaded state
 async def submit_request(*, media_type, tmdb_id, imdb_id, title, year, poster, client_ip) -> dict:
     media_type = _norm_type(media_type)
     try:
@@ -242,7 +221,6 @@ async def submit_request(*, media_type, tmdb_id, imdb_id, title, year, poster, c
     if not tmdb_id and not imdb_id:
         return {"ok": False, "reason": "invalid"}
 
-    #----- Match an existing request by either id (imdb id preferred)
     ors = []
     if imdb_id:
         ors.append({"imdb_id": imdb_id})
@@ -272,7 +250,6 @@ async def submit_request(*, media_type, tmdb_id, imdb_id, title, year, poster, c
         await _coll().update_one({"_id": existing["_id"]}, update)
         return {"ok": True, "reason": reason, "title": existing.get("title")}
 
-    #----- Not requested before: if it's already in the library, no request needed
     if await media_exists(media_type, tmdb_id, imdb_id, title, year):
         return {"ok": True, "reason": "already_available", "title": title}
 
@@ -292,13 +269,11 @@ async def submit_request(*, media_type, tmdb_id, imdb_id, title, year, poster, c
     await _coll().insert_one(doc)
     return {"ok": True, "reason": "created", "title": doc["title"]}
 
-
 def _shape(doc: dict) -> dict:
     doc["_id"] = str(doc["_id"])
     doc["request_count"] = len(doc.get("requesters") or [])
     doc.pop("requesters", None)
     return doc
-
 
 async def list_requests() -> list:
     items = []
@@ -306,12 +281,10 @@ async def list_requests() -> list:
         items.append(_shape(doc))
     return items
 
-
 async def popular_pending(limit: int = 12) -> list:
     items = [_shape(doc) async for doc in _coll().find({"status": "pending"})]
     items.sort(key=lambda d: d["request_count"], reverse=True)
     return items[:limit]
-
 
 async def set_status(request_id: str, status: str):
     if status not in STATUSES:
@@ -327,7 +300,6 @@ async def set_status(request_id: str, status: str):
     )
     return _shape(doc) if doc else None
 
-
 async def delete_request(request_id: str) -> bool:
     try:
         oid = ObjectId(request_id)
@@ -336,8 +308,6 @@ async def delete_request(request_id: str) -> bool:
     result = await _coll().delete_one({"_id": oid})
     return result.deleted_count > 0
 
-
-#----- Mark matching pending requests as uploaded when a title is added to a channel
 async def auto_fulfill(tmdb_id=None, imdb_id=None, media_type: str = "movie") -> int:
     media_type = _norm_type(media_type)
     ors = []
