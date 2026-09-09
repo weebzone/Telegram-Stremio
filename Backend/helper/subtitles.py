@@ -3,7 +3,7 @@ from datetime import datetime
 
 from Backend import db
 from Backend.helper.encrypt import encode_string
-from Backend.helper.manual_add import parse_telegram_link
+from Backend.helper.tools.manual_add import parse_telegram_link
 from Backend.helper.metadata import (
     extract_default_id,
     fetch_movie_metadata,
