@@ -249,6 +249,8 @@ async def update_media_api(
                 except (ValueError, TypeError):
                     pass
         update_data = {k: v for k, v in update_data.items() if v != ""}
+        if "title" in update_data:
+            update_data["title_english"] = update_data["title"]
         result = await db.update_document(media_type, tmdb_id, db_index, update_data)
         if result:
             return {"message": "Media updated successfully"}
@@ -1667,7 +1669,7 @@ async def update_catalog_order_api(payload: dict):
     return {"ok": True, "message": "Catalog order saved."}
 
 
-async def get_user_activity_api(page: int = 1, per_page: int = 12):
+async def get_user_activity_api(page: int = 1, per_page: int = 5):
     try:
         return await get_activity_overview(page, per_page)
     except Exception as e:
@@ -2431,6 +2433,13 @@ async def import_config_api(payload: dict) -> dict:
 #----- Lightweight liveness probe; start_time changes on every boot (restart detection)
 async def health_api() -> dict:
     return {"status": "ok", "start_time": StartTime, "version": __version__}
+
+
+async def version_status_api(force: bool = False) -> dict:
+    from Backend.helper.version_check import check_upstream_version, get_version_status
+    if force:
+        await check_upstream_version(force=True)
+    return {"status": "success", "data": get_version_status()}
 
 
 #----- Full diagnostics report (DBs, bot clients, TMDB, base URL)

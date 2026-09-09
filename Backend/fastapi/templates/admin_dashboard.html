@@ -698,7 +698,12 @@
                 const avg = Number(s.avg_mbps ?? 0);
                 const peak = Number(s.peak_mbps ?? 0);
                 const bytesStr = ((Number(s.total_bytes ?? 0)) / (1024 * 1024)).toFixed(1) + ' MB';
-                const timeStr = s.logged_at ? new Date(s.logged_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—';
+                const timeStr = s.logged_at
+                    ? new Date(s.logged_at).toLocaleString([], {
+                        year: 'numeric', month: 'short', day: 'numeric',
+                        hour: '2-digit', minute: '2-digit', second: '2-digit'
+                      })
+                    : '—';
                 const durationStr = s.duration_sec ? `${Number(s.duration_sec).toFixed(1)}s` : '—';
                 const titleStr = s.title || s.meta?.title || '—';
                 const status = s.status || 'unknown';

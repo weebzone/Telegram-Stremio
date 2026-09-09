@@ -1,4 +1,11 @@
 DEFAULT_THEME = "graphite_amber"
+DEFAULT_STYLE = "default"
+
+STYLES = {
+    "default": {"name": "Default"},
+    "glassy": {"name": "Glassy"},
+    "neo_brutal": {"name": "Neo Brutalism"},
+}
 
 THEMES = {
     "graphite_amber": {
@@ -121,21 +128,6 @@ THEMES = {
         },
         "css_classes": "theme-tiffany-noir"
     },
-    "bridal_blush": {
-        "name": "Bridal Blush",
-        "is_dark": True,
-        "colors": {
-            "primary": "#FFC6A8",
-            "secondary": "#E8A98A",
-            "accent": "#FFD9C2",
-            "background": "#1B080F",
-            "card": "#38131E",
-            "border": "#741A2F",
-            "text": "#FFEDE3",
-            "text_secondary": "#D2A093"
-        },
-        "css_classes": "theme-bridal-blush"
-    },
     "rose_quartz": {
         "name": "Rose Quartz",
         "is_dark": False,
@@ -198,11 +190,14 @@ THEMES = {
     }
 }
 
-#----- Resolve a theme by name, falling back to the default
-def get_theme(theme_name: str = DEFAULT_THEME):
-    return THEMES.get(theme_name, THEMES[DEFAULT_THEME])
+def get_theme(theme_name: str = DEFAULT_THEME, style_name: str = DEFAULT_STYLE):
+    base = dict(THEMES.get(theme_name, THEMES[DEFAULT_THEME]))
+    style = style_name if style_name in STYLES else DEFAULT_STYLE
+    base["style"] = style
+    return base
 
-
-#----- Return the full theme registry
 def get_all_themes():
     return THEMES
+
+def get_all_styles():
+    return STYLES

@@ -7,7 +7,7 @@ from fastapi.templating import Jinja2Templates
 from Backend import StartTime, __version__, db
 from Backend.config import Telegram
 from Backend.fastapi.security.credentials import get_current_user, is_authenticated, require_auth, verify_credentials
-from Backend.fastapi.themes import DEFAULT_THEME, get_all_themes, get_theme
+from Backend.fastapi.themes import DEFAULT_THEME, DEFAULT_STYLE, get_all_themes, get_all_styles, get_theme
 from Backend.helper.analytics import get_activity_overview
 from Backend.helper.custom_dl import ACTIVE_STREAMS, RECENT_STREAMS
 from Backend.helper.metadata import resolve_cover_url
@@ -24,11 +24,14 @@ templates.env.globals["cover_url"] = resolve_cover_url
 #----- Shared template context (request, theme metadata) for every page
 def _base_context(request: Request) -> dict:
     theme_name = request.session.get("theme", DEFAULT_THEME)
+    style_name = request.session.get("style", DEFAULT_STYLE)
     return {
         "request": request,
-        "theme": get_theme(theme_name),
+        "theme": get_theme(theme_name, style_name),
         "themes": get_all_themes(),
+        "styles": get_all_styles(),
         "current_theme": theme_name,
+        "current_style": style_name,
     }
 
 
@@ -64,9 +67,11 @@ async def logout(request: Request):
 
 
 #----- Persist the chosen theme and return to the referring page
-async def set_theme(request: Request, theme: str = Form(...)):
-    if theme in get_all_themes():
+async def set_theme(request: Request, theme: str = Form(None), style: str = Form(None)):
+    if theme and theme in get_all_themes():
         request.session["theme"] = theme
+    if style and style in get_all_styles():
+        request.session["style"] = style
     return RedirectResponse(url=request.headers.get("referer", "/"), status_code=302)
 
 
@@ -148,9 +153,9 @@ async def dashboard_page(request: Request, _: bool = Depends(require_auth)):
 
     ctx["system_stats"] = system_stats
     try:
-        ctx["user_activity_initial"] = await get_activity_overview(1, 12)
+        ctx["user_activity_initial"] = await get_activity_overview(1, 5)
     except Exception:
-        ctx["user_activity_initial"] = {"users": [], "online_count": 0, "total": 0, "page": 1, "per_page": 12, "total_pages": 1}
+        ctx["user_activity_initial"] = {"users": [], "online_count": 0, "total": 0, "page": 1, "per_page": 5, "total_pages": 1}
     return templates.TemplateResponse("dashboard.html", ctx)
 
 
@@ -199,38 +204,6 @@ async def edit_media_page(request: Request, tmdb_id: int, db_index: int, media_t
         "api_token": api_tokens[0].get("token") if api_tokens else None,
     })
     return templates.TemplateResponse("media_edit.html", ctx)
-
-
-#----- Public status page (no auth)
-async def public_status_page(request: Request):
-    try:
-        db_stats = await db.get_database_stats()
-        total_movies, total_tv_shows = db.content_totals(db_stats)
-        public_stats = {
-            "status": "operational",
-            "uptime": "99.9%",
-            "total_content": total_movies + total_tv_shows,
-            "databases_online": len(db_stats)
-        }
-    except Exception:
-        public_stats = {
-            "status": "maintenance",
-            "uptime": "N/A",
-            "total_content": 0,
-            "databases_online": 0
-        }
-
-    ctx = _base_context(request)
-    ctx["stats"] = public_stats
-    ctx["is_authenticated"] = is_authenticated(request)
-    return templates.TemplateResponse("public_status.html", ctx)
-
-
-#----- Stremio setup guide (no auth)
-async def stremio_guide_page(request: Request):
-    ctx = _base_context(request)
-    ctx["is_authenticated"] = is_authenticated(request)
-    return templates.TemplateResponse("stremio_guide.html", ctx)
 
 
 #----- Subscription management shell

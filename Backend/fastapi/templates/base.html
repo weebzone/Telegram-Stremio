@@ -1,12 +1,17 @@
 <!DOCTYPE html>
-<html lang="en" class="{{ 'dark' if theme.is_dark else 'light' }}">
+<html lang="en" class="{{ 'dark' if theme.is_dark else 'light' }} style-{{ theme.style|default('default') }}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{% block title %}Telegram Stremio{% endblock %}</title>
 
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='{{ theme.colors.primary | replace('#','%23') }}'/%3E%3Cpath d='M12.5 9.5l10 6.5-10 6.5z' fill='white'/%3E%3C/svg%3E">
-<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='{{ theme.colors.primary | replace('#','%23') }}'/%3E%3Cpath d='M12.5 9.5l10 6.5-10 6.5z' fill='white'/%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="/pwa-icon.svg">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="{{ theme.colors.primary }}">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="{{ 'black-translucent' if theme.is_dark else 'default' }}">
+<meta name="mobile-web-app-capable" content="yes">
 
 <script src="https://cdn.tailwindcss.com"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"/>
@@ -72,10 +77,12 @@ body::before {
         radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--card) 40%, transparent), transparent 60%);
 }
 
+
 .glass-panel {
     background: color-mix(in srgb, var(--card) 90%, var(--bg));
     border: 1px solid var(--hairline);
     box-shadow: var(--shadow-soft);
+    border-radius: 1.5rem;
 }
 
 .glass-nav {
@@ -139,6 +146,120 @@ body::before {
     outline: none;
     border-color: var(--primary);
     box-shadow: 0 0 0 3px var(--ring);
+}
+
+html.style-glassy .glass-panel,
+html.style-glassy .surface-card {
+    background: color-mix(in srgb, var(--card) 28%, transparent);
+    backdrop-filter: blur(48px) saturate(220%);
+    -webkit-backdrop-filter: blur(48px) saturate(220%);
+    border: 1px solid color-mix(in srgb, var(--text) 18%, transparent);
+    box-shadow: 0 12px 40px rgba(0,0,0,.32), inset 0 1px 0 color-mix(in srgb, var(--text) 18%, transparent);
+    border-radius: 1.5rem;
+}
+html.style-glassy body::before {
+    opacity: 1;
+    filter: blur(0px);
+}
+html.style-glassy .glass-nav {
+    background: color-mix(in srgb, var(--card) 30%, transparent);
+    backdrop-filter: blur(56px) saturate(240%);
+    -webkit-backdrop-filter: blur(56px) saturate(240%);
+    border-bottom: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
+}
+html.style-glassy .btn-primary {
+    border-radius: 9999px;
+    font-weight: 600;
+    background: color-mix(in srgb, var(--primary) 85%, transparent);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow: 0 8px 28px color-mix(in srgb, var(--primary) 45%, transparent);
+    border: 1px solid color-mix(in srgb, var(--text) 15%, transparent);
+}
+html.style-glassy .btn-ghost {
+    border-radius: 9999px;
+    background: color-mix(in srgb, var(--card) 28%, transparent);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid color-mix(in srgb, var(--text) 14%, transparent);
+}
+html.style-glassy .field {
+    border-radius: 9999px;
+    background: color-mix(in srgb, var(--card) 25%, transparent);
+    backdrop-filter: blur(18px) saturate(180%);
+    -webkit-backdrop-filter: blur(18px) saturate(180%);
+    border: 1px solid color-mix(in srgb, var(--text) 14%, transparent);
+}
+html.style-glassy .badge {
+    border-radius: 9999px;
+    background: color-mix(in srgb, var(--primary) 22%, transparent);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid color-mix(in srgb, var(--primary) 35%, transparent);
+}
+
+html.style-neo_brutal .glass-panel,
+html.style-neo_brutal .surface-card {
+    background: var(--card);
+    border: 3px solid var(--text);
+    box-shadow: 6px 6px 0 var(--text);
+    border-radius: 0.75rem;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+html.style-neo_brutal .glass-nav {
+    background: var(--card);
+    border-bottom: 3px solid var(--text);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+html.style-neo_brutal .btn-primary {
+    background: var(--primary);
+    color: var(--bg);
+    font-weight: 900;
+    border: 3px solid var(--text);
+    border-radius: 0.5rem;
+    box-shadow: 4px 4px 0 var(--text);
+}
+html.style-neo_brutal .btn-primary:hover {
+    transform: translate(-2px, -2px);
+    box-shadow: 6px 6px 0 var(--text);
+    filter: none;
+}
+html.style-neo_brutal .btn-primary:active {
+    transform: translate(2px, 2px);
+    box-shadow: 1px 1px 0 var(--text);
+}
+html.style-neo_brutal .btn-ghost {
+    background: var(--card);
+    color: var(--text);
+    font-weight: 900;
+    border: 3px solid var(--text);
+    border-radius: 0.5rem;
+    box-shadow: 4px 4px 0 var(--text);
+}
+html.style-neo_brutal .btn-ghost:hover {
+    transform: translate(-2px, -2px);
+    box-shadow: 6px 6px 0 var(--text);
+}
+html.style-neo_brutal .badge {
+    border: 2px solid var(--text);
+    border-radius: 0.35rem;
+    font-weight: 900;
+    box-shadow: 2px 2px 0 var(--text);
+    background: var(--accent);
+    color: var(--text);
+}
+html.style-neo_brutal .field {
+    background: var(--card);
+    border: 3px solid var(--text);
+    border-radius: 0.5rem;
+    box-shadow: 3px 3px 0 var(--text);
+}
+html.style-neo_brutal .field:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 3px 3px 0 var(--primary);
 }
 
 .tabular { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
@@ -358,6 +479,18 @@ tailwind.config = {
 
 <body class="pt-24 pb-12 antialiased">
 
+<div id="update-banner" class="hidden fixed top-0 left-0 right-0 z-[60] px-3 pt-3 pointer-events-none">
+  <div class="pointer-events-auto mx-auto max-w-6xl rounded-2xl border border-amber-400/40 bg-amber-500/95 text-black shadow-[0_12px_40px_rgba(0,0,0,0.35)] backdrop-blur-md px-4 py-3 sm:px-5 flex items-start sm:items-center gap-3">
+    <div class="shrink-0 w-9 h-9 rounded-xl bg-black/15 flex items-center justify-center mt-0.5 sm:mt-0">
+      <i class="fa-solid fa-arrow-up text-sm"></i>
+    </div>
+    <div class="min-w-0 flex-1 leading-snug">
+      <p class="text-sm font-bold">New version <span id="update-latest" class="font-extrabold"></span> available</p>
+      <p class="text-xs sm:text-sm opacity-90 mt-0.5">You are on <span id="update-current" class="font-semibold"></span>. Set upstream repo/branch, then restart/update.</p>
+    </div>
+  </div>
+</div>
+
 <div id="overlay" class="fixed inset-0 z-40 opacity-0 pointer-events-none"></div>
 
 <nav id="navbar"
@@ -409,7 +542,7 @@ tailwind.config = {
                     </div>
 
                     <div class="mb-4">
-                        <label class="text-[10px] uppercase text-text-secondary font-bold mb-2 block ml-1">App Theme</label>
+                        <label class="text-[10px] uppercase text-text-secondary font-bold mb-2 block ml-1">Color</label>
                         <div class="theme-grid">
                             {% for theme_key, theme_data in themes.items() %}
                             <button type="button"
@@ -426,8 +559,21 @@ tailwind.config = {
                             </button>
                             {% endfor %}
                         </div>
+                        <label class="text-[10px] uppercase text-text-secondary font-bold mb-2 mt-3 block ml-1">Theme</label>
+                        <div class="theme-grid">
+                            {% for style_key, style_data in styles.items() %}
+                            <button type="button"
+                                onclick="selectStyle('{{ style_key }}')"
+                                class="theme-chip {% if current_style==style_key %}active{% endif %}"
+                                title="{{ style_data.name }}">
+                                <span class="theme-chip-name">{{ style_data.name }}</span>
+                                {% if current_style==style_key %}<i class="fa-solid fa-check chip-check"></i>{% endif %}
+                            </button>
+                            {% endfor %}
+                        </div>
                         <form id="theme-form" method="post" action="/set-theme" class="hidden">
                             <input type="hidden" name="theme" id="theme-input">
+                            <input type="hidden" name="style" id="style-input">
                         </form>
                     </div>
 
@@ -584,6 +730,17 @@ function selectTheme(key) {
     const form = document.getElementById('theme-form');
     if (!input || !form) return;
     input.value = key;
+    const s = document.getElementById('style-input');
+    if (s) s.value = '';
+    form.submit();
+}
+function selectStyle(key) {
+    const input = document.getElementById('style-input');
+    const form = document.getElementById('theme-form');
+    if (!input || !form) return;
+    input.value = key;
+    const c = document.getElementById('theme-input');
+    if (c) c.value = '';
     form.submit();
 }
 
@@ -668,7 +825,55 @@ if(navContainer) {
     check();
     setInterval(check, 60000);
 })();
+
+(function versionBanner() {
+    const banner = document.getElementById('update-banner');
+    const navbar = document.getElementById('navbar');
+    function layout(show) {
+        if (!banner || !navbar) return;
+        if (show) {
+            banner.classList.remove('hidden');
+            requestAnimationFrame(() => {
+                const h = banner.offsetHeight || 72;
+                navbar.style.top = (h + 12) + 'px';
+                document.body.style.paddingTop = (h + 88) + 'px';
+            });
+        } else {
+            banner.classList.add('hidden');
+            navbar.style.top = '';
+            document.body.style.paddingTop = '';
+        }
+    }
+    async function check() {
+        try {
+            const res = await fetch('/api/admin/version');
+            if (!res.ok) return;
+            const data = await res.json();
+            const d = data.data || {};
+            if (d.update_available && d.latest) {
+                const elL = document.getElementById('update-latest');
+                const elC = document.getElementById('update-current');
+                if (elL) elL.textContent = d.latest;
+                if (elC) elC.textContent = d.current || '';
+                layout(true);
+            } else {
+                layout(false);
+            }
+        } catch (e) {}
+    }
+    check();
+    setInterval(check, 3600000);
+    window.addEventListener('resize', () => {
+        if (banner && !banner.classList.contains('hidden')) layout(true);
+    });
+})();
 {% endif %}
+
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch(() => {});
+    });
+}
 </script>
 
 </body>

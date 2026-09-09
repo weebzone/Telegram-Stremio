@@ -190,38 +190,57 @@ async def record_client(token: str, name: str, ip: str, user_agent: str = "") ->
     await _record(token, name, ip, user_agent, is_client=True)
 
 
-async def get_activity_overview(page: int = 1, per_page: int = 12) -> dict:
+async def get_activity_overview(page: int = 1, per_page: int = 5) -> dict:
     now = datetime.utcnow()
     cutoff = now - timedelta(seconds=ONLINE_WINDOW)
     coll = db.dbs["tracking"]["user_activity"]
+    tokens_coll = db.dbs["tracking"]["api_tokens"]
+
+    valid_tokens = set()
+    try:
+        async for doc in tokens_coll.find({}, {"token": 1}):
+            tok = doc.get("token")
+            if tok:
+                valid_tokens.add(tok)
+    except Exception:
+        valid_tokens = set()
+
+    if valid_tokens:
+        try:
+            await coll.delete_many({"_id": {"$nin": list(valid_tokens)}})
+        except Exception:
+            pass
 
     playing = {}
     for info in ACTIVE_STREAMS.values():
         meta = info.get("meta", {}) or {}
         tok = meta.get("token")
-        if tok:
+        if tok and tok in valid_tokens:
             playing[tok] = meta.get("title") or "Streaming"
 
+    match = {"_id": {"$in": list(valid_tokens)}} if valid_tokens else {"_id": {"$exists": False}}
     try:
-        total = await coll.count_documents({})
-        online_count = await coll.count_documents({"last_active": {"$gte": cutoff}})
+        total = await coll.count_documents(match)
+        online_count = await coll.count_documents({**match, "last_active": {"$gte": cutoff}})
     except Exception:
         total, online_count = 0, 0
     online_count = max(online_count, len(playing))
 
-    per_page = max(1, min(int(per_page or 12), 60))
+    per_page = max(1, min(int(per_page or 5), 60))
     total_pages = max(1, (total + per_page - 1) // per_page)
     page = max(1, min(int(page or 1), total_pages))
     offset = (page - 1) * per_page
 
     try:
-        docs = await coll.find().sort("last_active", -1).skip(offset).limit(per_page).to_list(per_page)
+        docs = await coll.find(match).sort("last_active", -1).skip(offset).limit(per_page).to_list(per_page)
     except Exception:
         docs = []
 
     rows = []
     for d in docs:
         token = d.get("_id")
+        if token not in valid_tokens:
+            continue
         last = d.get("last_active")
         online = token in playing
         if not online and last:
