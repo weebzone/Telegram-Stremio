@@ -27,7 +27,8 @@ from Backend.helper.auto_catalog import (
     update_auto_catalog_settings,
 )
 from Backend.helper.backup import export_config, import_config
-from Backend.helper.custom_dl import ByteStreamer, _speed_test_single_client, run_speed_test
+from Backend.helper.streaming.custom_dl import ByteStreamer
+from Backend.helper.streaming.speed_test import _speed_test_single_client, run_speed_test
 from Backend.helper.encrypt import decode_string, encode_string
 from Backend.helper.health import run_health_checks
 from Backend.helper.manual_add import resolve_telegram_message, stamp_caption_by_ref

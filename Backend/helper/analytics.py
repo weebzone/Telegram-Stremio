@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 import httpx
 
 from Backend import db
-from Backend.helper.custom_dl import ACTIVE_STREAMS
+from Backend.helper.streaming.registry import ACTIVE_STREAMS
 from Backend.logger import LOGGER
 
 _IP_CACHE = {}

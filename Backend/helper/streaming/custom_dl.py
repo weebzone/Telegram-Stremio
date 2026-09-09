@@ -1,3 +1,12 @@
+"""
+Byte-level media streaming engine for Telegram files.
+
+Implements the ByteStreamer class that resolves Telegram file locations,
+opens media sessions (including DC migration / AuthBytes handling), and
+performs parallel range fetches with prefetch. Stream activity is recorded
+in the shared registry (ACTIVE_STREAMS / RECENT_STREAMS).
+"""
+
 import asyncio
 import random
 import re
@@ -16,52 +25,21 @@ from pyrogram.session import Auth, Session
 from Backend import db
 from Backend.helper.exceptions import FileNotFound
 from Backend.helper.pyro import get_file_ids
+from Backend.helper.streaming.registry import (
+    ACTIVE_STREAMS,
+    RECENT_STREAMS,
+    _ensure_stale_cleaner,
+)
 from Backend.logger import LOGGER
-from Backend.pyrofork.bot import client_avg_mbps, client_dc_map, client_failures, multi_clients, work_loads
-
-ACTIVE_STREAMS: Dict[str, Dict] = {}
-RECENT_STREAMS = deque(maxlen=20)
-STALE_STREAM_IDLE = 180
-_STALE_CLEANER_STARTED = False
-
-
-async def _cleanup_stale_streams():
-    while True:
-        try:
-            await asyncio.sleep(30)
-            now = time.time()
-            stale = []
-            for sid, entry in list(ACTIVE_STREAMS.items()):
-                last = entry.get("last_ts") or entry.get("start_ts") or 0
-                status = entry.get("status") or "active"
-                total = entry.get("total_bytes") or 0
-                idle = now - last
-                if status != "active" or idle > STALE_STREAM_IDLE or (total == 0 and idle > 60):
-                    stale.append(sid)
-            for sid in stale:
-                try:
-                    entry = ACTIVE_STREAMS.pop(sid, None)
-                    if entry:
-                        entry["status"] = "stale"
-                        entry["end_ts"] = now
-                        RECENT_STREAMS.appendleft(entry)
-                        idx = entry.get("client_index")
-                        if idx is not None and idx in work_loads:
-                            work_loads[idx] = max(0, work_loads[idx] - 1)
-                except Exception:
-                    pass
-        except Exception:
-            pass
+from Backend.pyrofork.bot import (
+    client_avg_mbps,
+    client_dc_map,
+    client_failures,
+    multi_clients,
+    work_loads,
+)
 
 
-def _ensure_stale_cleaner():
-    global _STALE_CLEANER_STARTED
-    if not _STALE_CLEANER_STARTED:
-        _STALE_CLEANER_STARTED = True
-        asyncio.create_task(_cleanup_stale_streams())
-
-
-#----- Telegram file byte streamer with prefetch, multi-client parallelism, and telemetry
 class ByteStreamer:
     CHUNK_SIZE = 1024 * 1024
     CLEAN_INTERVAL = 30 * 60
@@ -95,8 +73,15 @@ class ByteStreamer:
                 imported = False
                 for _ in range(6):
                     try:
-                        exported = await self.client.invoke(raw.functions.auth.ExportAuthorization(dc_id=dc))
-                        await session.send(raw.functions.auth.ImportAuthorization(id=exported.id,bytes=exported.bytes,))
+                        exported = await self.client.invoke(
+                            raw.functions.auth.ExportAuthorization(dc_id=dc)
+                        )
+                        await session.send(
+                            raw.functions.auth.ImportAuthorization(
+                                id=exported.id,
+                                bytes=exported.bytes,
+                            )
+                        )
                         imported = True
                         break
                     except AuthBytesInvalid:
@@ -112,7 +97,6 @@ class ByteStreamer:
             except Exception:
                 continue
 
-    #----- Fetch (and cache) Telegram FileId properties for a message
     async def get_file_properties(self, chat_id: int, message_id: int) -> FileId:
         cache_key = (int(chat_id), int(message_id))
         if cache_key not in self._file_id_cache:
@@ -123,7 +107,6 @@ class ByteStreamer:
             self._file_id_cache[cache_key] = file_id
         return self._file_id_cache[cache_key]
 
-    #----- Build a prefetching, range-aware streaming generator for a file
     async def prefetch_stream(
         self,
         file_id: FileId,
@@ -175,6 +158,7 @@ class ByteStreamer:
 
         media_session = await self._get_media_session(file_id)
         location_box: List[object] = [await self._get_location(file_id)]
+
         async def _make_refresh_fn(loc_b, streamer_ref, file_id_ref):
             async def _refresh() -> bool:
                 if not chat_id or not message_id:
@@ -188,8 +172,14 @@ class ByteStreamer:
                         loc_b[0] = await ByteStreamer._get_location(fresh)
                         return True
                 except Exception as exc:
-                    LOGGER.warning("Location refresh failed for chat=%s msg_id=%s: %s", chat_id, message_id, exc)
+                    LOGGER.warning(
+                        "Location refresh failed for chat=%s msg_id=%s: %s",
+                        chat_id,
+                        message_id,
+                        exc,
+                    )
                 return False
+
             return _refresh
 
         primary_refresh = await _make_refresh_fn(location_box, self, file_id)
@@ -239,7 +229,7 @@ class ByteStreamer:
                     if "FILE_REFERENCE" in err_str or "file_reference" in err_str.lower():
                         await c_refresh()
 
-                    flood_m = re.search(r'wait of (\d+) second', err_str, re.IGNORECASE)
+                    flood_m = re.search(r"wait of (\d+) second", err_str, re.IGNORECASE)
                     if flood_m:
                         required = float(flood_m.group(1))
                         jitter = random.uniform(0.5, 2.0)
@@ -283,7 +273,9 @@ class ByteStreamer:
                         scheduled_tasks[seq] = task
                         next_to_schedule += 1
 
-                    done, _ = await asyncio.wait(scheduled_tasks.values(), return_when=asyncio.FIRST_COMPLETED)
+                    done, _ = await asyncio.wait(
+                        scheduled_tasks.values(), return_when=asyncio.FIRST_COMPLETED
+                    )
 
                     for completed in done:
                         try:
@@ -315,7 +307,11 @@ class ByteStreamer:
                         except asyncio.CancelledError:
                             raise
                         except Exception as e:
-                            LOGGER.exception("Error processing completed fetch task: %s%s", e, traceback.format_exc())
+                            LOGGER.exception(
+                                "Error processing completed fetch task: %s%s",
+                                e,
+                                traceback.format_exc(),
+                            )
                             await q.put((None, None))
                             return
 
@@ -408,7 +404,9 @@ class ByteStreamer:
                     if len(recent) >= 2:
                         total_bytes = sum(b for b, _ in recent)
                         total_time = sum(t for _, t in recent)
-                        instant_mbps = min((total_bytes / (1024 * 1024)) / max(total_time, 0.01), 1000.0)
+                        instant_mbps = min(
+                            (total_bytes / (1024 * 1024)) / max(total_time, 0.01), 1000.0
+                        )
                     else:
                         instant_mbps = 0.0
 
@@ -420,7 +418,9 @@ class ByteStreamer:
                     if total_time <= 0:
                         total_time = 1e-6
 
-                    stream_entry["avg_mbps"] = (stream_entry["total_bytes"] / (1024 * 1024)) / total_time
+                    stream_entry["avg_mbps"] = (
+                        stream_entry["total_bytes"] / (1024 * 1024)
+                    ) / total_time
                     stream_entry["instant_mbps"] = instant_mbps
 
                     if instant_mbps > stream_entry.get("peak_mbps", 0.0):
@@ -458,14 +458,20 @@ class ByteStreamer:
                     duration = end_ts - start_ts if end_ts > start_ts else 0.0
                     avg_mbps = (total_bytes / (1024 * 1024)) / (duration if duration > 0 else 1e-6)
 
-                    stream_entry.update({
-                        "end_ts": end_ts,
-                        "duration": duration,
-                        "avg_mbps": avg_mbps,
-                        "status": "finished" if stream_entry.get("status") == "active" else stream_entry.get("status", "finished"),
-                        "parallelism": parallelism,
-                        "chunk_size": chunk_size,
-                    })
+                    stream_entry.update(
+                        {
+                            "end_ts": end_ts,
+                            "duration": duration,
+                            "avg_mbps": avg_mbps,
+                            "status": (
+                                "finished"
+                                if stream_entry.get("status") == "active"
+                                else stream_entry.get("status", "finished")
+                            ),
+                            "parallelism": parallelism,
+                            "chunk_size": chunk_size,
+                        }
+                    )
 
                     prev = client_avg_mbps.get(client_index, 0.0)
                     if prev == 0.0:
@@ -516,16 +522,22 @@ class ByteStreamer:
 
             session = Session(self.client, dc, auth_key, test_mode, is_media=True)
             session.no_updates = True
-            session.timeout = 30 
-            session.sleep_threshold = 60 
+            session.timeout = 30
+            session.sleep_threshold = 60
 
             await session.start()
 
             if dc != current_dc:
                 for _ in range(6):
                     try:
-                        exported = await self.client.invoke(raw.functions.auth.ExportAuthorization(dc_id=dc))
-                        await session.send(raw.functions.auth.ImportAuthorization(id=exported.id, bytes=exported.bytes))
+                        exported = await self.client.invoke(
+                            raw.functions.auth.ExportAuthorization(dc_id=dc)
+                        )
+                        await session.send(
+                            raw.functions.auth.ImportAuthorization(
+                                id=exported.id, bytes=exported.bytes
+                            )
+                        )
                         break
                     except AuthBytesInvalid:
                         await asyncio.sleep(0.5)
@@ -536,9 +548,7 @@ class ByteStreamer:
             return session
 
     @staticmethod
-    async def _get_location(file_id: FileId) -> Union[
-        raw.types.InputDocumentFileLocation,
-    ]:
+    async def _get_location(file_id: FileId) -> Union[raw.types.InputDocumentFileLocation,]:
         return raw.types.InputDocumentFileLocation(
             id=file_id.media_id,
             access_hash=file_id.access_hash,
@@ -551,148 +561,3 @@ class ByteStreamer:
             await asyncio.sleep(self.CLEAN_INTERVAL)
             self._file_id_cache.clear()
             LOGGER.debug("ByteStreamer: cleared file_id cache")
-
-
-#----- Speed test helper (runs independently, on-demand per file)
-TEST_CHUNK_SIZE = 100 * 1024 * 1024
-
-
-#----- Download a fixed slice from one client and measure throughput
-async def _speed_test_single_client(
-    client: Client,
-    client_index: int,
-    chat_id: int,
-    message_id: int,
-    progress_callback=None,
-) -> dict:
-    dc_id = client_dc_map.get(client_index, "?")
-    result = {
-        "client_index": client_index,
-        "dc_id": dc_id,
-        "ping_ms": None,
-        "speed_mbps": None,
-        "time_taken_sec": None,
-        "bytes_downloaded": 0,
-        "error": None,
-    }
-    try:
-        streamer = ByteStreamer(client)
-        file_id = await streamer.get_file_properties(chat_id, message_id)
-
-        media_session = await streamer._get_media_session(file_id)
-        location = await ByteStreamer._get_location(file_id)
-        ping_start = time.perf_counter()
-        tiny = await media_session.send(
-            raw.functions.upload.GetFile(location=location, offset=0, limit=4096)
-        )
-        ping_end = time.perf_counter()
-        ping_ms = (ping_end - ping_start) * 1000
-        result["ping_ms"] = round(ping_ms, 2)
-
-        if not getattr(tiny, "bytes", None):
-            result["error"] = "No data on ping probe"
-            return result
-        dl_start = time.perf_counter()
-        last_progress_time = dl_start
-        total_bytes = 0
-        chunk_size = 512 * 1024  
-        max_concurrent_chunks = 8
-        queue = asyncio.Queue()
-        target_offsets = list(range(0, TEST_CHUNK_SIZE, chunk_size))
-        for off in target_offsets:
-            queue.put_nowait(off)
-        eof_reached = False
-        
-        async def fetch_chunk_worker():
-            nonlocal total_bytes, last_progress_time, eof_reached
-            while not queue.empty() and not eof_reached:
-                offset = queue.get_nowait()
-                fetch_size = min(chunk_size, TEST_CHUNK_SIZE - offset)
-                try:
-                    r = await asyncio.wait_for(
-                        media_session.send(
-                            raw.functions.upload.GetFile(
-                                location=location, offset=offset, limit=fetch_size
-                            )
-                        ),
-                        timeout=15.0,
-                    )
-                    chunk = getattr(r, "bytes", None)
-                    if not chunk:
-                        eof_reached = True
-                        queue.task_done()
-                        continue
-                    bytes_got = len(chunk)
-                    total_bytes += bytes_got
-                    if bytes_got < fetch_size:
-                        eof_reached = True
-                    now = time.perf_counter()
-                    if progress_callback and (now - last_progress_time) >= 1.0:
-                        elapsed_so_far = now - dl_start
-                        if elapsed_so_far > 0:
-                            current_speed = (total_bytes / (1024 * 1024)) / elapsed_so_far
-                            prog_res = dict(result)
-                            prog_res["bytes_downloaded"] = total_bytes
-                            prog_res["time_taken_sec"] = round(elapsed_so_far, 3)
-                            prog_res["speed_mbps"] = round(current_speed, 3)
-                            if asyncio.iscoroutinefunction(progress_callback):
-                                asyncio.create_task(progress_callback(prog_res))
-                            else:
-                                progress_callback(prog_res)
-                        last_progress_time = now
-
-                except asyncio.TimeoutError:
-                    LOGGER.debug(
-                        "Speed-test chunk timeout client=%s offset=%s (skipping)",
-                        client_index, offset,
-                    )
-                except Exception as e:
-                    LOGGER.debug(
-                        "Speed-test fetch error client=%s offset=%s: %s",
-                        client_index, offset, e,
-                    )
-                    
-                finally:
-                    queue.task_done()
-        workers = [
-            asyncio.create_task(fetch_chunk_worker())
-            for _ in range(max_concurrent_chunks)
-        ]
-        
-        await queue.join()
-        for w in workers:
-            w.cancel()
-
-        dl_end = time.perf_counter()
-        elapsed = dl_end - dl_start
-        if elapsed <= 0:
-            elapsed = 1e-6
-
-        speed_mbps = (total_bytes / (1024 * 1024)) / elapsed
-        result["bytes_downloaded"] = total_bytes
-        result["time_taken_sec"] = round(elapsed, 3)
-        result["speed_mbps"] = round(speed_mbps, 3)
-
-    except Exception as exc:
-        result["error"] = str(exc)
-        LOGGER.warning("Speed test failed for client %s (DC %s): %s", client_index, dc_id, exc)
-
-    return result
-
-
-#----- Run the speed test across every connected client, fastest first
-async def run_speed_test(chat_id: int, message_id: int) -> List[dict]:
-    if not multi_clients:
-        return [{"error": "No bot clients connected"}]
-
-    tasks = [
-        _speed_test_single_client(client, idx, chat_id, message_id)
-        for idx, client in multi_clients.items()
-    ]
-
-    results = await asyncio.gather(*tasks, return_exceptions=False)
-    results.sort(
-        key=lambda r: r.get("speed_mbps") or -1,
-        reverse=True,
-    )
-    return list(results)

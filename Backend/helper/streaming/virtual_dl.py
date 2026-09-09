@@ -1,13 +1,21 @@
+"""
+Virtual (multi-part) file streaming helpers.
+
+Resolves a list of Telegram message parts into cumulative byte offsets and
+file properties, then yields a continuous byte stream that stitches those
+parts together on demand. Used when a single logical media item was split
+across several Telegram messages.
+"""
+
 import math
 from typing import Dict, List, Optional, Tuple
 
 from fastapi import Request
 
-from Backend.helper.custom_dl import ByteStreamer
+from Backend.helper.streaming.custom_dl import ByteStreamer
 from Backend.logger import LOGGER
 
 
-#----- Fetch metadata for each split part and compute cumulative offsets -> (parts, total_size)
 async def resolve_virtual_parts(
     parts_payload: List[dict],
     streamer: ByteStreamer,
@@ -21,24 +29,26 @@ async def resolve_virtual_parts(
         msg_id = int(p["msg_id"])
         file_id = await streamer.get_file_properties(chat_id=chat_id, message_id=msg_id)
         size = file_id.file_size
-        parts.append({
-            "index": idx,
-            "chat_id": chat_id,
-            "msg_id": msg_id,
-            "file_id": file_id,
-            "size": size,
-            "cum_start": cum,
-        })
+        parts.append(
+            {
+                "index": idx,
+                "chat_id": chat_id,
+                "msg_id": msg_id,
+                "file_id": file_id,
+                "size": size,
+                "cum_start": cum,
+            }
+        )
         cum += size
     return parts, cum
 
 
-#----- Parts intersecting the virtual byte range [start, end]
 def parts_overlapping_range(parts: List[Dict], start: int, end: int) -> List[Dict]:
-    return [p for p in parts if not (p["cum_start"] + p["size"] - 1 < start or p["cum_start"] > end)]
+    return [
+        p for p in parts if not (p["cum_start"] + p["size"] - 1 < start or p["cum_start"] > end)
+    ]
 
 
-#----- Yield bytes across the virtual range [start, end], transparently spanning parts
 async def virtual_stream_generator(
     parts: List[Dict],
     start: int,
@@ -89,11 +99,14 @@ async def virtual_stream_generator(
         async for chunk in body_gen:
             yield chunk
 
-        #----- Stop fetching further parts if the client has disconnected
         if request is not None:
             try:
                 if await request.is_disconnected():
-                    LOGGER.debug("Virtual stream %s: client gone, stopping at part %s", stream_id, part["index"])
+                    LOGGER.debug(
+                        "Virtual stream %s: client gone, stopping at part %s",
+                        stream_id,
+                        part["index"],
+                    )
                     return
             except Exception:
                 pass
