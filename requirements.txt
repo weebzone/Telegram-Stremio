@@ -4,6 +4,7 @@ guessit
 httpx
 motor
 parse-torrent-title
+pymediainfo
 pyrofork
 rapidfuzz
 python-dotenv

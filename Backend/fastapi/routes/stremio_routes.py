@@ -24,6 +24,7 @@ from Backend.helper.metadata.providers.cinemeta import get_detail, get_season
 from Backend.helper.metadata import resolve_cover_url, COMBINED_SEASON, COMBINED_EPISODE_BASE
 from Backend.helper.telegram.split_files import parse_combined_episodes, combined_name_key
 from Backend.helper.settings_manager import SettingsManager
+from Backend.helper.streaming.formatter import format_stream, get_templates_for_token
 from Backend.helper.media_extras.subtitles import get_subtitles_for, stremio_subtitle_entries
 from Backend.logger import LOGGER
 from Backend.pyrofork.bot import StreamBot, get_streambot_url
@@ -309,39 +310,8 @@ def format_released_date(media):
     return None
 
 
-#----- Build a Stremio stream display name/title from a filename
-def format_stream_details(filename: str, quality: str, size: str, is_split: bool = False) -> tuple[str, str]:
-    size_emoji = "📦" if is_split else "💾"
-    try:
-        parsed = PTN.parse(filename)
-    except Exception:
-        return (f"Telegram {quality}", f"📁 {filename}\n{size_emoji} {size}")
-
-    codec_parts = []
-    if parsed.get("codec"):
-        codec_parts.append(f"🎥 {parsed.get('codec')}")
-    if parsed.get("bitDepth"):
-        codec_parts.append(f"🌈 {parsed.get('bitDepth')}bit")
-    if parsed.get("audio"):
-        codec_parts.append(f"🔊 {parsed.get('audio')}")
-    if parsed.get("encoder"):
-        codec_parts.append(f"👤 {parsed.get('encoder')}")
-
-    codec_info = " ".join(codec_parts) if codec_parts else ""
-
-    resolution = parsed.get("resolution", quality)
-    quality_type = parsed.get("quality", "")
-    stream_name = f"Telegram {resolution} {quality_type}".strip()
-
-    stream_title_parts = [
-        f"📁 {filename}",
-        f"{size_emoji} {size}",
-    ]
-    if codec_info:
-        stream_title_parts.append(codec_info)
-
-    stream_title = "\n".join(stream_title_parts)
-    return (stream_name, stream_title)
+def format_stream_details(filename: str, quality: str, size: str, is_split: bool = False, technical=None, name_template=None, title_template=None) -> tuple[str, str]:
+    return format_stream(filename, quality, size, is_split, technical, name_template, title_template)
 
 
 def parse_size_to_bytes(size_str: str) -> int:
@@ -1041,8 +1011,15 @@ async def get_streams(
                 episode_start = combined.get("start") or 0 if combined else 0
                 name_key = combined_name_key(filename) if combined else ""
 
+                name_tpl, title_tpl = get_templates_for_token(
+                    token_data.get("config"), SettingsManager.current().to_dict()
+                )
                 stream_name, stream_title = format_stream_details(
-                    filename, quality_str, size, is_split=bool(quality.get("group_key"))
+                    filename, quality_str, size,
+                    is_split=bool(quality.get("group_key")),
+                    technical=quality.get("technical"),
+                    name_template=name_tpl,
+                    title_template=title_tpl,
                 )
 
                 if combined:
@@ -1244,6 +1221,8 @@ async def save_addon_config(token: str, payload: dict):
         "quality_filter": [q for q in (payload.get("quality_filter") or []) if q in valid_q],
         "hidden_catalogs": [str(x) for x in (payload.get("hidden_catalogs") or [])],
         "catalog_order": [str(x) for x in (payload.get("catalog_order") or [])],
+        "stream_name_template": str(payload.get("stream_name_template") or "").strip(),
+        "stream_title_template": str(payload.get("stream_title_template") or "").strip(),
     }
     await db.set_token_config(token, config)
     return {"ok": True, "config": config}

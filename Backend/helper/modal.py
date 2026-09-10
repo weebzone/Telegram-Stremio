@@ -1,10 +1,9 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
 from pydantic import BaseModel, Field
 
 
-#----- Quality detail schema
 class QualityPart(BaseModel):
     part_number: int
     chat_id: int
@@ -19,6 +18,8 @@ class QualityDetail(BaseModel):
     size: str
     group_key: Optional[str] = None
     parts: Optional[List[QualityPart]] = None
+    technical: Optional[Dict[str, Any]] = None
+    telegraph_url: Optional[str] = None
 
 
 class Episode(BaseModel):

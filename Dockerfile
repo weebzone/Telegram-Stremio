@@ -8,7 +8,7 @@ ENV PATH="/app/.venv/bin:$PATH"
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         build-essential \
-	bash \
+        bash \
         git \
         curl \
         ca-certificates \

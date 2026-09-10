@@ -1270,6 +1270,8 @@ class Database:
                 size=part_size,
                 group_key=group_key,
                 parts=[QualityPart(**part)],
+                technical=metadata_info.get("technical"),
+                telegraph_url=metadata_info.get("telegraph_url"),
             )
         else:
             quality_detail = QualityDetail(
@@ -1277,6 +1279,8 @@ class Database:
                 id=metadata_info['encoded_string'],
                 name=name,
                 size=size,
+                technical=metadata_info.get("technical"),
+                telegraph_url=metadata_info.get("telegraph_url"),
             )
 
         def _as_int(val):
@@ -1397,6 +1401,10 @@ class Database:
                 q["id"] = new_id
                 q["size"] = new_size
                 q["name"] = quality_to_update.get("name", q.get("name"))
+                if quality_to_update.get("technical"):
+                    q["technical"] = quality_to_update["technical"]
+                if quality_to_update.get("telegraph_url"):
+                    q["telegraph_url"] = quality_to_update["telegraph_url"]
                 merged = True
             result.append(q)
 

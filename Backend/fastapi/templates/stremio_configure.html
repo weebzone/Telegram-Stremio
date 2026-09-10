@@ -203,6 +203,16 @@ h1 { font-size: 1.15rem; font-weight: 700; color: var(--text); margin-bottom: 6p
     </div>
 
     <div class="cfg-block">
+        <div class="cfg-title">Stream name template (optional)</div>
+        <input type="text" id="cfg-name-tpl" class="s-input" style="width:100%;padding:8px 10px;border-radius:.6rem;border:1px solid var(--hairline);background:var(--surface);color:var(--text)"
+            placeholder="Leave empty to use global default">
+        <div class="cfg-title" style="margin-top:10px">Stream title template (optional)</div>
+        <textarea id="cfg-title-tpl" rows="3" style="width:100%;padding:8px 10px;border-radius:.6rem;border:1px solid var(--hairline);background:var(--surface);color:var(--text);font-family:inherit"
+            placeholder="Leave empty to use global default"></textarea>
+        <p class="cfg-hint">Placeholders: {resolution} {quality} {filename} {size} {video_codec} {audio_short} {subs_summary} {hdr} …</p>
+    </div>
+
+    <div class="cfg-block">
         <div class="cfg-title">Catalogs</div>
         <div id="cfg-catalogs" class="cfg-catalogs"></div>
         <p class="cfg-hint">Toggle to hide a catalog; use arrows to reorder.</p>
@@ -301,6 +311,8 @@ async function loadConfig() {
         setSort(cfg.quality_sort || 'desc');
         renderQuality();
         renderCatalogs();
+        document.getElementById('cfg-name-tpl').value = cfg.stream_name_template || '';
+        document.getElementById('cfg-title-tpl').value = cfg.stream_title_template || '';
     } catch (e) {}
 }
 
@@ -309,6 +321,8 @@ async function saveConfig() {
     const state = document.getElementById('cfg-state');
     btn.disabled = true;
     cfg.catalog_order = cfgCatalogs.map(c => catKey(c));
+    cfg.stream_name_template = document.getElementById('cfg-name-tpl').value.trim();
+    cfg.stream_title_template = document.getElementById('cfg-title-tpl').value.trim();
     try {
         const res = await fetch('addon-config', {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cfg)

@@ -54,6 +54,10 @@ _DEFAULTS: Dict[str, Any] = {
     "fanart_shuffle": False,
     "fanart_shuffle_interval": 5,
     "fanart_low_res_poster": True,
+    "metadata_bot_token": "",
+    "ffprobe_max_mb": 8,
+    "stream_name_template": "",
+    "stream_title_template": "",
 }
 
 
@@ -245,6 +249,25 @@ class Settings:
     @property
     def fanart_low_res_poster(self) -> bool:
         return bool(self._d.get("fanart_low_res_poster", True))
+
+    @property
+    def metadata_bot_token(self) -> str:
+        return str(self._d.get("metadata_bot_token") or "").strip()
+
+    @property
+    def ffprobe_max_mb(self) -> float:
+        try:
+            return max(1.0, float(self._d.get("ffprobe_max_mb") or 8))
+        except (TypeError, ValueError):
+            return 8.0
+
+    @property
+    def stream_name_template(self) -> str:
+        return str(self._d.get("stream_name_template") or "").strip()
+
+    @property
+    def stream_title_template(self) -> str:
+        return str(self._d.get("stream_title_template") or "").strip()
 
     #----- Integers
     @property
@@ -461,5 +484,13 @@ class SettingsManager:
         #----- Global Search toggle changed (module reads current() live per call)
         if old.get("global_search") != new.get("global_search") and "global_search" not in results:
             results["global_search"] = "enabled" if new.get("global_search") else "disabled"
+
+        if old.get("metadata_bot_token") != new.get("metadata_bot_token"):
+            try:
+                from Backend.helper.media_extras.technical import stop_metadata_client
+                await stop_metadata_client()
+                results["metadata_bot"] = "client restarted on next probe" if new.get("metadata_bot_token") else "disabled"
+            except Exception as exc:
+                results["metadata_bot"] = f"error: {exc}"
 
         return results

@@ -489,6 +489,64 @@
         </div>
     </div>
 
+    <!-- ── Stream Formatter & Technical Metadata ────────────────────────── -->
+    <div class="settings-card">
+        <h2><i class="fa-solid fa-sliders"></i> Stream Formatter &amp; Metadata</h2>
+        <p style="color:var(--text-sec);font-size:0.85rem;margin-bottom:1.25rem">
+            Control how streams appear in Stremio and optionally extract real technical details with ffprobe.
+            MediaInfo only runs when a <strong>Metadata Bot Token</strong> is set (uses a separate bot for small partial downloads).
+        </p>
+
+        <div style="margin-bottom:1.25rem">
+            <label class="s-label" for="metadata_bot_token">Metadata Bot Token</label>
+            <input type="password" id="metadata_bot_token" class="s-input"
+                value="{{ settings.metadata_bot_token }}" autocomplete="off" spellcheck="false"
+                placeholder="Leave empty to disable MediaInfo (filename-only metadata)">
+            <span style="color:var(--text-sec);font-size:0.78rem;display:block;margin-top:0.35rem">
+                Separate bot token used only for probing. Partial download (~8 MB by default) keeps it fast.
+            </span>
+        </div>
+
+        <div style="margin-bottom:1.25rem">
+            <label class="s-label" for="ffprobe_max_mb">Max probe size (MB)</label>
+            <input type="number" id="ffprobe_max_mb" class="s-input" min="1" step="1"
+                value="{{ settings.ffprobe_max_mb }}" style="max-width:8rem">
+            <span style="color:var(--text-sec);font-size:0.78rem;display:block;margin-top:0.35rem">
+                Bytes downloaded from the start of the file for MediaInfo. 5–12 is usually enough.
+            </span>
+        </div>
+
+        <div style="margin-bottom:1rem">
+            <label class="s-label" for="stream_name_template">Stream Name Template (global default)</label>
+            <input type="text" id="stream_name_template" class="s-input"
+                value="{{ settings.stream_name_template }}"
+                placeholder="Telegram {resolution} {quality}">
+        </div>
+        <div style="margin-bottom:1rem">
+            <label class="s-label" for="stream_title_template">Stream Title Template (global default)</label>
+            <textarea id="stream_title_template" class="s-input" rows="4"
+                placeholder="📁 {filename}&#10;{size_emoji} {size}&#10;{codec_line}">{{ settings.stream_title_template }}</textarea>
+        </div>
+
+        <details style="margin-top:0.5rem">
+            <summary style="cursor:pointer;font-weight:600;color:var(--primary)">Supported placeholders &amp; predefined templates</summary>
+            <div style="margin-top:0.75rem;font-size:0.82rem;color:var(--text-sec);line-height:1.55">
+                <p><strong>Placeholders:</strong>
+                {resolution} {quality} {filename} {size} {size_emoji} {codec} {video_codec}
+                {audio} {audio_short} {audio_summary} {channels} {subs} {subs_summary}
+                {hdr} {bit_depth} {fps} {bitrate} {duration} {encoder} {container} {source}
+                {codec_line} {video_line} {audio_line} {subs_line} {hdr_line} {encoder_line}
+                </p>
+                <p style="margin-top:0.5rem"><strong>Predefined name examples:</strong><br>
+                default → <code>Telegram {resolution} {quality}</code><br>
+                compact → <code>{resolution} {codec} {audio_short}</code><br>
+                technical → <code>{resolution} | {video_codec} | {audio_short}</code><br>
+                emoji → <code>🎬 {resolution} {quality}</code>
+                </p>
+            </div>
+        </details>
+    </div>
+
     <!-- ── Manual Add Channels ─────────────────────────────────────────── -->
     <div class="settings-card">
         <h2><i class="fa-solid fa-hand-pointer"></i> Manual Add Channels</h2>
@@ -1522,6 +1580,10 @@ async function saveSettings() {
         announcement_channel:          (function(){const el=document.getElementById('announcement_channel');return el.dataset.id||extractChannelId(el.value.trim());})(),
         skip_channel:                  (function(){const el=document.getElementById('skip_channel');return el.dataset.id||extractChannelId(el.value.trim());})(),
         delete_on_metadata_fail:       document.getElementById('delete_on_metadata_fail').checked,
+        metadata_bot_token:            document.getElementById('metadata_bot_token').value.trim(),
+        ffprobe_max_mb:                parseFloat(document.getElementById('ffprobe_max_mb').value) || 8,
+        stream_name_template:          document.getElementById('stream_name_template').value.trim(),
+        stream_title_template:         document.getElementById('stream_title_template').value.trim(),
     };
 
     try {

@@ -56,6 +56,16 @@ async def update_settings_api(payload: dict) -> dict:
         if key in payload:
             payload[key] = bool(payload[key])
 
+    for key in ("metadata_bot_token", "stream_name_template", "stream_title_template"):
+        if key in payload:
+            payload[key] = str(payload[key] or "").strip()
+
+    if "ffprobe_max_mb" in payload:
+        try:
+            payload["ffprobe_max_mb"] = max(1.0, float(payload["ffprobe_max_mb"]))
+        except (TypeError, ValueError):
+            payload["ffprobe_max_mb"] = 8.0
+
     list_str_keys = {"auth_channels", "multi_tokens", "extra_databases", "global_search_channels", "anime_channels", "manual_channels"}
     for key in list_str_keys:
         if key in payload:

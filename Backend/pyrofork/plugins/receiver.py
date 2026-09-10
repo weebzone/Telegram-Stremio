@@ -21,12 +21,28 @@ from Backend.helper.settings_manager import SettingsManager
 from Backend.helper.telegram.skip_channel import is_skip_channel, route_to_skip_channel
 from Backend.helper.telegram.split_files import parse_split_info
 from Backend.helper.media_extras.subtitles import ingest_subtitle, is_subtitle_file, remove_subtitle
+from Backend.helper.media_extras.technical import extract_technical, build_from_filename
 from Backend.helper.tasks.task_manager import delete_message
 from Backend.logger import LOGGER
 
 file_queue = Queue()
 db_lock = Lock()
 manual_session_lock = Lock()
+
+
+async def _enrich_technical(metadata_info: dict, channel: int, msg_id: int, title: str) -> dict:
+    try:
+        cid = int(channel)
+        if cid > 0:
+            cid = int(f"-100{cid}")
+        tech = await extract_technical(cid, msg_id, title)
+        if tech:
+            metadata_info["technical"] = tech
+    except Exception as e:
+        LOGGER.warning(f"technical enrich failed: {e}")
+        metadata_info["technical"] = build_from_filename(title)
+    return metadata_info
+
 
 
 #----- True when the message carries a streamable video or a split-archive part
@@ -70,6 +86,7 @@ def _finalize_title(title: str, metadata_info: dict) -> str:
 async def process_file():
     while True:
         metadata_info, channel, msg_id, size, raw_size, title = await file_queue.get()
+        metadata_info = await _enrich_technical(metadata_info, channel, msg_id, title)
         insert_status: dict = {}
         async with db_lock:
             updated_id = await db.insert_media(metadata_info, channel=channel, msg_id=msg_id, size=size, raw_size=raw_size, name=title, status=insert_status)
@@ -185,6 +202,8 @@ async def _handle_personal_session(client: Client, message: Message) -> None:
                 "episode_released": "",
             })
 
+        metadata_info = await _enrich_technical(metadata_info, p_channel, p_msg, name)
+
         async with db_lock:
             updated_id = await db.insert_media(
                 metadata_info, channel=p_channel, msg_id=p_msg,
@@ -246,7 +265,6 @@ async def file_receive_handler(client: Client, message: Message):
             return
 
         title = _finalize_title(title, metadata_info)
-
         await file_queue.put((metadata_info, int(channel), msg_id, size, raw_size, title))
 
         if is_real_session:

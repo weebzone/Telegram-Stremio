@@ -14,6 +14,7 @@ dependencies = [
     "jinja2>=3.1.6",
     "motor>=3.7.0",
     "parse-torrent-title>=2.8.1",
+    "pymediainfo>=7.0.1",
     "pyrofork>=2.3.61",
     "python-dotenv>=1.1.0",
     "python-multipart>=0.0.20",
