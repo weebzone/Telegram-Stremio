@@ -18,16 +18,24 @@ Layout (stable paths):
               └── Show Name S01E01 - Episode Title.nfo
 """
 
-from __future__ import annotations
 
 import re
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
-from urllib.parse import quote
+from typing import (
+    Any,
+    Dict,
+    List,
+    Optional,
+)
 
 from Backend import db
-from Backend.helper.media_extras.nfo import episode_nfo, movie_nfo, season_nfo, tvshow_nfo
+from Backend.helper.media_extras.nfo import (
+    episode_nfo,
+    movie_nfo,
+    season_nfo,
+    tvshow_nfo,
+)
 from Backend.logger import LOGGER
 
 

@@ -13,7 +13,6 @@ Example
     print(fmt_elapsed(now() - started))  # "2m 15s"
 """
 
-from __future__ import annotations
 
 import time
 

@@ -2,6 +2,8 @@
 telegram/split_files.py — detect and parse split / multi-part release filenames.
 """
 
+from __future__ import annotations
+
 import re
 from typing import Optional, Tuple
 

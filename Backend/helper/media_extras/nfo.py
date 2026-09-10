@@ -2,10 +2,13 @@
 media_extras/nfo.py — NFO / Kodi-style metadata file generation for library items.
 """
 
-from __future__ import annotations
-import html
 import re
-from typing import Any, Dict, List, Optional
+from typing import (
+    Any,
+    Dict,
+    List,
+    Optional,
+)
 from xml.sax.saxutils import escape
 
 def _e(value: Any) -> str:

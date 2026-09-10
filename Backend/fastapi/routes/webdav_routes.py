@@ -20,7 +20,6 @@ Compatibility notes (2026-08):
   - Avoids relative paths that cause clients to fall back to port 80 on HTTPS hosts
 """
 
-from __future__ import annotations
 
 import base64
 from datetime import datetime, timezone
@@ -28,7 +27,12 @@ from typing import List
 from urllib.parse import quote, unquote, urljoin
 from xml.etree.ElementTree import Element, SubElement, tostring
 
-from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi import (
+    APIRouter,
+    HTTPException,
+    Request,
+    Response,
+)
 
 from Backend.config import Telegram
 from Backend.fastapi.routes import stream_routes as sr

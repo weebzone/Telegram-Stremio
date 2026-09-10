@@ -1,22 +1,8 @@
 """
 tools/ — admin Tools-page backend (scan, dbcheck, duplicates, manual add).
 
-Groups the job managers and helpers driven by /admin/tools:
-
-  - scan_manager       channel scan / rescan
-  - dbcheck_manager    verify Telegram messages still exist
-  - duplicate_manager  find & purge duplicate streams
-  - manual_add helpers resolve posts and stamp captions
-
 Managers are loaded lazily so importing manual_add helpers does not pull
 in the full scan stack (avoids circular imports with subtitles).
-
-Example
--------
-    from Backend.helper.tools import (
-        scan_manager, dbcheck_manager, duplicate_manager
-    )
-    from Backend.helper.tools.manual_add import resolve_telegram_message
 """
 
 from Backend.helper.tools.manual_add import (

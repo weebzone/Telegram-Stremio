@@ -14,13 +14,17 @@ Example
     await duplicate_manager.purge(stream_ids=["id1", "id2"])
 """
 
-from __future__ import annotations
 
 import asyncio
-from typing import Any, Dict, List, Optional
+from typing import (
+    Any,
+    Dict,
+    List,
+    Optional,
+)
 
 from Backend.logger import LOGGER
-from Backend.helper.tools.utils import STATE_COLLECTION, now, fmt_elapsed
+from Backend.helper.tools.utils import now, fmt_elapsed
 
 
 class DuplicateManager:

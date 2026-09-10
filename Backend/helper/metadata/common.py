@@ -21,12 +21,11 @@ from __future__ import annotations
 import asyncio
 import re
 from difflib import SequenceMatcher
-from typing import Any, Dict, Optional
+from typing import Dict, Optional
 from urllib.parse import quote
 
 from rapidfuzz import fuzz
 
-from Backend.logger import LOGGER
 
 CINEMETA_THRESHOLD = 0.60
 TMDB_THRESHOLD = 0.55

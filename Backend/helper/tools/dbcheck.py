@@ -13,16 +13,20 @@ Example
     await dbcheck_manager.purge(stream_ids=["abc123"])
 """
 
-from __future__ import annotations
 
 import asyncio
-from typing import Any, Dict, List, Optional
+from typing import (
+    Any,
+    Dict,
+    List,
+    Optional,
+)
 
 from pyrogram.errors import FloodWait
 
 from Backend.logger import LOGGER
 from Backend.helper.security.encrypt import decode_string
-from Backend.helper.tools.utils import STATE_COLLECTION, now, fmt_elapsed
+from Backend.helper.tools.utils import now, fmt_elapsed
 
 DBCHECK_CONCURRENCY = 5
 DBCHECK_BATCH_DELAY = 0.3

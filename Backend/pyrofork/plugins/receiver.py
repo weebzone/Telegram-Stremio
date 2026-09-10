@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from asyncio import Lock, Queue, create_task
 from asyncio import sleep as asleep
 

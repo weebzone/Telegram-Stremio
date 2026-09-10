@@ -16,12 +16,16 @@ Example
     series = await resolve_tv("Breaking Bad", encoded_string, year=2008)
 """
 
-from __future__ import annotations
 
 from typing import Optional
 
 from Backend.helper.metadata.common import split_default_id, title_similarity, CINEMETA_THRESHOLD
-from Backend.helper.metadata.providers import cinemeta, kitsu, tmdb, tvdb
+from Backend.helper.metadata.providers import (
+    cinemeta,
+    kitsu,
+    tmdb,
+    tvdb,
+)
 from Backend.logger import LOGGER
 
 

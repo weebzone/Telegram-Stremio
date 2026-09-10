@@ -18,22 +18,17 @@ Example
 from __future__ import annotations
 
 import traceback
-from typing import Optional
 
 import Backend
 from Backend.helper.security.encrypt import encode_string
 from Backend.helper.metadata.common import (
     ensure_media_ids,
-    COMBINED_EPISODE_BASE,
-    COMBINED_SEASON,
     extract_default_id,
     format_imdb_images,
     format_tmdb_image,
-    resolve_cover_url,
     split_default_id,
 )
 from Backend.helper.metadata.parse import (
-    analyze_metadata_failure,
     apply_combined_override,
     clean_anime_search_title,
     extract_absolute_episode,

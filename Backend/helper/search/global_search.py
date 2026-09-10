@@ -2,6 +2,8 @@
 search/global_search.py — cross-channel Telegram global search for media posts.
 """
 
+from __future__ import annotations
+
 import asyncio
 import re
 import time

@@ -2,6 +2,8 @@
 telegram/pyro.py — Pyrogram helpers (filename cleanup, file ids, readable sizes).
 """
 
+from __future__ import annotations
+
 from pyrogram.file_id import FileId
 from typing import Optional
 from Backend.logger import LOGGER

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Query, Request

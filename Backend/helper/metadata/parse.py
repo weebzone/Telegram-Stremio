@@ -21,7 +21,6 @@ Example
 from __future__ import annotations
 
 import re
-import traceback
 
 import PTN
 from guessit import guessit as _guessit

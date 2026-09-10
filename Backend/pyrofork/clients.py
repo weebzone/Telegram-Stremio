@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from asyncio import create_task, gather
 
 from pyrogram import Client

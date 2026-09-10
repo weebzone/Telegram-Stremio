@@ -13,7 +13,6 @@ Example
     # -> 17  (if the mapping says S01E05 == absolute 17)
 """
 
-from __future__ import annotations
 
 import asyncio
 import json
@@ -22,7 +21,12 @@ import re
 import time
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+from typing import (
+    Dict,
+    List,
+    Optional,
+    Tuple,
+)
 
 import httpx
 

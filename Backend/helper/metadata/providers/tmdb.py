@@ -34,7 +34,6 @@ from Backend.helper.metadata.common import (
     cached_call,
     format_runtime,
     format_tmdb_image,
-    score_candidate,
     score_candidate_aliases,
 )
 from Backend.helper.settings_manager import SettingsManager

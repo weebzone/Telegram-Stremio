@@ -1,13 +1,6 @@
 """
 security/ — crypto, password hashing, and userbot session auth helpers.
 
-  - encrypt        encode_string / decode_string (compressed base62)
-  - passwords      hash_password / verify_password
-  - session_auth   Telegram userbot login / session lifecycle (lazy)
-
-FastAPI-layer auth (require_auth, verify_token) stays under
-Backend.fastapi.security.
-
 session_auth is loaded lazily so importing encrypt/passwords during
 Backend package bootstrap does not pull pyrogram / Backend.db.
 """

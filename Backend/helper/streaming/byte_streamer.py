@@ -14,7 +14,13 @@ import secrets
 import time
 import traceback
 from collections import deque
-from typing import Dict, List, Optional, Tuple, Union
+from typing import (
+    Dict,
+    List,
+    Optional,
+    Tuple,
+    Union,
+)
 
 from fastapi import Request
 from pyrogram import Client, raw
@@ -33,9 +39,7 @@ from Backend.helper.streaming.registry import (
 from Backend.logger import LOGGER
 from Backend.pyrofork.bot import (
     client_avg_mbps,
-    client_dc_map,
     client_failures,
-    multi_clients,
     work_loads,
 )
 
