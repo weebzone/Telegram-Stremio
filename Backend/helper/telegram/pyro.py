@@ -5,7 +5,6 @@ telegram/pyro.py — Pyrogram helpers (filename cleanup, file ids, readable size
 from pyrogram.file_id import FileId
 from typing import Optional
 from Backend.logger import LOGGER
-from Backend import __version__, now, timezone
 from Backend.helper.settings_manager import SettingsManager
 from Backend.helper.exceptions import FileNotFound
 from Backend.helper.telegram.split_files import strip_part_suffix
@@ -173,6 +172,7 @@ def finalize_media_name(title: str, is_split: bool = False) -> str:
     return title
 
 async def restart_notification():
+    from Backend import __version__, now, timezone
     chat_id, msg_id = 0, 0
     try:
         if await aiopath.exists(".restartmsg"):

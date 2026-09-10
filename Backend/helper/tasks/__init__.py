@@ -5,30 +5,11 @@ tasks/ — background jobs and message-task helpers.
   - subscription   subscription expiry checker loop
   - pinger         keep-alive HTTP ping
   - backup         config export/import
+
+All exports are lazy so importing task_manager during Backend bootstrap
+(database → delete_message) does not pull backup/subscription which import
+Backend.db / __version__.
 """
-
-from Backend.helper.tasks.task_manager import (
-    delete_message,
-    delete_messages_batch,
-    edit_message,
-)
-
-# Delayed imports to break circular dependency with Backend.db
-# (Backend/__init__.py imports Database which pulls task_manager via database.py,
-#  and subscription/backup import Backend.db at module level.)
-from Backend.helper.tasks.pinger import ping
-
-def __getattr__(name):
-    if name == "subscription_task_manager":
-        from Backend.helper.tasks import subscription as _mod
-        return _mod
-    if name == "export_config":
-        from Backend.helper.tasks.backup import export_config
-        return export_config
-    if name == "import_config":
-        from Backend.helper.tasks.backup import import_config
-        return import_config
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 __all__ = [
     "delete_message",
@@ -39,3 +20,24 @@ __all__ = [
     "export_config",
     "import_config",
 ]
+
+_LAZY = {
+    "delete_message": ("Backend.helper.tasks.task_manager", "delete_message"),
+    "delete_messages_batch": ("Backend.helper.tasks.task_manager", "delete_messages_batch"),
+    "edit_message": ("Backend.helper.tasks.task_manager", "edit_message"),
+    "subscription_task_manager": ("Backend.helper.tasks.subscription", None),  # whole module
+    "ping": ("Backend.helper.tasks.pinger", "ping"),
+    "export_config": ("Backend.helper.tasks.backup", "export_config"),
+    "import_config": ("Backend.helper.tasks.backup", "import_config"),
+}
+
+
+def __getattr__(name: str):
+    if name not in _LAZY:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    import importlib
+    mod_name, attr = _LAZY[name]
+    mod = importlib.import_module(mod_name)
+    value = mod if attr is None else getattr(mod, attr)
+    globals()[name] = value
+    return value

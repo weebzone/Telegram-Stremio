@@ -115,6 +115,7 @@ from Backend.fastapi.routes.api_routes import (
     update_token_limits_api,
 )
 from Backend.fastapi.routes.stream_routes import decay_client_failures
+from Backend.helper.ops.version_check import version_check_loop
 from Backend.fastapi.routes.stream_routes import router as stream_router
 from Backend.fastapi.routes.stremio_routes import router as stremio_router
 from Backend.fastapi.routes.webdav_routes import router as webdav_router
@@ -137,7 +138,6 @@ from Backend.fastapi.routes.template_routes import (
 )
 from Backend.fastapi.security.credentials import require_auth
 from Backend.pyrofork.bot import work_loads_summary
-from Backend.helper.ops.version_check import version_check_loop
 
 templates = Jinja2Templates(directory="Backend/fastapi/templates")
 
