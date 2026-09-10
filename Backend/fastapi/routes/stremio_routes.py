@@ -1157,7 +1157,7 @@ async def configure_addon(token: str, request: Request):
         else:
             status_color, status_text, expiry_str = "#22c55e", "Active", "Never"
 
-    return templates.TemplateResponse("stremio_configure.html", {
+    return templates.TemplateResponse(request, "stremio_configure.html", {
         "request": request,
         "theme": get_theme(request.session.get("theme", DEFAULT_THEME), request.session.get("style", DEFAULT_STYLE)),
         "manifest_url": manifest_url,
