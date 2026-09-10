@@ -529,20 +529,26 @@
         </div>
 
         <details style="margin-top:0.5rem">
-            <summary style="cursor:pointer;font-weight:600;color:var(--primary)">Supported placeholders &amp; predefined templates</summary>
+            <summary style="cursor:pointer;font-weight:600;color:var(--primary)">Template syntax &amp; placeholders</summary>
             <div style="margin-top:0.75rem;font-size:0.82rem;color:var(--text-sec);line-height:1.55">
-                <p><strong>Placeholders:</strong>
-                {resolution} {quality} {filename} {size} {size_emoji} {codec} {video_codec}
-                {audio} {audio_short} {audio_summary} {channels} {subs} {subs_summary}
-                {hdr} {bit_depth} {fps} {bitrate} {duration} {encoder} {container} {source}
-                {codec_line} {video_line} {audio_line} {subs_line} {hdr_line} {encoder_line}
-                </p>
-                <p style="margin-top:0.5rem"><strong>Predefined name examples:</strong><br>
-                default → <code>Telegram {resolution} {quality}</code><br>
-                compact → <code>{resolution} {codec} {audio_short}</code><br>
-                technical → <code>{resolution} | {video_codec} | {audio_short}</code><br>
-                emoji → <code>🎬 {resolution} {quality}</code>
-                </p>
+                <p><strong>Basic:</strong> <code>{resolution}</code> <code>{video_codec}</code> <code>{filename}</code> <code>{size}</code>
+                <code>{audio_langs}</code> <code>{sub_langs}</code> <code>{hdr}</code> <code>{fps}</code> <code>{bit_depth}</code>
+                <code>{audio_summary}</code> <code>{encoder}</code> <code>{quality}</code></p>
+                <p style="margin-top:0.45rem"><strong>Conditionals (missing values are hidden):</strong><br>
+                <code>{video_codec::exists["🎥 {video_codec}"||""]}</code><br>
+                <code>{hdr::exists[" {hdr}"||""]}</code><br>
+                <code>{resolution::=2160p["4K"||"{resolution}"]}</code><br>
+                <code>{audio_langs::exists["🎧 {audio_langs}"||""]}</code><br>
+                <code>{sub_langs::exists["📝 {sub_langs}"||"🙊 No subs"]}</code></p>
+                <p style="margin-top:0.45rem"><strong>Lists / filters:</strong>
+                <code>{languages::join(', ')}</code>
+                <code>{specs::join(' • ')}</code>
+                <code>{title::default('Stream')}</code>
+                <code>{size_bytes::>0["💾 {size}"||""]}</code></p>
+                <p style="margin-top:0.45rem"><strong>Nested:</strong>
+                <code>{stream.resolution}</code> <code>{stream.languages}</code> <code>{stream.subtitles}</code>
+                <code>{metadata.title}</code> <code>{addon.name}</code></p>
+                <p style="margin-top:0.45rem">Files without MediaInfo data automatically use the classic filename-based format.</p>
             </div>
         </details>
     </div>

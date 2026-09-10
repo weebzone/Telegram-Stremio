@@ -487,9 +487,13 @@ class SettingsManager:
 
         if old.get("metadata_bot_token") != new.get("metadata_bot_token"):
             try:
-                from Backend.helper.media_extras.technical import stop_metadata_client
+                from Backend.helper.media_extras.technical import stop_metadata_client, get_metadata_client
                 await stop_metadata_client()
-                results["metadata_bot"] = "client restarted on next probe" if new.get("metadata_bot_token") else "disabled"
+                if new.get("metadata_bot_token"):
+                    client = await get_metadata_client()
+                    results["metadata_bot"] = "started" if client else "failed to start"
+                else:
+                    results["metadata_bot"] = "disabled"
             except Exception as exc:
                 results["metadata_bot"] = f"error: {exc}"
 
