@@ -455,18 +455,19 @@ async def submit_request(*, media_type, tmdb_id, imdb_id, title, year, poster, c
 
         await _coll().update_one({"_id": existing["_id"]}, update)
 
-        #----- If new seasons were actually added to an existing request,
-        #----- re-notify Telegram + external API so the new seasons are acted on
-        #----- (not just silently merged into the DB). Both targets receive ONE
-        #----- message per new season (Telegram + external API share the
-        #----- per-season contract your downstream API is built around).
-        if new_seasons:
-            for s in sorted(new_seasons):
-                single = dict(existing)
-                single["season_numbers"] = [s]
-                single["status"] = (await _coll().find_one({"_id": existing["_id"]}) or {}).get("status", single.get("status"))
-                notify_new_request(single)
-                notify_external_api(single)
+        #----- Always re-notify external API when a Stremio episode request hits an
+        #----- existing request — even if the season was already stored. The webhook
+        #----- needs: imdb, nombre, tipo, temporada, episodio. Previously only fired
+        #----- on "new_seasons", so re-requesting an already-existing serie/episode
+        #----- (Lanterns T1E1 when T1 already in DB) silently skipped the webhook.
+        _fire_existing = dict(existing)
+        _fire_existing.update({
+            "season_numbers": seasons or existing.get("season_numbers") or [],
+            "episode_num": episode_num if episode_num else existing.get("episode_num"),
+            "status": (await _coll().find_one({"_id": existing["_id"]}) or {}).get("status", _fire_existing.get("status")),
+        })
+        notify_new_request(_fire_existing)
+        notify_external_api(_fire_existing)
 
         return {"ok": True, "reason": reason, "title": existing.get("title")}
 
