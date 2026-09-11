@@ -45,7 +45,16 @@ def get_tmdb_client() -> aioTMDb:
     global _tmdb_client, _tmdb_client_key
     current_key = tmdb_api_key()
     if _tmdb_client is None or _tmdb_client_key != current_key:
-        _tmdb_client = aioTMDb(key=current_key, language="en-US", region="US")
+        # Latino-first: request results in the configured match language (default
+        # es-MX) so the primary `title`/`name` returned by search is the Spanish
+        # (Mexico) title. English + original title still participate as aliases.
+        lang = "es-MX"
+        try:
+            lang = SettingsManager.current().match_language or "es-MX"
+        except Exception:
+            pass
+        region = lang.split("-")[-1].upper() if "-" in lang else ""
+        _tmdb_client = aioTMDb(key=current_key, language=lang, region=region or None)
         _tmdb_client_key = current_key
     return _tmdb_client
 
@@ -119,7 +128,14 @@ async def _tmdb_alternative_titles(media_type: str, tmdb_id) -> list:
                 target = client.movie(tmdb_id) if media_type == "movie" else client.tv(tmdb_id)
                 alt = await target.alternative_titles()
             entries = list(getattr(alt, "titles", None) or []) + list(getattr(alt, "results", None) or [])
-            titles = [t for t in (getattr(e, "title", "") for e in entries) if t]
+            for e in entries:
+                # Keep Spanish (MX/ES) and English aliases so Latino titles match.
+                iso = getattr(e, "iso_3166_1", None) or ""
+                if iso and iso not in ("MX", "ES", "US"):
+                    continue
+                t = getattr(e, "title", "") or ""
+                if t:
+                    titles.append(t)
         except Exception as e:
             LOGGER.warning(f"TMDb alternative-titles fetch failed for {media_type} id={tmdb_id}: {e}")
         return titles
@@ -138,9 +154,15 @@ async def pick_best(results, query_title: str, query_year: Optional[int], media_
         r_title, r_year = tmdb_title_year(item, media_type)
         # original_title / original_name also counts as an alias
         orig = getattr(item, "original_title", None) or getattr(item, "original_name", None) or ""
+        # Latino-first: pull Spanish (MX/ES) + English alt titles up-front so an
+        # ES query title competes from the first pass instead of being dropped
+        # when the primary `title` is English.
+        es_aliases = await _tmdb_alternative_titles(media_type, getattr(item, "id", None))
+        aliases = [orig] if (orig and orig != r_title) else []
+        aliases.extend(es_aliases)
         score = score_candidate_aliases(
             query_title, query_year, r_title, r_year,
-            aliases=[orig] if orig and orig != r_title else None,
+            aliases=aliases or None,
             year_reliable=year_reliable, year_lower_bound=year_lower_bound,
         )
         scored.append((score, item, r_year))
@@ -150,7 +172,7 @@ async def pick_best(results, query_title: str, query_year: Optional[int], media_
     if best_score >= STRONG_MATCH:
         return best_item
 
-    # Fetch official alternative titles for top candidates
+    # Fetch official alternative titles for top candidates (refine pass)
     scored.sort(key=lambda x: x[0], reverse=True)
     for _, item, r_year in scored[:ALT_TITLE_LOOKUPS]:
         r_title, _ = tmdb_title_year(item, media_type)

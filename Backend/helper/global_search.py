@@ -1,6 +1,7 @@
 import asyncio
 import re
 import time
+import unicodedata
 from typing import Dict, List, Optional
 
 import PTN
@@ -21,6 +22,7 @@ from Backend.helper.settings_manager import SettingsManager
 from Backend.helper.encrypt import encode_string
 from Backend.helper.pyro import get_readable_file_size
 from Backend.helper.split_files import parse_combined_episodes, parse_split_info, strip_part_suffix
+from Backend.helper.metadata.parse import parse_media_name as _parse_media_name
 import Backend.pyrofork.bot as botmod
 
 MAX_RESULTS = 50
@@ -184,6 +186,52 @@ def _parse_and_validate(filename: str, expected_title: str, season: Optional[int
     return _validate_name(filename, expected_title, season, episode)
 
 
+def _validate_name_spanish(filename: str, expected_title: str, season: Optional[int], episode: Optional[int]) -> Optional[dict]:
+    """Like _validate_name but uses the full media-name parser so Latino
+    Spanish filenames such as 'Soy_Tu_Duena_Capitulo_5.mkv' (Capitulo with a
+    capital C, underscores, no SxxExx) are recognised as season/episode.
+    PTN alone misses 'Capitulo_5', so we route through parse_media_name which
+    understands 'capitulo N' / 'temp N' / NxNN wording."""
+    if _MULTIPART_RE.search(filename):
+        return None
+    try:
+        parsed = _parse_media_name(filename) or {}
+    except Exception as e:
+        LOGGER.warning(f"parse_media_name failed for {filename}: {e}")
+        parsed = {}
+    if _is_combined_filename(filename, parsed):
+        LOGGER.info(f"Skipping {filename}: combined episode pack")
+        return None
+    if not _matches_episode(parsed, season, episode, filename=filename):
+        return None
+    raw_title = parsed.get("title", "") or (filename or "")
+    # Strip the trailing "capitulo N" / "temporada N" wording PTN/parse leaves
+    # in the title (e.g. "Soy Tu Duena Capitulo 5") so the title score compares
+    # cleanly against the expected series name ("Soy tu dueña").
+    result_title = re.sub(
+        r"(?i)(?<![a-z0-9])(?:temporada|temp|cap[íi]tulo|cap)[._\s-]*0*\d{1,3}",
+        " ",
+        raw_title,
+    ).strip()
+    if not result_title:
+        result_title = raw_title
+    # Drop emoji / flag glyphs and pure-numeric noise tokens so decorated
+    # titles like "🇲🇽 LION 🇲🇽 4..." score as "LION".
+    result_title = _strip_decorations(result_title)
+    # Latino uploaders drop accents/Ñ (dueña -> duena), so de-accent both sides
+    # before scoring to avoid false title mismatches.
+    result_title = _deaccent(result_title)
+    expected = _strip_decorations(_deaccent(expected_title))
+    score = _title_score(result_title, expected)
+    if score < MIN_TITLE_SCORE:
+        stripped_expected = _strip_symbols(expected)
+        if stripped_expected and stripped_expected.lower() != expected.lower():
+            score = _title_score(result_title, _deaccent(stripped_expected))
+    if score < MIN_TITLE_SCORE:
+        return None
+    return parsed
+
+
 def _split_part_info(filename: str) -> Optional[tuple]:
     if not filename:
         return None
@@ -284,12 +332,56 @@ async def _get_chat_title(client, chat_id: int) -> str:
     return title
 
 
+def _deaccent(text: str) -> str:
+    """Strip accents / Ñ so 'Soy tu dueña' matches a channel filename like
+    'Soy tu duena'. Latino uploaders routinely drop accents, so search queries
+    must be tried both accented (TMDB) and de-accented (channel reality)."""
+    if not text:
+        return text
+    return "".join(
+        c for c in unicodedata.normalize("NFD", text)
+        if unicodedata.category(c) != "Mn"
+    )
+
+
+# Emoji / flag glyph ranges (flags are pairs of regional-indicator symbols).
+_DECORATION_RE = re.compile(
+    "[\U0001F1E6-\U0001F1FF\U0001F000-\U0001FAFF\U00002600-\U000027BF"
+    "\U0000FE00-\U0000FE0F\U00002190-\U000021FF\U00002B00-\U00002BFF]",
+    re.UNICODE,
+)
+
+
+def _strip_decorations(text: str) -> str:
+    """Remove emoji / flag glyphs and pure numeric-noise tokens so a decorated
+    channel filename like '🇲🇽 LION 🇲🇽 4...- S11E12' scores cleanly as 'LION'.
+    Only affects title *comparison* — the raw filename shown to the user is
+    untouched."""
+    if not text:
+        return ""
+    text = _DECORATION_RE.sub(" ", text)
+    toks = [
+        t for t in re.split(r"[\s._\-]+", text)
+        if t and not re.fullmatch(r"[\d.\-]+", t)
+    ]
+    return " ".join(toks).strip()
+
+
 def _strip_symbols(text: str) -> str:
     if not text:
         return ""
     text = _APOSTROPHE_RE.sub("", text)
     text = _SYMBOL_STRIP_RE.sub(" ", text)
     return re.sub(r"\s+", " ", text).strip()
+
+
+def _title_variants(title: str) -> List[str]:
+    """Base title plus a de-accented copy, de-duplicated case-insensitively."""
+    variants = [title]
+    da = _deaccent(title)
+    if da and da.lower() != title.lower():
+        variants.append(da)
+    return variants
 
 
 def _absolute_ep_forms(episode: int) -> List[str]:
@@ -324,11 +416,18 @@ def _build_query_candidates(
         if q and q.lower() not in (c.lower() for c in candidates):
             candidates.append(q)
 
+    # Season + episode: also try Latino Spanish "capitulo N" / "cap N" wording,
+    # since many channels name files "Show capitulo 13" instead of "S01E13".
+    if season is not None and episode is not None:
+        ep = int(episode)
+        for title in _title_variants(expected_title):
+            add(f"{title} S{season:02d}E{ep:02d}")
+            add(f"{title} capitulo {ep}")
+            add(f"{title} cap {ep}")
+        return candidates
+
     if season is None and episode is not None:
-        titles = [expected_title]
-        stripped_title = _strip_symbols(expected_title)
-        if stripped_title and stripped_title.lower() != expected_title.lower():
-            titles.append(stripped_title)
+        titles = _title_variants(expected_title)
         for form in _absolute_ep_forms(int(episode)):
             for title in titles:
                 add(f"{title} {form}")
@@ -405,7 +504,7 @@ async def _search_channel(
                     filename = _video_filename(message)
                     if not filename:
                         continue
-                    parsed = _parse_and_validate(filename, expected_title, season, episode)
+                    parsed = _validate_name_spanish(filename, expected_title, season, episode)
                     if parsed is None:
                         continue
 
@@ -674,7 +773,7 @@ async def _run_true_global_search(
                         filename = _video_filename(message)
                         if not filename:
                             continue
-                        parsed = _parse_and_validate(filename, expected_title, season, episode)
+                        parsed = _validate_name_spanish(filename, expected_title, season, episode)
                         if parsed is None:
                             continue
 

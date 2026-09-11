@@ -39,9 +39,14 @@ _DEFAULTS: Dict[str, Any] = {
     "global_search_channels": [],
     "anime_channels": [],
     "manual_channels": [],
+    "lataddon_channels": [],
     "channel_titles": {},
     "announce_new_content": False,
     "announcement_channel": "",
+    "announcement_thread": "",
+    "notify_new_requests": False,
+    "request_notify_channel": "",
+    "request_notify_thread": "",
     "skip_channel": "",
     "delete_on_metadata_fail": False,
     "better_poster_enabled": False,
@@ -53,6 +58,12 @@ _DEFAULTS: Dict[str, Any] = {
     "fanart_shuffle": False,
     "fanart_shuffle_interval": 5,
     "fanart_low_res_poster": True,
+    # Display/search language for the Latino community (TMDB client requests this
+    # language so Spanish titles surface as the primary match).
+    "match_language": "es-MX",
+    #----- External request API (e.g. n8n webhook): POST a new request there
+    "external_api_url": "",
+    "external_api_token": "",
 }
 
 
@@ -134,6 +145,12 @@ class Settings:
         return list(self._d.get("manual_channels") or [])
 
     @property
+    def lataddon_channels(self) -> List[str]:
+        # channel IDs whose content is mirrored into the /LatAddon WebDAV folder
+        # (shared with partners). Normalized (no -100 prefix) for matching.
+        return [str(c).strip().replace("-100", "") for c in (self._d.get("lataddon_channels") or []) if str(c).strip()]
+
+    @property
     def channel_titles(self) -> Dict[str, str]:
         raw = self._d.get("channel_titles") or {}
         if not isinstance(raw, dict):
@@ -151,6 +168,23 @@ class Settings:
     @property
     def announcement_channel(self) -> str:
         return str(self._d.get("announcement_channel") or "").strip()
+
+    @property
+    def notify_new_requests(self) -> bool:
+        return bool(self._d.get("notify_new_requests", False))
+
+    @property
+    def request_notify_channel(self) -> str:
+        return str(self._d.get("request_notify_channel") or "").strip()
+
+    @property
+    def announcement_thread(self) -> str:
+        return str(self._d.get("announcement_thread") or "").strip()
+
+    @property
+    def request_notify_thread(self) -> str:
+        return str(self._d.get("request_notify_thread") or "").strip()
+        
 
     @property
     def skip_channel(self) -> str:
@@ -273,6 +307,18 @@ class Settings:
     @property
     def extra_databases(self) -> List[str]:
         return list(self._d.get("extra_databases") or [])
+
+    @property
+    def match_language(self) -> str:
+        return str(self._d.get("match_language") or "es-MX").strip() or "es-MX"
+
+    @property
+    def external_api_url(self) -> str:
+        return str(self._d.get("external_api_url") or "").strip()
+
+    @property
+    def external_api_token(self) -> str:
+        return str(self._d.get("external_api_token") or "").strip()
 
     #----- Serialisation
     def to_dict(self) -> Dict[str, Any]:

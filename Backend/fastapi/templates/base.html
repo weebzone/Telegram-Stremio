@@ -589,9 +589,11 @@ tailwind.config = {
                 </div>
             </div>
         {% else %}
+        {% if show_login | default(true) %}
             <a href="/login" class="bg-primary hover:bg-primary/80 text-white px-6 py-2 rounded-full text-sm font-bold transition shadow-lg shadow-primary/20">
                 Login
             </a>
+        {% endif %}
         {% endif %}
     </div>
 

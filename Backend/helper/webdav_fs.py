@@ -28,6 +28,7 @@ from urllib.parse import quote
 
 from Backend import db
 from Backend.helper.nfo_generator import episode_nfo, movie_nfo, season_nfo, tvshow_nfo
+from Backend.helper.settings_manager import SettingsManager
 from Backend.logger import LOGGER
 
 
@@ -199,6 +200,56 @@ class WebDAVFilesystem:
         root.children["Movies"] = movies_dir
         root.children["TV Shows"] = shows_dir
 
+        #----- LatAddon: partner content mirrored into its own folder -----
+        lataddon_channels = set()
+        try:
+            lataddon_channels = set(SettingsManager.current().lataddon_channels)
+        except Exception:
+            pass
+        lataddon_dir = None
+        lataddon_movies_dir = None
+        lataddon_shows_dir = None
+        if lataddon_channels:
+            lataddon_dir = VNode(path="/LatAddon", name="LatAddon", is_dir=True)
+            lataddon_movies_dir = VNode(path="/LatAddon/Movies", name="Movies", is_dir=True)
+            lataddon_shows_dir = VNode(path="/LatAddon/TV Shows", name="TV Shows", is_dir=True)
+            lataddon_dir.children["Movies"] = lataddon_movies_dir
+            lataddon_dir.children["TV Shows"] = lataddon_shows_dir
+            root.children["LatAddon"] = lataddon_dir
+
+        def _channel_ids_of(quality: dict) -> set:
+            """Extract all normalized channel ids from a QualityDetail.
+
+            The channel can live at two places depending on how the quality was
+            stored:
+              - quality["chat_id"]                 (top-level, used by movies)
+              - quality["parts"][*]["chat_id"]     (episodes / split files)
+            """
+            ids = set()
+            c = str(quality.get("chat_id") or "").strip().replace("-100", "")
+            if c:
+                ids.add(c)
+            for part in (quality.get("parts") or []):
+                pc = str(part.get("chat_id") or "").strip().replace("-100", "")
+                if pc:
+                    ids.add(pc)
+            return ids
+
+        def _doc_is_lataddon(doc: dict) -> bool:
+            if not lataddon_channels:
+                return False
+            # movies: channel lives at doc.telegram[].chat_id (or parts[].chat_id)
+            for q in (doc.get("telegram") or []):
+                if any(cid in lataddon_channels for cid in _channel_ids_of(q)):
+                    return True
+            # tv: channel lives inside seasons -> episodes -> telegram[].chat_id/parts
+            for season in (doc.get("seasons") or []):
+                for ep in (season.get("episodes") or []):
+                    for q in (ep.get("telegram") or []):
+                        if any(cid in lataddon_channels for cid in _channel_ids_of(q)):
+                            return True
+            return False
+
         movie_count = 0
         show_count = 0
 
@@ -221,16 +272,18 @@ class WebDAVFilesystem:
                     doc = _oid_str(doc)
                     doc.setdefault("db_index", db_index)
                     folder = movie_folder_name(doc)
+                    # LatAddon routing: partner channel content goes to /LatAddon/Movies
+                    target_movies_dir = (lataddon_movies_dir if _doc_is_lataddon(doc) else None) or movies_dir
                     # avoid collisions
                     base_folder = folder
                     n = 2
-                    while folder in movies_dir.children:
+                    while folder in target_movies_dir.children:
                         folder = f"{base_folder} [{n}]"
                         n += 1
-                    folder_path = f"/Movies/{folder}"
+                    folder_path = f"{target_movies_dir.path}/{folder}"
                     fnode = VNode(path=folder_path, name=folder, is_dir=True,
                                   media_type="movie", tmdb_id=doc.get("tmdb_id"), db_index=db_index)
-                    movies_dir.children[folder] = fnode
+                    target_movies_dir.children[folder] = fnode
 
                     # NFO
                     nfo_name = f"{folder}.nfo"
@@ -268,15 +321,17 @@ class WebDAVFilesystem:
                     doc = _oid_str(doc)
                     doc.setdefault("db_index", db_index)
                     folder = show_folder_name(doc)
+                    # LatAddon routing: partner channel content goes to /LatAddon/TV Shows
+                    target_shows_dir = (lataddon_shows_dir if _doc_is_lataddon(doc) else None) or shows_dir
                     base_folder = folder
                     n = 2
-                    while folder in shows_dir.children:
+                    while folder in target_shows_dir.children:
                         folder = f"{base_folder} [{n}]"
                         n += 1
-                    folder_path = f"/TV Shows/{folder}"
+                    folder_path = f"{target_shows_dir.path}/{folder}"
                     snode = VNode(path=folder_path, name=folder, is_dir=True,
                                   media_type="tv", tmdb_id=doc.get("tmdb_id"), db_index=db_index)
-                    shows_dir.children[folder] = snode
+                    target_shows_dir.children[folder] = snode
 
                     # tvshow.nfo
                     nfo_bytes = tvshow_nfo(doc).encode("utf-8")

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import re
 import traceback
+import unicodedata
 
 import PTN
 from guessit import guessit as _guessit
@@ -23,11 +24,61 @@ _MULTIPART_RE = re.compile(r"(?:part|cd|disc|disk)[s._-]*\d+(?=\.\w+$)", re.IGNO
 # PTN does NOT parse by itself). Anything else falls through to the
 # absolute-episode logic below instead of guessing.
 _EXPLICIT_SXXEXX_RE = re.compile(r"(?i)\bs\d{1,2}[._\s-]*e\d{1,3}\b")
-_EXPLICIT_NXNN_RE = re.compile(r"(?i)\b\d{1,2}x\d{2,3}\b")
+# Episode may be 1-3 digits so "4x2" / "1x1" / "12x3" are caught (was \d{2,3},
+# which dropped single-digit episodes like "4x2" and forced episode 1).
+_EXPLICIT_NXNN_RE = re.compile(r"(?i)\b\d{1,2}x\d{1,3}\b")
 _EXPLICIT_SEASON_WORD_RE = re.compile(r"(?i)\b(?:season|series)\s*0*\d{1,2}\b")
+# Latino Spanish wording: "temporada N" / "temp N" (season) and
+# "capitulo N" / "capítulo N" / "cap N" (episode). Tolerates "_" / "." as the
+# separator (uploaders write "Soy_Tu_Duena_Capitulo_5.mkv"). The leading word
+# boundary is replaced by a negative lookbehind for [a-z0-9] because "_" is a
+# word char, so "\bcapitulo" would NOT match after "Duena_Capitulo" (no
+# word→non-word transition). The trailing boundary is also omitted because the
+# number is often glued to the extension ("Capitulo_5.mkv").
+_EXPLICIT_CAPITULO_RE = re.compile(
+    r"(?i)(?<![a-z0-9])(?:temporada|temp|cap[íi]tulo|cap)[._\s-]*0*\d{1,3}"
+)
+
+
+
+
+def fix_encoding(text: str) -> str:
+    """Repair garbled accents that arrive from Telegram / DB storage.
+
+    Two real-world cases for the Latino community:
+      1. Mojibake: UTF-8 bytes decoded as latin-1 / cp1252 (e.g. 'Cómo' ->
+         'CÃ³mo'). Re-encode and decode back to UTF-8. The result is already
+         a proper composed accented letter, so nothing more is needed.
+      2. Decomposed/standalone accents: a base letter followed by a stray
+         combining accent char (often stored as a separate glyph) so 'Cómo'
+         shows as 'C mo'. Here we recompose via NFC so the accented letter
+         is whole again (C + ´ + o -> ó), instead of dropping the accent.
+
+    Falls back to the input untouched when nothing applies.
+    """
+    if not text:
+        return text
+    s = text
+    # 1) mojibake repair (e.g. 'CÃ³mo' -> 'Cómo')
+    try:
+        repaired = s.encode("latin-1").decode("utf-8")
+        if repaired != s:
+            s = repaired
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        pass
+    # 2) recompose decomposed/standalone accents (C + ´ + o -> 'Cómo').
+    #    NFC merges a base letter with its following combining mark; str.replace
+    #    then cleans any combining marks that have no base letter to attach to
+    #    (true noise) without harming already-composed accented letters.
+    s = unicodedata.normalize("NFC", s)
+    s = "".join(c for c in s if not unicodedata.combining(c))
+    return s
 
 
 def parse_media_name(name: str) -> dict:
+    # Repair garbled accents (mojibake / decomposed) before any parsing so
+    # Latino filenames like 'Cómo matar a mamá' match TMDB correctly.
+    name = fix_encoding(name or "")
     try:
         ptn = PTN.parse(name) or {}
     except Exception as e:
@@ -59,6 +110,7 @@ def parse_media_name(name: str) -> dict:
                     _EXPLICIT_SXXEXX_RE.search(name)
                     or _EXPLICIT_NXNN_RE.search(name)
                     or _EXPLICIT_SEASON_WORD_RE.search(name)
+                    or _EXPLICIT_CAPITULO_RE.search(name)
                 )
                 if has_anchor:
                     g_season = first(g.get("season"))
@@ -69,11 +121,64 @@ def parse_media_name(name: str) -> dict:
                             g_season_int = None
                         if g_season_int is not None and g_season_int > 0:
                             parsed["season"] = g_season_int
-                    parsed["episode"] = first(g.get("episode"))
+                    g_episode = first(g.get("episode"))
+                    if g_episode is not None:
+                        try:
+                            g_episode_int = int(g_episode)
+                        except (TypeError, ValueError):
+                            g_episode_int = None
+                        if g_episode_int is not None and g_episode_int > 0:
+                            parsed["episode"] = g_episode_int
 
             parsed["quality"] = parsed["quality"] or first(g.get("screen_size"))
         except Exception as e:
             LOGGER.warning(f"GuessIt parsing failed for {name}: {e}")
+
+    # Direct Latino Spanish extraction for "temporada/capitulo" wording.
+    # GuessIt is unreliable for Spanish "capitulo", so parse it ourselves and
+    # only fill what PTN/GuessIt left empty. "temporada 4 capitulo 2" ->
+    # season 4, episode 2; bare "capitulo 2" -> season 1, episode 2.
+    if parsed.get("episode") is None or parsed.get("season") is None:
+        _season_m = re.search(
+            r"(?i)\b(?:temporada|temp)\s*0*(\d{1,3})\b", name
+        )
+        _ep_m = re.search(
+            r"(?i)(?<![a-z0-9])(?:cap[íi]tulo|cap)[._\s-]*0*(\d{1,3})", name
+        )
+        if _ep_m is not None:
+            try:
+                _ep_int = int(_ep_m.group(1))
+            except (TypeError, ValueError):
+                _ep_int = None
+            if _ep_int is not None and _ep_int > 0 and parsed.get("episode") is None:
+                parsed["episode"] = _ep_int
+        if _season_m is not None:
+            try:
+                _se_int = int(_season_m.group(1))
+            except (TypeError, ValueError):
+                _se_int = None
+            if _se_int is not None and _se_int > 0 and parsed.get("season") is None:
+                parsed["season"] = _se_int
+        # If we found a Spanish episode but no season anywhere, default to 1
+        # so "capitulo 2" routes as S01E02 instead of an absolute/anime episode.
+        if parsed.get("episode") is not None and parsed.get("season") is None:
+            parsed["season"] = parsed.get("season") or 1
+
+    # Recover the episode from a raw NxNN token ("4x2", "12x3") when PTN read
+    # the trailing digit as a release "group" instead of the episode (it does
+    # this for single-digit episodes). The anchor regex already widened to
+    # 1-3 digits; pull the episode straight from the match.
+    if parsed.get("season") is not None and parsed.get("episode") is None:
+        _nxnn_m = _EXPLICIT_NXNN_RE.search(name)
+        if _nxnn_m is not None:
+            _nums = _nxnn_m.group(0).lower().split("x")
+            if len(_nums) == 2:
+                try:
+                    _ep_int = int(_nums[1])
+                except (TypeError, ValueError):
+                    _ep_int = None
+                if _ep_int is not None and _ep_int > 0:
+                    parsed["episode"] = _ep_int
 
     # Normalize season 0 → None (specials folder only, not a real season for routing)
     try:

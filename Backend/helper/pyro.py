@@ -119,9 +119,22 @@ def clean_filename(filename: str) -> str:
     #----- 3 – Remove decorative unicode symbols
     filename = _DECORATION_PATTERN.sub(" ", filename)
 
-    #----- 4 – Replace any remaining non-ASCII characters with a space.
-    #----- Keep standard filename-safe characters: alphanumerics, . - _ ( ) [ ] ' " , : ! ? & + @
-    filename = re.sub(r"[^\x20-\x7E]", " ", filename)
+    #----- 4 – Replace remaining non-ASCII characters with a space, EXCEPT
+    #----- Latin accented letters / Spanish punctuation used by the Latino
+    #----- community (á é í ó ú ñ ü Á É Í Ó Ú Ñ Ü ¿ ¡). Those are preserved so
+    #----- Spanish titles like '¿Cómo matar a mamá?' match TMDB correctly.
+    _LATIN_KEEP = (
+        "áéíóúñüÁÉÍÓÚÑÜ¿¡"
+        "\u00E0\u00E1\u00E2\u00E3\u00E8\u00E9\u00EA\u00EB"  # à á â ã è é ê ë
+        "\u00ED\u00EE\u00EF\u00F2\u00F3\u00F4\u00F5\u00FA\u00FB\u00FC"  # í î ï ò ó ô õ ú û ü
+        "\u00C0\u00C1\u00C2\u00C3\u00C8\u00C9\u00CA\u00CB"  # À Á Â Ã È É Ê Ë
+        "\u00CD\u00CE\u00CF\u00D2\u00D3\u00D4\u00D5\u00DA\u00DB\u00DC"  # Í Î Ï Ò Ó Ô Õ Ú Û Ü
+        "\u00F1\u00D1\u00BF\u00A1"  # ñ Ñ ¿ ¡
+    )
+    filename = "".join(
+        ch if (ch in _LATIN_KEEP or "\x20" <= ch <= "\x7E") else " "
+        for ch in filename
+    )
 
     #----- 5 – Remove Telegram channel tags  (@ChannelName_ etc.)
     filename = _CHANNEL_TAG_PATTERN.sub("", filename)

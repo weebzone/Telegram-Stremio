@@ -89,6 +89,15 @@ async def _require_webdav_auth(request: Request, token: str) -> dict:
         raise HTTPException(status_code=401, detail=f"Invalid API token for WebDAV: {e.detail}")
     if token_data.get("subscription_expired") or token_data.get("limit_exceeded"):
         raise HTTPException(status_code=403, detail="Token expired or limit exceeded")
+
+    #----- Optional path restriction: a token with path_prefix may only access
+    #----- that subtree (e.g. a partner token locked to /LatAddon).
+    prefix = (token_data.get("path_prefix") or "").strip()
+    if prefix:
+        # requested path is the part after /webdav/{token}/
+        req_path = normalize_path(request.path_params.get("path", "") or request.url.path.split(f"/webdav/{token}", 1)[-1])
+        if not (req_path == prefix or req_path.startswith(prefix + "/")):
+            raise HTTPException(status_code=403, detail=f"Token is restricted to WebDAV path '{prefix}'")
     return token_data
 
 

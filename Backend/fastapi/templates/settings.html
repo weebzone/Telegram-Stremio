@@ -153,6 +153,20 @@
 }
 .stat-box .v { font-size: 1.3rem; font-weight: 800; }
 .stat-box .l { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-sec); }
+.storage-summary {
+    background: color-mix(in srgb, var(--primary) 8%, transparent);
+    border: 1px solid color-mix(in srgb, var(--primary) 35%, var(--border));
+    border-radius: 1rem; padding: 0.9rem 1rem;
+}
+.ss-head { display:flex; align-items:center; gap:0.5rem; font-weight:800; font-size:0.95rem; color:var(--text); }
+.ss-infinite { margin-left:auto; font-size:0.7rem; font-weight:700; color:var(--primary);
+    background:color-mix(in srgb,var(--primary) 15%,transparent); padding:0.15rem 0.55rem; border-radius:999px; }
+.ss-cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:0.6rem; margin-top:0.7rem; }
+.ss-card { background:color-mix(in srgb,var(--bg) 55%,transparent); border:1px solid var(--border); border-radius:0.75rem; padding:0.6rem 0.7rem; }
+.ss-card .ss-v { font-size:1.25rem; font-weight:800; color:var(--text); }
+.ss-card .ss-l { font-size:0.66rem; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-sec); margin-top:0.15rem; }
+.ss-card.ss-total { background:color-mix(in srgb,var(--primary) 14%,transparent); border-color:color-mix(in srgb,var(--primary) 40%,var(--border)); }
+.ss-card.ss-total .ss-v { color:var(--primary); }
 .hint { font-size: 0.78rem; color: var(--text-sec); }
 </style>
 
@@ -272,13 +286,36 @@
     <!-- ── Authentication ──────────────────────────────────────────────── -->
     <div class="settings-card">
         <h2><i class="fa-solid fa-shield-halved"></i> Admin Authentication</h2>
+
+        {% if not is_owner %}
+        <!-- Sub-admin: manage ONLY their own account -->
         <div class="grid-2">
             <div>
+                <label class="s-label" for="me_password">Your New Password</label>
+                <input type="password" id="me_password" class="s-input"
+                    placeholder="Set a new password for your account" autocomplete="new-password">
+            </div>
+            <div>
+                <label class="s-label">Your API Token (for scripts)</label>
+                <div class="add-row">
+                    <button class="add-btn" type="button" onclick="loadMyToken()">Show my token</button>
+                    <button class="add-btn" type="button" onclick="copyMyToken()">Copy</button>
+                </div>
+                <textarea id="me-token" readonly
+                    style="width:100%;margin-top:0.5rem;min-height:3.2rem;font-family:monospace;font-size:0.78rem;color:var(--primary);background:var(--background);border:1px solid var(--hairline);border-radius:0.6rem;padding:0.5rem;resize:none;display:none"></textarea>
+                <button class="add-btn" type="button" onclick="saveMyPassword()" style="margin-top:0.5rem">Save new password</button>
+            </div>
+        </div>
+        <hr class="divider">
+        {% endif %}
+
+        <div class="grid-2">
+            <div class="_owner_only">
                 <label class="s-label" for="admin_username">Admin Username</label>
                 <input type="text" id="admin_username" class="s-input"
                     value="{{ settings.admin_username }}" autocomplete="off">
             </div>
-            <div>
+            <div class="_owner_only">
                 <label class="s-label" for="admin_password">Admin Password</label>
                 <div style="position:relative">
                     <input type="password" id="admin_password" class="s-input"
@@ -298,7 +335,7 @@
             </div>
         </div>
 
-        <div style="margin-top:1rem">
+        <div style="margin-top:1rem" class="_owner_only">
             <label class="s-label" for="session_secret">Session Secret</label>
             <div style="position:relative">
                 <input type="password" id="session_secret" class="s-input"
@@ -352,8 +389,31 @@
         </div>
     </div>
 
-    <!-- ── Media & Content ─────────────────────────────────────────────── -->
+    <!-- ── Admins (owner only) ───────────────────────────────────────── -->
+    {% if is_owner %}
     <div class="settings-card">
+        <h2><i class="fa-solid fa-user-shield"></i> Admins</h2>
+        <p style="font-size:0.82rem;color:var(--text-sec);margin-bottom:0.75rem">
+            <i class="fa-solid fa-circle-info"></i>
+            Generate a one-time invite code (expires in 7 days) and share it.
+            New admins register with it on the login page. You can reset their
+            password or revoke access anytime.
+        </p>
+
+        <div class="add-row">
+            <button class="add-btn" type="button" onclick="genInvite()">Generate invite code</button>
+            <button class="add-btn" type="button" onclick="copyInvite()">Copy</button>
+        </div>
+        <textarea id="invite-code" readonly
+            style="width:100%;margin-top:0.5rem;min-height:3.2rem;font-family:monospace;font-size:0.85rem;color:var(--primary);background:var(--background);border:1px solid var(--hairline);border-radius:0.6rem;padding:0.5rem;resize:none;display:none"></textarea>
+
+        <div id="admins-list" style="margin-top:1rem"></div>
+    </div>
+    {% endif %}
+
+
+    <!-- ── Media & Content ─────────────────────────────────────────────── -->
+    <div class="settings-card _owner_only">
         <h2><i class="fa-solid fa-film"></i> Media &amp; Content</h2>
         <div class="grid-2">
             <div>
@@ -515,6 +575,23 @@
                 onkeydown="if(event.key==='Enter'){event.preventDefault();addItem('manual_channels')}">
             <button class="add-btn" onclick="addItem('manual_channels')">+ Add Channel</button>
         </div>
+    </div>
+
+    <!-- ── LatAddon (partner content) ─────────────────────────────────── -->
+    <div class="settings-card">
+        <h2><i class="fa-solid fa-people-arrows"></i> LatAddon (Partner Content)</h2>
+        <span style="color:var(--text-sec);font-size:0.82rem;display:block;margin-bottom:1rem">
+            Channels listed below are mirrored into a dedicated <code>/LatAddon</code> folder on the WebDAV
+            (Movies &amp; TV Shows), so partners can mount just that content via rclone. Your own catalog
+            and access are unchanged — this is an extra read-only window onto the same files.
+        </span>
+        <label class="s-label" for="lataddon_channels">LATADDON CHANNEL IDS <span style="font-weight:400;text-transform:none;letter-spacing:0">(one per line)</span></label>
+        <textarea id="lataddon_channels" class="s-input" rows="3"
+            placeholder="-100xxxxxxxxxx&#10;-100yyyyyyyyyy">{{ settings.lataddon_channels | join('\n') }}</textarea>
+        <span style="color:var(--text-sec);font-size:0.78rem;display:block;margin-top:0.4rem">
+            Every file arriving in these channels is also exposed under <code>/LatAddon</code> on the WebDAV.
+            Generate a WebDAV-only token (Settings → WebDAV) and share it with partners to mount that folder.
+        </span>
     </div>
 
     <!-- ── Subscription ────────────────────────────────────────────────── -->
@@ -911,8 +988,107 @@ document.addEventListener('DOMContentLoaded', sessLoadStatus);
                 <i class="fa-solid fa-xmark"></i>
             </button>
         </div>
+
+        <label class="s-label" for="announcement_thread" style="margin-top:0.75rem">ANNOUNCEMENT THREAD ID <span style="font-weight:400;text-transform:none;letter-spacing:0">(optional)</span></label>
+        <p style="font-size:0.78rem;color:var(--text-sec);margin-bottom:0.5rem">
+            <i class="fa-solid fa-circle-info"></i>
+            If the announcement channel is a <strong>forum group</strong>, paste the
+            <code>message_thread_id</code> of the topic where new-content cards should go
+            (e.g. the "Recién Agregados" topic). Leave empty to post in the group's main chat.
+        </p>
+        <div class="multi-item" style="margin-top:0.25rem">
+            <input type="text" id="announcement_thread" class="s-input"
+                value="{{ settings.announcement_thread or '' }}"
+                placeholder="123456 (topic id inside a forum group)">
+        </div>
     </div>
 </div>
+
+
+<!-- ── Request Notifications (new requests from public Request page) ── -->
+<div class="settings-card">
+    <h2><i class="fa-solid fa-bell"></i> Request Notifications</h2>
+
+    <label class="toggle-wrap">
+        <input type="checkbox" class="toggle-input" id="notify_new_requests"
+            {% if settings.notify_new_requests %}checked{% endif %}
+            onchange="toggleRequestNotifyFields()">
+        <span class="toggle-track"></span>
+        <span class="toggle-label">
+            <strong>Notify New Requests</strong>
+            <span style="color:var(--text-sec);font-size:0.8rem;display:block">
+                Send a Telegram message to a channel/group every time a brand
+                new title is requested from the public Request page.
+            </span>
+        </span>
+    </label>
+
+    <div id="request-notify-fields"
+         style="{% if not settings.notify_new_requests %}display:none{% endif %}">
+        <hr class="divider">
+        <label class="s-label" for="request_notify_channel">REQUEST NOTIFY CHANNEL</label>
+        <p style="font-size:0.78rem;color:var(--text-sec);margin-bottom:0.75rem">
+            <i class="fa-solid fa-circle-info"></i>
+            Channel/group ID in <code>-100xxxxxxxxxx</code> format.
+            The bot must be an <strong>admin</strong> in that chat.
+        </p>
+        <div class="multi-item" style="margin-top:0.25rem">
+            {% set rnc_t = (settings.channel_titles or {}).get(settings.request_notify_channel|string, settings.request_notify_channel) %}
+            <input type="text" id="request_notify_channel" class="s-input"
+                value="{{ rnc_t if settings.request_notify_channel else '' }}"
+                data-id="{{ settings.request_notify_channel }}"
+                {% if settings.request_notify_channel %}readonly{% endif %}
+                placeholder="-100xxxxxxxxxx"
+                oninput="if(!this.readOnly){this.dataset.id='';}">
+            <button type="button" class="remove-btn" id="request_notify_channel_clear"
+                style="{% if not settings.request_notify_channel %}display:none{% endif %}"
+                onclick="clearSingleChannel('request_notify_channel')" title="Remove">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <label class="s-label" for="request_notify_thread" style="margin-top:0.75rem">REQUEST THREAD ID <span style="font-weight:400;text-transform:none;letter-spacing:0">(optional)</span></label>
+        <p style="font-size:0.78rem;color:var(--text-sec);margin-bottom:0.5rem">
+            <i class="fa-solid fa-circle-info"></i>
+            If that chat is a <strong>forum group</strong>, paste the
+            <code>message_thread_id</code> of the topic where new requests should go
+            (e.g. the "Pedidos" topic). Leave empty to post in the group's main chat.
+        </p>
+        <div class="multi-item" style="margin-top:0.25rem">
+            <input type="text" id="request_notify_thread" class="s-input"
+                value="{{ settings.request_notify_thread or '' }}"
+                placeholder="123456 (topic id inside a forum group)">
+        </div>
+    </div>
+</div>
+
+
+    <!-- ── External Request API (webhook) ─────────────────────────────── -->
+    <div class="settings-card">
+        <h2><i class="fa-solid fa-cloud-arrow-up"></i> External Request API</h2>
+        <p style="font-size:0.82rem;color:var(--text-sec);margin-bottom:0.75rem">
+            <i class="fa-solid fa-circle-info"></i>
+            Sends each new public request to this API (e.g. n8n) as
+            <code>{"imdb","nombre","tipo","temporada"}</code>.
+            Movie → <code>tipo:"movies"</code>, <code>temporada:0</code>;
+            Series → <code>tipo:"series"</code> with the chosen season.
+            Leave both empty to disable. Does not affect the Telegram notifier.
+        </p>
+
+        <label class="s-label" for="external_api_url">API URL</label>
+        <div class="multi-item" style="margin-top:0.25rem">
+            <input type="text" id="external_api_url" class="s-input"
+                value="{{ settings.external_api_url or '' }}"
+                placeholder="https://.../webhook/xxxx-xxxx">
+        </div>
+
+        <label class="s-label" for="external_api_token" style="margin-top:1rem">TOKEN (Bearer)</label>
+        <div class="multi-item" style="margin-top:0.25rem">
+            <input type="password" id="external_api_token" class="s-input"
+                value="{{ settings.external_api_token or '' }}"
+                placeholder="Bearer token of the API">
+        </div>
+    </div>
 
 
     <!-- ── Skip Channel (metadata failures) ────────────────────────────── -->
@@ -1049,8 +1225,8 @@ document.addEventListener('DOMContentLoaded', sessLoadStatus);
     </div>
 
 <!-- ── Databases ────────────────────────────────────────────────────── -->
-    <div class="settings-card">
-        <h2><i class="fa-solid fa-database"></i> Databases</h2>
+<div class="settings-card _owner_only">
+    <h2><i class="fa-solid fa-database"></i> Databases</h2>
         <p style="font-size:0.83rem;color:var(--text-sec);margin-bottom:1rem">
             Tracking and Storage 1 are required to boot the app and can't be edited
             here. Additional storage databases connect/disconnect instantly when
@@ -1136,7 +1312,7 @@ document.addEventListener('DOMContentLoaded', sessLoadStatus);
     </div>
 
     <!-- ── Backup & Restore ───────────────────────────────────────────── -->
-    <div class="settings-card">
+    <div class="settings-card _owner_only">
         <h2><i class="fa-solid fa-box-archive"></i> Backup &amp; Restore</h2>
         <p class="bk-desc">
             Export everything — settings, custom catalogs, subscription plans and access tokens — to a JSON file,
@@ -1224,6 +1400,14 @@ function toggleGlobalSearchFields() {
 function toggleAnnouncementFields() {
     const enabled = document.getElementById('announce_new_content').checked;
     const fields = document.getElementById('announcement-fields');
+    if (fields) {
+        fields.style.display = enabled ? '' : 'none';
+    }
+}
+
+function toggleRequestNotifyFields() {
+    const enabled = document.getElementById('notify_new_requests').checked;
+    const fields = document.getElementById('request-notify-fields');
     if (fields) {
         fields.style.display = enabled ? '' : 'none';
     }
@@ -1457,10 +1641,13 @@ async function saveSettings() {
     ];
     const acEl = document.getElementById('announcement_channel');
     const scEl = document.getElementById('skip_channel');
+    const rncEl = document.getElementById('request_notify_channel');
     const acId = (acEl.dataset.id || extractChannelId(acEl.value.trim()));
     const scId = (scEl.dataset.id || extractChannelId(scEl.value.trim()));
+    const rncId = (rncEl.dataset.id || extractChannelId(rncEl.value.trim()));
     if (acId) channelFields.push(acId);
     if (scId) channelFields.push(scId);
+    if (rncId) channelFields.push(rncId);
     for (const c of channelFields) {
         if (!isValidChannelId(c)) {
             alert('Only channel IDs in -100xxxxxxxxxx format are accepted: ' + c);
@@ -1473,6 +1660,10 @@ async function saveSettings() {
     }
     if (scEl.value.trim() && !scId) {
         alert('Skip channel must be -100xxxxxxxxxx format.');
+        return;
+    }
+    if (rncEl.value.trim() && !rncId) {
+        alert('Request notify channel must be -100xxxxxxxxxx format.');
         return;
     }
 
@@ -1518,9 +1709,19 @@ async function saveSettings() {
         global_search:                 document.getElementById('global_search').checked,
         global_search_channels:        collectList('global_search_channels'),
         manual_channels:               collectList('manual_channels'),
+        lataddon_channels:             (document.getElementById('lataddon_channels').value || '')
+                                            .split('\n')
+                                            .map(s => s.trim().replace('-100', ''))
+                                            .filter(s => s.length > 0),
         announce_new_content:          document.getElementById('announce_new_content').checked,
         announcement_channel:          (function(){const el=document.getElementById('announcement_channel');return el.dataset.id||extractChannelId(el.value.trim());})(),
         skip_channel:                  (function(){const el=document.getElementById('skip_channel');return el.dataset.id||extractChannelId(el.value.trim());})(),
+        notify_new_requests:           document.getElementById('notify_new_requests').checked,
+        request_notify_channel:        (function(){const el=document.getElementById('request_notify_channel');return el.dataset.id||extractChannelId(el.value.trim());})(),
+        announcement_thread:          (document.getElementById('announcement_thread').value || '').trim(),
+        request_notify_thread:        (document.getElementById('request_notify_thread').value || '').trim(),
+        external_api_url:             (document.getElementById('external_api_url').value || '').trim(),
+        external_api_token:           (document.getElementById('external_api_token').value || '').trim(),
         delete_on_metadata_fail:       document.getElementById('delete_on_metadata_fail').checked,
     };
 
@@ -1778,7 +1979,19 @@ async function loadDbStats(btn) {
         const data = await res.json();
         if (data.status !== 'success') throw new Error(data.message || 'failed');
         const s = data.data;
-        grid.innerHTML = STAT_FIELDS.map(([k, label]) =>
+        const storageBlock = `
+            <div class="storage-summary" style="grid-column:1/-1">
+                <div class="ss-head">
+                    <i class="fa-solid fa-database"></i> Stored Content
+                    <span class="ss-infinite" title="No storage limit set"><i class="fa-solid fa-infinity"></i> unlimited</span>
+                </div>
+                <div class="ss-cards">
+                    <div class="ss-card"><div class="ss-v">${s.movies_readable ?? '—'}</div><div class="ss-l">Movies (${s.movies ?? 0})</div></div>
+                    <div class="ss-card"><div class="ss-v">${s.tv_readable ?? '—'}</div><div class="ss-l">TV Shows (${s.tv_shows ?? 0})</div></div>
+                    <div class="ss-card ss-total"><div class="ss-v">${s.total_readable ?? '—'}</div><div class="ss-l">Total</div></div>
+                </div>
+            </div>`;
+        grid.innerHTML = storageBlock + STAT_FIELDS.map(([k, label]) =>
             `<div class="stat-box"><div class="v">${escapeHtml(String(s[k] ?? '—'))}</div><div class="l">${label}</div></div>`
         ).join('');
     } catch (e) {
@@ -1868,7 +2081,112 @@ window.addEventListener('DOMContentLoaded', () => {
     toggleMediaflowFields();
     loadDbStats();
     loadLogs();
-});
+    });
 </script>
 
-{% endblock %}
+<style>
+  /* ===== Multi-admin UI helpers ===== */
+  ._owner_only { display: block; }
+  body:not(.is-owner) ._owner_only { display: none !important; }
+</style>
+    <script>
+      // Mark the body so CSS can hide owner-only sections for sub-admins.
+      (function () {
+        const isOwner = "{{ '1' if is_owner else '0' }}" === "1";
+        if (isOwner) document.body.classList.add('is-owner');
+      })();
+
+      async function genInvite() {
+        try {
+          const res = await fetch('/api/admin/invite/generate', { method: 'POST' });
+          const d = await res.json();
+          if (!res.ok) { showToast(d.detail || 'Error', 'error'); return; }
+          const el = document.getElementById('invite-code');
+          el.value = d.code || '';
+          el.style.display = el.value ? 'block' : 'none';
+          showToast('Invite code generated (one-time, 7 days).', 'success');
+        } catch (e) { showToast('Request failed', 'error'); }
+      }
+
+      async function copyInvite() {
+        const el = document.getElementById('invite-code');
+        if (!el.value) { showToast('Generate a code first', 'error'); return; }
+        try { await navigator.clipboard.writeText(el.value); showToast('Invite code copied', 'success'); }
+        catch (e) { el.select(); document.execCommand('copy'); showToast('Invite code copied', 'success'); }
+      }
+
+      async function loadAdmins() {
+        try {
+          const res = await fetch('/api/admin/admins');
+          const d = await res.json();
+          const box = document.getElementById('admins-list');
+          if (!res.ok || !d.admins) { box.innerHTML = ''; return; }
+          box.innerHTML = d.admins.map(a => `
+            <div style="display:flex;align-items:center;gap:0.5rem;margin:0.35rem 0;flex-wrap:wrap">
+              <span class="channel-chip">${a.username}</span>
+              <span style="font-size:0.75rem;color:var(--text-sec)">${a.role}</span>
+              ${a.role !== 'owner' ? `
+                <button class="remove-btn" title="Reset password" onclick="resetAdmin('${a.username}')"><i class="fa-solid fa-key"></i></button>
+                <button class="remove-btn" title="Delete" onclick="deleteAdmin('${a.username}')"><i class="fa-solid fa-xmark"></i></button>
+              ` : ''}
+            </div>`).join('');
+        } catch (e) {}
+      }
+
+      async function resetAdmin(username) {
+        const pw = prompt('New password for ' + username);
+        if (!pw) return;
+        const res = await fetch('/api/admin/admins/reset-password', {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ target: username, new_password: pw })
+        });
+        const d = await res.json();
+        showToast(d.ok ? 'Password reset' : (d.detail || 'Error'), d.ok ? 'success' : 'error');
+      }
+
+      async function deleteAdmin(username) {
+        if (!confirm('Delete admin ' + username + '?')) return;
+        const res = await fetch('/api/admin/admins/delete', {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ target: username })
+        });
+        const d = await res.json();
+        showToast(d.ok ? 'Admin deleted' : (d.detail || 'Error'), d.ok ? 'success' : 'error');
+        loadAdmins();
+      }
+
+      async function loadMyToken() {
+        try {
+          const res = await fetch('/api/admin/me/token');
+          const d = await res.json();
+          const el = document.getElementById('me-token');
+          el.value = d.api_token || '';
+          el.style.display = el.value ? 'block' : 'none';
+        } catch (e) { showToast('Failed to load token', 'error'); }
+      }
+
+      async function copyMyToken() {
+        const el = document.getElementById('me-token');
+        if (!el.value) { showToast('Show your token first', 'error'); return; }
+        try { await navigator.clipboard.writeText(el.value); showToast('Token copied', 'success'); }
+        catch (e) { el.select(); document.execCommand('copy'); showToast('Token copied', 'success'); }
+      }
+
+      async function saveMyPassword() {
+        const pw = document.getElementById('me_password').value;
+        if (!pw) { showToast('Enter a new password', 'error'); return; }
+        const res = await fetch('/api/admin/me/password', {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ new_password: pw })
+        });
+        const d = await res.json();
+        showToast(d.ok ? 'Password updated' : (d.detail || 'Error'), d.ok ? 'success' : 'error');
+        document.getElementById('me_password').value = '';
+      }
+
+      if (document.body.classList.contains('is-owner')) {
+        window.addEventListener('DOMContentLoaded', loadAdmins);
+      }
+    </script>
+
+    {% endblock %}

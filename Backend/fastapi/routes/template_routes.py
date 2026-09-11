@@ -13,6 +13,7 @@ from Backend.helper.custom_dl import ACTIVE_STREAMS, RECENT_STREAMS
 from Backend.helper.metadata import resolve_cover_url
 from Backend.helper.pyro import get_readable_time
 from Backend.helper.settings_manager import SettingsManager
+from Backend.helper.tv_coverage import compute_coverage
 import Backend.pyrofork.bot as botmod
 from Backend.pyrofork.bot import StreamBot, multi_clients, work_loads_summary
 
@@ -167,6 +168,22 @@ async def media_management_page(request: Request, media_type: str = "movie", cus
     return templates.TemplateResponse("media_management.html", ctx)
 
 
+#----- Episode coverage (uploaded vs full season list from Cinemeta)
+async def media_coverage_api(request: Request, tmdb_id: int, db_index: int = 1, refresh: bool = False, _: bool = Depends(require_auth)):
+    doc = await db.get_document("tv", tmdb_id, db_index)
+    if not doc:
+        return {"coverage_pct": 0.0, "total_expected": 0, "total_have": 0, "seasons": []}
+    return await compute_coverage(doc, refresh=refresh)
+
+
+async def media_coverage_refresh_api(request: Request, tmdb_id: int, db_index: int = 1, _: bool = Depends(require_auth)):
+    doc = await db.get_document("tv", tmdb_id, db_index)
+    if not doc:
+        return {"ok": False, "reason": "not_found"}
+    await compute_coverage(doc, refresh=True)
+    return {"ok": True}
+
+
 #----- Media edit page for a single title
 async def edit_media_page(request: Request, tmdb_id: int, db_index: int, media_type: str, _: bool = Depends(require_auth)):
     try:
@@ -214,6 +231,7 @@ async def admin_requests_page(request: Request, _: bool = Depends(require_auth))
 async def public_request_page(request: Request):
     ctx = _base_context(request)
     ctx["is_authenticated"] = is_authenticated(request)
+    ctx["show_login"] = False
     return templates.TemplateResponse("request_public.html", ctx)
 
 
@@ -248,10 +266,15 @@ async def settings_page(request: Request, _: bool = Depends(require_auth)):
         titles = {}
     settings["channel_titles"] = {str(k): str(v) for k, v in titles.items() if k and v}
 
+    #----- Role of the logged-in admin, to show/hide sections in the UI.
+    from Backend.fastapi.security.credentials import get_current_role
+    is_owner = (await get_current_role(request)) == "owner"
+
     ctx = _base_context(request)
     ctx.update({
         "current_user": get_current_user(request),
         "settings": settings,
         "userbot_configured": botmod.Userbot is not None,
+        "is_owner": is_owner,
     })
     return templates.TemplateResponse("settings.html", ctx)

@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 from pyrogram.errors import FloodWait, ChannelPrivate, ChatAdminRequired
 
 from Backend.logger import LOGGER
+from Backend.helper.announcer import announce_new_media
 from Backend.helper.encrypt import encode_string, decode_string
 from Backend.helper.metadata import metadata, extract_default_id
 from Backend.helper.pyro import clean_filename, finalize_media_name, get_readable_file_size
@@ -511,6 +512,7 @@ class ScanManager:
                     s["counters"]["skipped_dup"] += 1
                 else:
                     s["counters"]["indexed"] += 1
+                    announce_new_media(metadata_info)
             else:
                 s["counters"]["skipped_meta"] += 1
         except Exception as e:

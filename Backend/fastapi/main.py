@@ -118,6 +118,7 @@ from Backend.fastapi.routes.stream_routes import decay_client_failures
 from Backend.fastapi.routes.stream_routes import router as stream_router
 from Backend.fastapi.routes.stremio_routes import router as stremio_router
 from Backend.fastapi.routes.webdav_routes import router as webdav_router
+from Backend.fastapi.routes.admin_users_routes import router as admin_users_router
 from Backend.fastapi.routes.template_routes import (
     admin_access_page,
     admin_dashboard_page,
@@ -131,6 +132,8 @@ from Backend.fastapi.routes.template_routes import (
     login_post,
     logout,
     media_management_page,
+    media_coverage_api,
+    media_coverage_refresh_api,
     settings_page,
     set_theme,
     tools_page,
@@ -164,6 +167,13 @@ except Exception:
 @app.on_event("startup")
 async def _startup():
     asyncio.create_task(decay_client_failures())
+    #----- Ensure the settings-based owner exists as an admin (never locks out).
+    try:
+        from Backend.helper import admin_users
+        asyncio.create_task(admin_users.ensure_owner())
+    except Exception as e:
+        print(f"[STARTUP] ensure_owner skipped: {e}")
+
     from Backend.helper.version_check import version_check_loop
     asyncio.create_task(version_check_loop())
 
@@ -172,6 +182,7 @@ async def _startup():
 app.include_router(stream_router)
 app.include_router(stremio_router)
 app.include_router(webdav_router)
+app.include_router(admin_users_router)
 
 
 #----- Public routes (no authentication)
@@ -304,6 +315,15 @@ async def custom_catalogs(request: Request, _: bool = Depends(require_auth)):
 @app.get("/media/edit", response_class=HTMLResponse)
 async def edit_media(request: Request, tmdb_id: int, db_index: int, media_type: str, _: bool = Depends(require_auth)):
     return await edit_media_page(request, tmdb_id, db_index, media_type, _)
+
+@app.get("/api/media/coverage/{tmdb_id}")
+async def api_media_coverage(request: Request, tmdb_id: int, db_index: int = Query(1), refresh: bool = Query(False), _: bool = Depends(require_auth)):
+    return await media_coverage_api(request, tmdb_id, db_index, refresh, _)
+
+@app.post("/api/media/coverage/{tmdb_id}/refresh")
+async def api_media_coverage_refresh(request: Request, tmdb_id: int, db_index: int = Query(1), _: bool = Depends(require_auth)):
+    return await media_coverage_refresh_api(request, tmdb_id, db_index, _)
+
 
 @app.get("/api/media/list")
 async def list_media(

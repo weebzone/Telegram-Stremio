@@ -7,6 +7,7 @@ from urllib.parse import quote, unquote
 
 import PTN
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import JSONResponse, RedirectResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
 from pyrogram.enums import ChatMemberStatus
 from pyrogram.errors import UserNotParticipant
@@ -15,7 +16,7 @@ from Backend import __version__, db
 from Backend.config import Telegram
 from Backend.helper.analytics import client_ip_from, record_client
 from Backend.fastapi.security.tokens import verify_token
-from Backend.fastapi.themes import DEFAULT_THEME, DEFAULT_STYLE, get_theme
+from Backend.fastapi.themes import DEFAULT_THEME, get_theme
 from Backend.helper.fanart import fanart_artwork
 from Backend.helper.global_search import global_search, is_global_search_enabled
 from Backend.helper.metadata.providers.cinemeta import get_detail, get_season
@@ -27,6 +28,13 @@ from Backend.logger import LOGGER
 from Backend.pyrofork.bot import StreamBot, get_streambot_url
 
 router = APIRouter(prefix="/stremio", tags=["Stremio Addon"])
+
+#----- Dedupe cache for the "Solicitar contenido" stream prompt:
+# Android TV retries the stream GET every ~15s during playback failure, which
+# would fire the n8n webhook + Telegram msg repeatedly. Cache (token, media_id)
+# for 120s to ensure only ONE request/notification per Stremio stream-click.
+_request_stream_cache: dict[tuple, float] = {}
+_REQUEST_STREAM_TTL = 120  # seconds
 templates = Jinja2Templates(directory="Backend/fastapi/templates")
 
 #----- Addon configuration
@@ -34,9 +42,8 @@ ADDON_NAME = "Telegram"
 ADDON_VERSION = __version__
 PAGE_SIZE = 15
 
-def _donation():
-    return {"name": "⭐ Donation needed.", "title": "Click here to donate to keep the project alive.", "externalUrl": "https://donate.weebzonex.workers.dev"}
 
+#----- Wrap a direct stream URL with the configured proxy (plain prepend or MediaFlow)
 def build_proxy_url(original_url: str) -> str | None:
     settings = SettingsManager.current()
     base = settings.http_proxy_url
@@ -307,38 +314,88 @@ def format_released_date(media):
     return None
 
 
-#----- Build a Stremio stream display name/title from a filename
+#----- Resolution tag shown on the stream button (short label with sigla)
+_RES_TAG_MAP = [
+    (re.compile(r"2160p|4k|uhd", re.IGNORECASE), "4K (2160p)"),
+    (re.compile(r"1080p|fhd", re.IGNORECASE), "FHD (1080p)"),
+    (re.compile(r"720p|\bhd\b", re.IGNORECASE), "HD (720p)"),
+    (re.compile(r"480p|\bsd\b", re.IGNORECASE), "SD (480p)"),
+    (re.compile(r"360p", re.IGNORECASE), "360p"),
+]
+
+#----- Language / audio-track tags detected from the filename (order = display priority)
+_LANG_TAG_MAP = [
+    (re.compile(r"\b(lat(?:ino)?)\b", re.IGNORECASE), "Latino"),
+    (re.compile(r"\b(cast(?:ellano)?|espa[nñ]ol|esp)\b", re.IGNORECASE), "Español"),
+    (re.compile(r"\b(dual(?:[\s._-]*audio)?)\b", re.IGNORECASE), "Dual"),
+    (re.compile(r"\b(multi(?:[\s._-]*audio)?)\b", re.IGNORECASE), "Multi"),
+    (re.compile(r"\b(ingl[ée]s|english|eng)\b", re.IGNORECASE), "Inglés"),
+]
+
+#----- Known source/rip tags (kept short — no release group / site branding)
+_SOURCE_TAG_MAP = [
+    (re.compile(r"web[\s._-]?dl", re.IGNORECASE), "WEB-DL"),
+    (re.compile(r"web[\s._-]?rip", re.IGNORECASE), "WEBRip"),
+    (re.compile(r"blu[\s._-]?ray|bd[\s._-]?rip", re.IGNORECASE), "BluRay"),
+    (re.compile(r"hd[\s._-]?rip", re.IGNORECASE), "HDRip"),
+    (re.compile(r"hdtv", re.IGNORECASE), "HDTV"),
+    (re.compile(r"\bdvd\b", re.IGNORECASE), "DVD"),
+    (re.compile(r"\bcam\b", re.IGNORECASE), "CAM"),
+]
+
+
+def _resolution_tag(filename: str, quality: str) -> str:
+    for rx, label in _RES_TAG_MAP:
+        if rx.search(filename) or (quality and rx.search(str(quality))):
+            return label
+    return str(quality) if quality else "HD"
+
+
+def _detect_language_tags(filename: str) -> str:
+    found = []
+    for rx, label in _LANG_TAG_MAP:
+        if rx.search(filename) and label not in found:
+            found.append(label)
+    return " + ".join(found)
+
+
+def _detect_source_tag(filename: str) -> str:
+    for rx, label in _SOURCE_TAG_MAP:
+        if rx.search(filename):
+            return label
+    return ""
+
+
+#----- Build a Stremio stream display name/title from a filename.
+#----- Deliberately never exposes the raw filename (site/release-group branding) —
+#----- only clean tags: resolution, source, codec, language, size.
 def format_stream_details(filename: str, quality: str, size: str, is_split: bool = False) -> tuple[str, str]:
     size_emoji = "📦" if is_split else "💾"
+    filename = filename or ""
+
     try:
         parsed = PTN.parse(filename)
     except Exception:
-        return (f"Telegram {quality}", f"📁 {filename}\n{size_emoji} {size}")
+        parsed = {}
 
-    codec_parts = []
-    if parsed.get("codec"):
-        codec_parts.append(f"🎥 {parsed.get('codec')}")
-    if parsed.get("bitDepth"):
-        codec_parts.append(f"🌈 {parsed.get('bitDepth')}bit")
-    if parsed.get("audio"):
-        codec_parts.append(f"🔊 {parsed.get('audio')}")
-    if parsed.get("encoder"):
-        codec_parts.append(f"👤 {parsed.get('encoder')}")
+    res_tag = _resolution_tag(filename, quality)
+    stream_name = f"🎬 {res_tag}"
 
-    codec_info = " ".join(codec_parts) if codec_parts else ""
+    source_tag = _detect_source_tag(filename)
+    codec = parsed.get("codec") or ""
+    top_line_parts = [p for p in (source_tag, codec) if p]
+    top_line = " · ".join(top_line_parts)
 
-    resolution = parsed.get("resolution", quality)
-    quality_type = parsed.get("quality", "")
-    stream_name = f"Telegram {resolution} {quality_type}".strip()
+    lang_tag = _detect_language_tags(filename)
 
-    stream_title_parts = [
-        f"📁 {filename}",
-        f"{size_emoji} {size}",
-    ]
-    if codec_info:
-        stream_title_parts.append(codec_info)
+    title_lines = []
+    if top_line:
+        title_lines.append(f"🌐 {top_line}")
+    if lang_tag:
+        title_lines.append(f"🔊 {lang_tag}")
+    title_lines.append(f"{size_emoji} {size}")
 
-    stream_title = "\n".join(stream_title_parts)
+    stream_title = "\n".join(title_lines)
     return (stream_name, stream_title)
 
 
@@ -768,15 +825,22 @@ async def _kitsu_title_year(kitsu_id: int) -> tuple:
 
 def _streams_from_global_results(token: str, global_results: list) -> list:
     streams = []
+    # Never expose the source channel name or the original message caption to
+    # the end user — show only a neutral "Telegram" source label so private
+    # channel / chat names (e.g. "ya pi, dejame vivir") never leak into Stremio.
     for r in global_results:
         is_split = bool(r.get("is_split"))
-        _, stream_title = format_stream_details(r["title"], r["quality"], r["size"], is_split=is_split)
+        # Pass the quality as the "filename" so format_stream_details only ever
+        # derives clean tags (resolution/source/lang) and never echoes the raw
+        # caption text back to the UI.
+        _, stream_title = format_stream_details(r.get("quality") or "", r["quality"], r["size"], is_split=is_split)
         stream_name = f"🌐 GLOBAL {r['quality']}"
-        stream_title = f"{stream_title}\n📡 {r['source_chat']}"
+        stream_title = f"{stream_title}\n📡 Telegram"
         if is_split:
             kind = "zip parts" if r.get("is_zip") else "parts"
             stream_title += f" · 📦 {r.get('part_count', 0)} {kind}"
-        url = f"{SettingsManager.current().base_url}/dl/{token}/{r['token']}/{quote(r['title'])}"
+        # Use a neutral slug in the download URL instead of the raw caption.
+        url = f"{SettingsManager.current().base_url}/dl/{token}/{r['token']}/{quote(r.get('quality') or 'video')}"
         size_bytes = parse_size_to_bytes(r.get("size", ""))
         streams.append({"name": stream_name, "title": stream_title, "url": url, "size_bytes": size_bytes})
     return streams
@@ -1087,7 +1151,24 @@ async def get_streams(
             streams = filtered
 
     if not streams:
-        return {"streams": [_donation()]}
+        # No streams available — offer the user a one-click "request this title"
+        # action. The imdb_id is stable and identifies the title across seasons.
+        # NOTE: Stremio follows `url` as a video fetch, so we point it at a tiny
+        # HTML redirect page that fires the request POST and then refreshes to /requests.
+        # Use the FULL Stremio id (imdb_id:season:episode) so the webhook payload
+        # carries the exact season/episode the user selected.
+        _uid = id  # NOT imdb_id — that drops season/episode for series
+        _redirect_url = f"{SettingsManager.current().base_url}/stremio/{token}/request-stream/{str(_uid)}?from=stremio"
+        return {
+            "streams": [
+                {
+                    "name": "📢 Solicitar contenido",
+                    "title": "📩 No hay streams disponibles todavía. Hacé clic para solicitarlo — te avisamos cuando esté listo.",
+                    "url": _redirect_url,
+                    "behaviorHints": {"notWebReady": True},  # tells Stremio NOT to attempt media playback
+                }
+            ]
+        }
 
     ascending = config.get("quality_sort") == "asc"
     if is_combined:
@@ -1108,8 +1189,81 @@ async def get_streams(
         if name_count[s["name"]] > 1:
             seen[s["name"]] = seen.get(s["name"], 0) + 1
             s["name"] = f"{s['name']} ({seen[s['name']]})"
-    streams.insert(0, _donation())
     return {"streams": streams}
+
+#----- Stream a "solicitar contenido" click from the Stremio player back into
+# the request pipeline (same webhook that the public /requests page uses).
+# Returns a tiny HTML page with a meta-refresh so Stremio (which follows the
+# stream `url`) does NOT attempt media playback — it loads this page, the JS
+# fires the request via queue_stream_request, then redirects to /requests.
+@router.get("/{token}/request-stream/{media_id}")
+async def request_stream(
+    token: str,
+    media_id: str,
+    request: Request,
+    from_query: str = None,
+):
+    token_data = await db.get_api_token(token)
+    if not token_data:
+        return HTMLResponse(
+            "<html><body><p>❌ Token inválido o expirado.</p>"
+            "<script>window.location='/requests'</script></body></html>",
+            status_code=404
+        )
+    base = SettingsManager.current().base_url
+    referer = request.headers.get("referer") or base
+    #----- Endpoint-level dedupe: Android TV retries the stream GET every ~15s
+    # during playback failure. 120s TTL → only ONE webhook+telegram per click.
+    cache_key = (token, media_id)
+    now = time.monotonic()
+    if cache_key in _request_stream_cache and (now - _request_stream_cache[cache_key]) < _REQUEST_STREAM_TTL:
+        LOGGER.info(f"request_stream deduped (cached {now - _request_stream_cache[cache_key]:.1f}s ago): {media_id}")
+        return HTMLResponse(
+            "<html><head><meta http-equiv=\"refresh\" content=\"0;url=/requests?submitted=1\"></head>"
+            "<body><p>📩 Solicitando contenido…</p></body></html>",
+        )
+    _request_stream_cache[cache_key] = now  # record this fire
+
+    try:
+        from Backend.helper.request_notifier import queue_stream_request
+        await queue_stream_request(media_id, token_data, referer)
+        # Return HTML page: server-side POST already fired above. Stremio's
+        # WebView follows the stream `url` and tries to render it as media;
+        # the JS fetch fires a companion call to _fire-request to ensure the
+        # webhook POST completes server-side. meta-refresh then redirects to /requests.
+        html = (
+            '<html><head>\n'
+            '<meta http-equiv="refresh" content="0;url=/requests?submitted=1">\n'
+            '<script>\n'
+            f'fetch("/stremio/{token}/_fire-request/{media_id}")\\n'
+            '  .then(r => r.json())\n'
+            '  .then(d => console.log("request", d))\n'
+            '  .catch(e => console.error(e));\n'
+            '</script>\n'
+            '</head><body><p>📩 Solicitando contenido…</p></body></html>'
+        )
+        return HTMLResponse(html)
+    except Exception as e:
+        LOGGER.error(f"stream request failed for {media_id}: {e}")
+        return HTMLResponse(
+            "<html><body><p>❌ No se pudo solicitar el contenido.</p>"
+            "<script>window.location='/requests'</script></body></html>",
+            status_code=500,
+        )
+
+# Companion endpoint: the JS in the HTML above calls this to trigger the POST,
+# keeping the request pipeline call server-side (no CORS issues from Stremio's view).
+@router.get("/{token}/_fire-request/{media_id}")
+async def fire_request(token: str, media_id: str, request: Request):
+    token_data = await db.get_api_token(token)
+    if not token_data:
+        return JSONResponse({"error": "invalid token"}, status_code=404)
+    base = SettingsManager.current().base_url
+    referer = request.headers.get("referer") or base
+    from Backend.helper.request_notifier import queue_stream_request
+    result = await queue_stream_request(media_id, token_data, referer)
+    return JSONResponse({"result": result})
+
 
 #----- Configure/install landing page rendered as HTML for a token
 @router.get("/{token}/configure")
@@ -1180,7 +1334,7 @@ async def configure_addon(token: str, request: Request):
 
     return templates.TemplateResponse("stremio_configure.html", {
         "request": request,
-        "theme": get_theme(request.session.get("theme", DEFAULT_THEME), request.session.get("style", DEFAULT_STYLE)),
+        "theme": get_theme(request.session.get("theme", DEFAULT_THEME)),
         "manifest_url": manifest_url,
         "web_install_url": web_install_url,
         "user_name": user_name,
