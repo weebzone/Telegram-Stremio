@@ -2,6 +2,7 @@
 public Request page. Mirrors the pattern used in announcer.py, but fires on
 *new* requests (submit_request reason == "created") instead of new uploads.
 """
+import time as _time
 from asyncio import create_task
 
 from pyrogram.enums import ParseMode
@@ -11,6 +12,12 @@ from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from Backend.helper.settings_manager import SettingsManager
 from Backend.logger import LOGGER
 from Backend.pyrofork.bot import StreamBot
+
+
+#----- Deduplicate Telegram notifications: Stremio retries the stream GET, so
+# the same request can enter here 7x in 5s. We only want ONE Telegram message
+# per (imdb, season, episode) per ~5 second window. SAME TTL as external_api_notifier.
+from Backend.helper.external_api_notifier import _notify_key, _is_recently_sent, _RECENT_NOTIFY, _NOTIFY_TTL  # reuse
 
 
 def _resolve_chat(value: str):
@@ -114,6 +121,15 @@ async def _notify(doc: dict) -> None:
 
 #----- Fire-and-forget notification for a freshly created request (call once per new title)
 def notify_new_request(doc: dict) -> None:
+    # Dedupe: Stremio retries the stream GET → 7x notify. Only send ONCE per
+    # (imdb, season, episode) per _NOTIFY_TTL (~5s). Reuses the same cache as
+    # external_api_notifier so webhook + Telegram dedupe stay in sync.
+    key = _notify_key(doc)
+    if _is_recently_sent(key):
+        LOGGER.info(
+            f"Request notify SKIPPED (duplicate): '{doc.get('title')}' key={key}"
+        )
+        return
     try:
         create_task(_notify(dict(doc)))
     except RuntimeError:
