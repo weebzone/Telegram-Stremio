@@ -1209,20 +1209,19 @@ async def request_stream(
     try:
         from Backend.helper.request_notifier import queue_stream_request
         result = await queue_stream_request(media_id, token_data, referer)
-        # Return HTML page: server-side POST already fired above. Stremio's
-        # WebView does NOT execute window.fetch reliably, so we do NOT depend
-        # on a client-side fetch to _fire-request — the webhook call happens
-        # server-side in queue_stream_request. This page only meta-refreshes.
-        html = (
-            '<html><head><meta http-equiv="refresh" content="0;url=/requests?submitted=1">'
-            "</head><body><p>📩 Solicitando contenido…</p></body></html>"
+        # Stremio's WebView follows the stream `url` and tries to render it as media.
+        # A 201 + JSON body tells Stremio "this is not a media resource" → avoids the
+        # internal HTTP 500 from ffmpeg/mp4 parse errors on HTMLResponse.
+        return JSONResponse(
+            content={"status": "requested", "submitted": True, "result": result},
+            status_code=201,
         )
-        return HTMLResponse(html)
     except Exception as e:
         LOGGER.error(f"stream request failed for {media_id}: {e}")
-        return HTMLResponse("<html><body><p>❌ No se pudo solicitar el contenido.</p>"
-                             "<script>window.location='/requests'</script></body></html>",
-                             status_code=500)
+        return JSONResponse(
+            content={"status": "error", "error": str(e)},
+            status_code=500,
+        )
 
 # Companion endpoint: the JS in the HTML above calls this to trigger the POST,
 # keeping the request pipeline call server-side (no CORS issues from Stremio's view).
