@@ -373,7 +373,7 @@ async def search_titles_enriched(query: str) -> list:
 #----- Public submit: de-duplicated per (title + requested seasons), honouring
 #----- banned/denied/uploaded state. For TV, season_numbers drives availability.
 async def submit_request(*, media_type, tmdb_id, imdb_id, title, year, poster, client_ip,
-                         season_numbers=None) -> dict:
+                         season_numbers=None, episode_num=None) -> dict:
     media_type = _norm_type(media_type)
     try:
         tmdb_id = int(tmdb_id) if tmdb_id else None
@@ -472,6 +472,7 @@ async def submit_request(*, media_type, tmdb_id, imdb_id, title, year, poster, c
         "year": year,
         "poster": poster or "",
         "season_numbers": seasons,
+        "episode_num": episode_num if (seasons and episode_num) else None,
         "status": "pending",
         "requesters": [iphash],
         "created_at": now,
