@@ -111,14 +111,34 @@ async def _tv_seasons(tmdb_id, imdb_id):
     return await _cinemeta_tv_seasons(imdb_id)
 
 
-#----- Seasons of this tmdb_id that already have >=1 uploaded episode in the DB
-async def _db_tv_available_seasons(tmdb_id):
-    if not tmdb_id:
+#----- Seasons of this tmdb_id (or imdb_id) that already have >=1 uploaded episode in the DB
+async def _db_tv_available_seasons(tmdb_id, imdb_id=None):
+    if not tmdb_id and not imdb_id:
         return set()
-    res = await db.find_media_doc("tv", int(tmdb_id))
-    if not res:
+    doc = None
+    try:
+        if tmdb_id:
+            try:
+                res = await db.find_media_doc("tv", int(tmdb_id))
+                if res:
+                    doc, _ = res
+            except (TypeError, ValueError):
+                pass
+        if not doc and imdb_id:
+            # Fallback: search by IMDb id (Cinemeta-only results have no tmdb_id)
+            for i in range(1, db.current_db_index + 1):
+                coll = db.dbs.get(f"storage_{i}", {}).get("tv")
+                if not coll:
+                    continue
+                doc = await coll.find_one({"imdb_id": imdb_id})
+                if doc:
+                    doc["db_index"] = i
+                    break
+    except Exception as e:
+        LOGGER.warning(f"[REQUEST] db tv available seasons failed (tmdb={tmdb_id}): {e}")
         return set()
-    doc, _ = res
+    if not doc:
+        return set()
     avail = set()
     for s in doc.get("seasons", []):
         num = s.get("season_number")
@@ -133,7 +153,7 @@ async def tv_seasons_status(tmdb_id, imdb_id=None):
     all_s = await _tv_seasons(tmdb_id, imdb_id)
     if not all_s:
         return {"all": [], "available": [], "missing": []}
-    avail = await _db_tv_available_seasons(tmdb_id)
+    avail = await _db_tv_available_seasons(tmdb_id, imdb_id)
     available = [s for s in all_s if s in avail]
     missing = [s for s in all_s if s not in avail]
     return {"all": all_s, "available": available, "missing": missing}
@@ -161,13 +181,13 @@ def _norm_seasons(value) -> list:
 
 
 #----- Is a requested set of seasons already fully available in the library?
-async def tv_seasons_available(tmdb_id, season_numbers) -> bool:
+async def tv_seasons_available(tmdb_id, season_numbers, imdb_id=None) -> bool:
     if not season_numbers:
         return False
     wanted = set(_norm_seasons(season_numbers))
     if not wanted:
         return False
-    avail = await _db_tv_available_seasons(tmdb_id)
+    avail = await _db_tv_available_seasons(tmdb_id, imdb_id)
     return wanted.issubset(avail)
 
 
@@ -417,7 +437,7 @@ async def submit_request(*, media_type, tmdb_id, imdb_id, title, year, poster, c
         #----- reason: "added"  -> new season(s) merged into the request
         #-----         "voted"  -> nothing new, just an extra vote
         if media_type == "tv" and seasons:
-            if await tv_seasons_available(tmdb_id, seasons):
+            if await tv_seasons_available(tmdb_id, seasons, imdb_id):
                 reason = "already_available"
             else:
                 # reopen/keep pending so the missing seasons stay requested
