@@ -1208,18 +1208,28 @@ async def request_stream(
     referer = request.headers.get("referer") or base
     try:
         from Backend.helper.request_notifier import queue_stream_request
-        result = await queue_stream_request(media_id, token_data, referer)
-        # Stremio's WebView follows the stream `url` and tries to render it as media.
-        # A 201 + JSON body tells Stremio "this is not a media resource" → avoids the
-        # internal HTTP 500 from ffmpeg/mp4 parse errors on HTMLResponse.
-        return JSONResponse(
-            content={"status": "requested", "submitted": True, "result": result},
-            status_code=201,
+        await queue_stream_request(media_id, token_data, referer)
+        # Return HTML page: server-side POST already fired above. Stremio's
+        # WebView follows the stream `url` and tries to render it as media;
+        # the JS fetch fires a companion call to _fire-request to ensure the
+        # webhook POST completes server-side. meta-refresh then redirects to /requests.
+        html = (
+            '<html><head>\n'
+            '<meta http-equiv="refresh" content="0;url=/requests?submitted=1">\n'
+            '<script>\n'
+            f'fetch("/stremio/{token}/_fire-request/{quote(media_id)}")\n'
+            '  .then(r => r.json())\n'
+            '  .then(d => console.log("request", d))\n'
+            '  .catch(e => console.error(e));\n'
+            '</script>\n'
+            '</head><body><p>📩 Solicitando contenido…</p></body></html>'
         )
+        return HTMLResponse(html)
     except Exception as e:
         LOGGER.error(f"stream request failed for {media_id}: {e}")
-        return JSONResponse(
-            content={"status": "error", "error": str(e)},
+        return HTMLResponse(
+            "<html><body><p>❌ No se pudo solicitar el contenido.</p>"
+            "<script>window.location='/requests'</script></body></html>",
             status_code=500,
         )
 
