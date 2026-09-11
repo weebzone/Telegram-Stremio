@@ -7,7 +7,7 @@ from urllib.parse import quote, unquote
 
 import PTN
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
 from pyrogram.enums import ChatMemberStatus
 from pyrogram.errors import UserNotParticipant
@@ -28,6 +28,13 @@ from Backend.logger import LOGGER
 from Backend.pyrofork.bot import StreamBot, get_streambot_url
 
 router = APIRouter(prefix="/stremio", tags=["Stremio Addon"])
+
+#----- Dedupe cache for the "Solicitar contenido" stream prompt:
+# Android TV retries the stream GET every ~15s during playback failure, which
+# would fire the n8n webhook + Telegram msg repeatedly. Cache (token, media_id)
+# for 120s to ensure only ONE request/notification per Stremio stream-click.
+_request_stream_cache: dict[tuple, float] = {}
+_REQUEST_STREAM_TTL = 120  # seconds
 templates = Jinja2Templates(directory="Backend/fastapi/templates")
 
 #----- Addon configuration
@@ -1189,7 +1196,6 @@ async def get_streams(
 # Returns a tiny HTML page with a meta-refresh so Stremio (which follows the
 # stream `url`) does NOT attempt media playback — it loads this page, the JS
 # fires the request via queue_stream_request, then redirects to /requests.
-from fastapi.responses import HTMLResponse
 @router.get("/{token}/request-stream/{media_id}")
 async def request_stream(
     token: str,
@@ -1206,6 +1212,18 @@ async def request_stream(
         )
     base = SettingsManager.current().base_url
     referer = request.headers.get("referer") or base
+    #----- Endpoint-level dedupe: Android TV retries the stream GET every ~15s
+    # during playback failure. 120s TTL → only ONE webhook+telegram per click.
+    cache_key = (token, media_id)
+    now = time.monotonic()
+    if cache_key in _request_stream_cache and (now - _request_stream_cache[cache_key]) < _REQUEST_STREAM_TTL:
+        LOGGER.info(f"request_stream deduped (cached {now - _request_stream_cache[cache_key]:.1f}s ago): {media_id}")
+        return HTMLResponse(
+            "<html><head><meta http-equiv=\"refresh\" content=\"0;url=/requests?submitted=1\"></head>"
+            "<body><p>📩 Solicitando contenido…</p></body></html>",
+        )
+    _request_stream_cache[cache_key] = now  # record this fire
+
     try:
         from Backend.helper.request_notifier import queue_stream_request
         await queue_stream_request(media_id, token_data, referer)
