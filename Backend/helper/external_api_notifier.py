@@ -21,7 +21,9 @@ _TIMEOUT = 10
 
 
 def _build_payload(doc: dict) -> dict:
-    is_tv = doc.get("media_type") == "tv"
+    # media_type in DB may be "tv" or "series" (raw Cinemeta); normalize to "tv"
+    raw_type = doc.get("media_type") or ""
+    is_tv = raw_type in ("tv", "series")
     seasons = [s for s in (doc.get("season_numbers") or []) if s]
     return {
         "imdb": doc.get("imdb_id") or "",
