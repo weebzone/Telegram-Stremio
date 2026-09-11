@@ -7,6 +7,7 @@ from urllib.parse import quote, unquote
 
 import PTN
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pyrogram.enums import ChatMemberStatus
 from pyrogram.errors import UserNotParticipant
@@ -15,7 +16,7 @@ from Backend import __version__, db
 from Backend.config import Telegram
 from Backend.helper.analytics import client_ip_from, record_client
 from Backend.fastapi.security.tokens import verify_token
-from Backend.fastapi.themes import DEFAULT_THEME, DEFAULT_STYLE, get_theme
+from Backend.fastapi.themes import DEFAULT_THEME, get_theme
 from Backend.helper.fanart import fanart_artwork
 from Backend.helper.global_search import global_search, is_global_search_enabled
 from Backend.helper.metadata.providers.cinemeta import get_detail, get_season
@@ -34,6 +35,8 @@ ADDON_NAME = "Telegram"
 ADDON_VERSION = __version__
 PAGE_SIZE = 15
 
+
+#----- Wrap a direct stream URL with the configured proxy (plain prepend or MediaFlow)
 def build_proxy_url(original_url: str) -> str | None:
     settings = SettingsManager.current()
     base = settings.http_proxy_url
@@ -1141,7 +1144,24 @@ async def get_streams(
             streams = filtered
 
     if not streams:
-        return {"streams": []}
+        # No streams available — offer the user a one-click "request this title"
+        # action. The imdb_id is stable and identifies the title across seasons.
+        # NOTE: Stremio follows `url` as a video fetch, so we point it at a tiny
+        # HTML redirect page that fires the request POST and then refreshes to /requests.
+        # Use the FULL Stremio id (imdb_id:season:episode) so the webhook payload
+        # carries the exact season/episode the user selected.
+        _uid = id  # NOT imdb_id — that drops season/episode for series
+        _redirect_url = f"{SettingsManager.current().base_url}/stremio/{token}/request-stream/{quote(str(_uid))}?from=stremio"
+        return {
+            "streams": [
+                {
+                    "name": "📢 Solicitar contenido",
+                    "title": "📩 No hay streams disponibles todavía. Hacé clic para solicitarlo — te avisamos cuando esté listo.",
+                    "url": _redirect_url,
+                    "behaviorHints": {"notWebReady": True},  # tells Stremio NOT to attempt media playback
+                }
+            ]
+        }
 
     ascending = config.get("quality_sort") == "asc"
     if is_combined:
@@ -1163,6 +1183,61 @@ async def get_streams(
             seen[s["name"]] = seen.get(s["name"], 0) + 1
             s["name"] = f"{s['name']} ({seen[s['name']]})"
     return {"streams": streams}
+
+#----- Stream a "solicitar contenido" click from the Stremio player back into
+# the request pipeline (same webhook that the public /requests page uses).
+# Returns a tiny HTML page with a meta-refresh so Stremio (which follows the
+# stream `url`) does NOT attempt media playback — it loads this page, the JS
+# fires the request via queue_stream_request, then redirects to /requests.
+from fastapi.responses import HTMLResponse
+@router.get("/{token}/request-stream/{media_id}")
+async def request_stream(
+    token: str,
+    media_id: str,
+    request: Request,
+    from_query: str = None,
+):
+    token_data = await db.get_api_token(token)
+    if not token_data:
+        return HTMLResponse(
+            "<html><body><p>❌ Token inválido o expirado.</p>"
+            "<script>window.location='/requests'</script></body></html>",
+            status_code=404
+        )
+    base = SettingsManager.current().base_url
+    referer = request.headers.get("referer") or base
+    try:
+        from Backend.helper.request_notifier import queue_stream_request
+        result = await queue_stream_request(media_id, token_data, referer)
+        # Return HTML page: JS calls the webhook, then meta-refresh to /requests
+        html = f"""<html><head><meta http-equiv="refresh" content="0;url=/requests?submitted=1">
+        <script>
+        fetch('/stremio/{token}/_fire-request/{quote(media_id)}')
+          .then(r => r.json())
+          .then(d => console.log('request', d))
+          .catch(e => console.error(e));
+        </script>
+        </head><body><p>📩 Solicitando contenido…</p></body></html>"""
+        return HTMLResponse(html)
+    except Exception as e:
+        LOGGER.error(f"stream request failed for {media_id}: {e}")
+        return HTMLResponse("<html><body><p>❌ No se pudo solicitar el contenido.</p>"
+                             "<script>window.location='/requests'</script></body></html>",
+                             status_code=500)
+
+# Companion endpoint: the JS in the HTML above calls this to trigger the POST,
+# keeping the request pipeline call server-side (no CORS issues from Stremio's view).
+@router.get("/{token}/_fire-request/{media_id}")
+async def fire_request(token: str, media_id: str, request: Request):
+    token_data = await db.get_api_token(token)
+    if not token_data:
+        return JSONResponse({"error": "invalid token"}, status_code=404)
+    base = SettingsManager.current().base_url
+    referer = request.headers.get("referer") or base
+    from Backend.helper.request_notifier import queue_stream_request
+    result = await queue_stream_request(media_id, token_data, referer)
+    return JSONResponse({"result": result})
+
 
 #----- Configure/install landing page rendered as HTML for a token
 @router.get("/{token}/configure")
@@ -1233,7 +1308,7 @@ async def configure_addon(token: str, request: Request):
 
     return templates.TemplateResponse("stremio_configure.html", {
         "request": request,
-        "theme": get_theme(request.session.get("theme", DEFAULT_THEME), request.session.get("style", DEFAULT_STYLE)),
+        "theme": get_theme(request.session.get("theme", DEFAULT_THEME)),
         "manifest_url": manifest_url,
         "web_install_url": web_install_url,
         "user_name": user_name,

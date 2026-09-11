@@ -23,17 +23,15 @@ _TIMEOUT = 10
 def _build_payload(doc: dict) -> dict:
     is_tv = doc.get("media_type") == "tv"
     seasons = [s for s in (doc.get("season_numbers") or []) if s]
-    payload = {
+    return {
         "imdb": doc.get("imdb_id") or "",
         "nombre": (doc.get("title") or "").strip(),
         "tipo": "series" if is_tv else "movies",
         # Película -> 0; Serie -> mayor temporada pedida (0 si no se eligió ninguna)
         "temporada": max(seasons) if (is_tv and seasons) else 0,
+        # Episodio específico (solo desde Stremio stream prompt; 0 = toda la temporada o movie)
+        "episodio": (doc.get("episode_num") or 0),
     }
-    if is_tv:
-        # Full list of requested seasons (so downstream knows exactly what to fetch)
-        payload["temporadas"] = sorted(seasons)
-    return payload
 
 
 async def _notify(doc: dict) -> None:

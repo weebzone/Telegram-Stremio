@@ -118,3 +118,51 @@ def notify_new_request(doc: dict) -> None:
         create_task(_notify(dict(doc)))
     except RuntimeError:
         LOGGER.warning("notify_new_request called outside an event loop; skipped")
+
+
+#----- Reusable hook fired by the "Solicitar contenido" stream prompt clicked
+# from the Stremio player. Resolves the imdb_id via Cinemeta (same resolver as
+# the public /requests page) and delegates to submit_request, so the n8n /requests
+# webhook receives the EXACT same payload. Returns the same dict submit_request
+# returns: {"ok": True, "reason": ...}.
+async def queue_stream_request(media_id: str, token_data: dict | None, referer: str) -> dict:
+    from Backend.helper import requests_manager as _rm
+    from Backend.fastapi.routes.stremio_routes import _parse_stremio_id
+    # Parse Stremio media_id:  película = "tt0468569", serie = "tt0944947:1:5" (imdb:season:episode)
+    # Reuses the same parser get_streams() uses so season/episode extraction is identical.
+    try:
+        parsed = _parse_stremio_id(media_id)
+    except Exception:
+        parsed = {"imdb_id": media_id, "season_num": None, "episode_num": None}
+    imdb_id = parsed["imdb_id"] or media_id
+    season_num = parsed.get("season_num")
+    episode_num = parsed.get("episode_num")
+    # Resolve title/type/tmdb_id/poster/year via Cinemeta (movie + tv attempts)
+    hits = await _rm._cinemeta_id_search(imdb_id) if imdb_id else []
+    if not hits:
+        # Fallback: try a name search on the imdb id itself
+        hits = await _rm._cinemeta_name_search(imdb_id)
+    hit = hits[0] if hits else None
+    # Force media_type=tv when a season/episode was parsed — Cinemeta may return
+    # a false-positive "movie" hit first (e.g. tt0944947 Rick & Morty). The presence
+    # of season_num/episode_num definitively means it's a TV episode.
+    if season_num:
+        hit = next((h for h in hits if h.get("media_type") == "tv"), hit or {})
+        forced_type = "tv"
+    else:
+        forced_type = None
+    # Only send season_numbers when a specific season was requested (Serie/Temporada/Episodio)
+    seasons = [season_num] if season_num else []
+    result = await _rm.submit_request(
+        media_type=(forced_type or (hit["media_type"] if hit else "movie")),
+        tmdb_id=(hit["tmdb_id"] if hit else None),
+        imdb_id=imdb_id,
+        title=(hit["title"] if hit else imdb_id),
+        year=(hit["year"] if hit else None),
+        poster=(hit["poster"] if hit else ""),
+        client_ip=None,           # unknown from Stremio player; hash stays empty
+        season_numbers=seasons,
+        episode_num=episode_num,  # → webhook recibirá el número de episodio
+    )
+    return result or {"ok": False, "reason": "unresolved"}
+
