@@ -474,7 +474,7 @@ async def submit_request(*, media_type, tmdb_id, imdb_id, title, year, poster, c
     already = False
     if media_type == "tv":
         if seasons:
-            already = await tv_seasons_available(tmdb_id, seasons)
+            already = await tv_seasons_available(tmdb_id, seasons, imdb_id)
         else:
             # no seasons specified -> only "available" if the whole show is in the lib
             st = await tv_seasons_status(tmdb_id, imdb_id)
@@ -592,7 +592,7 @@ async def auto_fulfill(tmdb_id=None, imdb_id=None, media_type: str = "movie",
             continue
         if season_number is not None and int(season_number) in _norm_seasons(wanted):
             # the just-uploaded season was requested; check if all wanted now present
-            if await tv_seasons_available(tmdb_id, wanted):
+            if await tv_seasons_available(tmdb_id, wanted, doc.get("imdb_id")):
                 await _coll().update_one(
                     {"_id": doc["_id"]},
                     {"$set": {"status": "uploaded", "updated_at": datetime.utcnow()}},
