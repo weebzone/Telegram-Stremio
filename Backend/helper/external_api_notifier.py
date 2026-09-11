@@ -19,6 +19,32 @@ from Backend.logger import LOGGER
 
 _TIMEOUT = 10
 
+#----- Deduplicate webhook calls: Stremio retries the stream GET (fetch/retry),
+# so the same (imdb, season, episode) can hit this code path ~7x in a few seconds.
+# This cache ensures we only POST to the webhook ONCE per unique request per window.
+import time as _time
+_RECENT_NOTIFY = {}   # {(imdb, season_str, ep): timestamp}
+_NOTIFY_TTL = 5  # seconds — Stremio's full retry backoff is ~4s, so 5s covers all
+
+
+def _notify_key(doc: dict) -> tuple:
+    seasons = [s for s in (doc.get("season_numbers") or []) if s]
+    season_str = ",".join(str(s) for s in sorted(seasons)) or "none"
+    return (doc.get("imdb_id") or "", season_str, doc.get("episode_num") or 0)
+
+
+def _is_recently_sent(key: tuple) -> bool:
+    now = _time.monotonic()
+    last = _RECENT_NOTIFY.get(key)
+    if last is not None and (now - last) < _NOTIFY_TTL:
+        return True
+    _RECENT_NOTIFY[key] = now
+    # prune old entries (keeps the dict tiny)
+    for k, ts in list(_RECENT_NOTIFY.items()):
+        if (now - ts) >= _NOTIFY_TTL * 3:
+            del _RECENT_NOTIFY[k]
+    return False
+
 
 def _build_payload(doc: dict) -> dict:
     # media_type in DB may be "tv" or "series" (raw Cinemeta); normalize to "tv"
@@ -41,6 +67,11 @@ async def _notify(doc: dict) -> None:
     url = settings.external_api_url
     token = settings.external_api_token
     if not url or not token:
+        return
+    #----- Dedupe: skip if we already fired this exact (imdb, season, episode) recently
+    key = _notify_key(doc)
+    if _is_recently_sent(key):
+        LOGGER.info(f"External API notify SKIPPED (duplicate): '{doc.get('title')}' imdb={key[0]} s={key[1]} e={key[2]}")
         return
 
     payload = _build_payload(doc)
