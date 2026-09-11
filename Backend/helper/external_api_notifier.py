@@ -24,7 +24,8 @@ _TIMEOUT = 10
 # This cache ensures we only POST to the webhook ONCE per unique request per window.
 import time as _time
 _RECENT_NOTIFY = {}   # {(imdb, season_str, ep): timestamp}
-_NOTIFY_TTL = 5  # seconds — Stremio's full retry backoff is ~4s, so 5s covers all
+_NOTIFY_TTL = 15  # seconds — Stremio retries stream GET up to ~10s; 15s TTL ensures
+                  # BOTH the retry + meta-refresh stay deduplicated (was 5s → 2x fire)
 
 
 def _notify_key(doc: dict) -> tuple:
