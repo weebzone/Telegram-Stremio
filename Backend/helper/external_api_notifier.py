@@ -28,10 +28,10 @@ _NOTIFY_TTL = 15  # seconds — Stremio retries stream GET up to ~10s; 15s TTL e
                   # BOTH the retry + meta-refresh stay deduplicated (was 5s → 2x fire)
 
 
-def _notify_key(doc: dict) -> tuple:
+def _notify_key(doc: dict, namespace: str = "webhook") -> tuple:
     seasons = [s for s in (doc.get("season_numbers") or []) if s]
     season_str = ",".join(str(s) for s in sorted(seasons)) or "none"
-    return (doc.get("imdb_id") or "", season_str, doc.get("episode_num") or 0)
+    return (namespace, doc.get("imdb_id") or "", season_str, doc.get("episode_num") or 0)
 
 
 def _is_recently_sent(key: tuple) -> bool:

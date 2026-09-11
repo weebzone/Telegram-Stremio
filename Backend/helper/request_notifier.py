@@ -124,7 +124,7 @@ def notify_new_request(doc: dict) -> None:
     # Dedupe: Stremio retries the stream GET → 7x notify. Only send ONCE per
     # (imdb, season, episode) per _NOTIFY_TTL (~5s). Reuses the same cache as
     # external_api_notifier so webhook + Telegram dedupe stay in sync.
-    key = _notify_key(doc)
+    key = _notify_key(doc, namespace="telegram")  # namespace isolates from webhook dedupe
     if _is_recently_sent(key):
         LOGGER.info(
             f"Request notify SKIPPED (duplicate): '{doc.get('title')}' key={key}"
