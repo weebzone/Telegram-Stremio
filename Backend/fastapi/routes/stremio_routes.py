@@ -1151,7 +1151,7 @@ async def get_streams(
         # Use the FULL Stremio id (imdb_id:season:episode) so the webhook payload
         # carries the exact season/episode the user selected.
         _uid = id  # NOT imdb_id — that drops season/episode for series
-        _redirect_url = f"{SettingsManager.current().base_url}/stremio/{token}/request-stream/{quote(str(_uid))}?from=stremio"
+        _redirect_url = f"{SettingsManager.current().base_url}/stremio/{token}/request-stream/{str(_uid)}?from=stremio"
         return {
             "streams": [
                 {
@@ -1217,7 +1217,7 @@ async def request_stream(
             '<html><head>\n'
             '<meta http-equiv="refresh" content="0;url=/requests?submitted=1">\n'
             '<script>\n'
-            f'fetch("/stremio/{token}/_fire-request/{quote(media_id)}")\n'
+            f'fetch("/stremio/{token}/_fire-request/{media_id}")\\n'
             '  .then(r => r.json())\n'
             '  .then(d => console.log("request", d))\n'
             '  .catch(e => console.error(e));\n'
