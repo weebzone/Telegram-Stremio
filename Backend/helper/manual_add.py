@@ -2,7 +2,7 @@ import re
 from typing import Optional, Tuple
 
 from Backend.helper.metadata import caption_with_id, parse_media_name
-from Backend.helper.pyro import clean_filename, finalize_media_name, get_readable_file_size, is_media
+from Backend.helper.pyro import clean_filename, finalize_media_name, get_readable_file_size, is_media, message_has_thumb
 from Backend.helper.split_files import parse_split_info, strip_part_suffix
 from Backend.logger import LOGGER
 from Backend.helper.task_manager import edit_message
@@ -84,7 +84,7 @@ async def resolve_telegram_message(client, url: str = None, chat_id=None, msg_id
         "episode": parsed.get("episode"),
         "width": getattr(media, "width", 0) or 0,
         "height": height,
-        "has_thumb": bool(getattr(media, "thumbs", None)),
+        "has_thumb": message_has_thumb(message),
         "upload_year": upload_year,
         "split_key": split_info[0] if split_info else None,
         "part_number": split_info[1] if split_info else None,

@@ -12,6 +12,7 @@ from Backend.pyrofork.bot import StreamBot
 import re
 from pyrogram.types import BotCommand
 from pyrogram import enums
+import httpx
 
 
 _EMOJI_PATTERN = re.compile(
@@ -58,6 +59,111 @@ def is_media(message):
         ),
         None,
     )
+
+
+def get_video_cover(message):
+    media = getattr(message, "video", None) or getattr(message, "document", None)
+    if not media:
+        return None
+    return getattr(media, "cover", None) or getattr(media, "video_cover", None) or getattr(message, "video_cover", None)
+
+
+def message_has_thumb(message) -> bool:
+    media = getattr(message, "video", None) or getattr(message, "document", None)
+    if not media:
+        return False
+    if get_video_cover(message):
+        return True
+    return bool(getattr(media, "thumbs", None))
+
+
+def get_thumb_download_target(message):
+    cover = get_video_cover(message)
+    if cover is not None:
+        return cover
+    media = getattr(message, "video", None) or getattr(message, "document", None)
+    thumbs = getattr(media, "thumbs", None) if media else None
+    if thumbs:
+        return thumbs[-1]
+    return None
+
+
+_GRAPH_UPLOAD_URLS = (
+    "https://graph.org/upload",
+    "https://telegra.ph/upload",
+)
+
+
+async def upload_bytes_to_graph(data: bytes, filename: str = "thumb.jpg") -> Optional[str]:
+    if not data:
+        return None
+    timeout = httpx.Timeout(20.0, connect=8.0)
+    async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as http:
+        for base in _GRAPH_UPLOAD_URLS:
+            try:
+                resp = await http.post(base, files={"file": (filename, data, "image/jpeg")})
+                if resp.status_code != 200:
+                    continue
+                body = resp.json()
+                src = None
+                if isinstance(body, list) and body:
+                    src = body[0].get("src")
+                elif isinstance(body, dict):
+                    src = body.get("src") or (body.get("result") or {}).get("src")
+                if not src:
+                    continue
+                if src.startswith("http"):
+                    return src
+                host = "https://graph.org" if "graph.org" in base else "https://telegra.ph"
+                return f"{host}{src}" if src.startswith("/") else f"{host}/{src}"
+            except Exception:
+                continue
+    return None
+
+
+async def upload_message_thumb_to_graph(client, message) -> Optional[str]:
+    target = get_thumb_download_target(message)
+    if not target or not client:
+        return None
+    try:
+        file_id = getattr(target, "file_id", None) or target
+        buf = await client.download_media(file_id, in_memory=True)
+        data = buf.getvalue() if hasattr(buf, "getvalue") else bytes(buf)
+        return await upload_bytes_to_graph(data)
+    except Exception as e:
+        LOGGER.warning(f"[THUMB] graph upload failed: {e}")
+        return None
+
+
+async def resolve_video_thumb_url(client, message, encoded: str) -> str:
+    if not message_has_thumb(message):
+        return ""
+    fallback = f"/thumb/{encoded}"
+    if client:
+        try:
+            url = await upload_message_thumb_to_graph(client, message)
+            if url:
+                return url
+        except Exception as e:
+            LOGGER.warning(f"[THUMB] hybrid resolve failed: {e}")
+    return fallback
+
+
+async def apply_video_thumb_to_metadata(metadata_info: dict, message, encoded: str, client=None) -> None:
+    needs = False
+    if metadata_info.get("media_type") == "tv":
+        needs = not metadata_info.get("episode_backdrop")
+    else:
+        needs = not metadata_info.get("backdrop")
+    if not needs:
+        return
+    thumb_url = await resolve_video_thumb_url(client, message, encoded)
+    if not thumb_url:
+        return
+    if metadata_info.get("media_type") == "tv":
+        metadata_info["episode_backdrop"] = thumb_url
+    else:
+        metadata_info["backdrop"] = thumb_url
 
 
 async def get_file_ids(client: Client, chat_id: int, message_id: int) -> Optional[FileId]:

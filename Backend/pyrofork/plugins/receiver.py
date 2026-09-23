@@ -14,7 +14,7 @@ from Backend.helper.encrypt import encode_string
 from Backend.helper.manual_add import resolve_telegram_message, stamp_caption_with_id
 from Backend.helper.requests_manager import auto_fulfill
 from Backend.helper.metadata import extract_default_id, metadata
-from Backend.helper.pyro import clean_filename, finalize_media_name, get_readable_file_size
+from Backend.helper.pyro import apply_video_thumb_to_metadata, clean_filename, finalize_media_name, get_readable_file_size, resolve_video_thumb_url
 from Backend.helper.settings_manager import SettingsManager
 from Backend.helper.skip_channel import is_skip_channel, route_to_skip_channel
 from Backend.helper.split_files import parse_split_info
@@ -173,7 +173,7 @@ async def _handle_personal_session(client: Client, message: Message) -> None:
                 episode_number = _max_episode(doc, season_number) + 1
             thumb_url = ""
             if resolved.get("has_thumb"):
-                thumb_url = f"/thumb/{encoded}"
+                thumb_url = await resolve_video_thumb_url(client, message, encoded)
             metadata_info.update({
                 "season_number": season_number,
                 "episode_number": episode_number,
@@ -182,6 +182,8 @@ async def _handle_personal_session(client: Client, message: Message) -> None:
                 "episode_overview": "",
                 "episode_released": "",
             })
+        else:
+            await apply_video_thumb_to_metadata(metadata_info, message, encoded, client)
 
         async with db_lock:
             updated_id = await db.insert_media(
@@ -244,6 +246,8 @@ async def file_receive_handler(client: Client, message: Message):
             return
 
         title = _finalize_title(title, metadata_info)
+        encoded = metadata_info.get("encoded_string") or await encode_string({"chat_id": int(channel), "msg_id": msg_id})
+        await apply_video_thumb_to_metadata(metadata_info, message, encoded, client)
 
         await file_queue.put((metadata_info, int(channel), msg_id, size, raw_size, title))
 
@@ -295,6 +299,8 @@ async def file_edited_handler(client: Client, message: Message):
             return
 
         title = _finalize_title(title, metadata_info)
+        encoded = metadata_info.get("encoded_string") or await encode_string({"chat_id": int(channel), "msg_id": msg_id})
+        await apply_video_thumb_to_metadata(metadata_info, message, encoded, client)
         await file_queue.put((metadata_info, int(channel), msg_id, size, raw_size, title))
     except Exception as e:
         LOGGER.error(f"Error handling edited generic file {message.id}: {e}")

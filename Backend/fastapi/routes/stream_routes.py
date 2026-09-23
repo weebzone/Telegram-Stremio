@@ -17,6 +17,7 @@ from Backend.fastapi.security.tokens import verify_token
 from Backend.helper.analytics import client_ip_from, record_stream_start
 from Backend.helper.custom_dl import ACTIVE_STREAMS, RECENT_STREAMS, ByteStreamer
 from Backend.helper.encrypt import decode_string
+from Backend.helper.pyro import get_thumb_download_target
 from Backend.helper.utils import track_usage
 from Backend.helper.virtual_dl import resolve_virtual_parts, virtual_stream_generator
 from Backend.helper.zip_stream import resolve_zip_entry
@@ -194,11 +195,11 @@ async def thumb_handler(id: str):
         client = multi_clients[select_best_client(0)]
         try:
             message = await client.get_messages(chat_id, msg_id)
-            media = getattr(message, "video", None) or getattr(message, "document", None)
-            thumbs = getattr(media, "thumbs", None) if media else None
-            if not thumbs:
+            target = get_thumb_download_target(message)
+            if not target:
                 raise HTTPException(status_code=404, detail="No thumbnail")
-            buf = await client.download_media(thumbs[-1].file_id, in_memory=True)
+            file_id = getattr(target, "file_id", None) or target
+            buf = await client.download_media(file_id, in_memory=True)
             data = buf.getvalue()
         except HTTPException:
             raise
