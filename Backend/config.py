@@ -20,7 +20,7 @@ class Telegram:
     BOT_TOKEN           = 8381794847:AAGFGvMv3Bw7rUO81S4Rb5AZ6xg27giG1to
 
     #----- Required: Database URIs
-    DATABASE = mongodb+srv://sunil57godara:lF58eBiUSJOgyzVU@tracking.nsiy7d3.mongodb.net/?appName=tracking,mongodb+srv://sunil57godara_db_user:uqhwiIkGvZfbchnu@storage1.m6gzcr9.mongodb.net/?appName=storage1
+    DATABASE = mongodb+srv://sunil57godara:lF58eBiUSJOgyzVU@tracking.nsiy7d3.mongodb.net/?appName=tracking,mongodb+srv://sunil57godara:il5uB045Dm5ix6q5@storage1.czubpmz.mongodb.net/?appName=storage1
 
     #----- Required: Server
     PORT     = 8000
