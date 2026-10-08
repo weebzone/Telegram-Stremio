@@ -15,16 +15,16 @@ def _int_env(key: str, default: int = 0) -> int:
 #----- Environment-backed configuration
 class Telegram:
     #----- Required: Telegram clients
-    API_ID              = _int_env("API_ID")
-    API_HASH            = getenv("API_HASH", "")
-    BOT_TOKEN           = getenv("BOT_TOKEN", "")
+    API_ID              = 34601197
+    API_HASH            = e851d1273fb503d3c256c5ba11bcb06f
+    BOT_TOKEN           = 8381794847:AAGFGvMv3Bw7rUO81S4Rb5AZ6xg27giG1to
 
     #----- Required: Database URIs
-    DATABASE = [db.strip() for db in (getenv("DATABASE") or "").split(",") if db.strip()]
+    DATABASE = mongodb+srv://sunil57godara:lF58eBiUSJOgyzVU@tracking.nsiy7d3.mongodb.net/?appName=tracking,mongodb+srv://sunil57godara:il5uB045Dm5ix6q5@storage1.czubpmz.mongodb.net/?appName=storage1
 
     #----- Required: Server
-    PORT     = _int_env("PORT", 8000)
-    OWNER_ID = _int_env("OWNER_ID")
+    PORT     = 8000
+    OWNER_ID = 8014251801
 
     #----- Read/Write via SettingsManager
     REPLACE_MODE                  = getenv("REPLACE_MODE", "true").lower() == "true"
