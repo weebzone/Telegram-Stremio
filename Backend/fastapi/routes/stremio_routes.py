@@ -23,7 +23,7 @@ from Backend.fastapi.themes import DEFAULT_THEME, DEFAULT_STYLE, get_theme
 from Backend.helper.fanart import fanart_artwork
 from Backend.helper.global_search import global_search, is_global_search_enabled
 from Backend.helper.metadata.providers.cinemeta import get_detail, get_season
-from Backend.helper.metadata import resolve_cover_url, COMBINED_SEASON, COMBINED_EPISODE_BASE, tmdb_api_key
+from Backend.helper.metadata import resolve_cover_url, COMBINED_SEASON, COMBINED_EPISODE_BASE, tmdb_api_key, get_tmdb_client, format_tmdb_image
 from Backend.helper.database import convert_objectid_to_str
 from Backend.helper.split_files import parse_combined_episodes, combined_name_key
 from Backend.helper.settings_manager import SettingsManager
@@ -43,6 +43,115 @@ PAGE_SIZE = 15
 def _donation():
     text = "Enjoying Telegram Stremio?\nTap to support the developer"
     return {"name": "❤️ Support", "title": text, "description": text, "externalUrl": "https://donate.weebzonex.workers.dev"}
+
+async def _external_meta_for_id(id: str, parsed: dict, media_type: str) -> Optional[dict]:
+    """Resolve basic metadata from TMDB or Cinemeta when an item is not in the database.
+    This prevents Stremio/Nuvio from crashing with 'Could not load details' on un-cached items."""
+    try:
+        tmdb_id = parsed.get("tmdb_id")
+        if tmdb_id is not None and tmdb_api_key():
+            client = get_tmdb_client()
+            is_movie = media_type == "movie" or parsed.get("tmdb_media_type") == "movie"
+            target = client.movie(tmdb_id) if is_movie else client.tv(tmdb_id)
+            item = await target.details(append_to_response="images,credits,external_ids")
+            if not item:
+                return None
+
+            name = getattr(item, "title", None) if is_movie else getattr(item, "name", None)
+            name = name or getattr(item, "original_title", None) or getattr(item, "original_name", None) or ""
+
+            rel_date = getattr(item, "release_date", None) if is_movie else getattr(item, "first_air_date", None)
+            year_str = str(rel_date.year) if (rel_date and getattr(rel_date, "year", None)) else ""
+
+            ext_ids = getattr(item, "external_ids", None)
+            external_imdb = getattr(ext_ids, "imdb_id", None) if ext_ids else None
+
+            images = getattr(item, "images", None)
+            logo_url = ""
+            if images and getattr(images, "logos", None):
+                for l in images.logos:
+                    if getattr(l, "iso_639_1", None) == "en" and getattr(l, "file_path", None):
+                        logo_url = format_tmdb_image(l.file_path, "w300")
+                        break
+                if not logo_url and images.logos and getattr(images.logos[0], "file_path", None):
+                    logo_url = format_tmdb_image(images.logos[0].file_path, "w300")
+
+            genres = [getattr(g, "name", "") for g in (getattr(item, "genres", None) or []) if getattr(g, "name", None)]
+            runtime = getattr(item, "runtime", "") if is_movie else ""
+            if not runtime and not is_movie:
+                r_list = getattr(item, "episode_run_time", None) or []
+                runtime = str(r_list[0]) if r_list else ""
+
+            credits_data = getattr(item, "credits", None)
+            cast_list = []
+            if credits_data and getattr(credits_data, "cast", None):
+                cast_list = [getattr(c, "name", "") for c in credits_data.cast[:10] if getattr(c, "name", None)]
+
+            meta_id = id
+            videos = []
+            if not is_movie:
+                seasons = getattr(item, "seasons", None) or []
+                yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+                for s in seasons:
+                    s_num = getattr(s, "season_number", 0)
+                    if s_num == 0:
+                        continue
+                    ep_count = getattr(s, "episode_count", 0) or 0
+                    for ep in range(1, ep_count + 1):
+                        videos.append({
+                            "id": f"{meta_id}:{s_num}:{ep}",
+                            "title": f"Episode {ep}",
+                            "season": s_num,
+                            "episode": ep,
+                            "released": yesterday,
+                        })
+
+            return {
+                "id": meta_id,
+                "type": "movie" if is_movie else "series",
+                "name": name,
+                "description": getattr(item, "overview", "") or "",
+                "year": year_str,
+                "releaseInfo": year_str,
+                "poster": format_tmdb_image(getattr(item, "poster_path", None), "w500"),
+                "background": format_tmdb_image(getattr(item, "backdrop_path", None), "original"),
+                "logo": logo_url,
+                "genres": genres,
+                "imdbRating": str(round(getattr(item, "vote_average", 0), 1)) if getattr(item, "vote_average", None) else "",
+                "imdb_id": external_imdb or "",
+                "moviedb_id": tmdb_id,
+                "cast": cast_list,
+                "runtime": str(runtime) if runtime else "",
+                "videos": videos,
+            }
+
+        imdb_id = parsed.get("imdb_id")
+        if imdb_id and imdb_id.startswith("tt"):
+            external = await get_detail(imdb_id, "movie" if media_type == "movie" else "series")
+            if external and external.get("title"):
+                release = external.get("releaseDetailed") or {}
+                year = release.get("year") or ""
+                return {
+                    "id": imdb_id,
+                    "type": "movie" if media_type == "movie" else "series",
+                    "name": external.get("title") or "",
+                    "description": external.get("plot") or "",
+                    "year": str(year) if year else "",
+                    "releaseInfo": str(year) if year else "",
+                    "poster": external.get("poster") or "",
+                    "background": external.get("background") or "",
+                    "logo": external.get("logo") or "",
+                    "genres": external.get("genre") or [],
+                    "imdbRating": str((external.get("rating") or {}).get("star") or ""),
+                    "imdb_id": imdb_id,
+                    "moviedb_id": external.get("moviedb_id") or "",
+                    "cast": external.get("cast") or [],
+                    "runtime": external.get("runtime") or "",
+                    "videos": external.get("videos") or [],
+                }
+    except Exception as exc:
+        LOGGER.warning(f"[EXTERNAL META] Failed to resolve fallback meta for {id}: {exc}")
+    return None
 
 def build_proxy_url(original_url: str) -> str | None:
     settings = SettingsManager.current()
@@ -229,9 +338,13 @@ async def _get_db_matches_in_tmdb_order(
 
 def _parse_stremio_id(id: str):
     parts = id.split(":")
-    is_kitsu = parts and parts[0].lower() == "kitsu"
+    prefix = parts[0].lower() if parts else ""
+    is_kitsu = prefix == "kitsu"
+    is_tmdb = prefix == "tmdb"
     imdb_id = None
     kitsu_id = None
+    tmdb_id = None
+    tmdb_media_type = None
     season_num = None
     episode_num = None
     absolute_episode = None
@@ -258,6 +371,31 @@ def _parse_stremio_id(id: str):
                 episode_num = None
             if season_num is None and episode_num is not None:
                 absolute_episode = episode_num
+    elif is_tmdb:
+        # Supports tmdb:movie:<id>, tmdb:tv:<id>, tmdb:<id>, and tmdb:<id>:<season>:<ep>
+        id_index = 1
+        if len(parts) > 2 and parts[1].lower() in ("movie", "tv", "series"):
+            tmdb_media_type = "movie" if parts[1].lower() == "movie" else "tv"
+            id_index = 2
+        try:
+            tmdb_id = int(parts[id_index]) if len(parts) > id_index else None
+        except (TypeError, ValueError):
+            tmdb_id = None
+        trailing = parts[id_index + 1:]
+        if len(trailing) >= 2:
+            try:
+                season_num = int(trailing[0]) if trailing[0] not in ("", "null", "None") else None
+            except (TypeError, ValueError):
+                season_num = None
+            try:
+                episode_num = int(trailing[1]) if trailing[1] not in ("", "null", "None") else None
+            except (TypeError, ValueError):
+                episode_num = None
+        elif len(trailing) == 1:
+            try:
+                episode_num = int(trailing[0])
+            except (TypeError, ValueError):
+                episode_num = None
     else:
         imdb_id = parts[0] if parts else id
         try:
@@ -272,15 +410,18 @@ def _parse_stremio_id(id: str):
     return {
         "imdb_id": imdb_id,
         "kitsu_id": kitsu_id,
+        "tmdb_id": tmdb_id,
+        "tmdb_media_type": tmdb_media_type,
         "season_num": season_num,
         "episode_num": episode_num,
         "absolute_episode": absolute_episode,
         "is_kitsu": is_kitsu,
+        "is_tmdb": is_tmdb,
     }
 
 
-async def _title_allowed(imdb_id: str = None, token_data: dict = None, kitsu_id: int = None) -> bool:
-    doc = await db.get_media_details(imdb_id=imdb_id, kitsu_id=kitsu_id, projection={"visibility": 1, "allowed_tokens": 1})
+async def _title_allowed(imdb_id: str = None, token_data: dict = None, kitsu_id: int = None, tmdb_id: int = None, media_type: str = None) -> bool:
+    doc = await db.get_media_details(imdb_id=imdb_id, kitsu_id=kitsu_id, tmdb_id=tmdb_id, media_type=media_type, projection={"visibility": 1, "allowed_tokens": 1})
     if not doc:
         return True
     return _token_can_view(doc.get("visibility") or "public", doc.get("allowed_tokens") or [], token_data)
@@ -646,7 +787,7 @@ async def get_manifest(token: str, token_data: dict = Depends(verify_token)):
         "types": ["movie", "series"],
         "resources": resources,
         "catalogs": catalogs,
-        "idPrefixes": ["tt", "tg", "kitsu"],
+        "idPrefixes": ["tt", "tg", "kitsu"] + (["tmdb"] if tmdb_api_key() else []),
         "behaviorHints": {
             "configurable": True,
             "configurationRequired": False
@@ -1555,14 +1696,20 @@ async def get_meta(token: str, media_type: str, id: str, token_data: dict = Depe
         raise HTTPException(status_code=404, detail="Catalog disabled")
 
     parsed = _parse_stremio_id(id)
-    imdb_id = parsed["imdb_id"] if not parsed["is_kitsu"] else None
+    imdb_id = parsed["imdb_id"] if not parsed["is_kitsu"] and not parsed["is_tmdb"] else None
     kitsu_id = parsed["kitsu_id"]
+    tmdb_id = parsed["tmdb_id"]
 
     media = await db.get_media_details(
-        imdb_id=imdb_id, kitsu_id=kitsu_id, projection={"telegram": 0, "seasons.episodes.telegram": 0}
+        imdb_id=imdb_id,
+        kitsu_id=kitsu_id,
+        tmdb_id=tmdb_id,
+        media_type=media_type,
+        projection={"telegram": 0, "seasons.episodes.telegram": 0}
     )
     if not media:
-        return {"meta": {}}
+        fallback_meta = await _external_meta_for_id(id, parsed, media_type)
+        return {"meta": fallback_meta or {}}
 
     if not _token_can_view(media.get("visibility") or "public", media.get("allowed_tokens") or [], token_data):
         return {"meta": {}}
@@ -1570,6 +1717,8 @@ async def get_meta(token: str, media_type: str, id: str, token_data: dict = Depe
     meta_id = id
     if parsed["is_kitsu"] and kitsu_id is not None:
         meta_id = f"kitsu:{kitsu_id}"
+    elif parsed.get("is_tmdb") and tmdb_id is not None:
+        meta_id = f"tmdb:{'movie' if (parsed.get('tmdb_media_type') or ('movie' if media_type == 'movie' else 'tv')) == 'movie' else 'tv'}:{tmdb_id}"
     elif media.get("imdb_id"):
         meta_id = media.get("imdb_id")
 
@@ -1584,7 +1733,7 @@ async def get_meta(token: str, media_type: str, id: str, token_data: dict = Depe
         "poster": _poster_url(media.get("imdb_id") or imdb_id, media.get("poster"), "series" if media.get("media_type") == "tv" else "movie"),
         "logo": media.get("logo") or "",
         "background": _abs_media_url(media.get("backdrop")),
-        "imdb_id": media.get("imdb_id") or (id if not parsed["is_kitsu"] else ""),
+        "imdb_id": media.get("imdb_id") or (id if not parsed["is_kitsu"] and not parsed.get("is_tmdb") else ""),
         "releaseInfo": _year_label(media) or "",
         "moviedb_id": _safe_moviedb_id(media),
         "cast": media.get("cast") or [],
@@ -1649,7 +1798,7 @@ async def get_meta(token: str, media_type: str, id: str, token_data: dict = Depe
                     "thumbnail": _abs_media_url(
                         episode.get("episode_backdrop") or episode.get("thumbnail")
                     ) or "https://raw.githubusercontent.com/weebzone/Colab-Tools/refs/heads/main/no_episode_backdrop.png",
-                    "imdb_id": episode.get("imdb_id") or media.get("imdb_id") or (id if not parsed["is_kitsu"] else ""),
+                    "imdb_id": episode.get("imdb_id") or media.get("imdb_id") or (episode_id if parsed.get("is_tmdb") else (id if not parsed["is_kitsu"] else "")),
                 })
         meta_obj["videos"] = videos
         if not videos:
@@ -1966,13 +2115,20 @@ async def get_streams(
         episode_num = parsed["episode_num"]
         absolute_episode = parsed["absolute_episode"]
         is_kitsu = parsed["is_kitsu"]
+        tmdb_id = parsed.get("tmdb_id")
     except (ValueError, IndexError):
         raise HTTPException(status_code=400, detail="Invalid Stremio ID format")
 
     if is_kitsu and kitsu_id is None:
         raise HTTPException(status_code=400, detail="Invalid Kitsu ID format")
 
-    if not await _title_allowed(imdb_id=imdb_id, token_data=token_data, kitsu_id=kitsu_id):
+    if not await _title_allowed(
+        imdb_id=imdb_id,
+        token_data=token_data,
+        kitsu_id=kitsu_id,
+        tmdb_id=tmdb_id,
+        media_type=media_type,
+    ):
         return {"streams": []}
 
     media_details = await db.get_media_details(
@@ -1980,6 +2136,8 @@ async def get_streams(
         season_number=season_num,
         episode_number=episode_num,
         kitsu_id=kitsu_id,
+        tmdb_id=tmdb_id,
+        media_type=media_type,
         absolute_episode=absolute_episode,
     )
 
