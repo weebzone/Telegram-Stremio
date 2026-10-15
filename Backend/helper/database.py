@@ -576,10 +576,19 @@ class Database:
 
     async def get_custom_catalog(self, catalog_id: str) -> Optional[dict]:
         try:
-            catalog = await self.dbs["tracking"]["custom_catalogs"].find_one({"_id": ObjectId(catalog_id)})
+            if catalog_id.startswith("auto_"):
+                catalog = await self.dbs["tracking"]["custom_catalogs"].find_one({"auto_key": catalog_id})
+            else:
+                catalog = await self.dbs["tracking"]["custom_catalogs"].find_one({"_id": ObjectId(catalog_id)})
+            if not catalog:
+                catalog = await self.dbs["tracking"]["custom_catalogs"].find_one({"auto_key": catalog_id})
             return self._normalize_catalog(convert_objectid_to_str(catalog)) if catalog else None
         except Exception:
-            return None
+            try:
+                catalog = await self.dbs["tracking"]["custom_catalogs"].find_one({"auto_key": catalog_id})
+                return self._normalize_catalog(convert_objectid_to_str(catalog)) if catalog else None
+            except Exception:
+                return None
 
     async def update_custom_catalog(
         self,

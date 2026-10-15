@@ -135,6 +135,24 @@ The app is great for personal, single-user use, but it's intentionally lighter t
 
 ---
 
+## 📱 Nuvio Integration & Custom Catalogs Setup
+
+`Telegram-Stremio` seamlessly supports **Nuvio** alongside Stremio!
+
+### 1. Main Addon URL (Stremio & Nuvio)
+* **URL:** `https://<YOUR_DOMAIN>/stremio/<TOKEN>/manifest.json`
+* Add this manifest URL into **Stremio Addons** or **Nuvio Addons**. It serves as the primary streaming engine for both players.
+
+### 2. Nuvio Collection & Logo Buttons (Optional)
+* **URL:** `https://<YOUR_DOMAIN>/stremio/<TOKEN>/nuvio-collection.json`
+* **File:** The Telegram bot automatically attaches the downloadable `nuvio_collection.json` document on `/start` or subscription approval.
+* Import the URL or JSON file into **Nuvio (Settings ⚙️ → Collections → Import)** to display horizontal **Landscape Logo Buttons** (*Netflix*, *JioHotstar*, *Prime Video*, *Apple TV*, *Bollywood*, *Anime*, *Marvel*, *Star Wars*) on the Nuvio home screen!
+
+> ⚠️ **Important for Server Hosts:**  
+> For Nuvio collections to populate platform-specific titles (instead of falling back to default latest movies/series), make sure to enable the **Auto Catalogs** (**Netflix, Hotstar, Prime Video, Apple TV, Bollywood, etc.**) under **Dashboard → Catalogs** and click **Sync**.
+
+---
+
 # 🗂️ Organizing Your Channels (recommended)
 
 You *can* dump everything into one AUTH channel — but keeping content in **separate channels** makes your library far easier to manage, back up, and share with helpers. Each of these is added the same way (as an AUTH channel in Settings), and your bot must be an **admin** in every one.
