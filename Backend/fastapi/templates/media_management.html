@@ -214,6 +214,11 @@
             updatePagination(data.current_page || page, data.total_pages || 1);
             updateMediaInfo(data);
 
+            //----- Lazy-load episode coverage badges for TV cards
+            if (mediaType === 'tv') {
+                mediaItems.forEach(item => refreshCovBadge(item.tmdb_id, item.db_index));
+            }
+
         } catch (error) {
             console.error('Error loading media:', error);
             hideLoading();
@@ -304,6 +309,12 @@
                     </span>
                 </div>` : ''}
                 ${mediaBadges(item)}
+                ${mediaType === 'tv' ? `
+                <div class="absolute top-3 right-3">
+                    <span id="cov-${item.tmdb_id}-${item.db_index}" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-black/60 text-white text-[11px] font-bold border border-hairline" title="Episode coverage">
+                        <i class="fa-solid fa-layer-group"></i> <span class="cov-pct">…</span>
+                    </span>
+                </div>` : ''}
             </div>
 
             <div class="p-4">
@@ -313,9 +324,9 @@
                     <span>${mediaType === 'movie' ? 'Movie' : 'TV Show'}</span>
                 </div>
 
-                <div class="mt-4 flex gap-2">
+                <div class="mt-4 flex flex-wrap gap-2">
                     <a href="/media/edit?tmdb_id=${encodeURIComponent(item.tmdb_id)}&db_index=${encodeURIComponent(item.db_index)}&media_type=${encodeURIComponent(mediaType)}&page=${currentPage}${currentSearch ? `&search=${encodeURIComponent(currentSearch)}` : ''}"
-                       class="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 rounded-2xl bg-primary hover:bg-primary/90 text-white text-xs font-bold transition shadow-lg shadow-primary/20">
+                       class="flex-1 min-w-[80px] inline-flex items-center justify-center gap-2 px-3 py-2 rounded-2xl bg-primary hover:bg-primary/90 text-white text-xs font-bold transition shadow-lg shadow-primary/20">
                         <i class="fa-solid fa-pen-to-square"></i> Edit
                     </a>
                     <button onclick="deleteMedia(this)"
@@ -325,6 +336,12 @@
                             class="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-2xl glass-panel hover:bg-red-500/10 text-red-300 text-xs font-bold transition border border-hairline">
                         <i class="fa-solid fa-trash"></i>
                     </button>
+                    ${mediaType === 'tv' ? `
+                    <button onclick="openCoverage('${item.tmdb_id}', '${item.db_index ?? ''}')"
+                            title="Episode coverage"
+                            class="flex-1 min-w-[90px] inline-flex items-center justify-center gap-2 px-3 py-2 rounded-2xl bg-sky-500/90 hover:bg-sky-500 text-white text-xs font-bold transition border border-sky-400/40">
+                        <i class="fa-solid fa-layer-group"></i> Coverage
+                    </button>` : ''}
                 </div>
             </div>
         </div>
@@ -994,5 +1011,83 @@
             document.getElementById('ma-quality-custom').classList.toggle('hidden', e.target.value !== '__custom');
         });
     });
+
+    //----- Episode coverage (uploaded vs Cinemeta full season list)
+    function covColor(pct) {
+        if (pct >= 100) return 'text-emerald-300';
+        if (pct >= 60) return 'text-amber-300';
+        return 'text-red-300';
+    }
+
+    async function refreshCovBadge(tmdbId, dbIndex) {
+        const el = document.querySelector(`#cov-${tmdbId}-${dbIndex} .cov-pct`);
+        if (!el) return;
+        try {
+            const res = await fetch(`/api/media/coverage/${encodeURIComponent(tmdbId)}?db_index=${encodeURIComponent(dbIndex ?? 1)}`);
+            const d = await res.json();
+            el.textContent = `${d.coverage_pct}%`;
+            el.className = `cov-pct ${covColor(d.coverage_pct)}`;
+        } catch (e) {
+            el.textContent = '—';
+        }
+    }
+
+    async function openCoverage(tmdbId, dbIndex) {
+        const modal = document.getElementById('coverage-modal');
+        const body = document.getElementById('coverage-body');
+        const titleEl = document.getElementById('coverage-title');
+        modal.classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+        body.innerHTML = '<div class="text-center py-10 text-text-secondary"><i class="fa-solid fa-spinner fa-spin mr-2"></i>Loading coverage…</div>';
+        try {
+            const res = await fetch(`/api/media/coverage/${encodeURIComponent(tmdbId)}?db_index=${encodeURIComponent(dbIndex ?? 1)}`);
+            const d = await res.json();
+            titleEl.textContent = `Episode Coverage · ${d.coverage_pct}%`;
+            if (!d.seasons || !d.seasons.length) {
+                body.innerHTML = '<div class="py-10 text-center text-text-secondary">No season data available (Cinemeta lookup failed or no IMDb id).</div>';
+                return;
+            }
+            let html = '';
+            for (const s of d.seasons) {
+                const complete = s.have >= s.total;
+                const chipCls = complete ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40' : 'bg-red-500/10 text-red-300 border-red-500/40';
+                let missingHtml = '';
+                if (!complete) {
+                    const shown = s.missing.slice(0, 60).map(e => `E${e}`).join(', ');
+                    const extra = s.missing.length > 60 ? ', …' : '';
+                    missingHtml = `<div class="mt-1 text-xs text-red-300/90">Missing: ${shown}${extra}</div>`;
+                }
+                html += `
+                    <div class="rounded-2xl border ${chipCls} px-4 py-3">
+                        <div class="flex items-center justify-between">
+                            <span class="font-bold">Season ${s.n}</span>
+                            <span class="text-sm font-bold">${s.have}/${s.total}</span>
+                        </div>
+                        ${missingHtml}
+                    </div>`;
+            }
+            body.innerHTML = html;
+        } catch (e) {
+            body.innerHTML = '<div class="py-10 text-center text-red-300">Failed to load coverage.</div>';
+        }
+    }
+
+    function closeCoverage() {
+        document.getElementById('coverage-modal').classList.add('hidden');
+        document.body.style.overflow = '';
+    }
 </script>
+
+<!-- Episode coverage modal -->
+<div id="coverage-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onclick="if(event.target===this)closeCoverage()">
+    <div class="glass-panel rounded-3xl border border-hairline w-full max-w-lg max-h-[85vh] overflow-y-auto">
+        <div class="flex items-center justify-between px-5 py-4 border-b border-hairline sticky top-0 glass-panel rounded-t-3xl">
+            <h3 id="coverage-title" class="font-extrabold text-lg text-text">Episode Coverage</h3>
+            <button onclick="closeCoverage()" class="w-9 h-9 inline-flex items-center justify-center rounded-xl text-text-secondary hover:bg-surface-2 transition">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+        <div id="coverage-body" class="p-5 grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
+    </div>
+</div>
 {% endblock %}

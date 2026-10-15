@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Request a Title{% endblock %}
+{% block title %}Solicitar una película o serie{% endblock %}
 
 {% block content %}
 <style>
@@ -33,34 +33,50 @@
   .rp-btn { margin-top: auto; border: none; border-radius: 0.6rem; padding: 0.5rem; font-weight: 800; font-size: 0.82rem;
             cursor: pointer; background: color-mix(in srgb, var(--primary) 18%, transparent); color: var(--primary); }
   .rp-btn:hover { background: var(--primary); color: var(--bg); }
+  .rp-btn.is-available { background: rgba(34,197,94,0.18); color: #22c55e; cursor: default; }
+  .rp-btn.is-available:hover { background: rgba(34,197,94,0.18); color: #22c55e; }
   .rp-empty { text-align: center; color: var(--text-sec); padding: 2rem 1rem; }
   .rp-spinner { text-align: center; color: var(--text-sec); padding: 2rem; }
+  .rp-badge { display: inline-block; font-size: 0.68rem; font-weight: 800; border-radius: 9999px; padding: 0.15rem 0.55rem; }
+  .rp-badge.missing { background: rgba(239,68,68,0.18); color: #ef4444; }
+  .rp-badge.partial { background: rgba(245,158,11,0.18); color: #f59e0b; }
+  .rp-badge.complete { background: rgba(34,197,94,0.18); color: #22c55e; }
+  .rp-seasons { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.25rem; }
+  .rp-season-chip { font-size: 0.74rem; font-weight: 700; border-radius: 0.5rem; padding: 0.25rem 0.5rem;
+                     border: 1px solid var(--hairline, rgba(255,255,255,0.15)); background: transparent; color: var(--text-sec); cursor: pointer; }
+  .rp-season-chip.on { background: var(--primary); color: var(--bg); border-color: var(--primary); }
+  .rp-season-chip.have { opacity: 0.85; border-color: rgba(34,197,94,0.6); color: #22c55e; }
+  .rp-season-actions { display: flex; gap: 0.4rem; margin-top: 0.5rem; }
+  .rp-season-actions .rp-btn { flex: 1; }
+  .rp-season-actions .rp-btn.ghost { background: color-mix(in srgb, var(--text-sec) 14%, transparent); color: var(--text); }
+  .rp-season-actions .rp-btn.ghost:hover { background: color-mix(in srgb, var(--text-sec) 24%, transparent); color: var(--text); }
 </style>
 
 <div class="rp-shell">
   <div class="rp-hero">
-    <h1>Request a Movie or Show</h1>
-    <p>Can't find something? Search below and send a request — we'll try to add it.</p>
+    <h1>Solicita una película o serie</h1>
+    <p>¿No encuentras algo? Búsquelo abajo y envía una solicitud — intentaremos agregarlo.</p>
     <form class="rp-search" onsubmit="doSearch(event)">
-      <input id="rp-q" type="text" placeholder="Search by name, IMDb ID (tt…) or TMDB ID" autocomplete="off">
+      <input id="rp-q" type="text" placeholder="Buscar por nombre, IMDb ID (tt…) o TMDB ID" autocomplete="off">
       <button type="submit"><i class="fa-solid fa-magnifying-glass"></i></button>
     </form>
-    <p class="rp-hint">Examples: <b>Inception</b> · <b>tt1375666</b> · <b>27205</b></p>
+    <p class="rp-hint">Ejemplos: <b>Inception</b> · <b>tt1375666</b> · <b>27205</b></p>
   </div>
 
   <div id="rp-results-wrap" style="display:none">
-    <div class="rp-section-title"><i class="fa-solid fa-list"></i> Search results</div>
+    <div class="rp-section-title"><i class="fa-solid fa-list"></i> Resultados de búsqueda</div>
     <div id="rp-results" class="rp-grid"></div>
   </div>
 
   <div id="rp-popular-wrap">
-    <div class="rp-section-title"><i class="fa-solid fa-fire" style="color:#f59e0b"></i> Most Requested</div>
+    <div class="rp-section-title"><i class="fa-solid fa-fire" style="color:#f59e0b"></i> Más solicitados</div>
     <div id="rp-popular" class="rp-grid"></div>
   </div>
 </div>
 
 <script>
 let searchResults = [];
+let selectedSeasons = {};
 
 function esc(s) {
   return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;')
@@ -74,13 +90,47 @@ function posterHtml(r, extra) {
   return `<div class="rp-poster">${img}<span class="rp-type">${type}</span>${extra || ''}</div>`;
 }
 
+function seasonChips(r) {
+  const st = r.seasons_status || { all: [], available: [], missing: [] };
+  if (!st.all || !st.all.length) return '';
+  const have = new Set(st.available || []);
+  const chips = st.all.map(n =>
+    `<button type="button" class="rp-season-chip${have.has(n) ? ' have' : ''}" data-s="${n}" onclick="toggleSeason(${r.__idx}, ${n})">T${n}</button>`
+  ).join('');
+  return `<div class="rp-seasons">${chips}</div>`;
+}
+
 function resultCard(r, idx) {
+  r.__idx = idx;
   const yr = r.year ? ` (${esc(r.year)})` : '';
+  let bodyInner;
+  if (r.media_type === 'tv') {
+    const st = r.seasons_status || { all: [], available: [], missing: [] };
+    const haveSeasons = st.all && st.all.length > 0;
+    const chips = seasonChips(r);
+    const sel = (selectedSeasons[idx] || []);
+    const reqSel = sel.length
+      ? `<button class="rp-btn" onclick="sendRequest(${idx})"><i class="fa-solid fa-paper-plane"></i> Solicitar T${sel.join(',T')}</button>`
+      : '';
+    // "Pedir serie completa" is an ACTION, not an availability claim.
+    // Only show it when we actually know the full season list; otherwise the
+    // generic request button covers it.
+    const reqAll = haveSeasons
+      ? `<button class="rp-btn ghost" onclick="sendRequest(${idx}, null)"><i class="fa-solid fa-film"></i> Pedir serie completa</button>`
+      : `<button class="rp-btn" onclick="sendRequest(${idx}, null)"><i class="fa-solid fa-paper-plane"></i> Solicitar</button>`;
+    bodyInner = `${chips}<div class="rp-season-actions">${reqSel}${reqAll}</div>`;
+  } else {
+    const available = r.availability === 'complete';
+    const btn = available
+      ? `<button class="rp-btn is-available" disabled><i class="fa-solid fa-circle-check"></i> En biblioteca</button>`
+      : `<button class="rp-btn" onclick="sendRequest(${idx})"><i class="fa-solid fa-paper-plane"></i> Solicitar</button>`;
+    bodyInner = btn;
+  }
   return `<div class="rp-card">
     ${posterHtml(r)}
     <div class="rp-body">
       <div class="rp-title">${esc(r.title)}${yr}</div>
-      <button class="rp-btn" onclick="sendRequest(${idx})"><i class="fa-solid fa-paper-plane"></i> Request</button>
+      ${bodyInner}
     </div>
   </div>`;
 }
@@ -94,52 +144,104 @@ function popularCard(r) {
   </div>`;
 }
 
-async function doSearch(e) {
-  if (e) e.preventDefault();
-  const q = document.getElementById('rp-q').value.trim();
-  if (q.length < 2) { showToast('Type at least 2 characters.', 'info'); return; }
-  const wrap = document.getElementById('rp-results-wrap');
-  const box = document.getElementById('rp-results');
-  wrap.style.display = '';
-  box.innerHTML = `<div class="rp-spinner" style="grid-column:1/-1"><i class="fa-solid fa-spinner fa-spin"></i> Searching…</div>`;
-  try {
-    const res = await fetch('/api/request/search?q=' + encodeURIComponent(q));
-    const data = await res.json();
-    searchResults = data.data || [];
-    box.innerHTML = searchResults.length
-      ? searchResults.map((r, i) => resultCard(r, i)).join('')
-      : `<div class="rp-empty" style="grid-column:1/-1">No matches found. Try a different name or an IMDb/TMDB ID.</div>`;
-  } catch (err) {
-    box.innerHTML = `<div class="rp-empty" style="grid-column:1/-1;color:#ef4444">Search failed. Please try again.</div>`;
+function toggleSeason(idx, n) {
+  selectedSeasons[idx] = selectedSeasons[idx] || [];
+  const arr = selectedSeasons[idx];
+  const i = arr.indexOf(n);
+  if (i >= 0) arr.splice(i, 1); else arr.push(n);
+  // re-render that card's chips
+  const card = document.querySelectorAll('#rp-results .rp-card')[idx];
+  if (card) {
+    const chipsWrap = card.querySelector('.rp-seasons');
+    if (chipsWrap) {
+      chipsWrap.querySelectorAll('.rp-season-chip').forEach(c => {
+        c.classList.toggle('on', arr.includes(Number(c.dataset.s)));
+      });
+    }
+    // refresh action buttons
+    const actions = card.querySelector('.rp-season-actions');
+    if (actions) {
+      const sel = arr;
+      actions.innerHTML = (sel.length
+        ? `<button class="rp-btn" onclick="sendRequest(${idx})"><i class="fa-solid fa-paper-plane"></i> Solicitar T${sel.join(',T')}</button>`
+        : '') + `<button class="rp-btn ghost" onclick="sendRequest(${idx}, null)"><i class="fa-solid fa-film"></i> Serie completa</button>`;
+    }
   }
 }
 
-async function sendRequest(idx) {
+async function doSearch(e) {
+  if (e) e.preventDefault();
+  const q = document.getElementById('rp-q').value.trim();
+  if (q.length < 2) { showToast('Escribe al menos 2 caracteres.', 'info'); return; }
+  const wrap = document.getElementById('rp-results-wrap');
+  const box = document.getElementById('rp-results');
+  wrap.style.display = '';
+  box.innerHTML = `<div class="rp-spinner" style="grid-column:1/-1"><i class="fa-solid fa-spinner fa-spin"></i> Buscando…</div>`;
+  // Retry once: the Space can be asleep (HF free tier) and the first hit wakes it.
+  let lastErr = null;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const res = await fetch('/api/request/search?q=' + encodeURIComponent(q));
+      const data = await res.json();
+      searchResults = data.data || [];
+      selectedSeasons = {};
+      box.innerHTML = searchResults.length
+        ? searchResults.map((r, i) => resultCard(r, i)).join('')
+        : `<div class="rp-empty" style="grid-column:1/-1">No se encontraron coincidencias. Prueba otro nombre o un ID de IMDb/TMDb.</div>`;
+      return;
+    } catch (err) {
+      lastErr = err;
+      if (attempt === 1) await new Promise(r => setTimeout(r, 1500));
+    }
+  }
+  box.innerHTML = `<div class="rp-empty" style="grid-column:1/-1;color:#ef4444">El servicio tardó en responder. Inténtalo de nuevo en unos segundos.</div>`;
+}
+
+async function sendRequest(idx, seasonsArg) {
   const r = searchResults[idx];
   if (!r) return;
+  const seasons = seasonsArg === null ? null : ((selectedSeasons[idx] || []));
   try {
     const res = await fetch('/api/request/submit', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         media_type: r.media_type, tmdb_id: r.tmdb_id, imdb_id: r.imdb_id || null,
         title: r.title, year: r.year, poster: r.poster,
+        season_numbers: seasons,
       }),
     });
     const data = await res.json();
     const map = {
-      created:            ['🎉 Request submitted! We\'ll try to add it soon.', 'success', 'Requested'],
-      added:              ['👍 Added your vote — this was already requested.', 'success', 'Requested'],
-      reopened:           ['🔄 Request re-opened. Thanks!', 'success', 'Requested'],
-      already_available:  ['✅ Good news — this is already in the library!', 'info', 'Available'],
-      banned:             ['🚫 This title has been banned and can\'t be requested.', 'error', 'Not allowed'],
-      invalid:            ['⚠️ Could not identify this title.', 'error', 'Error'],
+      created:            ['🎉 ¡Solicitud enviada! Intentaremos agregarlo pronto.', 'success', 'Solicitado'],
+      added:              ['✅ Temporada(s) agregada(s) a tu solicitud.', 'success', 'Solicitado'],
+      voted:              ['👍 Ya estaba solicitado — sumaste tu voto.', 'success', 'Solicitado'],
+      reopened:           ['🔄 Solicitud reabierta. ¡Gracias!', 'success', 'Solicitado'],
+      already_available:  ['✅ Buenas noticias — ¡ya está en la biblioteca!', 'info', 'Disponible'],
+      banned:             ['🚫 Este título está bloqueado y no se puede solicitar.', 'error', 'No permitido'],
+      invalid:            ['⚠️ No se pudo identificar este título.', 'error', 'Error'],
     };
-    const m = map[data.reason] || (data.ok ? ['Request submitted!', 'success', 'Requested']
-                                            : ['Something went wrong.', 'error', 'Error']);
+    const m = map[data.reason] || (data.ok ? ['¡Solicitud enviada!', 'success', 'Solicitado']
+                                            : ['Algo salió mal.', 'error', 'Error']);
     showToast(m[0], m[1], m[2]);
-    if (data.ok) loadPopular();
+    if (data.ok) {
+      //----- Clear this card's season selection so a later click does not
+      //----- silently re-send already-requested seasons (and re-notify).
+      selectedSeasons[idx] = [];
+      const card = document.querySelectorAll('#rp-results .rp-card')[idx];
+      if (card) {
+        card.querySelectorAll('.rp-season-chip').forEach(c => c.classList.remove('on'));
+        const actions = card.querySelector('.rp-season-actions');
+        if (actions) {
+          const st = r.seasons_status || { all: [] };
+          actions.innerHTML = (st.all && st.all.length
+            ? `<button class="rp-btn ghost" onclick="sendRequest(${idx}, null)"><i class="fa-solid fa-film"></i> Pedir serie completa</button>`
+            : `<button class="rp-btn" onclick="sendRequest(${idx}, null)"><i class="fa-solid fa-paper-plane"></i> Solicitar</button>`);
+        }
+      }
+      loadPopular();
+    }
   } catch (err) {
-    showToast('Request failed. Please try again.', 'error', 'Error');
+    showToast('La solicitud falló. Inténtalo de nuevo.', 'error', 'Error');
   }
 }
 

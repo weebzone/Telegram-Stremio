@@ -93,6 +93,7 @@ async def process_file():
                 tmdb_id=metadata_info.get("tmdb_id"),
                 imdb_id=metadata_info.get("imdb_id"),
                 media_type=metadata_info.get("media_type"),
+                season_number=metadata_info.get("season_number"),
             ))
         file_queue.task_done()
 

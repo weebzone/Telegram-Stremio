@@ -61,7 +61,7 @@ def _fetch_upstream_from_db() -> tuple[str | None, str]:
 db_repo, db_branch = _fetch_upstream_from_db()
 
 UPSTREAM_REPO   = db_repo   or environ.get("UPSTREAM_REPO",   "").strip() or None
-UPSTREAM_BRANCH = db_branch or environ.get("UPSTREAM_BRANCH", "").strip() or "master"
+UPSTREAM_BRANCH = db_branch or environ.get("UPSTREAM_BRANCH", "").strip() or "dev"
 
 # ── Git update ────────────────────────────────────────────────────────────────
 if UPSTREAM_REPO:
