@@ -19,7 +19,7 @@
             </div>
 
             <div class="text-center mb-6">
-                <h2 class="text-lg font-bold tracking-tight text-text">Admin Authentication</h2>
+                <h2 id="form-title" class="text-lg font-bold tracking-tight text-text">Admin Authentication</h2>
                 <p class="text-text-secondary text-xs mt-1">Access your management console</p>
             </div>
 
@@ -30,7 +30,7 @@
             </div>
             {% endif %}
 
-            <form method="post" class="space-y-4">
+            <form method="post" class="space-y-4" id="login-form">
 
                 <div class="space-y-1.5">
                     <label class="text-[10px] font-bold uppercase tracking-widest text-text-secondary ml-1">Username</label>
@@ -66,6 +66,53 @@
 
             </form>
 
+            <!-- Register form (hidden by default) -->
+            <form id="register-form" class="space-y-4 hidden">
+                <div class="space-y-1.5">
+                    <label class="text-[10px] font-bold uppercase tracking-widest text-text-secondary ml-1">New Username</label>
+                    <div class="relative group">
+                        <i class="fa-solid fa-user absolute left-4 top-1/2 -translate-y-1/2 text-text-secondary group-focus-within:text-primary transition-colors text-sm"></i>
+                        <input type="text" id="reg_username" required
+                            class="w-full pl-11 pr-4 py-3 bg-background/50 rounded-2xl border border-hairline focus:border-primary/50 focus:ring-4 focus:ring-primary/10 outline-none transition-all text-text text-sm"
+                            placeholder="Choose a username">
+                    </div>
+                </div>
+
+                <div class="space-y-1.5">
+                    <label class="text-[10px] font-bold uppercase tracking-widest text-text-secondary ml-1">Password</label>
+                    <div class="relative group">
+                        <i class="fa-solid fa-lock absolute left-4 top-1/2 -translate-y-1/2 text-text-secondary group-focus-within:text-primary transition-colors text-sm"></i>
+                        <input type="password" id="reg_password" required
+                            class="w-full pl-11 pr-4 py-3 bg-background/50 rounded-2xl border border-hairline focus:border-primary/50 focus:ring-4 focus:ring-primary/10 outline-none transition-all text-text text-sm"
+                            placeholder="Choose a password">
+                    </div>
+                </div>
+
+                <div class="space-y-1.5">
+                    <label class="text-[10px] font-bold uppercase tracking-widest text-text-secondary ml-1">Invite Code</label>
+                    <div class="relative group">
+                        <i class="fa-solid fa-key absolute left-4 top-1/2 -translate-y-1/2 text-text-secondary group-focus-within:text-primary transition-colors text-sm"></i>
+                        <input type="text" id="reg_code" required
+                            class="w-full pl-11 pr-4 py-3 bg-background/50 rounded-2xl border border-hairline focus:border-primary/50 focus:ring-4 focus:ring-primary/10 outline-none transition-all text-text text-sm"
+                            placeholder="One-time invite code">
+                    </div>
+                </div>
+
+                <button type="button" onclick="doRegister()"
+                    class="w-full py-3.5 rounded-2xl bg-primary hover:brightness-110 text-background font-bold transition-all shadow-lg shadow-primary/20 flex items-center justify-center gap-3 mt-4">
+                    <i class="fa-solid fa-user-plus text-sm"></i>
+                    Create Account
+                </button>
+                <p id="reg-msg" class="text-xs text-center text-red-400 hidden"></p>
+            </form>
+
+            <div class="text-center mt-4">
+                <button type="button" id="toggle-mode" onclick="toggleMode()"
+                    class="text-xs text-text-secondary hover:text-primary transition-colors">
+                    Don't have an account? Register
+                </button>
+            </div>
+
         </div>
     </div>
 </div>
@@ -100,6 +147,44 @@
         } else {
             input.type = "password";
             icon.classList.replace("fa-eye-slash", "fa-eye");
+        }
+    }
+
+    function toggleMode() {
+        const login = document.getElementById("login-form");
+        const reg = document.getElementById("register-form");
+        const btn = document.getElementById("toggle-mode");
+        const title = document.getElementById("form-title");
+        if (reg.classList.contains("hidden")) {
+            login.classList.add("hidden"); reg.classList.remove("hidden");
+            btn.textContent = "Already have an account? Sign In";
+            title.textContent = "Create Admin Account";
+        } else {
+            reg.classList.add("hidden"); login.classList.remove("hidden");
+            btn.textContent = "Don't have an account? Register";
+            title.textContent = "Admin Authentication";
+        }
+    }
+
+    async function doRegister() {
+        const msg = document.getElementById("reg-msg");
+        msg.classList.add("hidden");
+        const body = {
+            username: document.getElementById("reg_username").value,
+            password: document.getElementById("reg_password").value,
+            invite_code: document.getElementById("reg_code").value,
+        };
+        try {
+            const res = await fetch("/api/admin/register", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(body),
+            });
+            const d = await res.json();
+            if (!res.ok) { msg.textContent = d.detail || "Registration failed"; msg.classList.remove("hidden"); return; }
+            window.location.href = "/login?registered=1";
+        } catch (e) {
+            msg.textContent = "Request failed"; msg.classList.remove("hidden");
         }
     }
 </script>

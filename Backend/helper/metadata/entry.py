@@ -48,11 +48,11 @@ def _is_anime_channel(channel) -> bool:
 
 
 def _resolve_default_id(override_id, filename) -> str | None:
-    for source in (override_id, getattr(Backend, "USE_DEFAULT_ID", None), filename):
+    for source in (override_id, filename, getattr(Backend, "USE_DEFAULT_ID", None)):
         if not source:
             continue
         try:
-            found = extract_default_id(source) or (override_id if source is override_id else None)
+            found = extract_default_id(source)
         except Exception:
             found = None
         if found:
@@ -303,22 +303,6 @@ async def _search_candidates(query: str, media_type: str, year: int | None = Non
     seen: set[tuple[str, str]] = set()
 
     try:
-        imdb_hits = await cinemeta.search_title_multi(query=query, type=imdb_type, limit=limit)
-        for hit in imdb_hits:
-            hid = hit.get("id")
-            if not hid or ("imdb", hid) in seen:
-                continue
-            seen.add(("imdb", hid))
-            images = format_imdb_images(hid)
-            results.append(_candidate_entry(
-                "imdb", hit.get("title", ""), hit.get("year", ""),
-                hid, None, hit.get("poster") or images["poster"], images["backdrop"],
-                "IMDb / Cinemeta", media_type,
-            ))
-    except Exception as e:
-        LOGGER.warning(f"IMDb {media_type} candidate search failed for '{query}': {e}")
-
-    try:
         tmdb_results = await tmdb.raw_search(query, media_type, year if media_type == "movie" else None)
         for item in (tmdb_results or [])[:limit]:
             tid = getattr(item, "id", None)
@@ -335,6 +319,22 @@ async def _search_candidates(query: str, media_type: str, year: int | None = Non
             ))
     except Exception as e:
         LOGGER.warning(f"TMDb {media_type} candidate search failed for '{query}': {e}")
+
+    try:
+        imdb_hits = await cinemeta.search_title_multi(query=query, type=imdb_type, limit=limit)
+        for hit in imdb_hits:
+            hid = hit.get("id")
+            if not hid or ("imdb", hid) in seen:
+                continue
+            seen.add(("imdb", hid))
+            images = format_imdb_images(hid)
+            results.append(_candidate_entry(
+                "imdb", hit.get("title", ""), hit.get("year", ""),
+                hid, None, hit.get("poster") or images["poster"], images["backdrop"],
+                "IMDb / Cinemeta", media_type,
+            ))
+    except Exception as e:
+        LOGGER.warning(f"IMDb {media_type} candidate search failed for '{query}': {e}")
 
     return results[:limit]
 
