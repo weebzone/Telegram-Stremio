@@ -3,6 +3,7 @@ import asyncio
 import json
 import os
 import random
+import re
 import secrets
 import shutil
 from datetime import datetime
@@ -37,6 +38,7 @@ from Backend.helper.requests_manager import (
     list_requests,
     popular_pending,
     search_titles,
+    search_titles_enriched,
     set_status,
     submit_request,
 )
@@ -74,7 +76,7 @@ from Backend.helper.subtitles import (
 )
 from Backend.logger import LOGGER
 import Backend.pyrofork.bot as botmod
-from Backend.helper.announcer import delete_announcement_async
+from Backend.helper.announcer import delete_announcement_async, announce_new_media
 from Backend.pyrofork.bot import (
     StreamBot,
     client_avg_mbps,
@@ -627,7 +629,7 @@ async def clear_stream_analytics_api() -> dict:
 #----- Public: search titles to request (by name, IMDb id or TMDB id)
 async def request_search_api(q: str) -> dict:
     try:
-        return {"status": "success", "data": await search_titles(q)}
+        return {"status": "success", "data": await search_titles_enriched(q)}
     except Exception as e:
         LOGGER.error(f"Request search error: {e}")
         return {"status": "error", "message": str(e), "data": []}
@@ -643,6 +645,7 @@ async def request_submit_api(payload: dict, client_ip: str) -> dict:
         year=payload.get("year"),
         poster=payload.get("poster"),
         client_ip=client_ip,
+        season_numbers=payload.get("season_numbers"),
     )
     return {"status": "success" if result.get("ok") else "error", **result}
 
@@ -1345,6 +1348,7 @@ async def manual_add_media_api(payload: dict) -> dict:
         )
         if not updated_id:
             raise HTTPException(status_code=500, detail="Failed to add media (validation error).")
+        announce_new_media(metadata_info)
         await stamp_caption_by_ref(client, p_channel, p_msg, metadata_info)
 
     result_tmdb_id = base["tmdb_id"]
@@ -1787,7 +1791,7 @@ async def update_settings_api(payload: dict) -> dict:
         del payload["session_secret"]
 
     #----- Type coercion and validation
-    bool_keys = {"replace_mode", "duplicate_protection", "hide_catalog", "subscription", "show_proxy_and_non_proxy_both", "mediaflow_proxy", "announce_new_content", "delete_on_metadata_fail", "better_poster_enabled", "rpdb_enabled", "spatial_poster_enabled", "fanart_enabled", "fanart_shuffle", "fanart_low_res_poster"}
+    bool_keys = {"replace_mode", "duplicate_protection", "hide_catalog", "subscription", "show_proxy_and_non_proxy_both", "mediaflow_proxy", "announce_new_content", "notify_new_requests", "delete_on_metadata_fail", "better_poster_enabled", "rpdb_enabled", "spatial_poster_enabled", "fanart_enabled", "fanart_shuffle", "fanart_low_res_poster"}
     for key in bool_keys:
         if key in payload:
             payload[key] = bool(payload[key])
@@ -1910,6 +1914,11 @@ async def update_settings_api(payload: dict) -> dict:
             payload["announcement_channel"], "announcement channel"
         )
 
+    if "request_notify_channel" in payload and payload["request_notify_channel"]:
+        payload["request_notify_channel"] = _validate_channel_id(
+            payload["request_notify_channel"], "request notify channel"
+        )
+
     if "skip_channel" in payload and payload["skip_channel"]:
         payload["skip_channel"] = _validate_channel_id(
             payload["skip_channel"], "skip channel"
@@ -1919,7 +1928,7 @@ async def update_settings_api(payload: dict) -> dict:
     #----- Only AUTH ∩ ANIME is allowed, because an anime channel is an auth channel
     #----- that's flagged as anime (the receiver only indexes files from auth channels).
     _channel_fields = ("auth_channels", "manual_channels", "global_search_channels",
-                       "anime_channels", "announcement_channel", "skip_channel")
+                       "anime_channels", "announcement_channel", "request_notify_channel", "skip_channel")
     if any(field in payload for field in _channel_fields):
         current = SettingsManager.current()
 
@@ -1956,7 +1965,9 @@ async def update_settings_api(payload: dict) -> dict:
                 "admin_username", "admin_password", "session_secret", "http_proxy_url",
                 "cf_stream_url", "cf_stream_secret", "cf_stream_mode",
                 "mediaflow_password", "payment_instructions", "payment_qr_url",
-                "announcement_channel", "skip_channel"):
+                "announcement_channel", "request_notify_channel", "skip_channel",
+                "announcement_thread", "request_notify_thread",
+                "external_api_url", "external_api_token"):
         if key in payload and isinstance(payload[key], str):
             payload[key] = payload[key].strip()
 
@@ -2356,9 +2367,20 @@ LOG_FILE = "log.txt"
 
 
 #----- Aggregate content + system metrics across all storage DBs (was /stats)
+def _size_to_bytes(size_str) -> int:
+    if not size_str:
+        return 0
+    m = re.match(r"([\d.]+)\s*([A-Za-z]+)", str(size_str).strip())
+    if not m:
+        return 0
+    mult = {"B": 1, "KB": 1024, "MB": 1024**2, "GB": 1024**3, "TB": 1024**4}
+    return int(float(m.group(1)) * mult.get(m.group(2).upper(), 1))
+
+
 async def get_db_stats_api() -> dict:
     try:
         total_movies = total_tv = total_episodes = total_streams = total_db_size = 0
+        total_movies_bytes = total_tv_bytes = 0
 
         for i in range(1, db.current_db_index + 1):
             storage = db.dbs.get(f"storage_{i}")
@@ -2367,6 +2389,8 @@ async def get_db_stats_api() -> dict:
 
             total_movies += await storage["movie"].count_documents({})
             async for movie in storage["movie"].find({}, {"telegram": 1}):
+                for t in movie.get("telegram", []):
+                    total_movies_bytes += _size_to_bytes(t.get("size"))
                 total_streams += len(movie.get("telegram", []))
 
             total_tv += await storage["tv"].count_documents({})
@@ -2374,6 +2398,8 @@ async def get_db_stats_api() -> dict:
                 for season in show.get("seasons", []):
                     for episode in season.get("episodes", []):
                         total_episodes += 1
+                        for t in episode.get("telegram", []):
+                            total_tv_bytes += _size_to_bytes(t.get("size"))
                         total_streams += len(episode.get("telegram", []))
 
             try:
@@ -2381,6 +2407,7 @@ async def get_db_stats_api() -> dict:
             except Exception:
                 pass
 
+        total_bytes = total_movies_bytes + total_tv_bytes
         return {
             "status": "success",
             "data": {
@@ -2391,6 +2418,12 @@ async def get_db_stats_api() -> dict:
                 "streams": total_streams,
                 "uptime": get_readable_time(int(time() - StartTime)),
                 "db_size": get_readable_file_size(total_db_size),
+                "movies_bytes": total_movies_bytes,
+                "tv_bytes": total_tv_bytes,
+                "total_bytes": total_bytes,
+                "movies_readable": get_readable_file_size(total_movies_bytes),
+                "tv_readable": get_readable_file_size(total_tv_bytes),
+                "total_readable": get_readable_file_size(total_bytes),
                 "storage_dbs": db.current_db_index,
                 "auth_channels": len(SettingsManager.current().auth_channels),
             },

@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 from pyrogram.errors import FloodWait, ChannelPrivate, ChatAdminRequired
 
 from Backend.logger import LOGGER
+from Backend.helper.announcer import announce_new_media
 from Backend.helper.encrypt import encode_string, decode_string
 from Backend.helper.manual_add import stamp_caption_with_id
 from Backend.helper.metadata import caption_with_links, extract_default_id, has_raw_ref, metadata
@@ -516,6 +517,7 @@ class ScanManager:
                     s["counters"]["indexed"] += 1
                     if has_raw_ref(message.caption):
                         await stamp_caption_with_id(message, metadata_info)
+                    announce_new_media(metadata_info)
             else:
                 s["counters"]["skipped_meta"] += 1
         except Exception as e:

@@ -7,6 +7,7 @@ from urllib.parse import quote, unquote
 
 import PTN
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import JSONResponse, RedirectResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
 from pyrogram.enums import ChatMemberStatus
 from pyrogram.errors import UserNotParticipant
@@ -14,12 +15,13 @@ from pyrogram.errors import UserNotParticipant
 import httpx
 
 from Backend import __version__, db
+from Backend.helper.auto_catalog import provider_bucket
 from Backend.helper.database import META_PROJECTION
 from Backend.config import Telegram
 from Backend.helper.analytics import client_ip_from, record_client
 from Backend.fastapi.security.tokens import verify_token
 from Backend.helper.cf_stream import cf_enabled, cf_stream_url
-from Backend.fastapi.themes import DEFAULT_THEME, DEFAULT_STYLE, get_theme
+from Backend.fastapi.themes import DEFAULT_THEME, get_theme
 from Backend.helper.fanart import fanart_artwork
 from Backend.helper.global_search import global_search, is_global_search_enabled
 from Backend.helper.metadata.providers.cinemeta import get_detail, get_season
@@ -33,6 +35,13 @@ from Backend.logger import LOGGER
 from Backend.pyrofork.bot import StreamBot, get_streambot_url
 
 router = APIRouter(prefix="/stremio", tags=["Stremio Addon"])
+
+#----- Dedupe cache for the "Solicitar contenido" stream prompt:
+# Android TV retries the stream GET every ~15s during playback failure, which
+# would fire the n8n webhook + Telegram msg repeatedly. Cache (token, media_id)
+# for 120s to ensure only ONE request/notification per Stremio stream-click.
+_request_stream_cache: dict[tuple, float] = {}
+_REQUEST_STREAM_TTL = 120  # seconds
 templates = Jinja2Templates(directory="Backend/fastapi/templates")
 
 #----- Addon configuration
@@ -40,10 +49,8 @@ ADDON_NAME = "Telegram"
 ADDON_VERSION = __version__
 PAGE_SIZE = 15
 
-def _donation():
-    text = "Enjoying Telegram Stremio?\nTap to support the developer"
-    return {"name": "❤️ Support", "title": text, "description": text, "externalUrl": "https://donate.weebzonex.workers.dev"}
 
+#----- Wrap a direct stream URL with the configured proxy (plain prepend or MediaFlow)
 def build_proxy_url(original_url: str) -> str | None:
     settings = SettingsManager.current()
     base = settings.http_proxy_url
@@ -132,52 +139,262 @@ def _merge_filters(*filters) -> dict:
     return parts[0] if len(parts) == 1 else {"$and": parts}
 
 
-_TMDB_TRENDING_CACHE: dict = {}
-_TMDB_TRENDING_LOCKS: dict = {}
-_TMDB_TRENDING_TTL = 600  # 10 minutes cache
+_TMDB_LIST_CACHE: dict = {}
+_TMDB_LIST_LOCKS: dict = {}
+_TMDB_LIST_TTL = 600  # 10 minutes cache
+TMDB_LIST_PAGES = 20  # 20 pages x 20 items = up to 400 ranked ids
+TMDB_CATALOG_REGION = "MX"  # only applied to movie/popular (tv/popular has no region)
+
+# OTT auto-catalog auto_key -> catalog bucket name produced by provider_bucket()
+_OTT_AUTO_KEYS = {
+    "auto_netflix": "Netflix",
+    "auto_prime_video": "Prime Video",
+    "auto_disney": "Disney+",
+    "auto_hbo": "HBO",
+    "auto_apple_tv": "Apple TV",
+    "auto_hulu": "Hulu",
+    "auto_crunchyroll": "Crunchyroll",
+}
 
 
-async def _get_tmdb_trending_ids(media_type: str, time_window: str = "day") -> list[int]:
-    """Fetch daily trending TMDB IDs (cached for 10 minutes)."""
+def _tmdb_list_url(list_name: str, media_type: str, time_window: str) -> str:
+    if list_name == "trending":
+        return f"https://api.themoviedb.org/3/trending/{media_type}/{time_window}"
+    return f"https://api.themoviedb.org/3/{media_type}/{list_name}"
+
+
+async def _get_tmdb_list_ids(
+    list_name: str,
+    media_type: str,
+    time_window: str = "day",
+    pages: int = TMDB_LIST_PAGES,
+) -> list[int]:
+    """Fetch ordered ids from a TMDB list endpoint (trending/popular).
+
+    Pages are fetched concurrently and concatenated in ascending page order so
+    the result keeps TMDB's exact ranking. Cached for 10 minutes.
+    """
     api_key = tmdb_api_key()
     if not api_key:
         return []
 
-    cache_key = (media_type, time_window)
+    pages = max(1, int(pages))
+    cache_key = (list_name, media_type, time_window, pages)
     now = time.monotonic()
-    cached = _TMDB_TRENDING_CACHE.get(cache_key)
-    if cached and now - cached[0] < _TMDB_TRENDING_TTL:
+    cached = _TMDB_LIST_CACHE.get(cache_key)
+    if cached and now - cached[0] < _TMDB_LIST_TTL:
         return list(cached[1])
 
-    lock = _TMDB_TRENDING_LOCKS.setdefault(cache_key, asyncio.Lock())
+    lock = _TMDB_LIST_LOCKS.setdefault(cache_key, asyncio.Lock())
     async with lock:
-        now = time.monotonic()
-        cached = _TMDB_TRENDING_CACHE.get(cache_key)
-        if cached and now - cached[0] < _TMDB_TRENDING_TTL:
+        cached = _TMDB_LIST_CACHE.get(cache_key)
+        if cached and time.monotonic() - cached[0] < _TMDB_LIST_TTL:
             return list(cached[1])
 
+        url = _tmdb_list_url(list_name, media_type, time_window)
+        semaphore = asyncio.Semaphore(6)
+
+        async def _fetch_page(client, page_no: int):
+            params = {"api_key": api_key, "page": page_no}
+            if list_name == "popular" and media_type == "movie":
+                params["region"] = TMDB_CATALOG_REGION
+            async with semaphore:
+                try:
+                    resp = await client.get(url, params=params)
+                except Exception:
+                    return page_no, []
+                if resp.status_code != 200:
+                    return page_no, []
+                return page_no, (resp.json() or {}).get("results") or []
+
         ids: list[int] = []
+        seen: set[int] = set()
         try:
-            url = f"https://api.themoviedb.org/3/trending/{media_type}/{time_window}"
             async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.get(url, params={"api_key": api_key, "page": 1})
-                if resp.status_code == 200:
-                    data = resp.json()
-                    for item in data.get("results") or []:
-                        raw_id = item.get("id")
-                        if raw_id:
-                            try:
-                                ids.append(int(raw_id))
-                            except (TypeError, ValueError):
-                                pass
+                pages_data = await asyncio.gather(
+                    *(_fetch_page(client, p) for p in range(1, pages + 1))
+                )
+            for _, results in sorted(pages_data, key=lambda pair: pair[0]):
+                for item in results:
+                    raw_id = item.get("id")
+                    if not raw_id:
+                        continue
+                    try:
+                        tid = int(raw_id)
+                    except (TypeError, ValueError):
+                        continue
+                    if tid in seen:
+                        continue
+                    seen.add(tid)
+                    ids.append(tid)
+
+            first_page = next((res for pg, res in pages_data if pg == 1), [])
+            top_titles = [(r.get("title") or r.get("name") or "") for r in first_page[:5]]
+            region_note = (
+                f" region={TMDB_CATALOG_REGION}"
+                if list_name == "popular" and media_type == "movie"
+                else ""
+            )
+            LOGGER.info(
+                f"[TMDB {list_name}/{media_type}]{region_note} {len(ids)} ordered ids | top: {top_titles}"
+            )
         except Exception as exc:
-            LOGGER.warning(f"[TMDB Trending] Fetch failed for {media_type}: {exc}")
+            LOGGER.warning(f"[TMDB {list_name}] Fetch failed for {media_type}: {exc}")
             if cached:
                 return list(cached[1])
             return []
 
         if ids:
-            _TMDB_TRENDING_CACHE[cache_key] = (time.monotonic(), ids)
+            _TMDB_LIST_CACHE[cache_key] = (time.monotonic(), ids)
+        return ids
+
+
+async def _get_tmdb_trending_ids(
+    media_type: str, time_window: str = "day", pages: int = TMDB_LIST_PAGES
+) -> list[int]:
+    return await _get_tmdb_list_ids("trending", media_type, time_window, pages)
+
+
+async def _get_tmdb_popular_ids(media_type: str, pages: int = TMDB_LIST_PAGES) -> list[int]:
+    return await _get_tmdb_list_ids("popular", media_type, "day", pages)
+
+
+_TMDB_PROVIDER_MAP_CACHE: dict = {}
+_TMDB_PROVIDER_MAP_TTL = 86400  # 24 hours
+
+# Storefronts and channel add-ons that must not count as a subscription service.
+_PROVIDER_SKIP_WORDS = (
+    "store",
+    "channel",
+    "amazon video",
+    "google play",
+    "youtube",
+    "fandango",
+)
+
+_TMDB_DISCOVER_CACHE: dict = {}
+_TMDB_DISCOVER_LOCKS: dict = {}
+_TMDB_DISCOVER_TTL = 600  # 10 minutes
+
+
+async def _get_region_provider_buckets(media_type: str, region: str) -> dict:
+    """Map catalog bucket name -> TMDB provider ids actually available in a region.
+
+    Storefronts (rent/buy) and channel add-ons are skipped so a platform catalog
+    only reflects the real subscription service.
+    """
+    api_key = tmdb_api_key()
+    if not api_key:
+        return {}
+
+    cache_key = (media_type, region)
+    now = time.monotonic()
+    cached = _TMDB_PROVIDER_MAP_CACHE.get(cache_key)
+    if cached and now - cached[0] < _TMDB_PROVIDER_MAP_TTL:
+        return cached[1]
+
+    buckets: dict = {}
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                f"https://api.themoviedb.org/3/watch/providers/{media_type}",
+                params={"api_key": api_key, "watch_region": region},
+            )
+        if resp.status_code != 200:
+            return buckets
+        for provider in (resp.json() or {}).get("results") or []:
+            name = (provider.get("provider_name") or "").strip()
+            low = name.lower()
+            if not low or any(word in low for word in _PROVIDER_SKIP_WORDS):
+                continue
+            bucket = provider_bucket(name)
+            pid = provider.get("provider_id")
+            if bucket and pid is not None:
+                buckets.setdefault(bucket, []).append(int(pid))
+    except Exception as exc:
+        LOGGER.warning(f"[TMDB Providers] region map failed for {media_type}/{region}: {exc}")
+        return cached[1] if cached else buckets
+
+    _TMDB_PROVIDER_MAP_CACHE[cache_key] = (time.monotonic(), buckets)
+    return buckets
+
+
+async def _get_provider_discover_ids(
+    provider_ids: list[int],
+    media_type: str,
+    region: str,
+    pages: int = TMDB_LIST_PAGES,
+) -> list[int]:
+    """Ordered ids for 'top on this platform' in the given region."""
+    api_key = tmdb_api_key()
+    if not api_key or not provider_ids:
+        return []
+
+    pages = max(1, int(pages))
+    provider_param = "|".join(str(pid) for pid in sorted(set(provider_ids)))
+    cache_key = (media_type, region, provider_param, pages)
+    now = time.monotonic()
+    cached = _TMDB_DISCOVER_CACHE.get(cache_key)
+    if cached and now - cached[0] < _TMDB_DISCOVER_TTL:
+        return list(cached[1])
+
+    lock = _TMDB_DISCOVER_LOCKS.setdefault(cache_key, asyncio.Lock())
+    async with lock:
+        cached = _TMDB_DISCOVER_CACHE.get(cache_key)
+        if cached and time.monotonic() - cached[0] < _TMDB_DISCOVER_TTL:
+            return list(cached[1])
+
+        url = f"https://api.themoviedb.org/3/discover/{media_type}"
+        semaphore = asyncio.Semaphore(6)
+
+        async def _fetch_page(client, page_no: int):
+            async with semaphore:
+                try:
+                    resp = await client.get(url, params={
+                        "api_key": api_key,
+                        "page": page_no,
+                        "sort_by": "popularity.desc",
+                        "watch_region": region,
+                        "with_watch_providers": provider_param,
+                    })
+                except Exception:
+                    return page_no, []
+                if resp.status_code != 200:
+                    return page_no, []
+                return page_no, (resp.json() or {}).get("results") or []
+
+        ids: list[int] = []
+        seen: set[int] = set()
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                pages_data = await asyncio.gather(
+                    *(_fetch_page(client, p) for p in range(1, pages + 1))
+                )
+            for _, results in sorted(pages_data, key=lambda pair: pair[0]):
+                for item in results:
+                    raw_id = item.get("id")
+                    if not raw_id:
+                        continue
+                    try:
+                        tid = int(raw_id)
+                    except (TypeError, ValueError):
+                        continue
+                    if tid in seen:
+                        continue
+                    seen.add(tid)
+                    ids.append(tid)
+            first_page = next((res for pg, res in pages_data if pg == 1), [])
+            top_titles = [(r.get("title") or r.get("name") or "") for r in first_page[:5]]
+            LOGGER.info(
+                f"[TMDB discover/{media_type}] providers={provider_param} region={region} "
+                f"{len(ids)} ids | top: {top_titles}"
+            )
+        except Exception as exc:
+            LOGGER.warning(f"[TMDB discover] failed for {media_type}/{provider_param}: {exc}")
+            return list(cached[1]) if cached else []
+
+        if ids:
+            _TMDB_DISCOVER_CACHE[cache_key] = (time.monotonic(), ids)
         return ids
 
 
@@ -225,6 +442,108 @@ async def _get_db_matches_in_tmdb_order(
     # Preserve the exact ranking from TMDB
     ordered = [by_tmdb_id[tid] for tid in tmdb_ids if tid in by_tmdb_id]
     return ordered
+
+
+async def _build_tmdb_ranked_items(
+    media_type: str,
+    tmdb_ids: list[int],
+    token_data: dict,
+    genre_filter: Optional[str],
+    stremio_skip: int,
+) -> list[dict]:
+    """Intersect a ranked TMDB id list with the local library, keeping TMDB order."""
+    if not tmdb_ids:
+        return []
+    db_matches = await _get_db_matches_in_tmdb_order(
+        media_type, tmdb_ids, token_data, genre_filter=genre_filter
+    )
+    start = max(stremio_skip, 0)
+    return db_matches[start:start + PAGE_SIZE]
+
+
+async def _search_local_items(
+    media_type: str,
+    token_data: dict,
+    genre_filter: Optional[str],
+    search_query: str,
+    page: int,
+) -> list[dict]:
+    """Search the whole local library (not just the TMDB-ranked slice)."""
+    db_media_type = "tv" if media_type == "series" else "movie"
+    query_parts = [_visibility_query(token_data), _not_exclusive_clause()]
+    if genre_filter:
+        query_parts.append({"genres": {"$in": [genre_filter]}})
+    found = await db.search_documents(
+        query=search_query,
+        page=page,
+        page_size=PAGE_SIZE,
+        extra_filter=_merge_filters(*query_parts),
+        media_type=db_media_type,
+    )
+    return [
+        it for it in found.get("results", [])
+        if it.get("media_type") == db_media_type
+    ]
+
+
+async def _stored_catalog_items(
+    catalog: dict,
+    media_type: str,
+    token_data: dict,
+    search_query: Optional[str],
+    page: int,
+) -> list[dict]:
+    """Serve the items snapshot stored in a custom/auto catalog document."""
+    db_media_type = "tv" if media_type == "series" else "movie"
+    visible_items = [
+        it for it in (catalog.get("items") or [])
+        if it.get("media_type") == db_media_type
+        and _token_can_view(*_effective_visibility(catalog, it), token_data)
+    ]
+    visible_items.sort(
+        key=lambda it: it.get("updated_on") or it.get("added_at") or datetime.min,
+        reverse=True,
+    )
+    if search_query:
+        ids = [int(it["tmdb_id"]) for it in visible_items if it.get("tmdb_id") is not None]
+        found = await db.search_documents(
+            query=search_query, page=page, page_size=PAGE_SIZE,
+            extra_filter=_merge_filters({"tmdb_id": {"$in": ids}}, _visibility_query(token_data)),
+            media_type=db_media_type,
+        )
+        return [
+            it for it in found.get("results", [])
+            if it.get("media_type") == db_media_type
+        ]
+    start = (page - 1) * PAGE_SIZE
+    items = await db.get_documents(visible_items[start:start + PAGE_SIZE])
+    return [
+        it for it in items
+        if _token_can_view(
+            it.get("visibility") or "public", it.get("allowed_tokens") or [], token_data
+        )
+    ]
+
+
+async def _local_sorted_items(
+    media_type: str,
+    token_data: dict,
+    genre_filter: Optional[str],
+    page: int,
+    sort_params: list[tuple],
+) -> list[dict]:
+    vis_filter = _merge_filters(_visibility_query(token_data), _not_exclusive_clause())
+    if media_type == "movie":
+        data = await db.sort_movies(
+            sort_params, page, PAGE_SIZE, genre_filter=genre_filter,
+            extra_filter=vis_filter, projection=META_PROJECTION,
+        )
+        return data.get("movies", [])
+    data = await db.sort_tv_shows(
+        sort_params, page, PAGE_SIZE, genre_filter=genre_filter,
+        extra_filter=vis_filter, projection=META_PROJECTION,
+    )
+    return data.get("tv_shows", [])
 
 
 def _parse_stremio_id(id: str):
@@ -418,38 +737,88 @@ def format_released_date(media):
     return None
 
 
-#----- Build a Stremio stream display name/title from a filename
+#----- Resolution tag shown on the stream button (short label with sigla)
+_RES_TAG_MAP = [
+    (re.compile(r"2160p|4k|uhd", re.IGNORECASE), "4K (2160p)"),
+    (re.compile(r"1080p|fhd", re.IGNORECASE), "FHD (1080p)"),
+    (re.compile(r"720p|\bhd\b", re.IGNORECASE), "HD (720p)"),
+    (re.compile(r"480p|\bsd\b", re.IGNORECASE), "SD (480p)"),
+    (re.compile(r"360p", re.IGNORECASE), "360p"),
+]
+
+#----- Language / audio-track tags detected from the filename (order = display priority)
+_LANG_TAG_MAP = [
+    (re.compile(r"\b(lat(?:ino)?)\b", re.IGNORECASE), "Latino"),
+    (re.compile(r"\b(cast(?:ellano)?|espa[nñ]ol|esp)\b", re.IGNORECASE), "Español"),
+    (re.compile(r"\b(dual(?:[\s._-]*audio)?)\b", re.IGNORECASE), "Dual"),
+    (re.compile(r"\b(multi(?:[\s._-]*audio)?)\b", re.IGNORECASE), "Multi"),
+    (re.compile(r"\b(ingl[ée]s|english|eng)\b", re.IGNORECASE), "Inglés"),
+]
+
+#----- Known source/rip tags (kept short — no release group / site branding)
+_SOURCE_TAG_MAP = [
+    (re.compile(r"web[\s._-]?dl", re.IGNORECASE), "WEB-DL"),
+    (re.compile(r"web[\s._-]?rip", re.IGNORECASE), "WEBRip"),
+    (re.compile(r"blu[\s._-]?ray|bd[\s._-]?rip", re.IGNORECASE), "BluRay"),
+    (re.compile(r"hd[\s._-]?rip", re.IGNORECASE), "HDRip"),
+    (re.compile(r"hdtv", re.IGNORECASE), "HDTV"),
+    (re.compile(r"\bdvd\b", re.IGNORECASE), "DVD"),
+    (re.compile(r"\bcam\b", re.IGNORECASE), "CAM"),
+]
+
+
+def _resolution_tag(filename: str, quality: str) -> str:
+    for rx, label in _RES_TAG_MAP:
+        if rx.search(filename) or (quality and rx.search(str(quality))):
+            return label
+    return str(quality) if quality else "HD"
+
+
+def _detect_language_tags(filename: str) -> str:
+    found = []
+    for rx, label in _LANG_TAG_MAP:
+        if rx.search(filename) and label not in found:
+            found.append(label)
+    return " + ".join(found)
+
+
+def _detect_source_tag(filename: str) -> str:
+    for rx, label in _SOURCE_TAG_MAP:
+        if rx.search(filename):
+            return label
+    return ""
+
+
+#----- Build a Stremio stream display name/title from a filename.
+#----- Deliberately never exposes the raw filename (site/release-group branding) —
+#----- only clean tags: resolution, source, codec, language, size.
 def format_stream_details(filename: str, quality: str, size: str, is_split: bool = False) -> tuple[str, str]:
     size_emoji = "📦" if is_split else "💾"
+    filename = filename or ""
+
     try:
         parsed = PTN.parse(filename)
     except Exception:
-        return (f"Telegram {quality}", f"📁 {filename}\n{size_emoji} {size}")
+        parsed = {}
 
-    codec_parts = []
-    if parsed.get("codec"):
-        codec_parts.append(f"🎥 {parsed.get('codec')}")
-    if parsed.get("bitDepth"):
-        codec_parts.append(f"🌈 {parsed.get('bitDepth')}bit")
-    if parsed.get("audio"):
-        codec_parts.append(f"🔊 {parsed.get('audio')}")
-    if parsed.get("encoder"):
-        codec_parts.append(f"👤 {parsed.get('encoder')}")
+    res_tag = _resolution_tag(filename, quality)
+    stream_name = f"🎬 {res_tag}"
 
-    codec_info = " ".join(codec_parts) if codec_parts else ""
+    source_tag = _detect_source_tag(filename)
+    codec = parsed.get("codec") or ""
+    top_line_parts = [p for p in (source_tag, codec) if p]
+    top_line = " · ".join(top_line_parts)
 
-    resolution = parsed.get("resolution", quality)
-    quality_type = parsed.get("quality", "")
-    stream_name = f"Telegram {resolution} {quality_type}".strip()
+    lang_tag = _detect_language_tags(filename)
 
-    stream_title_parts = [
-        f"📁 {filename}",
-        f"{size_emoji} {size}",
-    ]
-    if codec_info:
-        stream_title_parts.append(codec_info)
+    title_lines = []
+    if top_line:
+        title_lines.append(f"🌐 {top_line}")
+    if lang_tag:
+        title_lines.append(f"🔊 {lang_tag}")
+    title_lines.append(f"{size_emoji} {size}")
 
-    stream_title = "\n".join(stream_title_parts)
+    stream_title = "\n".join(title_lines)
     return (stream_name, stream_title)
 
 
@@ -567,6 +936,18 @@ async def get_manifest(token: str, token_data: dict = Depends(verify_token)):
                 ]
                 has_movie = any(i.get("media_type") == "movie" for i in visible_items)
                 has_series = any(i.get("media_type") == "tv" for i in visible_items)
+
+                # OTT auto catalogs are served live from TMDB, so their stored
+                # snapshot may be empty while the catalog is still usable.
+                ott_bucket = _OTT_AUTO_KEYS.get(catalog.get("auto_key") or "")
+                if catalog.get("auto") and ott_bucket and catalog.get("visible", True):
+                    catalog_vis = catalog.get("visibility") or "public"
+                    if _token_can_view(
+                        catalog_vis, catalog.get("allowed_tokens") or [], token_data
+                    ):
+                        has_movie = True
+                        has_series = True
+
                 if not has_movie and not has_series:
                     continue
                 catalog_id = str(catalog.get("_id"))
@@ -1353,25 +1734,42 @@ async def get_catalog(token: str, media_type: str, id: str, extra: Optional[str]
             if not catalog:
                 return {"metas": []}
 
-            db_media_type = "tv" if media_type == "series" else "movie"
-            visible_items = [
-                it for it in (catalog.get("items") or [])
-                if it.get("media_type") == db_media_type
-                and _token_can_view(*_effective_visibility(catalog, it), token_data)
-            ]
-            visible_items.sort(key=lambda it: it.get("updated_on") or it.get("added_at") or datetime.min, reverse=True)
-            if search_query:
-                ids = [int(it["tmdb_id"]) for it in visible_items if it.get("tmdb_id") is not None]
-                found = await db.search_documents(
-                    query=search_query, page=page, page_size=PAGE_SIZE,
-                    extra_filter=_merge_filters({"tmdb_id": {"$in": ids}}, _visibility_query(token_data)),
-                    media_type=db_media_type,
+            ott_bucket = _OTT_AUTO_KEYS.get(catalog.get("auto_key") or "")
+            if catalog.get("auto") and ott_bucket:
+                catalog_vis = catalog.get("visibility") or (
+                    "public" if catalog.get("visible", True) else "owner"
                 )
-                items = [it for it in found.get("results", []) if it.get("media_type") == db_media_type]
+                if not _token_can_view(
+                    catalog_vis, catalog.get("allowed_tokens") or [], token_data
+                ):
+                    return {"metas": []}
+
+                if search_query:
+                    items = await _search_local_items(
+                        media_type, token_data, genre_filter, search_query, page
+                    )
+                else:
+                    tmdb_type = "movie" if media_type == "movie" else "tv"
+                    provider_map = await _get_region_provider_buckets(
+                        tmdb_type, TMDB_CATALOG_REGION
+                    )
+                    provider_ids = provider_map.get(ott_bucket) or []
+                    ranked_ids = await _get_provider_discover_ids(
+                        provider_ids, tmdb_type, TMDB_CATALOG_REGION
+                    )
+                    items = await _build_tmdb_ranked_items(
+                        media_type, ranked_ids, token_data, genre_filter, stremio_skip
+                    )
+
+                # Fall back to the stored snapshot when TMDB has nothing to offer
+                if not items and stremio_skip == 0 and not search_query:
+                    items = await _stored_catalog_items(
+                        catalog, media_type, token_data, None, page
+                    )
             else:
-                start = (page - 1) * PAGE_SIZE
-                items = await db.get_documents(visible_items[start:start + PAGE_SIZE])
-                items = [it for it in items if _token_can_view(it.get("visibility") or "public", it.get("allowed_tokens") or [], token_data)]
+                items = await _stored_catalog_items(
+                    catalog, media_type, token_data, search_query, page
+                )
         elif search_query:
             search_results = await db.search_documents(
                 query=search_query, page=page, page_size=PAGE_SIZE,
@@ -1386,35 +1784,45 @@ async def get_catalog(token: str, media_type: str, id: str, extra: Optional[str]
             if media_type != expected_type:
                 return {"metas": []}
 
-            items = []
-            tmdb_type = "movie" if media_type == "movie" else "tv"
-            trending_ids = await _get_tmdb_trending_ids(tmdb_type, "day")
-            if trending_ids:
-                db_matches = await _get_db_matches_in_tmdb_order(
-                    media_type, trending_ids, token_data, genre_filter=genre_filter
+            if search_query:
+                items = await _search_local_items(
+                    media_type, token_data, genre_filter, search_query, page
                 )
-                if search_query:
-                    q = search_query.lower()
-                    db_matches = [
-                        it for it in db_matches
-                        if q in (it.get("title") or "").lower()
-                        or q in (it.get("name") or "").lower()
-                        or q in (it.get("original_title") or "").lower()
-                    ]
-                start = max(stremio_skip, 0)
-                items = db_matches[start:start + PAGE_SIZE]
+            else:
+                tmdb_type = "movie" if media_type == "movie" else "tv"
+                ranked_ids = await _get_tmdb_trending_ids(tmdb_type, "day")
+                items = await _build_tmdb_ranked_items(
+                    media_type, ranked_ids, token_data, genre_filter, stremio_skip
+                )
 
             # Fallback to latest uploaded media if TMDB is unconfigured, empty, or returns no DB matches
-            if not items and stremio_skip == 0:
+            if not items and stremio_skip == 0 and not search_query:
                 LOGGER.info(f"[TMDB Trending] Falling back to latest {media_type} for catalog {id}")
-                sort_params = [("updated_on", "desc")]
-                vis_filter = _merge_filters(_visibility_query(token_data), _not_exclusive_clause())
-                if media_type == "movie":
-                    data = await db.sort_movies(sort_params, page, PAGE_SIZE, genre_filter=genre_filter, extra_filter=vis_filter, projection=META_PROJECTION)
-                    items = data.get("movies", [])
-                else:
-                    data = await db.sort_tv_shows(sort_params, page, PAGE_SIZE, genre_filter=genre_filter, extra_filter=vis_filter, projection=META_PROJECTION)
-                    items = data.get("tv_shows", [])
+                items = await _local_sorted_items(
+                    media_type, token_data, genre_filter, page, [("updated_on", "desc")]
+                )
+        elif id in {"top_movies", "top_series"}:
+            expected_type = "movie" if id == "top_movies" else "series"
+            if media_type != expected_type:
+                return {"metas": []}
+
+            if search_query:
+                items = await _search_local_items(
+                    media_type, token_data, genre_filter, search_query, page
+                )
+            else:
+                tmdb_type = "movie" if media_type == "movie" else "tv"
+                ranked_ids = await _get_tmdb_popular_ids(tmdb_type)
+                items = await _build_tmdb_ranked_items(
+                    media_type, ranked_ids, token_data, genre_filter, stremio_skip
+                )
+
+            # Fallback to local rating sort if TMDB is unconfigured, empty, or returns no DB matches
+            if not items and stremio_skip == 0 and not search_query:
+                LOGGER.info(f"[TMDB Popular] Falling back to rating sort for {media_type} catalog {id}")
+                items = await _local_sorted_items(
+                    media_type, token_data, genre_filter, page, [("rating", "desc")]
+                )
         else:
             if "latest" in id:
                 sort_params = [("updated_on", "desc")]
@@ -1606,14 +2014,22 @@ def _binge_group(quality: str, suffix: str = "") -> str:
 
 def _streams_from_global_results(token: str, global_results: list) -> list:
     streams = []
+    # Never expose the source channel name or the original message caption to
+    # the end user — show only a neutral "Telegram" source label so private
+    # channel / chat names (e.g. "ya pi, dejame vivir") never leak into Stremio.
     for r in global_results:
         is_split = bool(r.get("is_split"))
-        _, stream_title = format_stream_details(r["title"], r["quality"], r["size"], is_split=is_split)
+        # Pass the quality as the "filename" so format_stream_details only ever
+        # derives clean tags (resolution/source/lang) and never echoes the raw
+        # caption text back to the UI.
+        _, stream_title = format_stream_details(r.get("quality") or "", r["quality"], r["size"], is_split=is_split)
         stream_name = sort_name = f"🌐 GLOBAL {r['quality']}"
-        stream_title = f"{stream_title}\n📡 {r['source_chat']}"
+        stream_title = f"{stream_title}\n📡 Telegram"
         if is_split:
             kind = "zip parts" if r.get("is_zip") else "parts"
             stream_title += f" · 📦 {r.get('part_count', 0)} {kind}"
+        # Use a neutral slug in the download URL instead of the raw caption.
+        url = f"{SettingsManager.current().base_url}/dl/{token}/{r['token']}/{quote(r.get('quality') or 'video')}"
         size_bytes = parse_size_to_bytes(r.get("size", ""))
         custom = format_stream(SettingsManager.current(), r["title"], size_bytes, addon_name="🌐 Global",
                                is_split=is_split, parts=r.get("part_count", 0), channel=r.get("source_chat"))
@@ -1957,7 +2373,24 @@ async def get_streams(
             streams = filtered
 
     if not streams:
-        return {"streams": [_donation()]}
+        # No streams available — offer the user a one-click "request this title"
+        # action. The imdb_id is stable and identifies the title across seasons.
+        # NOTE: Stremio follows `url` as a video fetch, so we point it at a tiny
+        # HTML redirect page that fires the request POST and then refreshes to /requests.
+        # Use the FULL Stremio id (imdb_id:season:episode) so the webhook payload
+        # carries the exact season/episode the user selected.
+        _uid = id  # NOT imdb_id — that drops season/episode for series
+        _redirect_url = f"{SettingsManager.current().base_url}/stremio/{token}/request-stream/{str(_uid)}?from=stremio"
+        return {
+            "streams": [
+                {
+                    "name": "📢 Solicitar contenido",
+                    "title": "📩 No hay streams disponibles todavía. Hacé clic para solicitarlo — te avisamos cuando esté listo.",
+                    "url": _redirect_url,
+                    "behaviorHints": {"notWebReady": True},  # tells Stremio NOT to attempt media playback
+                }
+            ]
+        }
 
     ascending = config.get("quality_sort") == "asc"
     if is_combined:
@@ -1978,8 +2411,81 @@ async def get_streams(
         if name_count[s["name"]] > 1 and SettingsManager.current().stream_formatter == "default":
             seen[s["name"]] = seen.get(s["name"], 0) + 1
             s["name"] = f"{s['name']} ({seen[s['name']]})"
-    streams.append(_donation())
     return {"streams": streams}
+
+#----- Stream a "solicitar contenido" click from the Stremio player back into
+# the request pipeline (same webhook that the public /requests page uses).
+# Returns a tiny HTML page with a meta-refresh so Stremio (which follows the
+# stream `url`) does NOT attempt media playback — it loads this page, the JS
+# fires the request via queue_stream_request, then redirects to /requests.
+@router.get("/{token}/request-stream/{media_id}")
+async def request_stream(
+    token: str,
+    media_id: str,
+    request: Request,
+    from_query: str = None,
+):
+    token_data = await db.get_api_token(token)
+    if not token_data:
+        return HTMLResponse(
+            "<html><body><p>❌ Token inválido o expirado.</p>"
+            "<script>window.location='/requests'</script></body></html>",
+            status_code=404
+        )
+    base = SettingsManager.current().base_url
+    referer = request.headers.get("referer") or base
+    #----- Endpoint-level dedupe: Android TV retries the stream GET every ~15s
+    # during playback failure. 120s TTL → only ONE webhook+telegram per click.
+    cache_key = (token, media_id)
+    now = time.monotonic()
+    if cache_key in _request_stream_cache and (now - _request_stream_cache[cache_key]) < _REQUEST_STREAM_TTL:
+        LOGGER.info(f"request_stream deduped (cached {now - _request_stream_cache[cache_key]:.1f}s ago): {media_id}")
+        return HTMLResponse(
+            "<html><head><meta http-equiv=\"refresh\" content=\"0;url=/requests?submitted=1\"></head>"
+            "<body><p>📩 Solicitando contenido…</p></body></html>",
+        )
+    _request_stream_cache[cache_key] = now  # record this fire
+
+    try:
+        from Backend.helper.request_notifier import queue_stream_request
+        await queue_stream_request(media_id, token_data, referer)
+        # Return HTML page: server-side POST already fired above. Stremio's
+        # WebView follows the stream `url` and tries to render it as media;
+        # the JS fetch fires a companion call to _fire-request to ensure the
+        # webhook POST completes server-side. meta-refresh then redirects to /requests.
+        html = (
+            '<html><head>\n'
+            '<meta http-equiv="refresh" content="0;url=/requests?submitted=1">\n'
+            '<script>\n'
+            f'fetch("/stremio/{token}/_fire-request/{media_id}")\\n'
+            '  .then(r => r.json())\n'
+            '  .then(d => console.log("request", d))\n'
+            '  .catch(e => console.error(e));\n'
+            '</script>\n'
+            '</head><body><p>📩 Solicitando contenido…</p></body></html>'
+        )
+        return HTMLResponse(html)
+    except Exception as e:
+        LOGGER.error(f"stream request failed for {media_id}: {e}")
+        return HTMLResponse(
+            "<html><body><p>❌ No se pudo solicitar el contenido.</p>"
+            "<script>window.location='/requests'</script></body></html>",
+            status_code=500,
+        )
+
+# Companion endpoint: the JS in the HTML above calls this to trigger the POST,
+# keeping the request pipeline call server-side (no CORS issues from Stremio's view).
+@router.get("/{token}/_fire-request/{media_id}")
+async def fire_request(token: str, media_id: str, request: Request):
+    token_data = await db.get_api_token(token)
+    if not token_data:
+        return JSONResponse({"error": "invalid token"}, status_code=404)
+    base = SettingsManager.current().base_url
+    referer = request.headers.get("referer") or base
+    from Backend.helper.request_notifier import queue_stream_request
+    result = await queue_stream_request(media_id, token_data, referer)
+    return JSONResponse({"result": result})
+
 
 #----- Configure/install landing page rendered as HTML for a token
 @router.get("/{token}/configure")
@@ -2050,7 +2556,7 @@ async def configure_addon(token: str, request: Request):
 
     return templates.TemplateResponse("stremio_configure.html", {
         "request": request,
-        "theme": get_theme(request.session.get("theme", DEFAULT_THEME), request.session.get("style", DEFAULT_STYLE)),
+        "theme": get_theme(request.session.get("theme", DEFAULT_THEME)),
         "manifest_url": manifest_url,
         "web_install_url": web_install_url,
         "user_name": user_name,
