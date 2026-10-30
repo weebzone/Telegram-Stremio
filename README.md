@@ -69,31 +69,6 @@ Everything is managed from a friendly **web panel** — no coding, and almost no
 
 ---
 
-## 📱 Don't have a server? Use the TeleStremio Android app
-
-No VPS, no Docker, no MongoDB — **TeleStremio** runs this whole idea **on your phone**. It logs into your Telegram, hosts a local Stremio addon, and streams your channels on demand.
-
-<p align="center">
-  <a href="https://github.com/weebzone/Telegram-Stremio/releases/latest">
-    <img src="https://img.shields.io/badge/Download%20APK-F59E0B?style=for-the-badge&logo=android&logoColor=white" alt="Download APK" />
-  </a>
-</p>
-
-<table>
-  <tr>
-    <td><img src="https://raw.githubusercontent.com/weebzone/weebzone/main/assets/app/login.png" width="230" /></td>
-    <td><img src="https://raw.githubusercontent.com/weebzone/weebzone/main/assets/app/home.png" width="230" /></td>
-    <td><img src="https://raw.githubusercontent.com/weebzone/weebzone/main/assets/app/channels.png" width="230" /></td>
-  </tr>
-  <tr>
-    <td><img src="https://raw.githubusercontent.com/weebzone/weebzone/main/assets/app/status.png" width="230" /></td>
-    <td><img src="https://raw.githubusercontent.com/weebzone/weebzone/main/assets/app/settings.png" width="230" /></td>
-    <td><img src="https://raw.githubusercontent.com/weebzone/weebzone/main/assets/app/preferences.png" width="230" /></td>
-  </tr>
-</table>
-
-**Get started:** install the APK → log in with phone/QR → add your channels → turn the server on → paste the addon URL into Stremio. Want to watch outside your home Wi-Fi? Enable Remote access with [Tailscale](https://tailscale.com/download).
-
 ### ⚖️ App vs. the full self-hosted server
 
 The app is great for personal, single-user use, but it's intentionally lighter than the full server in this repo:
