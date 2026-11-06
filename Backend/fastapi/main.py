@@ -10,7 +10,6 @@ from Backend import __version__
 from Backend.fastapi.themes import DEFAULT_THEME, DEFAULT_STYLE, get_theme
 from Backend.fastapi.routes.api_routes import (
     add_custom_catalog_item_api,
-    add_subscription_plan_api,
     apply_media_rescan_api,
     assign_plan_api,
     auto_catalog_sync_status_api,
@@ -25,15 +24,12 @@ from Backend.fastapi.routes.api_routes import (
     grant_lifetime_api,
     set_token_lifetime_api,
     set_token_expiry_api,
-    subscription_preflight_api,
-    backfill_subscriber_names_api,
     dbcheck_status_api,
     duplicate_check_status_api,
     delete_custom_catalog_api,
     delete_media_api,
     delete_movie_quality_api,
     delete_request_api,
-    delete_subscription_plan_api,
     export_config_api,
     import_config_api,
     delete_tv_episode_api,
@@ -42,7 +38,6 @@ from Backend.fastapi.routes.api_routes import (
     download_logs_api,
     get_admin_stats_api,
     get_db_stats_api,
-    get_all_subscribers_api,
     get_all_tokens_api,
     get_auto_catalog_settings_api,
     get_catalog_order_api,
@@ -63,7 +58,6 @@ from Backend.fastapi.routes.api_routes import (
     request_search_api,
     request_submit_api,
     get_stream_analytics_api,
-    get_subscription_plans_api,
     get_settings_api,
     get_logs_api,
     get_manual_session_api,
@@ -82,7 +76,6 @@ from Backend.fastapi.routes.api_routes import (
     link_token_user_api,
     list_custom_catalogs_api,
     list_media_api,
-    manage_subscriber_api,
     manual_add_media_api,
     list_manual_add_catalogs_api,
     resolve_manual_metadata_api,
@@ -112,7 +105,6 @@ from Backend.fastapi.routes.api_routes import (
     update_media_api,
     update_request_api,
     update_settings_api,
-    update_subscription_plan_api,
     update_token_limits_api,
 )
 from Backend.fastapi.routes.stream_routes import decay_client_failures
@@ -124,7 +116,6 @@ from Backend.fastapi.routes.template_routes import (
     admin_access_page,
     admin_dashboard_page,
     admin_requests_page,
-    admin_subscriptions_page,
     public_request_page,
     custom_catalogs_page,
     dashboard_page,
@@ -390,35 +381,6 @@ async def get_user_activity(page: int = 1, per_page: int = 5, _: bool = Depends(
 async def clear_analytics(_: bool = Depends(require_auth)):
     return await clear_stream_analytics_api()
 
-@app.get("/admin/subscriptions", response_class=HTMLResponse)
-async def admin_subscriptions(request: Request, _: bool = Depends(require_auth)):
-    return await admin_subscriptions_page(request, _)
-
-@app.get("/api/admin/subscriptions/plans")
-async def get_subscription_plans(_: bool = Depends(require_auth)):
-    return await get_subscription_plans_api()
-
-@app.post("/api/admin/subscriptions/plans")
-async def add_subscription_plan(payload: dict, _: bool = Depends(require_auth)):
-    return await add_subscription_plan_api(payload)
-
-@app.put("/api/admin/subscriptions/plans/{plan_id}")
-async def update_subscription_plan(plan_id: str, payload: dict, _: bool = Depends(require_auth)):
-    return await update_subscription_plan_api(plan_id, payload)
-
-@app.delete("/api/admin/subscriptions/plans/{plan_id}")
-async def delete_subscription_plan(plan_id: str, _: bool = Depends(require_auth)):
-    return await delete_subscription_plan_api(plan_id)
-
-@app.get("/api/admin/subscriptions/users")
-async def get_subscribers(_: bool = Depends(require_auth)):
-    return await get_all_subscribers_api()
-
-@app.post("/api/admin/subscriptions/users/{user_id}/manage")
-async def manage_subscriber(user_id: int, payload: dict, _: bool = Depends(require_auth)):
-    return await manage_subscriber_api(user_id, payload)
-
-
 #----- Access management
 @app.get("/admin/access", response_class=HTMLResponse)
 async def admin_access(request: Request, _: bool = Depends(require_auth)):
@@ -455,15 +417,6 @@ async def set_token_expiry(token: str, payload: dict, _: bool = Depends(require_
 @app.post("/api/admin/access/grant-lifetime")
 async def grant_lifetime(_: bool = Depends(require_auth)):
     return await grant_lifetime_api()
-
-@app.get("/api/admin/subscriptions/preflight")
-async def subscription_preflight(_: bool = Depends(require_auth)):
-    return await subscription_preflight_api()
-
-@app.post("/api/admin/subscriptions/backfill-names")
-async def backfill_subscriber_names(_: bool = Depends(require_auth)):
-    return await backfill_subscriber_names_api()
-
 
 #----- Public content request page (no auth)
 @app.get("/request", response_class=HTMLResponse)

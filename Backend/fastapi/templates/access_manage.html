@@ -555,19 +555,6 @@
         }
     }
 
-    async function loadPlans() {
-        try {
-            const resp = await fetch('/api/admin/subscriptions/plans');
-            if (!resp.ok) return;
-            const result = await resp.json();
-            const plans = result.data || [];
-            const sel = document.getElementById('assign-plan-select');
-            if (!sel) return;
-            sel.innerHTML = '<option value="">— Select a plan —</option>' +
-                plans.map(p => { const sym = ({INR:'₹',USD:'$',EUR:'€',GBP:'£',JPY:'¥',AUD:'A$',CAD:'C$',SGD:'S$',AED:'د.إ',BRL:'R$'}[(p.currency||'INR').toUpperCase()]||((p.currency||'INR')+' ')); return `<option value="${p.days}">${p.days} days${p.price != null ? ' — ' + sym + p.price : ''}</option>`; }).join('');
-        } catch (e) { /* ignore */ }
-    }
-
     function openModal(id) {
         const m = document.getElementById(id);
         m.classList.remove('hidden'); m.classList.add('flex');
@@ -748,7 +735,6 @@
         if (e.key === 'Escape') ['create-modal', 'limits-modal', 'assign-modal', 'sub-action-modal'].forEach(closeModal);
     });
 
-    loadPlans();
     loadTokens();
 </script>
 {% endblock %}

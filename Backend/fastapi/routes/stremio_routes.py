@@ -56,20 +56,6 @@ def build_proxy_url(original_url: str) -> str | None:
         return url
     return f"{base}{original_url}"
 
-_membership_cache: dict = {}
-_MEMBERSHIP_TTL = 60
-_MEMBERSHIP_CACHE_MAX = 5000
-
-
-#----- Drop cached membership results for one user or all users
-def invalidate_membership_cache(user_id: int | None = None) -> None:
-    if user_id is None:
-        _membership_cache.clear()
-        return
-    for key in [k for k in _membership_cache if k[1] == user_id]:
-        _membership_cache.pop(key, None)
-
-
 #----- Effective (mode, allowed_tokens) for a title, honouring per-item overrides
 def _effective_visibility(catalog: dict, item: dict) -> tuple:
     if item.get("visibility") in ("public", "tokens", "owner"):
@@ -91,8 +77,6 @@ def _token_can_view(mode: str, allowed_tokens: list, token_data: Optional[dict] 
         return False
     if mode == "tokens":
         return token_data.get("token") in (allowed_tokens or [])
-    if SettingsManager.current().subscription:
-        return not token_data.get("subscription_expired")
     return True
 
 
@@ -616,16 +600,9 @@ async def get_manifest(token: str, token_data: dict = Depends(verify_token)):
     addon_desc = "Streams movies and series from your Telegram."
     addon_version = ADDON_VERSION
 
-    #----- Show expiry info in the addon: token's own expiry first, else the subscription
+    #----- Show the token's expiry in the addon
     try:
         expiry_obj = token_data.get("expires_at")
-        if expiry_obj is None and SettingsManager.current().subscription:
-            user_id = token_data.get("user_id")
-            if user_id:
-                user = await db.get_user(int(user_id))
-                if user and user.get("subscription_status") == "active":
-                    expiry_obj = user.get("subscription_expiry")
-
         if expiry_obj:
             expiry_str = expiry_obj.strftime("%d %b %Y").lstrip("0")
             addon_desc = (
@@ -1752,37 +1729,6 @@ async def _global_streams_for(
     return _streams_from_global_results(token, global_results)
 
 
-#----- Cached check that a user is still in the subscription group (fail-open)
-async def _is_subscription_member(user_id: int) -> bool:
-    group_id = SettingsManager.current().subscription_group_id
-    if not group_id:
-        return True
-
-    cache_key = (group_id, user_id)
-    cached = _membership_cache.get(cache_key)
-    now_ts = time.monotonic()
-    if cached and (now_ts - cached[0]) < _MEMBERSHIP_TTL:
-        return cached[1]
-
-    try:
-        member = await StreamBot.get_chat_member(group_id, user_id)
-        result = member.status not in (ChatMemberStatus.LEFT, ChatMemberStatus.BANNED)
-    except UserNotParticipant:
-        result = False
-    except Exception as e:
-        LOGGER.warning(f"[SUBSCRIPTION] Membership check failed for user {user_id}: {e}")
-        return True
-
-    if len(_membership_cache) >= _MEMBERSHIP_CACHE_MAX:
-        for k in [k for k, v in _membership_cache.items() if (now_ts - v[0]) >= _MEMBERSHIP_TTL]:
-            _membership_cache.pop(k, None)
-        if len(_membership_cache) >= _MEMBERSHIP_CACHE_MAX:
-            _membership_cache.clear()
-
-    _membership_cache[cache_key] = (now_ts, result)
-    return result
-
-
 #----- Resolve playable streams for a title (Telegram library or Global Search)
 @router.get("/{token}/stream/{media_type}/{id}.json")
 async def get_streams(
@@ -1800,34 +1746,16 @@ async def get_streams(
         request.headers.get("user-agent", ""),
     ))
 
-    if token_data.get("subscription_expired"):
+    if token_data.get("token_expired"):
         return {
             "streams": [
                 {
-                    "name": "🚫 Plan Expired",
-                    "title": "Your plan is expired.\nRenew it from the bot to continue watching.",
+                    "name": "🚫 Link Expired",
+                    "title": "Your access link has expired.\nAsk the admin for a new one.",
                     "url": get_streambot_url()
                 }
             ]
         }
-
-    #----- Subscription users must currently be members of the configured group.
-    #----- Admin, lifetime and admin-set token-expiry grants skip this check.
-    if (SettingsManager.current().subscription
-            and not token_data.get("is_admin")
-            and not token_data.get("subscription_exempt")
-            and not token_data.get("expires_at")):
-        user_id = token_data.get("user_id")
-        if user_id and not await _is_subscription_member(int(user_id)):
-            return {
-                "streams": [
-                    {
-                        "name": "📢 Join Required",
-                        "title": "First join the channel to stream it.\nThen wait for 2 min for verification",
-                        "url": get_streambot_url()
-                    }
-                ]
-            }
 
     if token_data.get("limit_exceeded"):
         limit_type = token_data["limit_exceeded"]
@@ -2029,21 +1957,12 @@ async def configure_addon(token: str, request: Request):
         token_expiry = token_doc.get("expires_at")
         if is_admin:
             status_color, status_text, expiry_str = "#22c55e", "Admin", "Never"
-        elif token_doc.get("subscription_exempt"):
-            status_color, status_text, expiry_str = "#22c55e", "Active", "Never"
         elif token_expiry is not None:
             expiry_str = _fmt(token_expiry)
             if _expired(token_expiry):
                 status_color, status_text = "#ef4444", "Expired"
             else:
                 status_color, status_text = "#22c55e", "Active"
-        elif SettingsManager.current().subscription:
-            expiry = user.get("subscription_expiry") if user else None
-            if user and user.get("subscription_status") == "active" and expiry and not _expired(expiry):
-                status_color, status_text, expiry_str = "#22c55e", "Active", _fmt(expiry)
-            else:
-                status_color, status_text = "#ef4444", "Expired"
-                expiry_str = _fmt(expiry) if expiry else "N/A"
         else:
             status_color, status_text, expiry_str = "#22c55e", "Active", "Never"
 

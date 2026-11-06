@@ -32,17 +32,17 @@ async def test_unknown_token_is_401(serve):
 async def test_valid_token(serve):
     serve(_token(expires_at=datetime.utcnow() + timedelta(days=1)))
     r = await tokens.verify_token("t")
-    assert not r["subscription_expired"] and r["limit_exceeded"] is None
+    assert not r["token_expired"] and r["limit_exceeded"] is None
 
 
 async def test_expired_token(serve):
     serve(_token(expires_at=datetime.utcnow() - timedelta(seconds=1)))
-    assert (await tokens.verify_token("t"))["subscription_expired"] is True
+    assert (await tokens.verify_token("t"))["token_expired"] is True
 
 
 async def test_admin_never_expires(serve):
     serve(_token(is_admin=True, expires_at=datetime.utcnow() - timedelta(days=9)))
-    assert (await tokens.verify_token("t"))["subscription_expired"] is False
+    assert (await tokens.verify_token("t"))["token_expired"] is False
 
 
 async def test_daily_limit(serve):

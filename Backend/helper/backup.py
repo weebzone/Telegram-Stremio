@@ -14,7 +14,6 @@ _SETTINGS_EXCLUDE = {"admin_password", "session_secret"}
 #----- backup section -> tracking collection
 _COLLECTIONS = {
     "custom_catalogs": "custom_catalogs",
-    "subscription_plans": "sub_plans",
     "tokens": "api_tokens",
 }
 

@@ -17,7 +17,6 @@ from pyrogram.types import ChatPrivileges
 import Backend
 from Backend import StartTime, __version__, db
 from Backend.fastapi.routes.stream_routes import _streamer_by_client
-from Backend.fastapi.routes.stremio_routes import invalidate_membership_cache
 from Backend.helper.analytics import get_activity_overview
 from Backend.helper.auto_catalog import (
     get_auto_catalog_settings,
@@ -382,26 +381,6 @@ async def set_token_expiry_api(token: str, payload: dict) -> dict:
     return {"status": "success", "expires_at": result.get("expires_at").isoformat() if result.get("expires_at") else None}
 
 
-#----- How many tokens would stop working if subscription mode is enabled
-async def subscription_preflight_api() -> dict:
-    return {"status": "success", "uncovered": await db.count_uncovered_tokens()}
-
-
-#----- Relabel "User <id>" placeholder subscribers with their real Telegram name
-async def backfill_subscriber_names_api() -> dict:
-    users = await db.get_all_subscribers()
-    updated = 0
-    for u in users:
-        uid = u.get("_id")
-        if uid is None or (u.get("first_name") or "") != f"User {uid}":
-            continue
-        name = await _fetch_tg_name(uid)
-        if name and name != f"User {uid}":
-            await db.update_subscriber_name(uid, name)
-            updated += 1
-    return {"status": "success", "updated": updated, "message": f"{updated} name(s) updated."}
-
-
 #----- Mark all tokens that aren't linked to a user as lifetime
 async def grant_lifetime_api() -> dict:
     count = await db.grant_lifetime_to_unlinked()
@@ -679,125 +658,12 @@ async def delete_request_api(request_id: str) -> dict:
     return {"status": "success", "message": "Request deleted."}
 
 
-#----- Admin subscription management
-async def get_subscription_plans_api() -> dict:
-    try:
-        plans = await db.get_subscription_plans()
-        return {"status": "success", "data": plans}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-
-async def add_subscription_plan_api(payload: dict) -> dict:
-    try:
-        days = int(payload.get("days", 0))
-        price = float(payload.get("price", 0.0))
-        currency = str(payload.get("currency") or "INR").upper().strip()
-        if days <= 0 or price < 0:
-            raise HTTPException(status_code=400, detail="Invalid plan parameters")
-            
-        plan_id = await db.add_subscription_plan(days, price, currency)
-        if plan_id:
-            return {"status": "success", "message": "Plan added successfully", "plan_id": plan_id}
-        else:
-            raise HTTPException(status_code=500, detail="Failed to add plan")
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-async def update_subscription_plan_api(plan_id: str, payload: dict) -> dict:
-    try:
-        days = int(payload.get("days", 0))
-        price = float(payload.get("price", 0.0))
-        currency = str(payload.get("currency") or "INR").upper().strip()
-        if days <= 0 or price < 0:
-             raise HTTPException(status_code=400, detail="Invalid plan parameters")
-             
-        success = await db.update_subscription_plan(plan_id, days, price, currency)
-        if success:
-             return {"status": "success", "message": "Plan updated successfully"}
-        else:
-             raise HTTPException(status_code=404, detail="Plan not found or update failed")
-    except HTTPException:
-         raise
-    except Exception as e:
-         raise HTTPException(status_code=500, detail=str(e))
-
-async def delete_subscription_plan_api(plan_id: str) -> dict:
-    try:
-        success = await db.delete_subscription_plan(plan_id)
-        if success:
-            return {"status": "success", "message": "Plan deleted successfully"}
-        else:
-            raise HTTPException(status_code=404, detail="Plan not found")
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-async def get_all_subscribers_api() -> dict:
-    try:
-        users = await db.get_all_subscribers()
-        for u in users:
-            u["is_admin"] = db._is_owner(u.get("_id"))
-        return {"status": "success", "data": users}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-
-async def manage_subscriber_api(user_id: int, payload: dict) -> dict:
-    try:
-        action = payload.get("action")
-        days = int(payload.get("days", 0))
-
-        if action not in ["extend", "reduce", "delete", "remove"]:
-            raise HTTPException(status_code=400, detail="Invalid action")
-
-        success = await db.manage_subscriber(user_id, action, days)
-
-        #----- On revoke/remove, kick the user from the group immediately (ban+unban)
-        if success and action in ("delete", "remove") and SettingsManager.current().subscription:
-            group_id = SettingsManager.current().subscription_group_id
-            if group_id:
-                try:
-                    await StreamBot.ban_chat_member(group_id, user_id)
-                    await StreamBot.unban_chat_member(group_id, user_id)
-                except Exception as exc:
-                    LOGGER.warning(f"Revoke: could not remove user {user_id} from group: {exc}")
-
-        #----- Reflect the change immediately in the stremio membership cache
-        if success:
-            try:
-                invalidate_membership_cache(user_id)
-            except Exception:
-                pass
-
-        if success:
-            verb = {"extend": "extended", "reduce": "reduced", "delete": "revoked", "remove": "removed"}.get(action, "updated")
-            return {"status": "success", "message": f"User subscription {verb} successfully"}
-        else:
-            raise HTTPException(status_code=404, detail="User not found or update failed")
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 #----- Access management
 async def get_all_tokens_api() -> dict:
     try:
         tokens = await db.get_all_api_tokens()
         now = datetime.utcnow()
         result = []
-
-        #----- Pre-load subscribers keyed by user_id for O(1) lookup
-        subscriber_map = {}
-        if SettingsManager.current().subscription:
-            try:
-                for u in await db.get_all_subscribers():
-                    uid = str(u.get("_id"))
-                    subscriber_map[uid] = u
-            except Exception:
-                pass
 
         #----- Display name, preferring a real name/alias over the "User <id>" placeholder
         def display_name(user, user_id, token_name=None):
@@ -813,96 +679,44 @@ async def get_all_tokens_api() -> dict:
                     return o
             return placeholder or "Telegram User"
 
-        sub_on = SettingsManager.current().subscription
-
-        #----- Unified access entry from optional user + token records
-        def build_entry(user_id, user, token_doc):
-            token_doc = token_doc or {}
-            user_found = bool(user)
-            sub_status = user.get("subscription_status") if user else None
-            is_admin = bool(token_doc.get("is_admin")) or db._is_owner(user_id)
-            lifetime = bool(token_doc.get("subscription_exempt"))
-            token_str = token_doc.get("token")
-
-            token_expiry = token_doc.get("expires_at")
-            user_sub_expiry = user.get("subscription_expiry") if user else None
-
-            #----- Sub OFF: token's own expiry (display only). Sub ON: token expiry is an
-            #----- admin grant, otherwise fall back to the subscription's expiry.
-            if not sub_on:
-                expiry = token_expiry
-                is_expired = False
-            elif is_admin or lifetime:
-                expiry = None
-                is_expired = False
-            elif token_expiry is not None:
-                expiry = token_expiry
-                is_expired = token_expiry < now
-            elif user_found and sub_status == "active" and user_sub_expiry:
-                expiry = user_sub_expiry
-                is_expired = user_sub_expiry < now
-            else:
-                expiry = user_sub_expiry
-                is_expired = True
-
-            created = token_doc.get("created_at") or (user.get("created_at") if user else None)
-            limits = token_doc.get("limits") or {}
-            usage = token_doc.get("usage") or {}
-            has_active_sub = sub_on and user_found and sub_status == "active" and bool(user_sub_expiry) and user_sub_expiry > now
-            never_expires = not expiry and (is_admin or lifetime or not sub_on)
-
-            return {
+        for t in tokens:
+            user_id = t.get("user_id")
+            user = None
+            if user_id:
+                try:
+                    user = await db.get_user(int(user_id))
+                except Exception:
+                    pass
+            is_admin = bool(t.get("is_admin")) or db._is_owner(user_id)
+            lifetime = bool(t.get("subscription_exempt"))
+            expiry = t.get("expires_at")
+            is_expired = bool(expiry and not is_admin and not lifetime and expiry < now)
+            created = t.get("created_at")
+            limits = t.get("limits") or {}
+            usage = t.get("usage") or {}
+            token_str = t.get("token")
+            result.append({
                 "token": token_str,
                 "user_id": user_id,
-                "user_name": display_name(user, user_id, token_doc.get("name")),
-                "user_found": user_found,
+                "user_name": display_name(user, user_id, t.get("name")),
+                "user_found": bool(user),
                 "is_admin": is_admin,
                 "lifetime": lifetime,
-                "never_expires": never_expires,
-                "has_token": bool(token_str),
-                "has_active_sub": has_active_sub,
+                "never_expires": not expiry or is_admin or lifetime,
+                "has_token": True,
                 "created_at": created.isoformat() if created else None,
                 "expires_at": expiry.isoformat() if expiry else None,
                 "is_expired": is_expired,
-                "sub_status": sub_status,
                 "daily_limit_gb": limits.get("daily_limit_gb") or 0,
                 "monthly_limit_gb": limits.get("monthly_limit_gb") or 0,
                 "daily_bytes": (usage.get("daily") or {}).get("bytes", 0),
                 "monthly_bytes": (usage.get("monthly") or {}).get("bytes", 0),
-                "addon_url": (
-                    f"{SettingsManager.current().base_url}/stremio/{token_str}/manifest.json"
-                    if token_str else None
-                ),
-            }
+                "addon_url": f"{SettingsManager.current().base_url}/stremio/{token_str}/manifest.json" if token_str else None,
+            })
 
-        seen_user_ids = set()
-
-        #----- 1. Process all existing tokens
-        for t in tokens:
-            token_user_id = t.get("user_id")
-
-            user = None
-            if token_user_id:
-                uid_str = str(token_user_id)
-                user = subscriber_map.get(uid_str)
-                if not user:
-                    try:
-                        user = await db.get_user(int(token_user_id))
-                    except Exception:
-                        pass
-                seen_user_ids.add(uid_str)
-
-            result.append(build_entry(token_user_id, user, t))
-
-        #----- 2. Add subscribers who have no token
-        for uid_str, u in subscriber_map.items():
-            if uid_str in seen_user_ids:
-                continue
-            result.append(build_entry(u.get("_id"), u, None))
-
-        #----- Sort: active-with-token first, active-no-token next, expired last
-        result.sort(key=lambda x: (x["is_expired"], not x["has_token"]))
-        return {"tokens": result, "subscription": sub_on}
+        #----- Active first, expired last
+        result.sort(key=lambda x: x["is_expired"])
+        return {"tokens": result}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -919,17 +733,18 @@ async def revoke_token_api(token: str) -> dict:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-#----- Assign or extend a subscription for any user_id
+#----- Give a Telegram user a token, expiring in `days` (0 = never)
 async def assign_plan_api(user_id: int, days: int) -> dict:
     try:
-        #----- Use the real Telegram name so the Plans page shows it (not "User <id>")
         name = await _fetch_tg_name(user_id)
-        #----- 0 / empty days means "never expires"
+        doc = await db.ensure_api_token_for_user(user_id, name)
+        if not doc or not doc.get("token"):
+            raise HTTPException(status_code=500, detail="Could not create token.")
         if days and days > 0:
-            result = await db.assign_subscription(user_id, days, name)
+            doc = await db.update_token_expiry(doc["token"], "set", days) or doc
         else:
-            result = await db.set_user_never_expires(user_id, name)
-        return {"status": "success", "data": result}
+            await db.set_token_lifetime(doc["token"], True)
+        return {"status": "success", "data": {"token": doc.get("token")}}
     except HTTPException:
         raise
     except Exception as e:
@@ -1787,7 +1602,7 @@ async def update_settings_api(payload: dict) -> dict:
         del payload["session_secret"]
 
     #----- Type coercion and validation
-    bool_keys = {"replace_mode", "duplicate_protection", "hide_catalog", "subscription", "show_proxy_and_non_proxy_both", "mediaflow_proxy", "announce_new_content", "delete_on_metadata_fail", "better_poster_enabled", "rpdb_enabled", "spatial_poster_enabled", "fanart_enabled", "fanart_shuffle", "fanart_low_res_poster"}
+    bool_keys = {"replace_mode", "duplicate_protection", "hide_catalog", "show_proxy_and_non_proxy_both", "mediaflow_proxy", "announce_new_content", "delete_on_metadata_fail", "better_poster_enabled", "rpdb_enabled", "spatial_poster_enabled", "fanart_enabled", "fanart_shuffle", "fanart_low_res_poster"}
     for key in bool_keys:
         if key in payload:
             payload[key] = bool(payload[key])
@@ -1849,19 +1664,6 @@ async def update_settings_api(payload: dict) -> dict:
                     detail=f"Invalid database URI (must start with mongodb:// or mongodb+srv://): {uri[:30]}…"
                 )
 
-    if "approver_ids" in payload:
-        if not isinstance(payload["approver_ids"], list):
-            raise HTTPException(status_code=400, detail="'approver_ids' must be a list.")
-        try:
-            payload["approver_ids"] = [int(v) for v in payload["approver_ids"] if str(v).strip()]
-        except (ValueError, TypeError):
-            raise HTTPException(status_code=400, detail="All approver_ids must be integers.")
-
-    if "subscription_group_id" in payload:
-        try:
-            payload["subscription_group_id"] = int(payload["subscription_group_id"])
-        except (ValueError, TypeError):
-            raise HTTPException(status_code=400, detail="'subscription_group_id' must be an integer.")
     def _validate_channel_id(channel: str, field: str) -> str:
         channel = str(channel).strip()
         if not channel:
@@ -1955,7 +1757,7 @@ async def update_settings_api(payload: dict) -> dict:
     for key in ("tmdb_api", "base_url", "upstream_repo", "upstream_branch",
                 "admin_username", "admin_password", "session_secret", "http_proxy_url",
                 "cf_stream_url", "cf_stream_secret", "cf_stream_mode",
-                "mediaflow_password", "payment_instructions", "payment_qr_url",
+                "mediaflow_password",
                 "announcement_channel", "skip_channel"):
         if key in payload and isinstance(payload[key], str):
             payload[key] = payload[key].strip()

@@ -591,79 +591,6 @@
         </div>
     </div>
 
-    <!-- ── Subscription ────────────────────────────────────────────────── -->
-    <div class="settings-card">
-        <h2><i class="fa-solid fa-credit-card"></i> Subscription</h2>
-        <label class="toggle-wrap" style="margin-bottom:1.25rem">
-            <input type="checkbox" class="toggle-input" id="subscription"
-                {% if settings.subscription %}checked{% endif %}
-                onchange="toggleSubFields()">
-            <span class="toggle-track"></span>
-            <span class="toggle-label">
-                <strong>Enable Subscription System</strong>
-                <span style="color:var(--text-sec);font-size:0.8rem;display:block">
-                    Restrict Stremio access to subscribed members
-                </span>
-            </span>
-        </label>
-
-        <div id="sub-fields" style="{% if not settings.subscription %}display:none{% endif %}">
-            <div style="margin-bottom:1rem">
-                <label class="s-label" for="subscription_group_id">Subscription Group ID</label>
-                <input type="number" id="subscription_group_id" class="s-input"
-                    value="{{ settings.subscription_group_id }}"
-                    placeholder="-100xxxxxxxx">
-                <span style="color:var(--text-sec);font-size:0.78rem;display:block;margin-top:0.4rem">
-                    Users are pointed back to your bot automatically for renewals and joining.
-                </span>
-            </div>
-
-            <!-- Payment method -->
-            <div style="margin-bottom:1rem">
-                <label class="s-label" for="payment_instructions">Payment Instructions
-                    <span style="font-weight:400;text-transform:none;letter-spacing:0">
-                        — shown to users when they pick a plan (UPI ID, bank details, etc.)</span>
-                </label>
-                <textarea id="payment_instructions" class="s-input" rows="4"
-                    placeholder="e.g. UPI: yourname@okhdfcbank&#10;Or PayPal: you@example.com&#10;After paying, send the screenshot here.">{{ settings.payment_instructions }}</textarea>
-            </div>
-            <div style="margin-bottom:1rem">
-                <label class="s-label" for="payment_qr_url">Payment QR Image URL
-                    <span style="font-weight:400;text-transform:none;letter-spacing:0">
-                        — optional; if set, the bot sends this QR image with the plan</span>
-                </label>
-                <input type="url" id="payment_qr_url" class="s-input"
-                    value="{{ settings.payment_qr_url }}"
-                    placeholder="https://.../upi-qr.png">
-            </div>
-
-            <!-- Approver IDs -->
-            <label class="s-label">APPROVER_IDS
-                <span style="font-weight:400;text-transform:none;letter-spacing:0">
-                    — Telegram user IDs allowed to approve subscriptions</span>
-            </label>
-            <div class="multi-list-items" id="approver_ids_items">
-                {% for uid in settings.approver_ids %}
-                <div class="multi-item">
-                    <input type="number" class="s-input" value="{{ uid }}" data-list="approver_ids">
-                    <button class="remove-btn" onclick="removeItem(this)" title="Remove">
-                        <i class="fa-solid fa-xmark"></i>
-                    </button>
-                </div>
-                {% endfor %}
-            </div>
-            <div class="add-row">
-                <input type="number" id="approver_ids_new" class="s-input"
-                    placeholder="Telegram user ID (numeric)"
-                    onkeydown="if(event.key==='Enter'){event.preventDefault();addItem('approver_ids')}">
-                <button class="add-btn" onclick="addItem('approver_ids')">+ Add Approver</button>
-            </div>
-        </div>
-    </div>
-
-
-
-
 <!-- ── Telegram User Session ──────────────────────────────────────── -->
 <div class="settings-card">
     <h2><i class="fa-solid fa-user-lock"></i> Telegram User Session</h2>
@@ -1266,7 +1193,7 @@ document.addEventListener('DOMContentLoaded', sessLoadStatus);
     <div class="settings-card">
         <h2><i class="fa-solid fa-box-archive"></i> Backup &amp; Restore</h2>
         <p class="bk-desc">
-            Export everything — settings, custom catalogs, subscription plans and access tokens — to a JSON file,
+            Export everything — settings, custom catalogs and access tokens — to a JSON file,
             or restore from one. Passwords and the session secret are never exported, but the file can hold bot
             tokens and database URIs, so keep it private.
         </p>
@@ -1331,12 +1258,6 @@ function toggleDuplicateProtection() {
     input.disabled = replaceOn;
     wrap.style.opacity = replaceOn ? '0.5' : '';
     wrap.style.pointerEvents = replaceOn ? 'none' : '';
-}
-
-/* ── Toggle sub-fields visibility ─────────────────────────────────────── */
-function toggleSubFields() {
-    const enabled = document.getElementById('subscription').checked;
-    document.getElementById('sub-fields').style.display = enabled ? '' : 'none';
 }
 
 function toggleGlobalSearchFields() {
@@ -1690,11 +1611,6 @@ async function saveSettings() {
         upstream_branch:               document.getElementById('upstream_branch').value.trim(),
         auth_channels:                 collectList('auth_channels'),
         anime_channels:                collectAnimeChannels(),
-        subscription:                  document.getElementById('subscription').checked,
-        subscription_group_id:         parseInt(document.getElementById('subscription_group_id').value || '0', 10),
-        payment_instructions:          document.getElementById('payment_instructions').value.trim(),
-        payment_qr_url:                document.getElementById('payment_qr_url').value.trim(),
-        approver_ids:                  collectList('approver_ids').map(Number),
         http_proxy_url:                document.getElementById('http_proxy_url').value.trim(),
         show_proxy_and_non_proxy_both: document.getElementById('show_proxy_and_non_proxy_both').checked,
         mediaflow_proxy:               document.getElementById('mediaflow_proxy').checked,
@@ -1816,14 +1732,12 @@ function renderSettings(s) {
     document.getElementById('duplicate_protection').checked = !!s.duplicate_protection;
     toggleDuplicateProtection();
     document.getElementById('hide_catalog').checked = !!s.hide_catalog;
-    document.getElementById('subscription').checked = !!s.subscription;
     document.getElementById('show_proxy_and_non_proxy_both').checked = !!s.show_proxy_and_non_proxy_both;
     document.getElementById('global_search').checked = !!s.global_search;
     const dsEl = document.getElementById('default_streaming');
     if (dsEl) dsEl.checked = s.default_streaming === 'userbot';
     document.getElementById('announce_new_content').checked = !!s.announce_new_content;
     document.getElementById('delete_on_metadata_fail').checked = !!s.delete_on_metadata_fail;
-    toggleSubFields();
     toggleGlobalSearchFields();
     toggleAnnouncementFields();
 
@@ -1852,7 +1766,6 @@ function renderSettings(s) {
     toggleFanartShuffle();
     document.getElementById('upstream_repo').value = s.upstream_repo || '';
     document.getElementById('upstream_branch').value = s.upstream_branch || '';
-    document.getElementById('subscription_group_id').value = s.subscription_group_id || 0;
     document.getElementById('http_proxy_url').value = s.http_proxy_url || '';
     document.getElementById('mediaflow_proxy').checked = !!s.mediaflow_proxy;
     document.getElementById('mediaflow_password').value = s.mediaflow_password || '';
@@ -1867,7 +1780,6 @@ function renderSettings(s) {
 
     const titles = s.channel_titles || {};
     rebuildAuthChannels(s.auth_channels, s.anime_channels, titles);
-    rebuildSimpleList('approver_ids_items', s.approver_ids, 'number');
     rebuildSimpleList('multi_tokens_items', s.multi_tokens, 'text');
     rebuildSimpleList('global_search_channels_items', s.global_search_channels, 'text', titles);
     rebuildSimpleList('manual_channels_items', s.manual_channels, 'text', titles);
