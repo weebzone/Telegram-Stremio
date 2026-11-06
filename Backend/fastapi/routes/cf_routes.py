@@ -7,7 +7,6 @@ from Backend.config import Telegram
 from Backend.helper.analytics import record_stream_start
 from Backend.helper.cf_live import apply_report
 from Backend.helper.cf_stream import verify_worker_request
-from Backend.helper.session_auth import get_active_session_string
 from Backend.helper.settings_manager import SettingsManager
 from Backend.logger import LOGGER
 
@@ -25,21 +24,16 @@ async def _verified_body(request: Request) -> bytes:
     return body
 
 
-#----- Telegram credentials the Worker needs to stream: API app, bot pool, optional userbot
+#----- Telegram credentials the Worker needs to stream: API app and bot pool
 @router.get("/api/cf/config")
 async def cf_config(request: Request):
     await _verified_body(request)
     tokens = [Telegram.BOT_TOKEN, *SettingsManager.current().multi_tokens]
-    try:
-        user_session = await get_active_session_string() or ""
-    except Exception as e:
-        LOGGER.warning(f"[CF] Could not load userbot session: {e}")
-        user_session = ""
     return {
         "api_id": Telegram.API_ID,
         "api_hash": Telegram.API_HASH,
         "bots": [t for t in dict.fromkeys(tokens) if t],
-        "user_session": user_session,
+        "user_session": "",  # Userbot removed; kept so older Workers still parse the response
     }
 
 

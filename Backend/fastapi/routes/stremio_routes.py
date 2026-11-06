@@ -21,7 +21,6 @@ from Backend.fastapi.security.tokens import verify_token
 from Backend.helper.cf_stream import cf_enabled, cf_stream_url
 from Backend.fastapi.themes import DEFAULT_THEME, DEFAULT_STYLE, get_theme
 from Backend.helper.fanart import fanart_artwork
-from Backend.helper.global_search import global_search, is_global_search_enabled
 from Backend.helper.metadata.providers.cinemeta import get_detail, get_season
 from Backend.helper.metadata import resolve_cover_url, COMBINED_SEASON, COMBINED_EPISODE_BASE, tmdb_api_key
 from Backend.helper.database import convert_objectid_to_str
@@ -1581,155 +1580,7 @@ def _binge_group(quality: str, suffix: str = "") -> str:
     return f"telegram-stremio-{quality}" + (f"-{route}" if route else "")
 
 
-def _streams_from_global_results(token: str, global_results: list) -> list:
-    streams = []
-    for r in global_results:
-        is_split = bool(r.get("is_split"))
-        _, stream_title = format_stream_details(r["title"], r["quality"], r["size"], is_split=is_split)
-        stream_name = sort_name = f"🌐 GLOBAL {r['quality']}"
-        stream_title = f"{stream_title}\n📡 {r['source_chat']}"
-        if is_split:
-            kind = "zip parts" if r.get("is_zip") else "parts"
-            stream_title += f" · 📦 {r.get('part_count', 0)} {kind}"
-        size_bytes = parse_size_to_bytes(r.get("size", ""))
-        custom = format_stream(SettingsManager.current(), r["title"], size_bytes, addon_name="🌐 Global",
-                               is_split=is_split, parts=r.get("part_count", 0), channel=r.get("source_chat"))
-        if custom:
-            stream_name, stream_title = custom
-        url = f"{SettingsManager.current().base_url}/dl/{token}/{r['token']}/{quote(r['title'])}"
-        if cf_enabled():
-            cf_url = cf_stream_url(token, r['token'], quote(r['title']))
-            if SettingsManager.current().cf_stream_mode == "cloudflare":
-                url = cf_url
-            else:
-                streams.append({"name": f"{stream_name} (Cloudflare)", "title": stream_title, "url": cf_url, "size_bytes": size_bytes, "sort_name": sort_name,
-                                "behaviorHints": {"bingeGroup": _binge_group(f"global-{r['quality']}", "(Cloudflare)")}})
-        streams.append({"name": stream_name, "title": stream_title, "url": url, "size_bytes": size_bytes, "sort_name": sort_name,
-                        "behaviorHints": {"bingeGroup": _binge_group(f"global-{r['quality']}")}})
-    return streams
-
-
-async def _global_streams_for(
-    token: str,
-    imdb_id: str = None,
-    media_type: str = "series",
-    season_num: Optional[int] = None,
-    episode_num: Optional[int] = None,
-    kitsu_id: Optional[int] = None,
-    absolute_episode: Optional[int] = None,
-    is_anime: bool = False,
-) -> list:
-    expected_title = ""
-    year = None
-    cinemeta_videos = []
-
-    if kitsu_id is not None:
-        expected_title, year = await _kitsu_title_year(int(kitsu_id))
-        is_anime = True
-    elif imdb_id:
-        imdb_media_type = "tvSeries" if media_type == "series" else "movie"
-        detail = await get_detail(imdb_id=imdb_id, media_type=imdb_media_type)
-        if not detail or not detail.get("title"):
-            return []
-        expected_title = detail["title"]
-        year = (detail.get("releaseDetailed") or {}).get("year") or None
-        cinemeta_videos = detail.get("videos") or []
-        if season_num is not None and episode_num is not None and absolute_episode is None:
-            try:
-                await get_season(imdb_id=imdb_id, season_id=season_num, episode_id=episode_num)
-            except Exception:
-                pass
-
-    if not expected_title:
-        return []
-
-    search_season = season_num
-    search_episode = episode_num
-    if is_anime and absolute_episode is not None:
-        search_season = None
-        search_episode = absolute_episode
-    elif is_anime and season_num is None and episode_num is not None:
-        search_season = None
-        search_episode = episode_num
-
-    abs_ep = absolute_episode
-    map_source = None
-    if (
-        abs_ep is None
-        and media_type == "series"
-        and imdb_id
-        and season_num is not None
-        and episode_num is not None
-    ):
-        try:
-            from Backend.helper.metadata.episode_maps import absolute_from_imdb_episode
-
-            mapped = await absolute_from_imdb_episode(
-                imdb_id,
-                int(season_num),
-                int(episode_num),
-                title=expected_title,
-                videos=cinemeta_videos,
-            )
-            if mapped and mapped.get("is_anime"):
-                is_anime = True
-                map_source = mapped.get("source")
-                abs_ep = mapped.get("absolute_episode")
-                if abs_ep is None and int(season_num) == 1:
-                    abs_ep = int(episode_num)
-        except Exception as e:
-            LOGGER.warning(f"[GLOBAL SEARCH] anime map lookup failed for {imdb_id}: {e}")
-
-    mapped_from_sxx = (
-        abs_ep is not None
-        and absolute_episode is None
-        and season_num is not None
-        and episode_num is not None
-    )
-    if mapped_from_sxx:
-        search_season = None
-        search_episode = int(abs_ep)
-        LOGGER.info(
-            f"[GLOBAL SEARCH] Anime mapped S{int(season_num):02d}E{int(episode_num):02d} "
-            f"→ absolute {int(abs_ep)} for '{expected_title}'"
-            + (f" (via {map_source})" if map_source else "")
-            + "; trying absolute first"
-        )
-
-    auth_channels = SettingsManager.current().auth_channels
-    try:
-        global_results = await global_search(
-            expected_title,
-            auth_channels,
-            year=year,
-            season=search_season,
-            episode=search_episode,
-        )
-    except Exception as e:
-        LOGGER.error(f"[GLOBAL SEARCH] search failed for '{expected_title}': {e}")
-        global_results = []
-
-    if not global_results and mapped_from_sxx:
-        LOGGER.info(
-            f"[GLOBAL SEARCH] Absolute {int(abs_ep)} empty for '{expected_title}'; "
-            f"falling back to S{int(season_num):02d}E{int(episode_num):02d}"
-        )
-        try:
-            global_results = await global_search(
-                expected_title,
-                auth_channels,
-                year=year,
-                season=season_num,
-                episode=episode_num,
-            )
-        except Exception as e:
-            LOGGER.error(f"[GLOBAL SEARCH] SxxExx fallback failed for '{expected_title}': {e}")
-            global_results = []
-
-    return _streams_from_global_results(token, global_results)
-
-
-#----- Resolve playable streams for a title (Telegram library or Global Search)
+#----- Resolve playable streams for a title from the Telegram library
 @router.get("/{token}/stream/{media_type}/{id}.json")
 async def get_streams(
     token: str,
@@ -1856,25 +1707,6 @@ async def get_streams(
                         add("(Direct)", original_url)
                     else:
                         add("", proxy_url or original_url, bool(proxy_url))
-    elif is_global_search_enabled():
-        try:
-            is_anime = bool(is_kitsu or (media_details and media_details.get("is_anime")))
-            log_id = f"kitsu:{kitsu_id}" if is_kitsu else imdb_id
-            LOGGER.info(f"{log_id}:{season_num}:{episode_num}:abs={absolute_episode}|{media_type}")
-            streams.extend(
-                await _global_streams_for(
-                    token,
-                    imdb_id=imdb_id,
-                    media_type=media_type,
-                    season_num=season_num,
-                    episode_num=episode_num,
-                    kitsu_id=kitsu_id,
-                    absolute_episode=absolute_episode,
-                    is_anime=is_anime,
-                )
-            )
-        except Exception as e:
-            LOGGER.error(f"[GLOBAL SEARCH] stream search failed for {id}: {e}")
 
     #----- Per-token quality filter (fall back to all if it would hide everything)
     config = token_data.get("config") or {}

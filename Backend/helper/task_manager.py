@@ -16,7 +16,6 @@ from pyrogram.errors import (
 from pyrogram.enums import ParseMode
 
 from Backend.logger import LOGGER
-import Backend.pyrofork.bot as botmod
 from Backend.pyrofork.bot import StreamBot
 
 DELETE_BATCH_SIZE = 10
@@ -29,12 +28,6 @@ _FALLBACK_WORTHY = (
     RPCError,
 )
 _SESSION_DEAD = (AuthKeyUnregistered, SessionRevoked)
-_userbot_session_dead = False
-
-
-def _userbot_usable() -> bool:
-    return botmod.Userbot is not None and not _userbot_session_dead
-
 
 async def _resolve_peer(client, chat_id) -> bool:
     try:
@@ -64,47 +57,11 @@ async def edit_message(chat_id: int, msg_id: int, new_caption: str):
                 return
             except Exception as e2:
                 LOGGER.error(f"Retry after peer resolve failed while editing {msg_id} in {chat_id}: {e2}")
-        if not _userbot_usable():
-            LOGGER.error(f"Error while editing message {msg_id} in {chat_id}: {e}")
-            return
-        LOGGER.info(f"[USERBOT] Fallback triggered: edit_message {msg_id} in {chat_id} (StreamBot: {e})")
-        await _userbot_edit(chat_id, msg_id, new_caption)
+        LOGGER.error(f"Error while editing message {msg_id} in {chat_id}: {e}")
     except _FALLBACK_WORTHY as e:
-        if not _userbot_usable():
-            LOGGER.error(f"Error while editing message {msg_id} in {chat_id}: {e}")
-            return
-        LOGGER.info(f"[USERBOT] Fallback triggered: edit_message {msg_id} in {chat_id} (StreamBot: {e})")
-        await _userbot_edit(chat_id, msg_id, new_caption)
+        LOGGER.error(f"Error while editing message {msg_id} in {chat_id}: {e}")
     except Exception as e:
         LOGGER.error(f"Error while editing message {msg_id} in {chat_id}: {e}")
-
-
-async def _userbot_edit(chat_id: int, msg_id: int, new_caption: str):
-    global _userbot_session_dead
-    try:
-        await botmod.Userbot.edit_message_caption(chat_id=chat_id, message_id=msg_id, caption=new_caption, parse_mode=ParseMode.HTML)
-        await sleep(2)
-    except FloodWait as e:
-        LOGGER.warning(f"[USERBOT] FloodWait detected: sleeping {e.value}s (edit {msg_id} in {chat_id})")
-        await sleep(e.value)
-        try:
-            await botmod.Userbot.edit_message_caption(chat_id=chat_id, message_id=msg_id, caption=new_caption, parse_mode=ParseMode.HTML)
-        except Exception as e2:
-            LOGGER.error(f"[USERBOT] Retry after FloodWait failed while editing {msg_id} in {chat_id}: {e2}")
-    except PeerIdInvalid as e:
-        if await _resolve_peer(botmod.Userbot, chat_id):
-            try:
-                await botmod.Userbot.edit_message_caption(chat_id=chat_id, message_id=msg_id, caption=new_caption, parse_mode=ParseMode.HTML)
-                return
-            except Exception as e2:
-                LOGGER.error(f"[USERBOT] Retry after peer resolve failed while editing {msg_id} in {chat_id}: {e2}")
-                return
-        LOGGER.error(f"[USERBOT] Peer unresolved while editing {msg_id} in {chat_id}: {e}")
-    except _SESSION_DEAD as e:
-        _userbot_session_dead = True
-        LOGGER.error(f"[USERBOT] Session invalid ({type(e).__name__}): {e}. Disabling Userbot fallback for this run.")
-    except Exception as e:
-        LOGGER.error(f"[USERBOT] Error while editing message {msg_id} in {chat_id}: {e}")
 
 
 async def delete_message(chat_id: int, msg_id: int):
@@ -120,22 +77,13 @@ async def delete_messages_batch(chat_id: int, msg_ids: List[int]):
 
         remaining = await _delete_chunk(StreamBot, "StreamBot", chat_id, chunk)
 
-        if remaining and _userbot_usable():
-            LOGGER.info(f"[USERBOT] Fallback triggered: deleting {len(remaining)} message(s) in {chat_id}")
-            remaining = await _delete_chunk(botmod.Userbot, "Userbot", chat_id, remaining)
-
         if remaining:
-            LOGGER.error(
-                f"Could not delete {len(remaining)} message(s) in {chat_id} "
-                f"(no usable Userbot fallback)" if not _userbot_usable() else
-                f"Could not delete {len(remaining)} message(s) in {chat_id} even with Userbot fallback"
-            )
+            LOGGER.error(f"Could not delete {len(remaining)} message(s) in {chat_id}")
 
         await sleep(1)
 
 
 async def _delete_chunk(client, client_label: str, chat_id: int, msg_ids: List[int]) -> List[int]:
-    global _userbot_session_dead
     try:
         await client.delete_messages(chat_id=chat_id, message_ids=msg_ids)
         LOGGER.info(f"[{client_label.upper()}] Deleted {len(msg_ids)} message(s) in {chat_id}")
@@ -162,8 +110,6 @@ async def _delete_chunk(client, client_label: str, chat_id: int, msg_ids: List[i
         LOGGER.warning(f"[{client_label.upper()}] Peer unresolved in {chat_id}: {e}")
         return msg_ids
     except _SESSION_DEAD as e:
-        if client_label == "Userbot":
-            _userbot_session_dead = True
         LOGGER.error(f"[{client_label.upper()}] Session invalid ({type(e).__name__}): {e}")
         return msg_ids
     except _FALLBACK_WORTHY as e:

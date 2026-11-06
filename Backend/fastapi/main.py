@@ -42,13 +42,6 @@ from Backend.fastapi.routes.api_routes import (
     get_catalog_order_api,
     update_catalog_order_api,
     get_user_activity_api,
-    session_send_code_api,
-    session_verify_code_api,
-    session_verify_password_api,
-    session_status_api,
-    session_disconnect_api,
-    session_reconnect_api,
-    session_remove_api,
     get_custom_catalog_items_api,
     get_dead_links_api,
     get_media_visibility_api,
@@ -58,9 +51,6 @@ from Backend.fastapi.routes.api_routes import (
     get_manual_session_api,
     get_system_stats_api,
     get_tools_channels_api,
-    bot_admin_scan_api,
-    bot_admin_apply_api,
-    bot_admin_apply_status_api,
     clear_manual_session_api,
     search_manual_session_api,
     set_manual_session_api,
@@ -612,36 +602,6 @@ async def formatter_preview(payload: dict, _: bool = Depends(require_auth)):
     return {"name": render(tpl["name"], pv), "description": render(tpl["description"], pv)}
 
 
-#----- Telegram user session login (replaces manual USER_SESSION_STRING)
-@app.get("/api/admin/settings/session")
-async def session_status(_: bool = Depends(require_auth)):
-    return await session_status_api()
-
-@app.post("/api/admin/settings/session/send-code")
-async def session_send_code(payload: dict, _: bool = Depends(require_auth)):
-    return await session_send_code_api(payload)
-
-@app.post("/api/admin/settings/session/verify-code")
-async def session_verify_code(payload: dict, _: bool = Depends(require_auth)):
-    return await session_verify_code_api(payload)
-
-@app.post("/api/admin/settings/session/verify-password")
-async def session_verify_password(payload: dict, _: bool = Depends(require_auth)):
-    return await session_verify_password_api(payload)
-
-@app.post("/api/admin/settings/session/disconnect")
-async def session_disconnect(_: bool = Depends(require_auth)):
-    return await session_disconnect_api()
-
-@app.post("/api/admin/settings/session/reconnect")
-async def session_reconnect(_: bool = Depends(require_auth)):
-    return await session_reconnect_api()
-
-@app.delete("/api/admin/settings/session")
-async def session_remove(_: bool = Depends(require_auth)):
-    return await session_remove_api()
-
-
 #----- System & Maintenance (WebUI replacement for /stats, /log, /restart bot commands)
 @app.get("/api/admin/stats")
 async def admin_db_stats(_: bool = Depends(require_auth)):
@@ -697,18 +657,6 @@ async def admin_tools(request: Request, _: bool = Depends(require_auth)):
 @app.get("/api/admin/tools/channels")
 async def tools_channels(_: bool = Depends(require_auth)):
     return await get_tools_channels_api()
-
-@app.get("/api/admin/tools/bot-admin/scan")
-async def tools_bot_admin_scan(_: bool = Depends(require_auth)):
-    return await bot_admin_scan_api()
-
-@app.post("/api/admin/tools/bot-admin/apply")
-async def tools_bot_admin_apply(payload: dict, _: bool = Depends(require_auth)):
-    return await bot_admin_apply_api(payload)
-
-@app.get("/api/admin/tools/bot-admin/apply/status")
-async def tools_bot_admin_apply_status(_: bool = Depends(require_auth)):
-    return await bot_admin_apply_status_api()
 
 @app.get("/api/admin/tools/manual-session")
 async def tools_manual_session_get(_: bool = Depends(require_auth)):

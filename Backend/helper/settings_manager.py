@@ -31,9 +31,6 @@ _DEFAULTS: Dict[str, Any] = {
     "mediaflow_password": "",
     "multi_tokens": [],
     "extra_databases": [],
-    "global_search": False,
-    "default_streaming": "bots",
-    "global_search_channels": [],
     "anime_channels": [],
     "manual_channels": [],
     "channel_titles": {},
@@ -73,7 +70,6 @@ def _seed_from_env() -> Dict[str, Any]:
         "admin_username":               Telegram.ADMIN_USERNAME,
         "admin_password":               hash_password(Telegram.ADMIN_PASSWORD),
         "session_secret":               secrets.token_hex(32),
-        "global_search_channels":       [],
         "http_proxy_url":               Telegram.HTTP_PROXY_URL,
         "show_proxy_and_non_proxy_both": Telegram.SHOW_PROXY_AND_NON_PROXY_BOTH,
         "multi_tokens":                 [],
@@ -111,18 +107,6 @@ class Settings:
     @property
     def mediaflow_proxy(self) -> bool:
         return bool(self._d.get("mediaflow_proxy", False))
-
-    @property
-    def global_search(self) -> bool:
-        return bool(self._d.get("global_search", False))
-
-    @property
-    def default_streaming(self) -> str:
-        return "userbot" if self._d.get("default_streaming") == "userbot" else "bots"
-
-    @property
-    def global_search_channels(self):
-        return list(self._d.get("global_search_channels") or [])
 
     @property
     def anime_channels(self) -> List[str]:
@@ -332,7 +316,7 @@ class SettingsManager:
     @staticmethod
     def _all_channel_ids(data: dict) -> set:
         ids = set()
-        for key in ("auth_channels", "global_search_channels", "manual_channels", "anime_channels"):
+        for key in ("auth_channels", "manual_channels", "anime_channels"):
             for c in (data.get(key) or []):
                 c = str(c).strip()
                 if c:
@@ -356,8 +340,6 @@ class SettingsManager:
             stream = getattr(botmod, "StreamBot", None)
             if stream is not None:
                 clients.append(stream)
-            if botmod.Userbot is not None:
-                clients.append(botmod.Userbot)
             for cid in missing:
                 resolved = None
                 for client in clients:
@@ -381,15 +363,6 @@ class SettingsManager:
         merged.update(new_values)
 
         results: Dict[str, str] = {}
-
-        #----- Global Search requires a Userbot session; enforce it server-side
-        if merged.get("global_search"):
-            if botmod.Userbot is None:
-                merged["global_search"] = False
-                LOGGER.warning(
-                    "SettingsManager: rejected global_search=True — no Userbot session connected."
-                )
-                results["global_search"] = "rejected — connect a Telegram session in Settings first"
 
         await cls._sync_channel_titles(merged)
 
@@ -454,9 +427,5 @@ class SettingsManager:
         cred_keys = {"admin_username", "admin_password"}
         if any(old.get(k) != new.get(k) for k in cred_keys):
             results["admin_credentials"] = "updated — takes effect on next login"
-
-        #----- Global Search toggle changed (module reads current() live per call)
-        if old.get("global_search") != new.get("global_search") and "global_search" not in results:
-            results["global_search"] = "enabled" if new.get("global_search") else "disabled"
 
         return results
