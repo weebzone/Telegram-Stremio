@@ -7,7 +7,7 @@ import traceback
 import PTN
 from guessit import guessit as _guessit
 
-from Backend.helper.metadata.common import COMBINED_EPISODE_BASE, COMBINED_SEASON, first
+from Backend.helper.metadata.common import first
 from Backend.helper.split_files import parse_combined_episodes, parse_split_info, strip_part_suffix
 from Backend.logger import LOGGER
 
@@ -86,10 +86,8 @@ def parse_media_name(name: str) -> dict:
 
 
 def apply_combined_override(payload: dict, combined: dict) -> None:
-    season, start, end = combined["season"], combined["start"], combined["end"]
-    payload["season_number"] = COMBINED_SEASON
-    payload["episode_number"] = COMBINED_EPISODE_BASE + season
-    payload["episode_title"] = f"Season {season} Combined"
+    #----- A combined file is just another stream of its season's first episode, labelled Full / E01-E13
+    start, end = combined["start"], combined["end"]
     label = "Full" if start is None else f"E{start:02d}-E{end:02d}"
     payload["quality"] = f"{payload.get('quality') or 'HD'} {label}"
     if not payload.get("episode_backdrop"):

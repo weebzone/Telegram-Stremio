@@ -22,7 +22,7 @@ from Backend.helper.cf_stream import cf_enabled, cf_stream_url
 from Backend.fastapi.themes import DEFAULT_THEME, DEFAULT_STYLE, get_theme
 from Backend.helper.fanart import fanart_artwork
 from Backend.helper.metadata.providers.cinemeta import get_detail, get_season
-from Backend.helper.metadata import resolve_cover_url, COMBINED_SEASON, COMBINED_EPISODE_BASE, tmdb_api_key
+from Backend.helper.metadata import resolve_cover_url, tmdb_api_key
 from Backend.helper.database import convert_objectid_to_str
 from Backend.helper.split_files import parse_combined_episodes, combined_name_key
 from Backend.helper.settings_manager import SettingsManager
@@ -1654,7 +1654,6 @@ async def get_streams(
 
     streams = []
 
-    is_combined = season_num == COMBINED_SEASON and episode_num is not None and episode_num >= COMBINED_EPISODE_BASE
 
     if media_details and "telegram" in media_details:
         fmt_meta = {
@@ -1669,7 +1668,7 @@ async def get_streams(
                 size = quality.get("size", "")
                 size_bytes = parse_size_to_bytes(size)
 
-                combined = parse_combined_episodes(filename) if is_combined else None
+                combined = parse_combined_episodes(filename)
                 episode_start = combined.get("start") or 0 if combined else 0
                 name_key = combined_name_key(filename) if combined else ""
 
@@ -1720,15 +1719,10 @@ async def get_streams(
         return {"streams": [_no_stream()]}
 
     ascending = config.get("quality_sort") == "asc"
-    if is_combined:
-        streams.sort(key=lambda s: s.get("episode_start", 0))
-        streams.sort(key=lambda s: s.get("name_key", ""))
-        streams.sort(key=lambda s: get_resolution_priority(s.get("sort_name", s.get("name", ""))), reverse=not ascending)
-    else:
-        streams.sort(
-            key=lambda s: (get_resolution_priority(s.get("sort_name", s.get("name", ""))), s.get("size_bytes", 0)),
-            reverse=not ascending
-        )
+    streams.sort(
+        key=lambda s: (get_resolution_priority(s.get("sort_name", s.get("name", ""))), s.get("size_bytes", 0)),
+        reverse=not ascending
+    )
     name_count: dict = {}
     for s in streams:
         name_count[s["name"]] = name_count.get(s["name"], 0) + 1

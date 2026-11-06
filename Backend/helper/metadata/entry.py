@@ -9,8 +9,6 @@ import Backend
 from Backend.helper.encrypt import encode_string
 from Backend.helper.metadata.common import (
     ensure_media_ids,
-    COMBINED_EPISODE_BASE,
-    COMBINED_SEASON,
     ID_REFS,
     extract_default_id,
     format_imdb_images,
