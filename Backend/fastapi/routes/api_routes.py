@@ -47,6 +47,7 @@ from Backend.helper.pyro import get_readable_file_size, get_readable_time
 from Backend.helper.scan_manager import dbcheck_manager, duplicate_manager, scan_manager
 from Backend.helper.settings_manager import SettingsManager
 from Backend.helper.skipped_files import retry_skipped
+from Backend.fastapi.security import tokens as token_cache
 from Backend.helper.split_files import strip_part_suffix
 from Backend.helper.subtitles import (
     list_languages,
@@ -339,6 +340,7 @@ async def create_token_api(payload: dict):
 
 #----- Toggle a token's lifetime (subscription-exempt) flag
 async def set_token_lifetime_api(token: str, payload: dict) -> dict:
+    token_cache.clear_cache()  # changes must apply to the next request, not 15 s later
     exempt = bool(payload.get("subscription_exempt"))
     if not await db.set_token_lifetime(token, exempt):
         raise HTTPException(status_code=404, detail="Token not found.")
@@ -348,6 +350,7 @@ async def set_token_lifetime_api(token: str, payload: dict) -> dict:
 #----- Set/extend/reduce a token's own expiry (subscription-off mode).
 #----- Optionally attach a Telegram user id at the same time.
 async def set_token_expiry_api(token: str, payload: dict) -> dict:
+    token_cache.clear_cache()  # changes must apply to the next request, not 15 s later
     user_id = payload.get("user_id")
     if user_id not in (None, "", 0, "0"):
         try:
@@ -371,6 +374,7 @@ async def grant_lifetime_api() -> dict:
     return {"status": "success", "updated": count, "message": f"{count} token(s) marked as lifetime."}
 
 async def update_token_limits_api(token: str, payload: dict):
+    token_cache.clear_cache()  # changes must apply to the next request, not 15 s later
     try:
         daily_limit = payload.get("daily_limit_gb")
         monthly_limit = payload.get("monthly_limit_gb")
@@ -651,6 +655,7 @@ async def get_all_tokens_api() -> dict:
 
 
 async def revoke_token_api(token: str) -> dict:
+    token_cache.clear_cache()  # changes must apply to the next request, not 15 s later
     try:
         success = await db.revoke_api_token(token)
         if success:

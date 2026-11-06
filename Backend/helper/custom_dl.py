@@ -1,4 +1,5 @@
 import asyncio
+import os
 import random
 import re
 import secrets
@@ -73,7 +74,6 @@ def _ensure_stale_cleaner():
 #----- Telegram file byte streamer with prefetch, multi-client parallelism, and telemetry
 class ByteStreamer:
     CHUNK_SIZE = 1024 * 1024
-    CLEAN_INTERVAL = 30 * 60
     _instances: Dict[int, "ByteStreamer"] = {}
 
     def __init__(self, client: Client, client_index: int = -1):
@@ -83,12 +83,13 @@ class ByteStreamer:
         self._session_lock = asyncio.Lock()
         if client_index >= 0:
             ByteStreamer._instances[client_index] = self
-        asyncio.create_task(self._clean_cache())
         asyncio.create_task(self._prewarm_sessions())
         _ensure_stale_cleaner()
 
     async def _prewarm_sessions(self):
-        common_dcs = [1, 2, 4, 5]
+        #----- Warm only the DCs named in PREWARM_DCS (e.g. "4,5"). Default none: sessions open on first
+        #----- use and stay cached, which saves ~3 idle sessions per bot on a small host.
+        common_dcs = [int(x) for x in os.getenv("PREWARM_DCS", "").replace(" ", "").split(",") if x.isdigit()]
         test_mode = await self.client.storage.test_mode()
         current_dc = await self.client.storage.dc_id()
         for dc in common_dcs:
@@ -551,12 +552,6 @@ class ByteStreamer:
             file_reference=file_id.file_reference,
             thumb_size=file_id.thumbnail_size,
         )
-
-    async def _clean_cache(self) -> None:
-        while True:
-            await asyncio.sleep(self.CLEAN_INTERVAL)
-            self._file_id_cache.clear()
-            LOGGER.debug("ByteStreamer: cleared file_id cache")
 
 
 #----- Speed test helper (runs independently, on-demand per file)

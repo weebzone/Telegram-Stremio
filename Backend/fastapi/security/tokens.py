@@ -1,3 +1,4 @@
+import time
 from datetime import datetime, timezone
 
 from fastapi import HTTPException
@@ -9,11 +10,34 @@ DAILY_LIMIT_VIDEO = "https://bit.ly/3YZFKT5"
 MONTHLY_LIMIT_VIDEO = "https://bit.ly/4rfjtgd"
 
 
+#----- Players send many requests per movie; skip the Mongo round trip for 15 s.
+#----- shortcut: a revoke or limit change is seen within 15 s, or at once via clear_cache().
+_CACHE_TTL = 15
+_cache: dict = {}
+
+
+def clear_cache() -> None:
+    _cache.clear()
+
+
+async def _load_token(token: str):
+    hit = _cache.get(token)
+    if hit and time.monotonic() - hit[0] < _CACHE_TTL:
+        return hit[1]
+    doc = await db.get_api_token(token)
+    if doc:
+        if len(_cache) >= 2000:
+            _cache.clear()
+        _cache[token] = (time.monotonic(), doc)
+    return doc
+
+
 #----- Validate an API token and annotate it with expiry/limit status
 async def verify_token(token: str):
-    token_data = await db.get_api_token(token)
-    if not token_data:
+    found = await _load_token(token)
+    if not found:
         raise HTTPException(status_code=401, detail="Invalid or expired API token")
+    token_data = dict(found)  # callers add keys; never touch the cached copy
 
     limits = token_data.get("limits", {})
     usage = token_data.get("usage", {})

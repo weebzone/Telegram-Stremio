@@ -16,6 +16,7 @@ def _token(**kw):
 @pytest.fixture
 def serve(monkeypatch):
     def _serve(doc):
+        tokens.clear_cache()   # verify_token caches by token string
         async def get_api_token(_):
             return doc
         monkeypatch.setattr(Backend.db, "get_api_token", get_api_token)

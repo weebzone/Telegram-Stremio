@@ -65,7 +65,7 @@ class Database:
     async def connect(self):
         try:
             for index, uri in enumerate(self.db_uris):
-                client = motor.motor_asyncio.AsyncIOMotorClient(uri)
+                client = motor.motor_asyncio.AsyncIOMotorClient(uri, maxPoolSize=10)
                 db_key = "tracking" if index == 0 else f"storage_{index}"
                 self.clients[db_key] = client
                 self.dbs[db_key] = client[self.db_name]
@@ -205,7 +205,7 @@ class Database:
 
     async def connect_storage_db(self, uri: str, index: int) -> bool:
         try:
-            client = motor.motor_asyncio.AsyncIOMotorClient(uri)
+            client = motor.motor_asyncio.AsyncIOMotorClient(uri, maxPoolSize=10)
             await client.admin.command("ping")
 
             db_key = "tracking" if index == 0 else f"storage_{index}"
