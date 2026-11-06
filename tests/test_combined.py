@@ -21,7 +21,7 @@ def test_name_parsing_unchanged():
     assert parse_combined_episodes("Show S02 Combined 1080p.mkv") == {"season": 2, "start": None, "end": None}
 
 
-def _q(name): return {"quality": "1080p Full", "id": name, "name": name, "size": "1 GB"}
+def _q(name, label="Full"): return {"quality": "1080p " + label, "id": name, "name": name, "size": "1 GB"}
 
 
 def test_migration_moves_old_pseudo_episode_into_episode_one():
@@ -51,3 +51,13 @@ def test_migration_keeps_real_specials():
     doc = {"title": "Show", "seasons": [{"season_number": 0, "episodes": [{"episode_number": 1, "title": "Special", "telegram": [_q("s")]}]}]}
     new, moved = migrate_show(doc)
     assert moved == 0 and new == doc
+
+
+def test_migration_puts_a_range_pack_on_its_first_episode():
+    doc = {"title": "Show", "seasons": [
+        {"season_number": 0, "episodes": [{"episode_number": 1002, "title": "Season 2 Combined",
+                                           "telegram": [_q("Show S02 E05-E08 1080p.mkv", "E05-E08"), _q("Show S02 Combined 1080p.mkv")]}]}]}
+    new, moved = migrate_show(doc)
+    eps = {e["episode_number"]: [q["name"] for q in e["telegram"]] for e in new["seasons"][0]["episodes"]}
+    assert moved == 1 and new["seasons"][0]["season_number"] == 2
+    assert eps == {5: ["Show S02 E05-E08 1080p.mkv"], 1: ["Show S02 Combined 1080p.mkv"]}

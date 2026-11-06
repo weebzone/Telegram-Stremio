@@ -46,6 +46,7 @@
             </div>
             <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
                 <span id="sk-total" class="sk-meta"></span>
+                <button class="sk-btn" id="sk-import" onclick="importSkipChannel()">Import from skip channel</button>
                 <button class="sk-btn primary" id="sk-retry-all" onclick="retryAll()">Retry all</button>
             </div>
         </div>
@@ -55,6 +56,7 @@
             <button class="sk-tab" data-status="missing" onclick="setStatus('missing')">Missing</button>
         </div>
         <p id="sk-progress" class="sk-meta" style="margin-top:.6rem;display:none"></p>
+        <p id="sk-import-status" class="sk-meta" style="margin-top:.3rem;display:none"></p>
     </div>
 
     <div id="sk-list" class="sk-shell"></div>
@@ -71,6 +73,7 @@ let status = 'pending';
 let page = 1;
 let pages = 1;
 let pollTimer = null;
+let importRunning = false;
 
 function el(tag, attrs = {}, text = '') {
     const e = document.createElement(tag);
@@ -117,6 +120,7 @@ async function load() {
         document.getElementById('sk-prev').disabled = page <= 1;
         document.getElementById('sk-next').disabled = page >= pages;
         updateProgress(data.retry_all);
+        updateImport(data.import);
         list.replaceChildren();
         if (!data.items.length) {
             list.append(el('div', { class: 'sk-card sk-empty' }, 'Nothing here.'));
@@ -135,7 +139,7 @@ function renderItem(it) {
     card.append(el('div', { class: 'sk-meta' }, it.size + ' · channel ' + it.chat_id + ' · msg ' + it.msg_id + (it.attempts ? ' · tried ' + it.attempts + 'x' : '')));
     card.append(el('div', { class: 'sk-reason' }, it.reason));
 
-    const title = el('input', { placeholder: 'Title (optional)', maxlength: '300' });
+    const title = el('input', { placeholder: 'Full name, e.g. Show S02E05 (optional)', maxlength: '300' });
     const id = el('input', { placeholder: 'IMDb tt… or TMDB link/id', maxlength: '200' });
     const season = el('input', { placeholder: 'Season (optional)', type: 'number', min: '1' });
     card.append(el('div', { class: 'sk-fix' }, '')); card.lastChild.append(title, id, season);
@@ -179,10 +183,31 @@ function updateProgress(st) {
         if (!pollTimer) pollTimer = setInterval(load, 3000);
     } else {
         btn.disabled = false;
-        if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+        if (pollTimer && !importRunning) { clearInterval(pollTimer); pollTimer = null; }
         if (st && st.total) { p.style.display = ''; p.textContent = 'Last retry-all: ' + st.ok + ' of ' + st.total + ' indexed.'; }
         else p.style.display = 'none';
     }
+}
+
+function updateImport(st) {
+    importRunning = !!(st && st.running);
+    const p = document.getElementById('sk-import-status');
+    const btn = document.getElementById('sk-import');
+    if (st && st.running) {
+        p.style.display = ''; p.textContent = 'Importing: scanned ' + st.scanned + ' ids, ' + st.added + ' added';
+        btn.disabled = true;
+        if (!pollTimer) pollTimer = setInterval(load, 3000);
+    } else {
+        btn.disabled = false;
+        if (st && st.error) { p.style.display = ''; p.textContent = 'Import failed: ' + st.error; }
+        else if (st && st.scanned) { p.style.display = ''; p.textContent = 'Last import: ' + st.added + ' added of ' + st.found + ' files found.'; }
+        else p.style.display = 'none';
+    }
+}
+
+async function importSkipChannel() {
+    if (!confirm('Scan the skip channel and add every file in it to this list?')) return;
+    try { await post('/api/admin/skipped/import'); load(); } catch (e) { alert(e.message); }
 }
 
 async function retryAll() {

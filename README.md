@@ -954,7 +954,7 @@ If Telegram-Stremio is useful to you, you can support its development here:
   `sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile`
   and add `/swapfile none swap sw 0 0` to `/etc/fstab`.
 - `docker-compose.yaml` caps the container at 850 MB. Raise `mem_limit` if you have more RAM.
-- Telegram media connections open on first play. Set `PREWARM_DCS="4,5"` in `config.env` to open them at boot instead.
+- Each bot opens Telegram media connections to 4 data centers at boot. Set `PREWARM_DCS="4,5"` (only the DCs your files live in) or `PREWARM_DCS="none"` in `config.env` to use less memory.
 - Leave `UPSTREAM_REPO` empty (and clear it in Settings) unless you want every boot to overwrite the code with that repository.
 
 ## Skipped files

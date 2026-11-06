@@ -65,6 +65,7 @@ async def metadata(
     override_id: str = None,
     season_hint: int = None,
     fallback_quality: str = None,
+    force_anime: bool = False,
 ) -> dict | None:
     if is_multipart_video(filename):
         LOGGER.info(f"Skipping {filename}: split video file not meant to be combined in Stremio")
@@ -128,7 +129,7 @@ async def metadata(
 
     # On anime channels, recover absolute from the raw filename when
     # PTN/GuessIt treated a numbered release as a movie (no season/episode).
-    anime_channel_early = _is_anime_channel(channel)
+    anime_channel_early = force_anime or _is_anime_channel(channel)
     if (
         anime_channel_early
         and not season
@@ -171,7 +172,7 @@ async def metadata(
         group_key = f"{channel}:{quality}:{_normalize(base)}.zip"
         part_number = 1
 
-    anime_channel = _is_anime_channel(channel)
+    anime_channel = force_anime or _is_anime_channel(channel)
 
     try:
         # TV path: classic SxxExx, or absolute/orphan episode on anime channels

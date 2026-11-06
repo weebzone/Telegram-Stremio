@@ -210,7 +210,7 @@ async def thumb_handler(id: str):
             raise HTTPException(status_code=400, detail="Invalid thumbnail id")
         #----- Public endpoint: only serve thumbnails from channels this server indexes
         cfg = SettingsManager.current()
-        served = {str(c).strip().replace("-100", "") for c in (*cfg.auth_channels, *cfg.manual_channels, *cfg.anime_channels)}
+        served = {str(c).strip().replace("-100", "") for c in (*cfg.auth_channels, *cfg.manual_channels, *cfg.anime_channels, cfg.skip_channel or "")}
         if str(decoded["chat_id"]) not in served:
             raise HTTPException(status_code=404, detail="No thumbnail")
         if not multi_clients:

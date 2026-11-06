@@ -1095,6 +1095,24 @@ class Database:
         res = await self.dbs["tracking"]["skipped_files"].delete_one({"_id": skipped_id})
         return res.deleted_count > 0
 
+    #----- True when a Telegram message is already part of any indexed movie / episode / split archive
+    async def stream_exists(self, channel: int, msg_id: int) -> bool:
+        stream_hash = await encode_string({"chat_id": channel, "msg_id": msg_id})
+        part_match = {"$elemMatch": {"chat_id": channel, "msg_id": msg_id}}
+        for i in range(1, self.current_db_index + 1):
+            storage = self.dbs.get(f"storage_{i}")
+            if storage is None:
+                continue
+            if await storage["movie"].find_one({"telegram.id": stream_hash}, {"_id": 1}):
+                return True
+            if await storage["tv"].find_one({"seasons.episodes.telegram.id": stream_hash}, {"_id": 1}):
+                return True
+            if await storage["movie"].find_one({"telegram.parts": part_match}, {"_id": 1}):
+                return True
+            if await storage["tv"].find_one({"seasons.episodes.telegram.parts": part_match}, {"_id": 1}):
+                return True
+        return False
+
     #----- A file that gets indexed (by any path) is no longer "skipped"
     async def insert_media(
         self, metadata_info: dict,

@@ -87,9 +87,10 @@ class ByteStreamer:
         _ensure_stale_cleaner()
 
     async def _prewarm_sessions(self):
-        #----- Warm only the DCs named in PREWARM_DCS (e.g. "4,5"). Default none: sessions open on first
-        #----- use and stay cached, which saves ~3 idle sessions per bot on a small host.
-        common_dcs = [int(x) for x in os.getenv("PREWARM_DCS", "").replace(" ", "").split(",") if x.isdigit()]
+        #----- DCs to open media connections to at boot. Set PREWARM_DCS="4,5" to open fewer (saves memory
+        #----- per bot on small hosts) or PREWARM_DCS="none" to open them on first play instead.
+        raw = os.getenv("PREWARM_DCS", "1,2,4,5").replace(" ", "").lower()
+        common_dcs = [] if raw == "none" else [int(x) for x in raw.split(",") if x.isdigit()]
         test_mode = await self.client.storage.test_mode()
         current_dc = await self.client.storage.dc_id()
         for dc in common_dcs:

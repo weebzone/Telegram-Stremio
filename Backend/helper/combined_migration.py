@@ -1,8 +1,16 @@
-"""Move the old combined-season pseudo episodes (season 0, episode 1000+N) into episode 1 of season N."""
+"""Move the old combined-season pseudo episodes (season 0, episode 1000+N) to where new uploads go:
+season N, episode = first episode of the range in the file name (episode 1 for full-season packs)."""
 import copy
+
+from Backend.helper.split_files import parse_combined_episodes
 
 _OLD_SEASON = 0
 _OLD_EPISODE_BASE = 1000
+
+
+def _target_episode(quality: dict) -> int:
+    combined = parse_combined_episodes(quality.get("name") or "")
+    return (combined or {}).get("start") or 1
 
 
 #----- Return (new_doc, moved_count); the input is not modified and a second run moves nothing
@@ -19,17 +27,19 @@ def migrate_show(doc: dict) -> tuple[dict, int]:
         if number < _OLD_EPISODE_BASE:
             keep.append(ep)          # a real "Specials" episode
             continue
-        target_no = number - _OLD_EPISODE_BASE
-        season = next((s for s in seasons if s.get("season_number") == target_no), None)
+        season_no = number - _OLD_EPISODE_BASE
+        season = next((s for s in seasons if s.get("season_number") == season_no), None)
         if season is None:
-            season = {"season_number": target_no, "episodes": []}
+            season = {"season_number": season_no, "episodes": []}
             seasons.append(season)
-        first = next((e for e in season["episodes"] if e.get("episode_number") == 1), None)
-        if first is None:
-            ep["episode_number"] = 1
-            season["episodes"].append(ep)
-        else:
-            first["telegram"] = (first.get("telegram") or []) + (ep.get("telegram") or [])
+        for quality in ep.get("telegram") or []:
+            ep_no = _target_episode(quality)
+            target = next((e for e in season["episodes"] if e.get("episode_number") == ep_no), None)
+            if target is None:
+                target = {k: v for k, v in ep.items() if k != "telegram"}
+                target.update(episode_number=ep_no, title=f"Episode {ep_no}", telegram=[])
+                season["episodes"].append(target)
+            target["telegram"] = (target.get("telegram") or []) + [quality]
         moved += 1
 
     if not moved:
