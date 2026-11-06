@@ -46,6 +46,7 @@ from Backend.helper.passwords import hash_password, verify_password
 from Backend.helper.pyro import get_readable_file_size, get_readable_time
 from Backend.helper.scan_manager import dbcheck_manager, duplicate_manager, scan_manager
 from Backend.helper.settings_manager import SettingsManager
+from Backend.helper.skipped_files import retry_skipped
 from Backend.helper.split_files import strip_part_suffix
 from Backend.helper.subtitles import (
     list_languages,
@@ -2173,3 +2174,80 @@ async def _perform_restart(delay: float = 1.0) -> None:
 async def restart_app_api() -> dict:
     asyncio.create_task(_perform_restart())
     return {"status": "success", "message": "Restart initiated — the server will be back shortly."}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Skipped files (could not be indexed)
+# ─────────────────────────────────────────────────────────────────────────────
+
+_skipped_retry_all = {"running": False, "done": 0, "ok": 0, "total": 0}
+
+
+async def list_skipped_api(status: str = "pending", page: int = 1, per_page: int = 50) -> dict:
+    per_page = min(max(per_page, 1), 200)
+    data = await db.list_skipped_files(status=status or None, page=max(page, 1), per_page=per_page)
+    items = [{
+        "id": d["_id"], "chat_id": d.get("chat_id"), "msg_id": d.get("msg_id"),
+        "file_name": d.get("file_name") or "", "caption": d.get("caption") or "",
+        "size": get_readable_file_size(d.get("raw_size") or 0),
+        "reason": d.get("reason") or "", "status": d.get("status", "pending"),
+        "attempts": d.get("attempts", 0), "created_at": d.get("created_at"),
+    } for d in data["items"]]
+    return {"total": data["total"], "page": page, "per_page": per_page, "items": items,
+            "retry_all": dict(_skipped_retry_all)}
+
+
+async def retry_skipped_api(skipped_id: str, payload: dict) -> dict:
+    client = _scan_client()
+    if client is None:
+        raise HTTPException(status_code=503, detail="Bot is not ready.")
+    season = payload.get("season")
+    try:
+        season = int(season) if season not in (None, "") else None
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Season must be a number.")
+    return await retry_skipped(
+        client, skipped_id,
+        id_override=str(payload.get("id") or ""), title=str(payload.get("title") or ""), season=season,
+    )
+
+
+async def ignore_skipped_api(skipped_id: str, payload: dict) -> dict:
+    ignored = bool(payload.get("ignored", True))
+    if not await db.set_skipped_file(skipped_id, status="ignored" if ignored else "pending"):
+        raise HTTPException(status_code=404, detail="Not found.")
+    return {"status": "success"}
+
+
+async def delete_skipped_api(skipped_id: str) -> dict:
+    if not await db.delete_skipped_file(skipped_id):
+        raise HTTPException(status_code=404, detail="Not found.")
+    return {"status": "success"}
+
+
+#----- Retry every pending skipped file one by one (gentle on Telegram and the metadata APIs)
+async def retry_all_skipped_api() -> dict:
+    st = _skipped_retry_all
+    if st["running"]:
+        return {"status": "running", **st}
+    client = _scan_client()
+    if client is None:
+        raise HTTPException(status_code=503, detail="Bot is not ready.")
+    ids = [d["_id"] for d in (await db.list_skipped_files("pending", 1, 5000))["items"]]
+    st.update(running=True, done=0, ok=0, total=len(ids))
+
+    async def _run():
+        try:
+            for sid in ids:
+                try:
+                    if (await retry_skipped(client, sid)).get("ok"):
+                        st["ok"] += 1
+                except Exception as e:
+                    LOGGER.warning(f"[Skipped] retry-all failed for {sid}: {e}")
+                st["done"] += 1
+                await asyncio.sleep(1)
+        finally:
+            st["running"] = False
+
+    asyncio.create_task(_run())
+    return {"status": "started", **st}

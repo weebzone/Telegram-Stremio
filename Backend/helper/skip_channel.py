@@ -20,6 +20,8 @@ def is_skip_channel(message: Message) -> bool:
 
 
 async def route_to_skip_channel(client: Client, message: Message) -> None:
+    from Backend.helper.skipped_files import record_skipped
+    await record_skipped(message)  # keep a dashboard record even without a skip channel
     settings = SettingsManager.current()
     skip = settings.skip_channel
     if not skip:

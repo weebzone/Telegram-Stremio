@@ -38,6 +38,11 @@ from Backend.fastapi.routes.api_routes import (
     get_admin_stats_api,
     get_db_stats_api,
     get_all_tokens_api,
+    list_skipped_api,
+    retry_skipped_api,
+    ignore_skipped_api,
+    delete_skipped_api,
+    retry_all_skipped_api,
     get_auto_catalog_settings_api,
     get_catalog_order_api,
     update_catalog_order_api,
@@ -97,6 +102,7 @@ from Backend.fastapi.routes.cf_routes import router as cf_router
 from Backend.fastapi.routes.stremio_routes import router as stremio_router
 from Backend.fastapi.routes.template_routes import (
     admin_access_page,
+    admin_skipped_page,
     admin_dashboard_page,
     custom_catalogs_page,
     dashboard_page,
@@ -362,6 +368,32 @@ async def clear_analytics(_: bool = Depends(require_auth)):
     return await clear_stream_analytics_api()
 
 #----- Access management
+#----- Skipped files
+@app.get("/admin/skipped", response_class=HTMLResponse)
+async def admin_skipped(request: Request, _: bool = Depends(require_auth)):
+    return await admin_skipped_page(request, _)
+
+@app.get("/api/admin/skipped")
+async def skipped_list(status: str = "pending", page: int = 1, _: bool = Depends(require_auth)):
+    return await list_skipped_api(status, page)
+
+@app.post("/api/admin/skipped/retry-all")
+async def skipped_retry_all(_: bool = Depends(require_auth)):
+    return await retry_all_skipped_api()
+
+@app.post("/api/admin/skipped/{skipped_id}/retry")
+async def skipped_retry(skipped_id: str, payload: dict, _: bool = Depends(require_auth)):
+    return await retry_skipped_api(skipped_id, payload)
+
+@app.post("/api/admin/skipped/{skipped_id}/ignore")
+async def skipped_ignore(skipped_id: str, payload: dict, _: bool = Depends(require_auth)):
+    return await ignore_skipped_api(skipped_id, payload)
+
+@app.delete("/api/admin/skipped/{skipped_id}")
+async def skipped_delete(skipped_id: str, _: bool = Depends(require_auth)):
+    return await delete_skipped_api(skipped_id)
+
+
 @app.get("/admin/access", response_class=HTMLResponse)
 async def admin_access(request: Request, _: bool = Depends(require_auth)):
     return await admin_access_page(request, _)

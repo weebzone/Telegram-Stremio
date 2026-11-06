@@ -11,7 +11,7 @@ from Backend import db
 from Backend.helper.announcer import announce_new_media
 from Backend.helper.auto_catalog import start_single_media_catalog_sync
 from Backend.helper.encrypt import encode_string
-from Backend.helper.manual_add import resolve_telegram_message, stamp_caption_with_id
+from Backend.helper.manual_add import quality_from_height, resolve_telegram_message, stamp_caption_with_id
 from Backend.helper.metadata import caption_with_links, extract_default_id, has_raw_ref, metadata
 from Backend.helper.pyro import apply_video_thumb_to_metadata, clean_filename, finalize_media_name, get_readable_file_size, resolve_video_thumb_url
 from Backend.helper.settings_manager import SettingsManager
@@ -234,7 +234,7 @@ async def file_receive_handler(client: Client, message: Message):
 
         _, title, msg_id, raw_size, size, channel = _extract_fields(message)
 
-        metadata_info = await metadata(clean_filename(title), int(channel), msg_id, override_id=override_id or extract_default_id(caption_with_links(message)), season_hint=season_hint)
+        metadata_info = await metadata(clean_filename(title), int(channel), msg_id, override_id=override_id or extract_default_id(caption_with_links(message)), season_hint=season_hint, fallback_quality=quality_from_height(getattr(message.video or message.document, "height", 0) or 0))
         if metadata_info is None:
             LOGGER.warning(f"Metadata failed for file: {title} (ID: {msg_id})")
             await route_to_skip_channel(client, message)

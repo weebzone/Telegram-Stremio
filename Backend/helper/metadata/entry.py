@@ -66,6 +66,7 @@ async def metadata(
     msg_id,
     override_id: str = None,
     season_hint: int = None,
+    fallback_quality: str = None,
 ) -> dict | None:
     if is_multipart_video(filename):
         LOGGER.info(f"Skipping {filename}: split video file not meant to be combined in Stremio")
@@ -92,7 +93,7 @@ async def metadata(
     season = parsed.get("season")
     episode = parsed.get("episode")
     year = parsed.get("year")
-    quality = parsed.get("quality")
+    quality = parsed.get("quality") or fallback_quality  # real video height when the name has no resolution
 
     if season_hint is not None and episode and not season and not isinstance(episode, list):
         season = season_hint

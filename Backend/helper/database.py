@@ -103,6 +103,7 @@ class Database:
                     [("items.tmdb_id", ASCENDING), ("items.media_type", ASCENDING)]
                 )
                 await self._ensure_subtitle_indexes(tracking)
+                await safe_create_index(tracking["skipped_files"], [("status", ASCENDING), ("created_at", DESCENDING)])
             except Exception as e:
                 LOGGER.error(f"Failed creating tracking indexes: {e}")
             try:
@@ -1063,7 +1064,52 @@ class Database:
 
         return False
 
+    #----- Files the parser/providers could not index, kept so they can be fixed from the dashboard
+    @staticmethod
+    def skipped_id(channel, msg_id) -> str:
+        return f"{str(channel).replace('-100', '')}:{msg_id}"
+
+    async def upsert_skipped_file(self, doc: dict) -> None:
+        fields = {k: v for k, v in doc.items() if k not in ("_id", "created_at", "status")}
+        await self.dbs["tracking"]["skipped_files"].update_one(
+            {"_id": doc["_id"]},
+            {"$set": fields, "$setOnInsert": {"created_at": doc["created_at"], "status": "pending"}},
+            upsert=True,
+        )
+
+    async def get_skipped_file(self, skipped_id: str) -> Optional[dict]:
+        return await self.dbs["tracking"]["skipped_files"].find_one({"_id": skipped_id})
+
+    async def list_skipped_files(self, status: str = "pending", page: int = 1, per_page: int = 50) -> dict:
+        coll = self.dbs["tracking"]["skipped_files"]
+        query = {"status": status} if status else {}
+        total = await coll.count_documents(query)
+        cursor = coll.find(query).sort("created_at", DESCENDING).skip(max(page - 1, 0) * per_page).limit(per_page)
+        return {"total": total, "items": await cursor.to_list(per_page)}
+
+    async def set_skipped_file(self, skipped_id: str, **fields) -> bool:
+        res = await self.dbs["tracking"]["skipped_files"].update_one({"_id": skipped_id}, {"$set": fields})
+        return res.matched_count > 0
+
+    async def delete_skipped_file(self, skipped_id: str) -> bool:
+        res = await self.dbs["tracking"]["skipped_files"].delete_one({"_id": skipped_id})
+        return res.deleted_count > 0
+
+    #----- A file that gets indexed (by any path) is no longer "skipped"
     async def insert_media(
+        self, metadata_info: dict,
+        channel: int, msg_id: int, size: str, name: str, raw_size: int = 0,
+        status: Optional[dict] = None
+    ) -> Optional[ObjectId]:
+        result = await self._insert_media(metadata_info, channel, msg_id, size, name, raw_size, status)
+        if result:
+            try:
+                await self.delete_skipped_file(self.skipped_id(channel, msg_id))
+            except Exception as e:
+                LOGGER.warning(f"Could not clear skipped record for {channel}:{msg_id}: {e}")
+        return result
+
+    async def _insert_media(
         self, metadata_info: dict,
         channel: int, msg_id: int, size: str, name: str, raw_size: int = 0,
         status: Optional[dict] = None
