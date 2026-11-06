@@ -40,6 +40,3 @@ class Telegram:
     HTTP_PROXY_URL                = getenv("HTTP_Proxy_URL", "")
     SHOW_PROXY_AND_NON_PROXY_BOTH = getenv("SHOW_ProxyAndNonProxyBoth", "false").lower() == "true"
 
-    #----- WebDAV (optional env fallback; prefer Settings page)
-    WEBDAV_USER     = getenv("WEBDAV_USER", "")
-    WEBDAV_PASSWORD = getenv("WEBDAV_PASSWORD", "")
