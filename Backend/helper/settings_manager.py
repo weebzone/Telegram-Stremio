@@ -17,7 +17,7 @@ _DEFAULTS: Dict[str, Any] = {
     "tmdb_api": "",
     "tvdb_api": "",
     "base_url": "",
-    "upstream_repo": "https://github.com/weebzone/Telegram-Stremio",
+    "upstream_repo": "",
     "upstream_branch": "master",
     "admin_username": "admin",
     "admin_password": "admin",

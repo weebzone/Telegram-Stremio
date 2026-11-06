@@ -13,6 +13,7 @@ from fastapi.responses import Response as PlainResponse
 from fastapi.responses import StreamingResponse
 
 from Backend import db
+from Backend.fastapi.security.credentials import require_auth
 from Backend.fastapi.security.tokens import verify_token
 from Backend.helper.bounded import BoundedDict
 from Backend.helper.analytics import client_ip_from, record_stream_start
@@ -207,6 +208,11 @@ async def thumb_handler(id: str):
             msg_id = int(decoded["msg_id"])
         except Exception:
             raise HTTPException(status_code=400, detail="Invalid thumbnail id")
+        #----- Public endpoint: only serve thumbnails from channels this server indexes
+        cfg = SettingsManager.current()
+        served = {str(c).strip().replace("-100", "") for c in (*cfg.auth_channels, *cfg.manual_channels, *cfg.anime_channels)}
+        if str(decoded["chat_id"]) not in served:
+            raise HTTPException(status_code=404, detail="No thumbnail")
         if not multi_clients:
             raise HTTPException(status_code=503, detail="No client available")
         client = multi_clients[select_best_client(0)]
@@ -503,7 +509,7 @@ async def db_zip_media_streamer(request: Request, parts_payload: list, token: st
 
 #----- Live and recent stream telemetry, pruning stale active entries
 @router.get("/stream/stats")
-async def get_stream_stats():
+async def get_stream_stats(_: bool = Depends(require_auth)):
     now = time.time()
     PRUNE_SECONDS = 3
     INACTIVE_TIMEOUT = 15
@@ -576,7 +582,7 @@ async def get_stream_stats():
 
 #----- Detailed telemetry for a single stream id
 @router.get("/stream/stats/{stream_id}")
-async def get_stream_detail(stream_id: str):
+async def get_stream_detail(stream_id: str, _: bool = Depends(require_auth)):
     info = ACTIVE_STREAMS.get(stream_id)
     if info:
         return JSONResponse(make_json_safe(info))

@@ -12,6 +12,7 @@ from Backend.fastapi.main import app
 from Backend.helper.link_checker import DeadLinkChecker
 from Backend.helper.pyro import restart_notification, setup_bot_commands
 from Backend.helper.scan_manager import dbcheck_manager, duplicate_manager, scan_manager
+from Backend.helper.passwords import verify_password
 from Backend.helper.settings_manager import SettingsManager
 from Backend.logger import LOGGER
 import Backend.pyrofork.bot as botmod
@@ -31,6 +32,8 @@ async def start_services():
         await asyncio.sleep(1.2)
 
         await SettingsManager.initialize(db)
+        if verify_password("admin", SettingsManager.current().admin_password):
+            LOGGER.warning("SECURITY: the admin password is still 'admin'. Change it in Settings now.")
         app.add_middleware(SessionMiddleware, secret_key=SettingsManager.current().session_secret or secrets.token_hex(32))
         await asyncio.sleep(0.5)
 

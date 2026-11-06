@@ -13,8 +13,15 @@ def compress_data(data):
     return zlib.compress(data.encode(), level=zlib.Z_BEST_COMPRESSION)
 
 
+MAX_DECODED_BYTES = 4 * 1024 * 1024  # ids carry small JSON; this stops zip-bomb input on public URLs
+
+
 def decompress_data(data):
-    return zlib.decompress(data).decode()
+    d = zlib.decompressobj()
+    out = d.decompress(data, MAX_DECODED_BYTES)
+    if d.unconsumed_tail:
+        raise ValueError("encoded id too large")
+    return out.decode()
 
 
 #----- base62 (de)encoding of raw bytes

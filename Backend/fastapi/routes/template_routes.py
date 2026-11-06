@@ -5,6 +5,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from Backend import StartTime, __version__, db
+from Backend.helper import login_guard
 from Backend.config import Telegram
 from Backend.fastapi.security.credentials import get_current_user, is_authenticated, require_auth, verify_credentials
 from Backend.fastapi.themes import DEFAULT_THEME, DEFAULT_STYLE, get_all_themes, get_all_styles, get_theme
@@ -51,11 +52,18 @@ async def login_page(request: Request):
 
 #----- Handle login submission
 async def login_post(request: Request, username: str = Form(...), password: str = Form(...)):
+    #----- Key on the direct peer, not X-Forwarded-For, which a client can spoof to dodge the limit
+    ip = request.client.host if request.client else ""
+    ctx = _base_context(request)
+    if login_guard.is_blocked(ip):
+        ctx["error"] = "Too many failed attempts. Try again in 10 minutes."
+        return templates.TemplateResponse("login.html", ctx, status_code=429)
     if verify_credentials(username, password):
+        login_guard.record_success(ip)
         request.session["authenticated"] = True
         request.session["username"] = username
         return RedirectResponse(url="/", status_code=302)
-    ctx = _base_context(request)
+    login_guard.record_failure(ip)
     ctx["error"] = "Invalid credentials"
     return templates.TemplateResponse("login.html", ctx)
 
