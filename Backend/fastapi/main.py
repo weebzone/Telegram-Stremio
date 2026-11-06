@@ -29,7 +29,6 @@ from Backend.fastapi.routes.api_routes import (
     delete_custom_catalog_api,
     delete_media_api,
     delete_movie_quality_api,
-    delete_request_api,
     export_config_api,
     import_config_api,
     delete_tv_episode_api,
@@ -53,10 +52,6 @@ from Backend.fastapi.routes.api_routes import (
     get_custom_catalog_items_api,
     get_dead_links_api,
     get_media_visibility_api,
-    get_requests_api,
-    request_popular_api,
-    request_search_api,
-    request_submit_api,
     get_stream_analytics_api,
     get_settings_api,
     get_logs_api,
@@ -103,7 +98,6 @@ from Backend.fastapi.routes.api_routes import (
     update_auto_catalog_settings_api,
     update_custom_catalog_api,
     update_media_api,
-    update_request_api,
     update_settings_api,
     update_token_limits_api,
 )
@@ -114,8 +108,6 @@ from Backend.fastapi.routes.stremio_routes import router as stremio_router
 from Backend.fastapi.routes.template_routes import (
     admin_access_page,
     admin_dashboard_page,
-    admin_requests_page,
-    public_request_page,
     custom_catalogs_page,
     dashboard_page,
     edit_media_page,
@@ -415,42 +407,6 @@ async def set_token_expiry(token: str, payload: dict, _: bool = Depends(require_
 @app.post("/api/admin/access/grant-lifetime")
 async def grant_lifetime(_: bool = Depends(require_auth)):
     return await grant_lifetime_api()
-
-#----- Public content request page (no auth)
-@app.get("/request", response_class=HTMLResponse)
-async def public_request(request: Request):
-    return await public_request_page(request)
-
-@app.get("/api/request/search")
-async def request_search(q: str = Query("")):
-    return await request_search_api(q)
-
-@app.get("/api/request/popular")
-async def request_popular():
-    return await request_popular_api()
-
-@app.post("/api/request/submit")
-async def request_submit(payload: dict, request: Request):
-    client_ip = request.client.host if request.client else None
-    return await request_submit_api(payload, client_ip)
-
-
-#----- Admin content requests
-@app.get("/admin/requests", response_class=HTMLResponse)
-async def admin_requests(request: Request, _: bool = Depends(require_auth)):
-    return await admin_requests_page(request, _)
-
-@app.get("/api/admin/requests")
-async def get_requests(_: bool = Depends(require_auth)):
-    return await get_requests_api()
-
-@app.patch("/api/admin/requests/{request_id}")
-async def update_request(request_id: str, payload: dict, _: bool = Depends(require_auth)):
-    return await update_request_api(request_id, payload)
-
-@app.delete("/api/admin/requests/{request_id}")
-async def delete_request_route(request_id: str, _: bool = Depends(require_auth)):
-    return await delete_request_api(request_id)
 
 @app.get("/api/system/speedtest")
 async def speed_test(

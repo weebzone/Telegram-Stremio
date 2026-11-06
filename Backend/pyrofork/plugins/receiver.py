@@ -12,7 +12,6 @@ from Backend.helper.announcer import announce_new_media
 from Backend.helper.auto_catalog import start_single_media_catalog_sync
 from Backend.helper.encrypt import encode_string
 from Backend.helper.manual_add import resolve_telegram_message, stamp_caption_with_id
-from Backend.helper.requests_manager import auto_fulfill
 from Backend.helper.metadata import caption_with_links, extract_default_id, has_raw_ref, metadata
 from Backend.helper.pyro import apply_video_thumb_to_metadata, clean_filename, finalize_media_name, get_readable_file_size, resolve_video_thumb_url
 from Backend.helper.settings_manager import SettingsManager
@@ -91,11 +90,6 @@ async def process_file():
                 media_type=metadata_info.get("media_type"),
             )
             announce_new_media(metadata_info)
-            create_task(auto_fulfill(
-                tmdb_id=metadata_info.get("tmdb_id"),
-                imdb_id=metadata_info.get("imdb_id"),
-                media_type=metadata_info.get("media_type"),
-            ))
         file_queue.task_done()
 
 
