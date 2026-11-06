@@ -1,4 +1,5 @@
 import asyncio
+import os
 import random
 import re
 import secrets
@@ -26,6 +27,16 @@ STALE_STREAM_IDLE = 180
 _STALE_CLEANER_STARTED = False
 
 
+#----- Give back a stream's load slot exactly once (stale cleaner and stream end can both call this)
+def release_load(entry: Dict) -> None:
+    if entry.get("load_released"):
+        return
+    entry["load_released"] = True
+    idx = entry.get("client_index")
+    if idx in work_loads:
+        work_loads[idx] = max(0, work_loads[idx] - 1)
+
+
 async def _cleanup_stale_streams():
     while True:
         try:
@@ -46,9 +57,7 @@ async def _cleanup_stale_streams():
                         entry["status"] = "stale"
                         entry["end_ts"] = now
                         RECENT_STREAMS.appendleft(entry)
-                        idx = entry.get("client_index")
-                        if idx is not None and idx in work_loads:
-                            work_loads[idx] = max(0, work_loads[idx] - 1)
+                        release_load(entry)
                 except Exception:
                     pass
         except Exception:
@@ -65,7 +74,6 @@ def _ensure_stale_cleaner():
 #----- Telegram file byte streamer with prefetch, multi-client parallelism, and telemetry
 class ByteStreamer:
     CHUNK_SIZE = 1024 * 1024
-    CLEAN_INTERVAL = 30 * 60
     _instances: Dict[int, "ByteStreamer"] = {}
 
     def __init__(self, client: Client, client_index: int = -1):
@@ -75,12 +83,14 @@ class ByteStreamer:
         self._session_lock = asyncio.Lock()
         if client_index >= 0:
             ByteStreamer._instances[client_index] = self
-        asyncio.create_task(self._clean_cache())
         asyncio.create_task(self._prewarm_sessions())
         _ensure_stale_cleaner()
 
     async def _prewarm_sessions(self):
-        common_dcs = [1, 2, 4, 5]
+        #----- DCs to open media connections to at boot. Set PREWARM_DCS="4,5" to open fewer (saves memory
+        #----- per bot on small hosts) or PREWARM_DCS="none" to open them on first play instead.
+        raw = os.getenv("PREWARM_DCS", "1,2,4,5").replace(" ", "").lower()
+        common_dcs = [] if raw == "none" else [int(x) for x in raw.split(",") if x.isdigit()]
         test_mode = await self.client.storage.test_mode()
         current_dc = await self.client.storage.dc_id()
         for dc in common_dcs:
@@ -486,10 +496,7 @@ class ByteStreamer:
 
                     asyncio.create_task(delayed_pop())
                 finally:
-                    try:
-                        work_loads[client_index] -= 1
-                    except Exception:
-                        pass
+                    release_load(stream_entry)
 
                 stop_event.set()
 
@@ -546,12 +553,6 @@ class ByteStreamer:
             file_reference=file_id.file_reference,
             thumb_size=file_id.thumbnail_size,
         )
-
-    async def _clean_cache(self) -> None:
-        while True:
-            await asyncio.sleep(self.CLEAN_INTERVAL)
-            self._file_id_cache.clear()
-            LOGGER.debug("ByteStreamer: cleared file_id cache")
 
 
 #----- Speed test helper (runs independently, on-demand per file)

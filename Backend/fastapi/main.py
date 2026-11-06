@@ -10,7 +10,6 @@ from Backend import __version__
 from Backend.fastapi.themes import DEFAULT_THEME, DEFAULT_STYLE, get_theme
 from Backend.fastapi.routes.api_routes import (
     add_custom_catalog_item_api,
-    add_subscription_plan_api,
     apply_media_rescan_api,
     assign_plan_api,
     auto_catalog_sync_status_api,
@@ -25,15 +24,11 @@ from Backend.fastapi.routes.api_routes import (
     grant_lifetime_api,
     set_token_lifetime_api,
     set_token_expiry_api,
-    subscription_preflight_api,
-    backfill_subscriber_names_api,
     dbcheck_status_api,
     duplicate_check_status_api,
     delete_custom_catalog_api,
     delete_media_api,
     delete_movie_quality_api,
-    delete_request_api,
-    delete_subscription_plan_api,
     export_config_api,
     import_config_api,
     delete_tv_episode_api,
@@ -42,36 +37,26 @@ from Backend.fastapi.routes.api_routes import (
     download_logs_api,
     get_admin_stats_api,
     get_db_stats_api,
-    get_all_subscribers_api,
     get_all_tokens_api,
+    list_skipped_api,
+    retry_skipped_api,
+    ignore_skipped_api,
+    delete_skipped_api,
+    retry_all_skipped_api,
+    import_skipped_api,
     get_auto_catalog_settings_api,
     get_catalog_order_api,
     update_catalog_order_api,
     get_user_activity_api,
-    session_send_code_api,
-    session_verify_code_api,
-    session_verify_password_api,
-    session_status_api,
-    session_disconnect_api,
-    session_reconnect_api,
-    session_remove_api,
     get_custom_catalog_items_api,
     get_dead_links_api,
     get_media_visibility_api,
-    get_requests_api,
-    request_popular_api,
-    request_search_api,
-    request_submit_api,
     get_stream_analytics_api,
-    get_subscription_plans_api,
     get_settings_api,
     get_logs_api,
     get_manual_session_api,
     get_system_stats_api,
     get_tools_channels_api,
-    bot_admin_scan_api,
-    bot_admin_apply_api,
-    bot_admin_apply_status_api,
     clear_manual_session_api,
     search_manual_session_api,
     set_manual_session_api,
@@ -82,7 +67,6 @@ from Backend.fastapi.routes.api_routes import (
     link_token_user_api,
     list_custom_catalogs_api,
     list_media_api,
-    manage_subscriber_api,
     manual_add_media_api,
     list_manual_add_catalogs_api,
     resolve_manual_metadata_api,
@@ -110,22 +94,17 @@ from Backend.fastapi.routes.api_routes import (
     update_auto_catalog_settings_api,
     update_custom_catalog_api,
     update_media_api,
-    update_request_api,
     update_settings_api,
-    update_subscription_plan_api,
     update_token_limits_api,
 )
 from Backend.fastapi.routes.stream_routes import decay_client_failures
 from Backend.fastapi.routes.stream_routes import router as stream_router
 from Backend.fastapi.routes.cf_routes import router as cf_router
 from Backend.fastapi.routes.stremio_routes import router as stremio_router
-from Backend.fastapi.routes.webdav_routes import router as webdav_router
 from Backend.fastapi.routes.template_routes import (
     admin_access_page,
+    admin_skipped_page,
     admin_dashboard_page,
-    admin_requests_page,
-    admin_subscriptions_page,
-    public_request_page,
     custom_catalogs_page,
     dashboard_page,
     edit_media_page,
@@ -152,7 +131,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,  # API calls use tokens in the URL, not cookies
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -174,7 +153,6 @@ async def _startup():
 app.include_router(stream_router)
 app.include_router(cf_router)
 app.include_router(stremio_router)
-app.include_router(webdav_router)
 
 
 #----- Public routes (no authentication)
@@ -390,36 +368,37 @@ async def get_user_activity(page: int = 1, per_page: int = 5, _: bool = Depends(
 async def clear_analytics(_: bool = Depends(require_auth)):
     return await clear_stream_analytics_api()
 
-@app.get("/admin/subscriptions", response_class=HTMLResponse)
-async def admin_subscriptions(request: Request, _: bool = Depends(require_auth)):
-    return await admin_subscriptions_page(request, _)
-
-@app.get("/api/admin/subscriptions/plans")
-async def get_subscription_plans(_: bool = Depends(require_auth)):
-    return await get_subscription_plans_api()
-
-@app.post("/api/admin/subscriptions/plans")
-async def add_subscription_plan(payload: dict, _: bool = Depends(require_auth)):
-    return await add_subscription_plan_api(payload)
-
-@app.put("/api/admin/subscriptions/plans/{plan_id}")
-async def update_subscription_plan(plan_id: str, payload: dict, _: bool = Depends(require_auth)):
-    return await update_subscription_plan_api(plan_id, payload)
-
-@app.delete("/api/admin/subscriptions/plans/{plan_id}")
-async def delete_subscription_plan(plan_id: str, _: bool = Depends(require_auth)):
-    return await delete_subscription_plan_api(plan_id)
-
-@app.get("/api/admin/subscriptions/users")
-async def get_subscribers(_: bool = Depends(require_auth)):
-    return await get_all_subscribers_api()
-
-@app.post("/api/admin/subscriptions/users/{user_id}/manage")
-async def manage_subscriber(user_id: int, payload: dict, _: bool = Depends(require_auth)):
-    return await manage_subscriber_api(user_id, payload)
-
-
 #----- Access management
+#----- Skipped files
+@app.get("/admin/skipped", response_class=HTMLResponse)
+async def admin_skipped(request: Request, _: bool = Depends(require_auth)):
+    return await admin_skipped_page(request, _)
+
+@app.get("/api/admin/skipped")
+async def skipped_list(status: str = "pending", page: int = 1, _: bool = Depends(require_auth)):
+    return await list_skipped_api(status, page)
+
+@app.post("/api/admin/skipped/import")
+async def skipped_import(_: bool = Depends(require_auth)):
+    return await import_skipped_api()
+
+@app.post("/api/admin/skipped/retry-all")
+async def skipped_retry_all(_: bool = Depends(require_auth)):
+    return await retry_all_skipped_api()
+
+@app.post("/api/admin/skipped/{skipped_id}/retry")
+async def skipped_retry(skipped_id: str, payload: dict, _: bool = Depends(require_auth)):
+    return await retry_skipped_api(skipped_id, payload)
+
+@app.post("/api/admin/skipped/{skipped_id}/ignore")
+async def skipped_ignore(skipped_id: str, payload: dict, _: bool = Depends(require_auth)):
+    return await ignore_skipped_api(skipped_id, payload)
+
+@app.delete("/api/admin/skipped/{skipped_id}")
+async def skipped_delete(skipped_id: str, _: bool = Depends(require_auth)):
+    return await delete_skipped_api(skipped_id)
+
+
 @app.get("/admin/access", response_class=HTMLResponse)
 async def admin_access(request: Request, _: bool = Depends(require_auth)):
     return await admin_access_page(request, _)
@@ -455,51 +434,6 @@ async def set_token_expiry(token: str, payload: dict, _: bool = Depends(require_
 @app.post("/api/admin/access/grant-lifetime")
 async def grant_lifetime(_: bool = Depends(require_auth)):
     return await grant_lifetime_api()
-
-@app.get("/api/admin/subscriptions/preflight")
-async def subscription_preflight(_: bool = Depends(require_auth)):
-    return await subscription_preflight_api()
-
-@app.post("/api/admin/subscriptions/backfill-names")
-async def backfill_subscriber_names(_: bool = Depends(require_auth)):
-    return await backfill_subscriber_names_api()
-
-
-#----- Public content request page (no auth)
-@app.get("/request", response_class=HTMLResponse)
-async def public_request(request: Request):
-    return await public_request_page(request)
-
-@app.get("/api/request/search")
-async def request_search(q: str = Query("")):
-    return await request_search_api(q)
-
-@app.get("/api/request/popular")
-async def request_popular():
-    return await request_popular_api()
-
-@app.post("/api/request/submit")
-async def request_submit(payload: dict, request: Request):
-    client_ip = request.client.host if request.client else None
-    return await request_submit_api(payload, client_ip)
-
-
-#----- Admin content requests
-@app.get("/admin/requests", response_class=HTMLResponse)
-async def admin_requests(request: Request, _: bool = Depends(require_auth)):
-    return await admin_requests_page(request, _)
-
-@app.get("/api/admin/requests")
-async def get_requests(_: bool = Depends(require_auth)):
-    return await get_requests_api()
-
-@app.patch("/api/admin/requests/{request_id}")
-async def update_request(request_id: str, payload: dict, _: bool = Depends(require_auth)):
-    return await update_request_api(request_id, payload)
-
-@app.delete("/api/admin/requests/{request_id}")
-async def delete_request_route(request_id: str, _: bool = Depends(require_auth)):
-    return await delete_request_api(request_id)
 
 @app.get("/api/system/speedtest")
 async def speed_test(
@@ -705,36 +639,6 @@ async def formatter_preview(payload: dict, _: bool = Depends(require_auth)):
     return {"name": render(tpl["name"], pv), "description": render(tpl["description"], pv)}
 
 
-#----- Telegram user session login (replaces manual USER_SESSION_STRING)
-@app.get("/api/admin/settings/session")
-async def session_status(_: bool = Depends(require_auth)):
-    return await session_status_api()
-
-@app.post("/api/admin/settings/session/send-code")
-async def session_send_code(payload: dict, _: bool = Depends(require_auth)):
-    return await session_send_code_api(payload)
-
-@app.post("/api/admin/settings/session/verify-code")
-async def session_verify_code(payload: dict, _: bool = Depends(require_auth)):
-    return await session_verify_code_api(payload)
-
-@app.post("/api/admin/settings/session/verify-password")
-async def session_verify_password(payload: dict, _: bool = Depends(require_auth)):
-    return await session_verify_password_api(payload)
-
-@app.post("/api/admin/settings/session/disconnect")
-async def session_disconnect(_: bool = Depends(require_auth)):
-    return await session_disconnect_api()
-
-@app.post("/api/admin/settings/session/reconnect")
-async def session_reconnect(_: bool = Depends(require_auth)):
-    return await session_reconnect_api()
-
-@app.delete("/api/admin/settings/session")
-async def session_remove(_: bool = Depends(require_auth)):
-    return await session_remove_api()
-
-
 #----- System & Maintenance (WebUI replacement for /stats, /log, /restart bot commands)
 @app.get("/api/admin/stats")
 async def admin_db_stats(_: bool = Depends(require_auth)):
@@ -790,18 +694,6 @@ async def admin_tools(request: Request, _: bool = Depends(require_auth)):
 @app.get("/api/admin/tools/channels")
 async def tools_channels(_: bool = Depends(require_auth)):
     return await get_tools_channels_api()
-
-@app.get("/api/admin/tools/bot-admin/scan")
-async def tools_bot_admin_scan(_: bool = Depends(require_auth)):
-    return await bot_admin_scan_api()
-
-@app.post("/api/admin/tools/bot-admin/apply")
-async def tools_bot_admin_apply(payload: dict, _: bool = Depends(require_auth)):
-    return await bot_admin_apply_api(payload)
-
-@app.get("/api/admin/tools/bot-admin/apply/status")
-async def tools_bot_admin_apply_status(_: bool = Depends(require_auth)):
-    return await bot_admin_apply_status_api()
 
 @app.get("/api/admin/tools/manual-session")
 async def tools_manual_session_get(_: bool = Depends(require_auth)):
@@ -866,13 +758,12 @@ async def tools_duplicates_purge(payload: dict | None = None, _: bool = Depends(
 
 @app.exception_handler(401)
 async def auth_exception_handler(request: Request, exc):
-    # API / stream / WebDAV clients must receive a real 401, not an HTML login redirect.
+    # API / stream clients must receive a real 401, not an HTML login redirect.
     path = request.url.path or ""
-    if path.startswith(("/webdav", "/dl/", "/sub/", "/stremio/", "/api/", "/thumb/")):
+    if path.startswith(("/dl/", "/sub/", "/stremio/", "/api/", "/thumb/")):
         from fastapi.responses import JSONResponse
         detail = getattr(exc, "detail", "Unauthorized")
         headers = {}
-        # Preserve WWW-Authenticate for WebDAV Basic auth prompts
         if hasattr(exc, "headers") and exc.headers:
             headers.update(exc.headers)
         return JSONResponse(status_code=401, content={"detail": detail}, headers=headers)

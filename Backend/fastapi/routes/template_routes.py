@@ -5,6 +5,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from Backend import StartTime, __version__, db
+from Backend.helper import login_guard
 from Backend.config import Telegram
 from Backend.fastapi.security.credentials import get_current_user, is_authenticated, require_auth, verify_credentials
 from Backend.fastapi.themes import DEFAULT_THEME, DEFAULT_STYLE, get_all_themes, get_all_styles, get_theme
@@ -51,11 +52,18 @@ async def login_page(request: Request):
 
 #----- Handle login submission
 async def login_post(request: Request, username: str = Form(...), password: str = Form(...)):
+    #----- Key on the direct peer, not X-Forwarded-For, which a client can spoof to dodge the limit
+    ip = request.client.host if request.client else ""
+    ctx = _base_context(request)
+    if login_guard.is_blocked(ip):
+        ctx["error"] = "Too many failed attempts. Try again in 10 minutes."
+        return templates.TemplateResponse("login.html", ctx, status_code=429)
     if verify_credentials(username, password):
+        login_guard.record_success(ip)
         request.session["authenticated"] = True
         request.session["username"] = username
         return RedirectResponse(url="/", status_code=302)
-    ctx = _base_context(request)
+    login_guard.record_failure(ip)
     ctx["error"] = "Invalid credentials"
     return templates.TemplateResponse("login.html", ctx)
 
@@ -190,13 +198,6 @@ async def edit_media_page(request: Request, tmdb_id: int, db_index: int, media_t
     return templates.TemplateResponse("media_edit.html", ctx)
 
 
-#----- Subscription management shell
-async def admin_subscriptions_page(request: Request, _: bool = Depends(require_auth)):
-    ctx = _base_context(request)
-    ctx["current_user"] = get_current_user(request)
-    return templates.TemplateResponse("subscriptions_manage.html", ctx)
-
-
 #----- Access management shell
 async def admin_access_page(request: Request, _: bool = Depends(require_auth)):
     ctx = _base_context(request)
@@ -204,18 +205,11 @@ async def admin_access_page(request: Request, _: bool = Depends(require_auth)):
     return templates.TemplateResponse("access_manage.html", ctx)
 
 
-#----- Content requests shell (admin)
-async def admin_requests_page(request: Request, _: bool = Depends(require_auth)):
+#----- Skipped files shell
+async def admin_skipped_page(request: Request, _: bool = Depends(require_auth)):
     ctx = _base_context(request)
     ctx["current_user"] = get_current_user(request)
-    return templates.TemplateResponse("requests_manage.html", ctx)
-
-
-#----- Public request page (no auth)
-async def public_request_page(request: Request):
-    ctx = _base_context(request)
-    ctx["is_authenticated"] = is_authenticated(request)
-    return templates.TemplateResponse("request_public.html", ctx)
+    return templates.TemplateResponse("skipped_files.html", ctx)
 
 
 #----- Custom catalogs shell
@@ -229,8 +223,6 @@ async def custom_catalogs_page(request: Request, _: bool = Depends(require_auth)
 async def tools_page(request: Request, _: bool = Depends(require_auth)):
     ctx = _base_context(request)
     ctx["current_user"] = get_current_user(request)
-    #----- Bot Admin Manager needs a session string AND more than one bot token
-    ctx["userbot_configured"] = botmod.Userbot is not None
     ctx["multi_token_available"] = len(multi_clients) > 1
     return templates.TemplateResponse("tools.html", ctx)
 
@@ -253,7 +245,6 @@ async def settings_page(request: Request, _: bool = Depends(require_auth)):
     ctx.update({
         "current_user": get_current_user(request),
         "settings": settings,
-        "userbot_configured": botmod.Userbot is not None,
         "formatter_presets": PRESETS,
     })
     return templates.TemplateResponse("settings.html", ctx)

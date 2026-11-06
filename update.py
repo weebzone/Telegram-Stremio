@@ -5,6 +5,7 @@ from subprocess import run as srun
 from dotenv import load_dotenv
 from datetime import datetime
 import pytz
+import re
 import shutil
 
 IST = pytz.timezone("Asia/Kolkata")
@@ -64,21 +65,32 @@ UPSTREAM_REPO   = db_repo   or environ.get("UPSTREAM_REPO",   "").strip() or Non
 UPSTREAM_BRANCH = db_branch or environ.get("UPSTREAM_BRANCH", "").strip() or "master"
 
 # ── Git update ────────────────────────────────────────────────────────────────
+# The repo URL and branch can come from the DB settings, so they are validated and
+# passed as argv (no shell) to keep a bad value from running commands.
+_REPO_RE = re.compile(r"^https://github\.com/[\w.-]+/[\w.-]+?(\.git)?/?$")
+_BRANCH_RE = re.compile(r"^[\w./-]+$")
+
+if UPSTREAM_REPO and not (_REPO_RE.match(UPSTREAM_REPO) and _BRANCH_RE.match(UPSTREAM_BRANCH)):
+    log_error("update.py: UPSTREAM_REPO must be an https://github.com/<owner>/<repo> URL and the branch a plain name — skipping update.")
+    UPSTREAM_REPO = None
+
 if UPSTREAM_REPO:
     if Path(".git").exists():
-        srun(["rm", "-rf", ".git"])
+        shutil.rmtree(".git")
 
-    update_cmd = (
-        f"git init -q && "
-        f"git config --global user.email 'doc.adhikari@gmail.com' && "
-        f"git config --global user.name 'weebzone' && "
-        f"git add . && git commit -sm 'update' -q && "
-        f"git remote add origin {UPSTREAM_REPO} && "
-        f"git fetch origin -q && "
-        f"git reset --hard origin/{UPSTREAM_BRANCH} -q"
-    )
-
-    update = srun(update_cmd, shell=True)
+    ident = ["-c", "user.name=weebzone", "-c", "user.email=doc.adhikari@gmail.com"]
+    steps = [
+        ["git", "init", "-q"],
+        ["git", "add", "."],
+        ["git", *ident, "commit", "-sm", "update", "-q"],
+        ["git", "remote", "add", "origin", UPSTREAM_REPO],
+        ["git", "fetch", "origin", "-q"],
+        ["git", "reset", "--hard", f"origin/{UPSTREAM_BRANCH}", "-q"],
+    ]
+    for step in steps:
+        update = srun(step)
+        if update.returncode != 0:
+            break
     repo = UPSTREAM_REPO.strip("/").split("/")
     repo_url = f"https://github.com/{repo[-2]}/{repo[-1]}"
     log_info(f"UPSTREAM_REPO: {repo_url} | UPSTREAM_BRANCH: {UPSTREAM_BRANCH}")

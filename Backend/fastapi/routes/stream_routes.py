@@ -13,6 +13,7 @@ from fastapi.responses import Response as PlainResponse
 from fastapi.responses import StreamingResponse
 
 from Backend import db
+from Backend.fastapi.security.credentials import require_auth
 from Backend.fastapi.security.tokens import verify_token
 from Backend.helper.bounded import BoundedDict
 from Backend.helper.analytics import client_ip_from, record_stream_start
@@ -24,9 +25,7 @@ from Backend.helper.utils import track_usage
 from Backend.helper.virtual_dl import resolve_virtual_parts, virtual_stream_generator
 from Backend.helper.zip_stream import resolve_zip_entry
 from Backend.logger import LOGGER
-import Backend.pyrofork.bot as botmod
 from Backend.pyrofork.bot import (
-    USERBOT_CLIENT_INDEX,
     client_dc_map,
     client_failures,
     multi_clients,
@@ -85,6 +84,12 @@ def parse_range_header(range_header: str, file_size: int):
     return start, end
 
 
+#----- Chunk-aligned fetch plan for bytes [start, end]: (offset, first_cut, last_cut, part_count)
+def part_math(start: int, end: int, chunk_size: int):
+    offset = start - (start % chunk_size)
+    return offset, start - offset, (end % chunk_size) + 1, end // chunk_size - offset // chunk_size + 1
+
+
 #----- Pick the least-loaded client, preferring the target DC, round-robin on ties
 def select_best_client(target_dc: int) -> int:
     global _rr_counter
@@ -130,16 +135,11 @@ def _get_streamer(tg_client, index: int) -> ByteStreamer:
 
 
 def _prefetch_for(index: int) -> tuple[int, int]:
-    return (1, 1) if index == USERBOT_CLIENT_INDEX else get_parallel_prefetch(len(multi_clients) - 1)
+    return get_parallel_prefetch(len(multi_clients) - 1)
 
 
-#----- Run fetch(streamer) on the Userbot when it is the default streamer, else (or on failure) on the bot pool
+#----- Run fetch(streamer) on the best bot in the pool
 async def _db_client(fetch):
-    if SettingsManager.current().default_streaming == "userbot" and (ub := _get_userbot_streamer()):
-        try:
-            return USERBOT_CLIENT_INDEX, ub, await fetch(ub)
-        except Exception as e:
-            LOGGER.warning(f"[USERBOT] Falling back to bots: {e}")
     index = select_best_client(0)
     streamer = _get_streamer(multi_clients[index], index)
     return index, streamer, await fetch(streamer)
@@ -208,6 +208,11 @@ async def thumb_handler(id: str):
             msg_id = int(decoded["msg_id"])
         except Exception:
             raise HTTPException(status_code=400, detail="Invalid thumbnail id")
+        #----- Public endpoint: only serve thumbnails from channels this server indexes
+        cfg = SettingsManager.current()
+        served = {str(c).strip().replace("-100", "") for c in (*cfg.auth_channels, *cfg.manual_channels, *cfg.anime_channels, cfg.skip_channel or "")}
+        if str(decoded["chat_id"]) not in served:
+            raise HTTPException(status_code=404, detail="No thumbnail")
         if not multi_clients:
             raise HTTPException(status_code=503, detail="No client available")
         client = multi_clients[select_best_client(0)]
@@ -285,22 +290,6 @@ async def stream_handler(request: Request, token: str, id: str, name: str, token
         ))
     decoded = await decode_string(id)
 
-    if decoded.get("global"):
-        if decoded.get("zip"):
-            return await global_zip_media_streamer(
-                request=request, parts_payload=decoded["parts"],
-                token=token, token_data=token_data, stream_id_hash=id,
-            )
-        if "parts" in decoded:
-            return await global_virtual_media_streamer(
-                request=request, parts_payload=decoded["parts"],
-                token=token, token_data=token_data, stream_id_hash=id,
-            )
-        return await global_media_streamer(
-            request=request, chat_id=int(decoded["chat_id"]), msg_id=int(decoded["msg_id"]),
-            token=token, token_data=token_data, stream_id_hash=id,
-        )
-
     if "parts" in decoded:
         if decoded.get("zip"):
             return await db_zip_media_streamer(
@@ -330,10 +319,7 @@ async def media_streamer(request: Request, chat_id: int, msg_id: int, token: str
     start, end = parse_range_header(range_header, file_size)
     req_length = end - start + 1
     chunk_size = 1024 * 1024
-    offset = start - (start % chunk_size)
-    first_part_cut = start - offset
-    last_part_cut = (end % chunk_size) + 1
-    part_count = math.ceil(end / chunk_size) - math.floor(offset / chunk_size)
+    offset, first_part_cut, last_part_cut, part_count = part_math(start, end, chunk_size)
     stream_id = secrets.token_hex(8)
     decoded_name = unquote(request.path_params.get("name", ""))
     final_title = await _lookup_title(stream_id_hash, decoded_name)
@@ -434,127 +420,8 @@ async def virtual_media_streamer(request: Request, parts_payload: list, token: s
     return StreamingResponse(body_gen, headers=common_headers, status_code=status, media_type=mime_type)
 
 
-_userbot_streamer: ByteStreamer = None
-
-
-#----- Lazily build and cache the ByteStreamer for the Userbot (None if unconfigured)
-def _get_userbot_streamer() -> ByteStreamer:
-    global _userbot_streamer
-    if botmod.Userbot is None:
-        return None
-    if _userbot_streamer is None or _userbot_streamer.client is not botmod.Userbot:
-        _userbot_streamer = ByteStreamer(botmod.Userbot, USERBOT_CLIENT_INDEX)
-    return _userbot_streamer
-
-
-#----- Stream a Global Search file through the Userbot session directly
-async def global_media_streamer(request: Request, chat_id: int, msg_id: int, token: str, token_data: dict = None, stream_id_hash: str = None):
-    streamer = _get_userbot_streamer()
-    if streamer is None:
-        raise HTTPException(status_code=503, detail="Global Search streaming is unavailable (no Userbot configured)")
-
-    LOGGER.info(f"[USERBOT] Stream request: chat={chat_id} msg={msg_id}")
-    try:
-        file_id = await streamer.get_file_properties(chat_id=chat_id, message_id=msg_id)
-    except Exception as e:
-        LOGGER.error(f"[USERBOT] File not accessible: chat={chat_id} msg={msg_id}: {e}")
-        raise HTTPException(status_code=404, detail="File not accessible via Global Search")
-
-    file_size = file_id.file_size
-    range_header = request.headers.get("Range", "")
-    start, end = parse_range_header(range_header, file_size)
-    req_length = end - start + 1
-    chunk_size = 1024 * 1024
-    offset = start - (start % chunk_size)
-    first_part_cut = start - offset
-    last_part_cut = (end % chunk_size) + 1
-    part_count = math.ceil(end / chunk_size) - math.floor(offset / chunk_size)
-    stream_id = secrets.token_hex(8)
-
-    file_name, mime_type = _resolve_filename_mime(file_id)
-    meta = {
-        "request_path": str(request.url.path),
-        "client_host": request.client.host if request.client else None,
-        "title": file_name or "global-stream",
-        "file_name": file_name,
-        "user_name": token_data.get("name", "Unknown") if token_data else "Unknown",
-        "token": token,
-        "global_search": True,
-    }
-
-    asyncio.create_task(track_usage(stream_id, token, token_data))
-
-    headers, status = _build_stream_headers(mime_type, file_name, req_length, range_header, start, end, file_size)
-
-    if request.method == "HEAD":
-        return PlainResponse(status_code=status, headers=headers)
-
-    body_gen = await streamer.prefetch_stream(
-        file_id=file_id,
-        client_index=USERBOT_CLIENT_INDEX,
-        offset=offset,
-        first_part_cut=first_part_cut,
-        last_part_cut=last_part_cut,
-        part_count=part_count,
-        chunk_size=chunk_size,
-        prefetch=1,
-        stream_id=stream_id,
-        meta=meta,
-        parallelism=1,
-        request=request,
-        chat_id=chat_id,
-        message_id=msg_id,
-    )
-    return StreamingResponse(body_gen, headers=headers, status_code=status, media_type=mime_type)
-
-
-#----- Stream a split Global Search file (multiple parts) through the Userbot session
-async def global_virtual_media_streamer(request: Request, parts_payload: list, token: str, token_data: dict = None, stream_id_hash: str = None):
-    streamer = _get_userbot_streamer()
-    if streamer is None:
-        raise HTTPException(status_code=503, detail="Global Search streaming is unavailable (no Userbot connected)")
-
-    parts, file_size = await resolve_virtual_parts(parts_payload, streamer, prefix_100=False)
-    if not parts or file_size <= 0:
-        raise HTTPException(status_code=404, detail="Split media parts not accessible via Global Search")
-
-    range_header = request.headers.get("Range", "")
-    start, end = parse_range_header(range_header, file_size)
-    req_length = end - start + 1
-    chunk_size = 1024 * 1024
-    stream_id = secrets.token_hex(8)
-    decoded_name = unquote(request.path_params.get("name", ""))
-    final_title = await _lookup_title(stream_id_hash, decoded_name)
-    file_name, mime_type = _resolve_filename_mime(parts[0]["file_id"])
-
-    meta = {
-        "request_path": str(request.url.path),
-        "client_host": request.client.host if request.client else None,
-        "title": final_title or file_name,
-        "file_name": file_name,
-        "user_name": token_data.get("name", "Unknown") if token_data else "Unknown",
-        "token": token,
-        "global_search": True,
-        "split_parts": len(parts),
-    }
-
-    asyncio.create_task(track_usage(stream_id, token, token_data))
-
-    headers, status = _build_stream_headers(mime_type, file_name, req_length, range_header, start, end, file_size)
-
-    if request.method == "HEAD":
-        return PlainResponse(status_code=status, headers=headers)
-
-    body_gen = virtual_stream_generator(
-        parts=parts, start=start, end=end, chunk_size=chunk_size,
-        streamer=streamer, client_index=USERBOT_CLIENT_INDEX, request=request, meta=meta,
-        stream_id=stream_id, parallelism=1, prefetch_count=1,
-    )
-    return StreamingResponse(body_gen, headers=headers, status_code=status, media_type=mime_type)
-
-
 #----- Read a byte range from the concatenated virtual parts into memory
-async def _read_virtual_range(parts, start, length, streamer, request, client_index=USERBOT_CLIENT_INDEX, parallelism=1, prefetch_count=1):
+async def _read_virtual_range(parts, start, length, streamer, request, client_index, parallelism=1, prefetch_count=1):
     buf = bytearray()
     gen = virtual_stream_generator(
         parts=parts, start=start, end=start + length - 1, chunk_size=1024 * 1024,
@@ -630,14 +497,6 @@ async def _zip_media_streamer(request, parts_payload, token, token_data, stream_
     return StreamingResponse(body_gen, headers=headers, status_code=status, media_type=mime_type)
 
 
-#----- ZIP split from Global Search (streamed via the Userbot session)
-async def global_zip_media_streamer(request: Request, parts_payload: list, token: str, token_data: dict = None, stream_id_hash: str = None):
-    return await _zip_media_streamer(
-        request, parts_payload, token, token_data, stream_id_hash,
-        _get_userbot_streamer(), USERBOT_CLIENT_INDEX, False, 1, 1,
-    )
-
-
 #----- ZIP split from the indexed library (streamed via the multi-bot pool)
 async def db_zip_media_streamer(request: Request, parts_payload: list, token: str, token_data: dict = None, stream_id_hash: str = None):
     index, streamer, _ = await _db_client(lambda s: resolve_virtual_parts(parts_payload[:1], s))
@@ -650,7 +509,7 @@ async def db_zip_media_streamer(request: Request, parts_payload: list, token: st
 
 #----- Live and recent stream telemetry, pruning stale active entries
 @router.get("/stream/stats")
-async def get_stream_stats():
+async def get_stream_stats(_: bool = Depends(require_auth)):
     now = time.time()
     PRUNE_SECONDS = 3
     INACTIVE_TIMEOUT = 15
@@ -723,7 +582,7 @@ async def get_stream_stats():
 
 #----- Detailed telemetry for a single stream id
 @router.get("/stream/stats/{stream_id}")
-async def get_stream_detail(stream_id: str):
+async def get_stream_detail(stream_id: str, _: bool = Depends(require_auth)):
     info = ACTIVE_STREAMS.get(stream_id)
     if info:
         return JSONResponse(make_json_safe(info))

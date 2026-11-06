@@ -62,7 +62,7 @@ def _check_bots() -> dict:
     for idx in sorted(multi_clients.keys()):
         client = multi_clients[idx]
         clients.append({
-            "name": "Userbot" if idx < 0 else f"Bot {idx + 1}",
+            "name": f"Bot {idx + 1}",
             "connected": bool(getattr(client, "is_connected", False)),
             "dc": client_dc_map.get(idx),
             "workload": work_loads.get(idx, 0),

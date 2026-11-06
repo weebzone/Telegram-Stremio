@@ -591,375 +591,6 @@
         </div>
     </div>
 
-    <!-- ── Subscription ────────────────────────────────────────────────── -->
-    <div class="settings-card">
-        <h2><i class="fa-solid fa-credit-card"></i> Subscription</h2>
-        <label class="toggle-wrap" style="margin-bottom:1.25rem">
-            <input type="checkbox" class="toggle-input" id="subscription"
-                {% if settings.subscription %}checked{% endif %}
-                onchange="toggleSubFields()">
-            <span class="toggle-track"></span>
-            <span class="toggle-label">
-                <strong>Enable Subscription System</strong>
-                <span style="color:var(--text-sec);font-size:0.8rem;display:block">
-                    Restrict Stremio access to subscribed members
-                </span>
-            </span>
-        </label>
-
-        <div id="sub-fields" style="{% if not settings.subscription %}display:none{% endif %}">
-            <div style="margin-bottom:1rem">
-                <label class="s-label" for="subscription_group_id">Subscription Group ID</label>
-                <input type="number" id="subscription_group_id" class="s-input"
-                    value="{{ settings.subscription_group_id }}"
-                    placeholder="-100xxxxxxxx">
-                <span style="color:var(--text-sec);font-size:0.78rem;display:block;margin-top:0.4rem">
-                    Users are pointed back to your bot automatically for renewals and joining.
-                </span>
-            </div>
-
-            <!-- Payment method -->
-            <div style="margin-bottom:1rem">
-                <label class="s-label" for="payment_instructions">Payment Instructions
-                    <span style="font-weight:400;text-transform:none;letter-spacing:0">
-                        — shown to users when they pick a plan (UPI ID, bank details, etc.)</span>
-                </label>
-                <textarea id="payment_instructions" class="s-input" rows="4"
-                    placeholder="e.g. UPI: yourname@okhdfcbank&#10;Or PayPal: you@example.com&#10;After paying, send the screenshot here.">{{ settings.payment_instructions }}</textarea>
-            </div>
-            <div style="margin-bottom:1rem">
-                <label class="s-label" for="payment_qr_url">Payment QR Image URL
-                    <span style="font-weight:400;text-transform:none;letter-spacing:0">
-                        — optional; if set, the bot sends this QR image with the plan</span>
-                </label>
-                <input type="url" id="payment_qr_url" class="s-input"
-                    value="{{ settings.payment_qr_url }}"
-                    placeholder="https://.../upi-qr.png">
-            </div>
-
-            <!-- Approver IDs -->
-            <label class="s-label">APPROVER_IDS
-                <span style="font-weight:400;text-transform:none;letter-spacing:0">
-                    — Telegram user IDs allowed to approve subscriptions</span>
-            </label>
-            <div class="multi-list-items" id="approver_ids_items">
-                {% for uid in settings.approver_ids %}
-                <div class="multi-item">
-                    <input type="number" class="s-input" value="{{ uid }}" data-list="approver_ids">
-                    <button class="remove-btn" onclick="removeItem(this)" title="Remove">
-                        <i class="fa-solid fa-xmark"></i>
-                    </button>
-                </div>
-                {% endfor %}
-            </div>
-            <div class="add-row">
-                <input type="number" id="approver_ids_new" class="s-input"
-                    placeholder="Telegram user ID (numeric)"
-                    onkeydown="if(event.key==='Enter'){event.preventDefault();addItem('approver_ids')}">
-                <button class="add-btn" onclick="addItem('approver_ids')">+ Add Approver</button>
-            </div>
-        </div>
-    </div>
-
-
-
-
-<!-- ── Telegram User Session ──────────────────────────────────────── -->
-<div class="settings-card">
-    <h2><i class="fa-solid fa-user-lock"></i> Telegram User Session</h2>
-    <p class="bk-desc">
-        Log in with your phone number to generate the User Session automatically — no manual
-        session string needed. It's encrypted and stored securely, and powers Global Search.
-    </p>
-
-    <div id="sess-loading" style="color:var(--text-sec);font-size:0.85rem">
-        <i class="fa-solid fa-spinner fa-spin"></i> Checking session…
-    </div>
-
-    <!-- Connected view -->
-    <div id="sess-connected" style="display:none">
-        <div class="sess-profile">
-            <div class="sess-avatar"><i class="fa-solid fa-user-astronaut"></i></div>
-            <div style="min-width:0;flex:1">
-                <div class="flex items-center gap-2 flex-wrap">
-                    <span id="sess-name" style="font-weight:800"></span>
-                    <span id="sess-live" class="sess-pill"></span>
-                </div>
-                <div id="sess-username" style="color:var(--text-sec);font-size:0.82rem"></div>
-            </div>
-        </div>
-        <div class="sess-grid">
-            <div><span class="sess-k">Phone</span><span id="sess-phone" class="sess-v">—</span></div>
-            <div><span class="sess-k">Telegram ID</span><span id="sess-id" class="sess-v">—</span></div>
-        </div>
-        <div class="flex flex-wrap gap-2 mt-4">
-            <button type="button" class="sess-btn" onclick="sessAction('reconnect')"><i class="fa-solid fa-rotate"></i> Reconnect</button>
-            <button type="button" class="sess-btn warn" onclick="sessAction('disconnect')"><i class="fa-solid fa-plug-circle-xmark"></i> Disconnect</button>
-            <button type="button" class="sess-btn danger" onclick="sessRemove()"><i class="fa-solid fa-trash"></i> Remove</button>
-        </div>
-    </div>
-
-    <!-- Login flow -->
-    <div id="sess-login" style="display:none">
-        <div id="sess-step-phone">
-            <label class="s-label">Phone number (with country code)</label>
-            <div class="flex flex-col sm:flex-row gap-2">
-                <input id="sess-phone-input" class="s-input" placeholder="+12025550123" style="flex:1">
-                <button type="button" class="sess-btn primary" onclick="sessSendCode()"><i class="fa-solid fa-paper-plane"></i> Send code</button>
-            </div>
-        </div>
-        <div id="sess-step-code" style="display:none;margin-top:0.85rem">
-            <label class="s-label">Login code (sent on Telegram)</label>
-            <div class="flex flex-col sm:flex-row gap-2">
-                <input id="sess-code-input" class="s-input" inputmode="numeric" placeholder="1 2 3 4 5" style="flex:1">
-                <button type="button" class="sess-btn primary" onclick="sessVerifyCode()"><i class="fa-solid fa-check"></i> Verify</button>
-            </div>
-        </div>
-        <div id="sess-step-pass" style="display:none;margin-top:0.85rem">
-            <label class="s-label">Two-step verification password</label>
-            <div class="flex flex-col sm:flex-row gap-2">
-                <input id="sess-pass-input" type="password" class="s-input" placeholder="Your 2FA password" style="flex:1">
-                <button type="button" class="sess-btn primary" onclick="sessVerifyPassword()"><i class="fa-solid fa-lock-open"></i> Confirm</button>
-            </div>
-        </div>
-        <p id="sess-msg" style="font-size:0.8rem;margin-top:0.7rem;display:none"></p>
-    </div>
-
-    {% if userbot_configured %}
-    <hr class="divider">
-    <label class="toggle-wrap">
-        <input type="checkbox" class="toggle-input" id="default_streaming"
-            {% if settings.default_streaming == 'userbot' %}checked{% endif %}>
-        <span class="toggle-track"></span>
-        <span class="toggle-label">
-            <strong>Default Streaming: Userbot</strong>
-            <span style="color:var(--text-sec);font-size:0.8rem;display:block">
-                Off streams library files by Bots (default). On streams them by the Userbot, falling back to Bots on error.
-                Global Search files always use the Userbot.
-            </span>
-        </span>
-    </label>
-    {% endif %}
-</div>
-
-<style>
-.sess-profile { display:flex; align-items:center; gap:0.9rem; padding:1rem; border-radius:0.9rem; border:1px solid var(--border); background:color-mix(in srgb,var(--card) 90%,var(--bg)); }
-.sess-avatar { width:3rem; height:3rem; border-radius:9999px; display:flex; align-items:center; justify-content:center; font-size:1.2rem; background:color-mix(in srgb,var(--primary) 18%,transparent); color:var(--primary); flex-shrink:0; }
-.sess-grid { display:grid; grid-template-columns:1fr 1fr; gap:0.75rem; margin-top:0.85rem; }
-@media (max-width:520px){ .sess-grid { grid-template-columns:1fr; } }
-.sess-grid > div { padding:0.7rem 0.9rem; border-radius:0.8rem; border:1px solid var(--border); background:color-mix(in srgb,var(--card) 92%,var(--bg)); }
-.sess-k { display:block; font-size:0.68rem; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-sec); font-weight:700; }
-.sess-v { display:block; font-weight:700; margin-top:0.2rem; word-break:break-all; }
-.sess-pill { font-size:0.62rem; font-weight:900; text-transform:uppercase; letter-spacing:0.05em; padding:0.15rem 0.55rem; border-radius:9999px; }
-.sess-pill.on { background:#22c55e22; color:#22c55e; }
-.sess-pill.off { background:#f59e0b22; color:#f59e0b; }
-.sess-btn { display:inline-flex; align-items:center; gap:0.5rem; padding:0.6rem 1.1rem; border-radius:9999px; font-weight:800; font-size:0.82rem; cursor:pointer; border:1px solid var(--border); background:color-mix(in srgb,var(--card) 92%,var(--bg)); color:var(--text); transition:all .15s; }
-.sess-btn:hover { border-color:var(--primary); }
-.sess-btn.primary { background:var(--primary); color:#fff; border-color:transparent; }
-.sess-btn.warn { color:#f59e0b; }
-.sess-btn.danger { color:#ef4444; }
-</style>
-
-<script>
-let sessLoginId = null;
-
-async function sessLoadStatus() {
-    try {
-        const res = await fetch('/api/admin/settings/session');
-        const data = await res.json();
-        document.getElementById('sess-loading').style.display = 'none';
-        if (data.connected && data.profile) {
-            const p = data.profile;
-            document.getElementById('sess-name').textContent = p.name || 'Telegram User';
-            document.getElementById('sess-username').textContent = p.username ? '@' + p.username : 'No username';
-            document.getElementById('sess-phone').textContent = p.phone || '—';
-            document.getElementById('sess-id').textContent = p.user_id || '—';
-            const live = document.getElementById('sess-live');
-            live.className = 'sess-pill ' + (data.live ? 'on' : 'off');
-            live.textContent = data.live ? 'Connected' : 'Stored (restart to activate)';
-            document.getElementById('sess-connected').style.display = '';
-            document.getElementById('sess-login').style.display = 'none';
-        } else {
-            document.getElementById('sess-connected').style.display = 'none';
-            document.getElementById('sess-login').style.display = '';
-            sessShowStep('phone');
-        }
-    } catch (e) {
-        document.getElementById('sess-loading').textContent = 'Unable to load session status.';
-    }
-}
-
-function sessShowStep(step) {
-    document.getElementById('sess-step-phone').style.display = step === 'phone' ? '' : 'none';
-    document.getElementById('sess-step-code').style.display = step === 'code' ? '' : 'none';
-    document.getElementById('sess-step-pass').style.display = step === 'pass' ? '' : 'none';
-}
-
-function sessMsg(text, ok) {
-    const el = document.getElementById('sess-msg');
-    el.style.display = '';
-    el.style.color = ok ? '#22c55e' : '#ef4444';
-    el.textContent = text;
-}
-
-async function sessSendCode() {
-    const phone = document.getElementById('sess-phone-input').value.trim();
-    if (!phone) return sessMsg('Enter your phone number.', false);
-    sessMsg('Sending code…', true);
-    try {
-        const res = await fetch('/api/admin/settings/session/send-code', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone })
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.detail || 'Failed to send code');
-        sessLoginId = data.login_id;
-        sessShowStep('code');
-        sessMsg('Code sent. Check your Telegram app.', true);
-    } catch (e) { sessMsg(e.message, false); }
-}
-
-async function sessVerifyCode() {
-    const code = document.getElementById('sess-code-input').value.trim();
-    if (!code) return sessMsg('Enter the login code.', false);
-    sessMsg('Verifying…', true);
-    try {
-        const res = await fetch('/api/admin/settings/session/verify-code', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ login_id: sessLoginId, code })
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.detail || 'Verification failed');
-        if (data.status === 'password_needed') {
-            sessShowStep('pass');
-            sessMsg('This account has two-step verification. Enter your password.', true);
-            return;
-        }
-        showToast('Session created successfully.', 'success', 'Telegram');
-        sessLoadStatus();
-    } catch (e) { sessMsg(e.message, false); }
-}
-
-async function sessVerifyPassword() {
-    const password = document.getElementById('sess-pass-input').value;
-    if (!password) return sessMsg('Enter your 2FA password.', false);
-    sessMsg('Confirming…', true);
-    try {
-        const res = await fetch('/api/admin/settings/session/verify-password', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ login_id: sessLoginId, password })
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.detail || 'Verification failed');
-        showToast('Session created successfully.', 'success', 'Telegram');
-        sessLoadStatus();
-    } catch (e) { sessMsg(e.message, false); }
-}
-
-async function sessAction(kind) {
-    try {
-        const res = await fetch('/api/admin/settings/session/' + kind, { method: 'POST' });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.detail || 'Action failed');
-        showToast(kind === 'reconnect' ? 'Reconnected.' : 'Disconnected.', 'info', 'Telegram');
-        sessLoadStatus();
-    } catch (e) { showToast(e.message, 'error', 'Telegram'); }
-}
-
-async function sessRemove() {
-    if (!confirm('Remove the stored Telegram session? Global Search will stop working until you log in again.')) return;
-    try {
-        const res = await fetch('/api/admin/settings/session', { method: 'DELETE' });
-        if (!res.ok) throw new Error();
-        showToast('Session removed.', 'info', 'Telegram');
-        sessLoadStatus();
-    } catch (e) { showToast('Failed to remove session.', 'error', 'Telegram'); }
-}
-
-document.addEventListener('DOMContentLoaded', sessLoadStatus);
-</script>
-
-
-<!-- ── Global Search (Userbot) ────────────────────────────────────── -->
-<div class="settings-card">
-    <h2><i class="fa-solid fa-globe"></i> Global Search</h2>
-
-    <label class="toggle-wrap" style="{% if not userbot_configured %}opacity:0.5{% endif %}">
-        <input type="checkbox" class="toggle-input" id="global_search"
-            {% if settings.global_search %}checked{% endif %}
-            {% if not userbot_configured %}disabled{% endif %}
-            onchange="toggleGlobalSearchFields()">
-        <span class="toggle-track"></span>
-        <span class="toggle-label">
-            <strong>Enable Global Search</strong>
-            <span style="color:var(--text-sec);font-size:0.8rem;display:block">
-                Search media <strong>only in the channels listed below</strong>.
-                Results are tagged <strong>🌐 GLOBAL</strong> in the stream list
-                for items not in your local catalog.
-            </span>
-        </span>
-    </label>
-
-    {% if not userbot_configured %}
-    <p style="color:var(--text-sec);font-size:0.8rem;margin-top:0.75rem">
-        <i class="fa-solid fa-circle-info"></i>
-        Connect your <strong>Telegram User Session</strong> above to unlock Global Search.
-    </p>
-    {% endif %}
-
-    <div id="global-search-fields"
-         style="{% if not settings.global_search %}display:none{% endif %}">
-
-        <hr class="divider">
-
-        <div id="global-search-channels-wrap"
-             style="{% if not userbot_configured %}opacity:0.5;pointer-events:none{% endif %}">
-
-            <label class="s-label">
-                GLOBAL SEARCH CHANNELS
-                <span style="font-weight:400;text-transform:none;letter-spacing:0">
-                    — optional. If set, search is restricted to these channels. If empty, searches all channels globally (faster).
-                </span>
-            </label>
-
-            <p style="font-size:0.78rem;color:var(--text-sec);margin-bottom:0.75rem">
-                <i class="fa-solid fa-circle-info"
-                   style="color:var(--info,#3b82f6)"></i>
-                Leave empty to search globally across all channels the account can see.
-                Otherwise enter channel IDs in <code>-100xxxxxxxxxx</code> format only.
-            </p>
-
-            <div class="multi-list-items" id="global_search_channels_items">
-                {% for ch in settings.global_search_channels %}
-                {% set t = (settings.channel_titles or {}).get(ch|string, ch|string) %}
-                <div class="multi-item">
-                    <span class="channel-chip" data-list="global_search_channels" data-id="{{ ch }}" title="{{ ch }}">{{ t }}</span>
-                    <button class="remove-btn"
-                            onclick="removeItem(this)"
-                            title="Remove">
-                        <i class="fa-solid fa-xmark"></i>
-                    </button>
-                </div>
-                {% endfor %}
-            </div>
-
-            <div class="add-row">
-                <input type="text"
-                       id="global_search_channels_new"
-                       class="s-input"
-                       placeholder="-100xxxxxxxxxx (channels only)"
-                       onkeydown="if(event.key==='Enter'){event.preventDefault();addItem('global_search_channels')}">
-
-                <button class="add-btn"
-                        onclick="addItem('global_search_channels')">
-                    + Add Channel
-                </button>
-            </div>
-
-        </div>
-    </div>
-</div>
-
-
-
-
 <!-- ── New Content Announcements ──────────────────────────────────── -->
 <div class="settings-card">
     <h2><i class="fa-solid fa-bullhorn"></i> New Content Announcements</h2>
@@ -1135,46 +766,6 @@ document.addEventListener('DOMContentLoaded', sessLoadStatus);
         </div>
     </div>
     
-    <!-- ── WebDAV ──────────────────────────────────────────────────────── -->
-    <div class="settings-card">
-        <h2><i class="fa-solid fa-hard-drive"></i> WebDAV</h2>
-        <p style="font-size:0.82rem;color:var(--text-sec);margin-bottom:1rem">
-            Expose your library as a virtual filesystem.
-            URL: <code id="webdav-url-hint">/webdav/&lt;API_TOKEN&gt;/</code>
-            Use any valid Stremio API token in the path. Optional Basic auth below.
-        </p>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4" style="margin-bottom:1rem">
-            <div>
-                <label class="s-label" for="webdav_user">WebDAV Username</label>
-                <input type="text" id="webdav_user" class="s-input"
-                    value="{{ settings.webdav_user | default('', true) }}"
-                    placeholder="Leave empty to disable Basic auth"
-                    autocomplete="off" spellcheck="false">
-            </div>
-            <div>
-                <label class="s-label" for="webdav_password">WebDAV Password</label>
-                <div style="position:relative">
-                    <input type="password" id="webdav_password" class="s-input"
-                        value="{{ settings.webdav_password | default('', true) }}"
-                        placeholder="Optional"
-                        style="padding-right:2.5rem"
-                        autocomplete="off" spellcheck="false">
-                    <button type="button" onclick="toggleWebdavPwdVisibility()"
-                        style="position:absolute;right:0.75rem;top:50%;transform:translateY(-50%);
-                               background:none;border:none;color:var(--text-sec);cursor:pointer">
-                        <i class="fa-solid fa-eye" id="webdav-eye-icon"></i>
-                    </button>
-                </div>
-            </div>
-        </div>
-        <p style="font-size:0.78rem;color:var(--text-sec)">
-            <i class="fa-solid fa-circle-info"></i>
-            Movies: <code>/webdav/TOKEN/Movies/</code> ·
-            TV: <code>/webdav/TOKEN/TV Shows/</code> ·
-            NFO files are generated automatically.
-        </p>
-    </div>
-
 <!-- ── Databases ────────────────────────────────────────────────────── -->
     <div class="settings-card">
         <h2><i class="fa-solid fa-database"></i> Databases</h2>
@@ -1266,7 +857,7 @@ document.addEventListener('DOMContentLoaded', sessLoadStatus);
     <div class="settings-card">
         <h2><i class="fa-solid fa-box-archive"></i> Backup &amp; Restore</h2>
         <p class="bk-desc">
-            Export everything — settings, custom catalogs, subscription plans and access tokens — to a JSON file,
+            Export everything — settings, custom catalogs and access tokens — to a JSON file,
             or restore from one. Passwords and the session secret are never exported, but the file can hold bot
             tokens and database URIs, so keep it private.
         </p>
@@ -1333,20 +924,6 @@ function toggleDuplicateProtection() {
     wrap.style.pointerEvents = replaceOn ? 'none' : '';
 }
 
-/* ── Toggle sub-fields visibility ─────────────────────────────────────── */
-function toggleSubFields() {
-    const enabled = document.getElementById('subscription').checked;
-    document.getElementById('sub-fields').style.display = enabled ? '' : 'none';
-}
-
-function toggleGlobalSearchFields() {
-    const enabled = document.getElementById('global_search').checked;
-    const fields = document.getElementById('global-search-fields');
-
-    if (fields) {
-        fields.style.display = enabled ? '' : 'none';
-    }
-}
 
 function toggleAnnouncementFields() {
     const enabled = document.getElementById('announce_new_content').checked;
@@ -1516,7 +1093,7 @@ function addItem(listKey) {
     const value = newInput.value.trim();
     if (!value) return;
 
-    const channelLists = ['auth_channels', 'global_search_channels', 'manual_channels'];
+    const channelLists = ['auth_channels', 'manual_channels'];
     if (channelLists.includes(listKey) && !isValidChannelId(value)) {
         alert('Only channel IDs in -100xxxxxxxxxx format are accepted (channels only).');
         return;
@@ -1616,18 +1193,6 @@ function collectList(listKey) {
 
 /* ── Save ──────────────────────────────────────────────────────────────── */
 
-function toggleWebdavPwdVisibility() {
-    const input = document.getElementById('webdav_password');
-    const icon = document.getElementById('webdav-eye-icon');
-    if (!input) return;
-    if (input.type === 'password') {
-        input.type = 'text';
-        if (icon) icon.className = 'fa-solid fa-eye-slash';
-    } else {
-        input.type = 'password';
-        if (icon) icon.className = 'fa-solid fa-eye';
-    }
-}
 
 async function saveSettings() {
     const btn   = document.getElementById('save-btn');
@@ -1635,7 +1200,6 @@ async function saveSettings() {
 
     const channelFields = [
         ...collectList('auth_channels'),
-        ...collectList('global_search_channels'),
         ...collectList('manual_channels'),
     ];
     const acEl = document.getElementById('announcement_channel');
@@ -1690,11 +1254,6 @@ async function saveSettings() {
         upstream_branch:               document.getElementById('upstream_branch').value.trim(),
         auth_channels:                 collectList('auth_channels'),
         anime_channels:                collectAnimeChannels(),
-        subscription:                  document.getElementById('subscription').checked,
-        subscription_group_id:         parseInt(document.getElementById('subscription_group_id').value || '0', 10),
-        payment_instructions:          document.getElementById('payment_instructions').value.trim(),
-        payment_qr_url:                document.getElementById('payment_qr_url').value.trim(),
-        approver_ids:                  collectList('approver_ids').map(Number),
         http_proxy_url:                document.getElementById('http_proxy_url').value.trim(),
         show_proxy_and_non_proxy_both: document.getElementById('show_proxy_and_non_proxy_both').checked,
         mediaflow_proxy:               document.getElementById('mediaflow_proxy').checked,
@@ -1702,20 +1261,14 @@ async function saveSettings() {
         cf_stream_url:                 document.getElementById('cf_stream_url').value.trim(),
         cf_stream_secret:              document.getElementById('cf_stream_secret').value.trim(),
         cf_stream_mode:                document.getElementById('cf_stream_mode').value,
-        webdav_user:                   document.getElementById('webdav_user').value.trim(),
-        webdav_password:               document.getElementById('webdav_password').value,
         multi_tokens:                  collectList('multi_tokens'),
         extra_databases:               collectList('extra_databases'),
-        global_search:                 document.getElementById('global_search').checked,
-        global_search_channels:        collectList('global_search_channels'),
         manual_channels:               collectList('manual_channels'),
         announce_new_content:          document.getElementById('announce_new_content').checked,
         announcement_channel:          (function(){const el=document.getElementById('announcement_channel');return el.dataset.id||extractChannelId(el.value.trim());})(),
         skip_channel:                  (function(){const el=document.getElementById('skip_channel');return el.dataset.id||extractChannelId(el.value.trim());})(),
         delete_on_metadata_fail:       document.getElementById('delete_on_metadata_fail').checked,
     };
-    const dsEl = document.getElementById('default_streaming');
-    if (dsEl) payload.default_streaming = dsEl.checked ? 'userbot' : 'bots';
 
     try {
         const res  = await fetch('/api/admin/settings', {
@@ -1816,15 +1369,9 @@ function renderSettings(s) {
     document.getElementById('duplicate_protection').checked = !!s.duplicate_protection;
     toggleDuplicateProtection();
     document.getElementById('hide_catalog').checked = !!s.hide_catalog;
-    document.getElementById('subscription').checked = !!s.subscription;
     document.getElementById('show_proxy_and_non_proxy_both').checked = !!s.show_proxy_and_non_proxy_both;
-    document.getElementById('global_search').checked = !!s.global_search;
-    const dsEl = document.getElementById('default_streaming');
-    if (dsEl) dsEl.checked = s.default_streaming === 'userbot';
     document.getElementById('announce_new_content').checked = !!s.announce_new_content;
     document.getElementById('delete_on_metadata_fail').checked = !!s.delete_on_metadata_fail;
-    toggleSubFields();
-    toggleGlobalSearchFields();
     toggleAnnouncementFields();
 
     // Plain text/number fields
@@ -1852,24 +1399,17 @@ function renderSettings(s) {
     toggleFanartShuffle();
     document.getElementById('upstream_repo').value = s.upstream_repo || '';
     document.getElementById('upstream_branch').value = s.upstream_branch || '';
-    document.getElementById('subscription_group_id').value = s.subscription_group_id || 0;
     document.getElementById('http_proxy_url').value = s.http_proxy_url || '';
     document.getElementById('mediaflow_proxy').checked = !!s.mediaflow_proxy;
     document.getElementById('mediaflow_password').value = s.mediaflow_password || '';
     document.getElementById('cf_stream_url').value = s.cf_stream_url || '';
     document.getElementById('cf_stream_secret').value = s.cf_stream_secret || '';
     document.getElementById('cf_stream_mode').value = s.cf_stream_mode || 'off';
-    const wu = document.getElementById('webdav_user');
-    if (wu) wu.value = s.webdav_user || '';
-    const wp = document.getElementById('webdav_password');
-    if (wp) wp.value = s.webdav_password || '';
     toggleMediaflowFields();
 
     const titles = s.channel_titles || {};
     rebuildAuthChannels(s.auth_channels, s.anime_channels, titles);
-    rebuildSimpleList('approver_ids_items', s.approver_ids, 'number');
     rebuildSimpleList('multi_tokens_items', s.multi_tokens, 'text');
-    rebuildSimpleList('global_search_channels_items', s.global_search_channels, 'text', titles);
     rebuildSimpleList('manual_channels_items', s.manual_channels, 'text', titles);
 
     const ac = document.getElementById('announcement_channel');
@@ -1899,7 +1439,7 @@ function rebuildSimpleList(containerId, values, inputType, titles) {
     const container = document.getElementById(containerId);
     if (!container) return;
     const listKey = containerId.replace('_items', '');
-    const channelLists = ['global_search_channels', 'manual_channels'];
+    const channelLists = ['manual_channels'];
     titles = titles || {};
 
     container.innerHTML = '';

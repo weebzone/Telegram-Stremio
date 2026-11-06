@@ -37,12 +37,6 @@ class Telegram:
     UPSTREAM_BRANCH               = getenv("UPSTREAM_BRANCH", "")
     ADMIN_USERNAME                = getenv("ADMIN_USERNAME", "admin")
     ADMIN_PASSWORD                = getenv("ADMIN_PASSWORD", "admin")
-    SUBSCRIPTION                  = getenv("SUBSCRIPTION", "false").lower() == "true"
-    SUBSCRIPTION_GROUP_ID         = _int_env("SUBSCRIPTION_GROUP_ID")
-    APPROVER_IDS                  = [int(x.strip()) for x in (getenv("APPROVER_IDS") or "").split(",") if x.strip().isdigit()]
     HTTP_PROXY_URL                = getenv("HTTP_Proxy_URL", "")
     SHOW_PROXY_AND_NON_PROXY_BOTH = getenv("SHOW_ProxyAndNonProxyBoth", "false").lower() == "true"
 
-    #----- WebDAV (optional env fallback; prefer Settings page)
-    WEBDAV_USER     = getenv("WEBDAV_USER", "")
-    WEBDAV_PASSWORD = getenv("WEBDAV_PASSWORD", "")

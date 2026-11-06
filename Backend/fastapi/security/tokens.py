@@ -1,28 +1,50 @@
+import time
 from datetime import datetime, timezone
 
 from fastapi import HTTPException
 
 from Backend import db
 from Backend.config import Telegram
-from Backend.helper.settings_manager import SettingsManager
 
 DAILY_LIMIT_VIDEO = "https://bit.ly/3YZFKT5"
 MONTHLY_LIMIT_VIDEO = "https://bit.ly/4rfjtgd"
-SUBSCRIPTION_EXPIRED_VIDEO = "https://bit.ly/4rfjtgd"
 
 
-#----- Validate an API token and annotate it with subscription/limit status
+#----- Players send many requests per movie; skip the Mongo round trip for 15 s.
+#----- shortcut: a revoke or limit change is seen within 15 s, or at once via clear_cache().
+_CACHE_TTL = 15
+_cache: dict = {}
+
+
+def clear_cache() -> None:
+    _cache.clear()
+
+
+async def _load_token(token: str):
+    hit = _cache.get(token)
+    if hit and time.monotonic() - hit[0] < _CACHE_TTL:
+        return hit[1]
+    doc = await db.get_api_token(token)
+    if doc:
+        if len(_cache) >= 2000:
+            _cache.clear()
+        _cache[token] = (time.monotonic(), doc)
+    return doc
+
+
+#----- Validate an API token and annotate it with expiry/limit status
 async def verify_token(token: str):
-    token_data = await db.get_api_token(token)
-    if not token_data:
+    found = await _load_token(token)
+    if not found:
         raise HTTPException(status_code=401, detail="Invalid or expired API token")
+    token_data = dict(found)  # callers add keys; never touch the cached copy
 
     limits = token_data.get("limits", {})
     usage = token_data.get("usage", {})
 
     token_data["limit_exceeded"] = None
     token_data["limit_video"] = None
-    token_data["subscription_expired"] = False
+    token_data["token_expired"] = False
 
     #----- Owner-linked tokens are admins (honour persisted flag, else derive)
     _uid = token_data.get("user_id")
@@ -33,36 +55,14 @@ async def verify_token(token: str):
     except (TypeError, ValueError):
         token_data["is_admin"] = bool(token_data.get("is_admin"))
 
-    #----- Access expiry checks. Admin and never-expires tokens always bypass.
-    if not token_data["is_admin"] and not token_data.get("subscription_exempt"):
-
+    #----- Admin and never-expires ("lifetime") tokens bypass expiry
+    token_expiry = token_data.get("expires_at")
+    if token_expiry is not None and not token_data["is_admin"] and not token_data.get("subscription_exempt"):
         #----- Compare correctly regardless of timezone awareness
-        def _expired(when):
-            ref = datetime.utcnow()
-            try:
-                if when.tzinfo is not None:
-                    ref = datetime.now(timezone.utc)
-            except AttributeError:
-                pass
-            return when < ref
-
-        #----- A token's own expiry is enforced in every mode. With no token expiry,
-        #----- an active subscription is required only while subscription mode is on.
-        #----- (When valid, fall through so data-limit checks still apply.)
-        token_expiry = token_data.get("expires_at")
-        if token_expiry is not None:
-            if _expired(token_expiry):
-                token_data["subscription_expired"] = True
-                return token_data
-        elif SettingsManager.current().subscription:
-            user_id = token_data.get("user_id")
-            user = await db.get_user(int(user_id)) if user_id else None
-            expiry = user.get("subscription_expiry") if user else None
-            if (not user_id or not user
-                    or user.get("subscription_status") != "active"
-                    or not expiry or _expired(expiry)):
-                token_data["subscription_expired"] = True
-                return token_data
+        ref = datetime.now(timezone.utc) if getattr(token_expiry, "tzinfo", None) is not None else datetime.utcnow()
+        if token_expiry < ref:
+            token_data["token_expired"] = True
+            return token_data
 
     if daily_limit := limits.get("daily_limit_gb"):
         if daily_limit > 0:

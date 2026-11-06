@@ -21,8 +21,6 @@ STRONG_MATCH = 0.92
 ALT_TITLE_LOOKUPS = 5
 
 # Combined-file constants (Specials season)
-COMBINED_SEASON = 0
-COMBINED_EPISODE_BASE = 1000
 
 GRADIENT_COVER_BASE = "https://gradient-cover-api.vercel.app"
 

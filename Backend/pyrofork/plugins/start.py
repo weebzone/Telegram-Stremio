@@ -1,7 +1,5 @@
-from datetime import datetime
-
 from pyrogram import Client, enums, filters
-from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
+from pyrogram.types import Message
 
 from Backend import db
 from Backend.config import Telegram
@@ -9,92 +7,29 @@ from Backend.helper.settings_manager import SettingsManager
 from Backend.helper.utils import addon_links_text
 from Backend.logger import LOGGER
 
-def _currency_symbol(code):
-    return {"INR": "₹", "USD": "$", "EUR": "€", "GBP": "£", "JPY": "¥", "AUD": "A$", "CAD": "C$", "SGD": "S$", "AED": "د.إ", "BRL": "R$"}.get((code or "INR").upper(), f"{(code or 'INR')} ")
 
-
-
-#----- /start: hand out the Stremio addon link, gated by subscription state
+#----- /start: hand out the Stremio addon link to the owner
 @Client.on_message(filters.command('start') & filters.private, group=10)
 async def send_start_message(client: Client, message: Message):
     try:
         user_id = (message.from_user.id if message.from_user else None) or (message.sender_chat.id if message.sender_chat else None) or message.chat.id
-        base_url = SettingsManager.current().base_url
-        addon_url = f"{base_url}/stremio/manifest.json"
-
-        #----- No subscription mode: owner-only, single personal token
-        if not SettingsManager.current().subscription:
-            if user_id != Telegram.OWNER_ID:
-                return
-            user_name = (message.from_user.first_name or message.from_user.username or f"User {user_id}") if message.from_user else f"Chat {user_id}"
-            try:
-                token_doc = await db.add_api_token(name=user_name, user_id=user_id)
-                links = addon_links_text(token_doc["token"])
-            except Exception as e:
-                LOGGER.error(f"Error ensuring token for free user: {e}")
-                links = f"🧩 <b>Addon Manifest URL:</b>\n<code>{addon_url}</code>"
-
-            await message.reply_text(
-                '🎉 <b>Welcome to the Telegram Stremio Media Server!</b>\n\n'
-                'Here are your personal links:\n\n' + links,
-                quote=True,
-                parse_mode=enums.ParseMode.HTML
-            )
+        if user_id != Telegram.OWNER_ID:
             return
-
-        #----- Subscription mode: verify active subscription, else offer plans
-        user = await db.get_user(user_id)
-        now = datetime.utcnow()
-
-        is_active = db.is_subscription_active(user, now)
-        if not is_active and user and user.get("subscription_status") == "active":
-            await db.mark_user_expired(user_id)
-
-        #----- Honour a manual token grant (never-expires or a future token expiry)
-        if not is_active:
-            token_doc = await db.get_api_token_by_user(user_id)
-            if token_doc and (token_doc.get("subscription_exempt")
-                              or (token_doc.get("expires_at") and token_doc["expires_at"] > now)):
-                is_active = True
-
-        if not is_active:
-            plans = await db.get_subscription_plans()
-            if not plans:
-                return await message.reply_text(
-                    '<b>Welcome to the Telegram Stremio Private Group!</b>\n\n'
-                    'Currently, no subscription plans are set up. Please contact the administrator.',
-                    quote=True,
-                    parse_mode=enums.ParseMode.HTML
-                )
-
-            keyboard = InlineKeyboardMarkup([
-                [InlineKeyboardButton(f"{plan['days']} Days - {_currency_symbol(plan.get('currency'))}{plan['price']}", callback_data=f"plan_{plan['_id']}")]
-                for plan in plans
-            ])
-            return await message.reply_text(
-                '<b>Welcome to the Telegram Stremio Private Group!</b>\n\n'
-                'Access to this bot and the Stremio Addon requires an active subscription.\n'
-                'Please select a subscription plan below to continue:',
-                reply_markup=keyboard,
-                quote=True,
-                parse_mode=enums.ParseMode.HTML
-            )
-
-        #----- Active subscriber: return their token link, creating one if missing
-        user_name = (user.get("first_name") or user.get("username")) if user else None
-        token_doc = await db.ensure_api_token_for_user(user_id, user_name)
-        if token_doc and token_doc.get("token"):
+        addon_url = f"{SettingsManager.current().base_url}/stremio/manifest.json"
+        user_name = (message.from_user.first_name or message.from_user.username or f"User {user_id}") if message.from_user else f"Chat {user_id}"
+        try:
+            token_doc = await db.add_api_token(name=user_name, user_id=user_id)
             links = addon_links_text(token_doc["token"])
-        else:
+        except Exception as e:
+            LOGGER.error(f"Error ensuring token for owner: {e}")
             links = f"🧩 <b>Addon Manifest URL:</b>\n<code>{addon_url}</code>"
 
         await message.reply_text(
-            '🎉 <b>Welcome back to the Telegram Stremio Subscription Manager!</b>\n\n'
-            'Your subscription is active. Here are your personal links:\n\n' + links,
+            '🎉 <b>Welcome to the Telegram Stremio Media Server!</b>\n\n'
+            'Here are your personal links:\n\n' + links,
             quote=True,
             parse_mode=enums.ParseMode.HTML
         )
-
     except Exception as e:
         await message.reply_text(f"⚠️ Error: {e}")
         LOGGER.error(f"Error in /start handler: {e}")

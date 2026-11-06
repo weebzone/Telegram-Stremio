@@ -1,0 +1,220 @@
+{% extends "base.html" %}
+{% block title %}Skipped Files{% endblock %}
+
+{% block content %}
+<style>
+    .sk-shell { display: flex; flex-direction: column; gap: 1.25rem; }
+    .sk-card {
+        background: color-mix(in srgb, var(--card) 50%, transparent);
+        backdrop-filter: blur(20px);
+        border: 1px solid var(--border);
+        border-radius: 1.25rem;
+        padding: 1rem 1.1rem;
+    }
+    .sk-top { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; justify-content: space-between; }
+    .sk-tabs { display: flex; gap: .4rem; }
+    .sk-tab, .sk-btn {
+        border: 1px solid var(--border); border-radius: .8rem; padding: .45rem .9rem;
+        font-weight: 700; font-size: .8rem; cursor: pointer; background: transparent; color: inherit;
+    }
+    .sk-tab.active, .sk-btn.primary { background: var(--primary); color: #fff; border-color: transparent; }
+    .sk-btn.danger { color: #ef4444; }
+    .sk-btn:disabled { opacity: .5; cursor: default; }
+    .sk-name { font-weight: 800; word-break: break-all; }
+    .sk-meta { font-size: .75rem; opacity: .7; margin-top: .15rem; }
+    .sk-reason { font-size: .82rem; margin-top: .45rem; color: #f59e0b; }
+    .sk-fix { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: .5rem; margin-top: .7rem; }
+    .sk-fix input {
+        border: 1px solid var(--border); border-radius: .7rem; padding: .5rem .7rem;
+        background: transparent; color: inherit; font-size: .82rem; min-width: 0;
+    }
+    .sk-actions { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .7rem; }
+    .sk-result { font-size: .8rem; margin-top: .5rem; }
+    .sk-result.ok { color: #22c55e; }
+    .sk-result.err { color: #ef4444; }
+    .sk-empty { text-align: center; padding: 2.5rem 1rem; opacity: .7; }
+</style>
+
+<div class="sk-shell">
+    <div class="sk-card">
+        <div class="sk-top">
+            <div>
+                <h1 style="font-size:1.4rem;font-weight:900">Skipped files</h1>
+                <p class="sk-meta" style="font-size:.85rem">
+                    Files the indexer could not match. Add a title, an IMDb id (tt1234567) or a TMDB link, then press Retry.
+                </p>
+            </div>
+            <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+                <span id="sk-total" class="sk-meta"></span>
+                <button class="sk-btn" id="sk-import" onclick="importSkipChannel()">Import from skip channel</button>
+                <button class="sk-btn primary" id="sk-retry-all" onclick="retryAll()">Retry all</button>
+            </div>
+        </div>
+        <div class="sk-tabs" style="margin-top:.8rem">
+            <button class="sk-tab active" data-status="pending" onclick="setStatus('pending')">Pending</button>
+            <button class="sk-tab" data-status="ignored" onclick="setStatus('ignored')">Ignored</button>
+            <button class="sk-tab" data-status="missing" onclick="setStatus('missing')">Missing</button>
+        </div>
+        <p id="sk-progress" class="sk-meta" style="margin-top:.6rem;display:none"></p>
+        <p id="sk-import-status" class="sk-meta" style="margin-top:.3rem;display:none"></p>
+    </div>
+
+    <div id="sk-list" class="sk-shell"></div>
+
+    <div style="display:flex;gap:.5rem;justify-content:center">
+        <button class="sk-btn" id="sk-prev" onclick="goPage(-1)">Previous</button>
+        <span id="sk-page" class="sk-meta" style="align-self:center"></span>
+        <button class="sk-btn" id="sk-next" onclick="goPage(1)">Next</button>
+    </div>
+</div>
+
+<script>
+let status = 'pending';
+let page = 1;
+let pages = 1;
+let pollTimer = null;
+let importRunning = false;
+
+function el(tag, attrs = {}, text = '') {
+    const e = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+        if (k === 'class') e.className = v;
+        else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
+        else e.setAttribute(k, v);
+    }
+    if (text) e.textContent = text;   // textContent: file names come from uploaders, never inject as HTML
+    return e;
+}
+
+async function api(url, opts) {
+    const res = await fetch(url, opts);
+    let data = {};
+    try { data = await res.json(); } catch (e) {}
+    if (!res.ok) throw new Error(data.detail || ('Request failed (' + res.status + ')'));
+    return data;
+}
+
+function post(url, body) {
+    return api(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+}
+
+function setStatus(s) {
+    status = s; page = 1;
+    document.querySelectorAll('.sk-tab').forEach(t => t.classList.toggle('active', t.dataset.status === s));
+    load();
+}
+
+function goPage(d) {
+    const n = page + d;
+    if (n < 1 || n > pages) return;
+    page = n; load();
+}
+
+async function load() {
+    const list = document.getElementById('sk-list');
+    try {
+        const data = await api('/api/admin/skipped?status=' + status + '&page=' + page);
+        pages = Math.max(1, Math.ceil(data.total / data.per_page));
+        document.getElementById('sk-total').textContent = data.total + ' file(s)';
+        document.getElementById('sk-page').textContent = 'Page ' + page + ' / ' + pages;
+        document.getElementById('sk-prev').disabled = page <= 1;
+        document.getElementById('sk-next').disabled = page >= pages;
+        updateProgress(data.retry_all);
+        updateImport(data.import);
+        list.replaceChildren();
+        if (!data.items.length) {
+            list.append(el('div', { class: 'sk-card sk-empty' }, 'Nothing here.'));
+            return;
+        }
+        data.items.forEach(item => list.append(renderItem(item)));
+    } catch (e) {
+        list.replaceChildren(el('div', { class: 'sk-card sk-empty' }, e.message));
+    }
+}
+
+function renderItem(it) {
+    const card = el('div', { class: 'sk-card' });
+    card.append(el('div', { class: 'sk-name' }, it.caption || it.file_name || '(no name)'));
+    if (it.caption && it.file_name && it.caption !== it.file_name) card.append(el('div', { class: 'sk-meta' }, 'File: ' + it.file_name));
+    card.append(el('div', { class: 'sk-meta' }, it.size + ' · channel ' + it.chat_id + ' · msg ' + it.msg_id + (it.attempts ? ' · tried ' + it.attempts + 'x' : '')));
+    card.append(el('div', { class: 'sk-reason' }, it.reason));
+
+    const title = el('input', { placeholder: 'Full name, e.g. Show S02E05 (optional)', maxlength: '300' });
+    const id = el('input', { placeholder: 'IMDb tt… or TMDB link/id', maxlength: '200' });
+    const season = el('input', { placeholder: 'Season (optional)', type: 'number', min: '1' });
+    card.append(el('div', { class: 'sk-fix' }, '')); card.lastChild.append(title, id, season);
+
+    const result = el('div', { class: 'sk-result' });
+    const retry = el('button', { class: 'sk-btn primary' }, 'Retry');
+    retry.addEventListener('click', async () => {
+        retry.disabled = true; result.className = 'sk-result'; result.textContent = 'Working…';
+        try {
+            const r = await post('/api/admin/skipped/' + encodeURIComponent(it.id) + '/retry',
+                { title: title.value, id: id.value, season: season.value });
+            result.className = 'sk-result ' + (r.ok ? 'ok' : 'err');
+            result.textContent = r.message;
+            if (r.ok) setTimeout(load, 900);
+        } catch (e) { result.className = 'sk-result err'; result.textContent = e.message; }
+        retry.disabled = false;
+    });
+    const ignoring = status === 'ignored';
+    const ignore = el('button', { class: 'sk-btn' }, ignoring ? 'Restore' : 'Ignore');
+    ignore.addEventListener('click', async () => {
+        try { await post('/api/admin/skipped/' + encodeURIComponent(it.id) + '/ignore', { ignored: !ignoring }); load(); }
+        catch (e) { result.className = 'sk-result err'; result.textContent = e.message; }
+    });
+    const del = el('button', { class: 'sk-btn danger' }, 'Remove from list');
+    del.addEventListener('click', async () => {
+        try { await api('/api/admin/skipped/' + encodeURIComponent(it.id), { method: 'DELETE' }); load(); }
+        catch (e) { result.className = 'sk-result err'; result.textContent = e.message; }
+    });
+    card.append(el('div', { class: 'sk-actions' }, ''));
+    card.lastChild.append(retry, ignore, del);
+    card.append(result);
+    return card;
+}
+
+function updateProgress(st) {
+    const p = document.getElementById('sk-progress');
+    const btn = document.getElementById('sk-retry-all');
+    if (st && st.running) {
+        p.style.display = ''; p.textContent = 'Retrying: ' + st.done + ' / ' + st.total + ' done, ' + st.ok + ' indexed';
+        btn.disabled = true;
+        if (!pollTimer) pollTimer = setInterval(load, 3000);
+    } else {
+        btn.disabled = false;
+        if (pollTimer && !importRunning) { clearInterval(pollTimer); pollTimer = null; }
+        if (st && st.total) { p.style.display = ''; p.textContent = 'Last retry-all: ' + st.ok + ' of ' + st.total + ' indexed.'; }
+        else p.style.display = 'none';
+    }
+}
+
+function updateImport(st) {
+    importRunning = !!(st && st.running);
+    const p = document.getElementById('sk-import-status');
+    const btn = document.getElementById('sk-import');
+    if (st && st.running) {
+        p.style.display = ''; p.textContent = 'Importing: scanned ' + st.scanned + ' ids, ' + st.added + ' added';
+        btn.disabled = true;
+        if (!pollTimer) pollTimer = setInterval(load, 3000);
+    } else {
+        btn.disabled = false;
+        if (st && st.error) { p.style.display = ''; p.textContent = 'Import failed: ' + st.error; }
+        else if (st && st.scanned) { p.style.display = ''; p.textContent = 'Last import: ' + st.added + ' added of ' + st.found + ' files found.'; }
+        else p.style.display = 'none';
+    }
+}
+
+async function importSkipChannel() {
+    if (!confirm('Scan the skip channel and add every file in it to this list?')) return;
+    try { await post('/api/admin/skipped/import'); load(); } catch (e) { alert(e.message); }
+}
+
+async function retryAll() {
+    if (!confirm('Retry every pending file? This runs in the background, one file per second.')) return;
+    try { await post('/api/admin/skipped/retry-all'); load(); } catch (e) { alert(e.message); }
+}
+
+load();
+</script>
+{% endblock %}

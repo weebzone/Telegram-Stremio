@@ -15,8 +15,6 @@ caches (search, details, episodes, mappings) plus an ``API_SEMAPHORE``
 Identical concurrent lookups share one in-flight Future (no stampedes).
 """
 from Backend.helper.metadata.common import (
-    COMBINED_EPISODE_BASE,
-    COMBINED_SEASON,
     caption_with_links,
     extract_default_id,
     format_tmdb_image,
@@ -43,8 +41,6 @@ from Backend.helper.metadata.resolvers import (
 )
 
 __all__ = [
-    "COMBINED_EPISODE_BASE",
-    "COMBINED_SEASON",
     "analyze_metadata_failure",
     "build_id_link",
     "caption_with_id",

@@ -9,11 +9,10 @@ from starlette.middleware.sessions import SessionMiddleware
 from Backend import __version__, db
 from Backend.fastapi import server
 from Backend.fastapi.main import app
-from Backend.helper import subscription_task_manager
 from Backend.helper.link_checker import DeadLinkChecker
 from Backend.helper.pyro import restart_notification, setup_bot_commands
 from Backend.helper.scan_manager import dbcheck_manager, duplicate_manager, scan_manager
-from Backend.helper.session_auth import get_active_session_string
+from Backend.helper.passwords import verify_password
 from Backend.helper.settings_manager import SettingsManager
 from Backend.logger import LOGGER
 import Backend.pyrofork.bot as botmod
@@ -33,6 +32,8 @@ async def start_services():
         await asyncio.sleep(1.2)
 
         await SettingsManager.initialize(db)
+        if verify_password("admin", SettingsManager.current().admin_password):
+            LOGGER.warning("SECURITY: the admin password is still 'admin'. Change it in Settings now.")
         app.add_middleware(SessionMiddleware, secret_key=SettingsManager.current().session_secret or secrets.token_hex(32))
         await asyncio.sleep(0.5)
 
@@ -49,18 +50,6 @@ async def start_services():
         LOGGER.info(f"Bot Client : [@{StreamBot.username}]")
         await asyncio.sleep(1.2)
 
-        if botmod.Userbot is None:
-            stored_session = await get_active_session_string()
-            if stored_session:
-                botmod.build_userbot(stored_session)
-                LOGGER.info("Loaded Userbot session from encrypted storage.")
-
-        if botmod.Userbot is not None:
-            await botmod.Userbot.start()
-            botmod.Userbot.username = botmod.Userbot.me.username
-            LOGGER.info(f"Userbot Client : [@{botmod.Userbot.username}]")
-        else:
-            LOGGER.info("Userbot not configured — running with StreamBot only.")
         await asyncio.sleep(1.2)
 
         LOGGER.info("Initializing Multi Clients...")
@@ -76,8 +65,6 @@ async def start_services():
 
         link_checker_task = DeadLinkChecker(db, app, check_interval_hours=24)
         loop.create_task(link_checker_task.start())
-
-        await subscription_task_manager.sync(StreamBot)
 
         LOGGER.info("Telegram-Stremio Started Successfully!")
         await idle()
@@ -96,8 +83,6 @@ async def stop_services():
         await asyncio.gather(*pending_tasks, return_exceptions=True)
 
         await StreamBot.stop()
-        if botmod.Userbot is not None:
-            await botmod.Userbot.stop()
 
         await db.disconnect()
         LOGGER.info("Services stopped successfully.")

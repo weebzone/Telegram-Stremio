@@ -17,7 +17,6 @@ from pyrogram.types import ChatPrivileges
 import Backend
 from Backend import StartTime, __version__, db
 from Backend.fastapi.routes.stream_routes import _streamer_by_client
-from Backend.fastapi.routes.stremio_routes import invalidate_membership_cache
 from Backend.helper.analytics import get_activity_overview
 from Backend.helper.auto_catalog import (
     get_auto_catalog_settings,
@@ -32,14 +31,6 @@ from Backend.helper.encrypt import decode_string, encode_string
 from Backend.helper.health import run_health_checks
 from Backend.helper.manual_add import resolve_telegram_message, retag_media, stamp_caption_by_ref
 from Backend.helper.pyro import resolve_video_thumb_url
-from Backend.helper.requests_manager import (
-    delete_request,
-    list_requests,
-    popular_pending,
-    search_titles,
-    set_status,
-    submit_request,
-)
 from Backend.helper.metadata import (
     build_id_link,
     extract_default_id,
@@ -54,16 +45,9 @@ from Backend.helper.metadata import (
 from Backend.helper.passwords import hash_password, verify_password
 from Backend.helper.pyro import get_readable_file_size, get_readable_time
 from Backend.helper.scan_manager import dbcheck_manager, duplicate_manager, scan_manager
-from Backend.helper.session_auth import (
-    disconnect_session,
-    get_session_status,
-    reconnect_session,
-    remove_session,
-    start_login,
-    submit_code,
-    submit_password,
-)
 from Backend.helper.settings_manager import SettingsManager
+from Backend.helper.skipped_files import import_skip_channel, import_state, retry_skipped
+from Backend.fastapi.security import tokens as token_cache
 from Backend.helper.split_files import strip_part_suffix
 from Backend.helper.subtitles import (
     list_languages,
@@ -356,6 +340,7 @@ async def create_token_api(payload: dict):
 
 #----- Toggle a token's lifetime (subscription-exempt) flag
 async def set_token_lifetime_api(token: str, payload: dict) -> dict:
+    token_cache.clear_cache()  # changes must apply to the next request, not 15 s later
     exempt = bool(payload.get("subscription_exempt"))
     if not await db.set_token_lifetime(token, exempt):
         raise HTTPException(status_code=404, detail="Token not found.")
@@ -365,6 +350,7 @@ async def set_token_lifetime_api(token: str, payload: dict) -> dict:
 #----- Set/extend/reduce a token's own expiry (subscription-off mode).
 #----- Optionally attach a Telegram user id at the same time.
 async def set_token_expiry_api(token: str, payload: dict) -> dict:
+    token_cache.clear_cache()  # changes must apply to the next request, not 15 s later
     user_id = payload.get("user_id")
     if user_id not in (None, "", 0, "0"):
         try:
@@ -382,32 +368,13 @@ async def set_token_expiry_api(token: str, payload: dict) -> dict:
     return {"status": "success", "expires_at": result.get("expires_at").isoformat() if result.get("expires_at") else None}
 
 
-#----- How many tokens would stop working if subscription mode is enabled
-async def subscription_preflight_api() -> dict:
-    return {"status": "success", "uncovered": await db.count_uncovered_tokens()}
-
-
-#----- Relabel "User <id>" placeholder subscribers with their real Telegram name
-async def backfill_subscriber_names_api() -> dict:
-    users = await db.get_all_subscribers()
-    updated = 0
-    for u in users:
-        uid = u.get("_id")
-        if uid is None or (u.get("first_name") or "") != f"User {uid}":
-            continue
-        name = await _fetch_tg_name(uid)
-        if name and name != f"User {uid}":
-            await db.update_subscriber_name(uid, name)
-            updated += 1
-    return {"status": "success", "updated": updated, "message": f"{updated} name(s) updated."}
-
-
 #----- Mark all tokens that aren't linked to a user as lifetime
 async def grant_lifetime_api() -> dict:
     count = await db.grant_lifetime_to_unlinked()
     return {"status": "success", "updated": count, "message": f"{count} token(s) marked as lifetime."}
 
 async def update_token_limits_api(token: str, payload: dict):
+    token_cache.clear_cache()  # changes must apply to the next request, not 15 s later
     try:
         daily_limit = payload.get("daily_limit_gb")
         monthly_limit = payload.get("monthly_limit_gb")
@@ -566,7 +533,7 @@ async def get_admin_stats_api() -> dict:
 
         bot_stats.append({
             "client_index": client_index,
-            "display_name": "Userbot" if client_index < 0 else f"Bot {client_index + 1}",
+            "display_name": f"Bot {client_index + 1}",
             "dc": client_dc_map.get(client_index),
             "current_load": load,
             "failures": failures,
@@ -624,180 +591,12 @@ async def clear_stream_analytics_api() -> dict:
         return {"status": "error", "message": str(e)}
 
 
-#----- Public: search titles to request (by name, IMDb id or TMDB id)
-async def request_search_api(q: str) -> dict:
-    try:
-        return {"status": "success", "data": await search_titles(q)}
-    except Exception as e:
-        LOGGER.error(f"Request search error: {e}")
-        return {"status": "error", "message": str(e), "data": []}
-
-
-#----- Public: submit a request for a title
-async def request_submit_api(payload: dict, client_ip: str) -> dict:
-    result = await submit_request(
-        media_type=payload.get("media_type"),
-        tmdb_id=payload.get("tmdb_id"),
-        imdb_id=payload.get("imdb_id"),
-        title=payload.get("title"),
-        year=payload.get("year"),
-        poster=payload.get("poster"),
-        client_ip=client_ip,
-    )
-    return {"status": "success" if result.get("ok") else "error", **result}
-
-
-#----- Public: most-requested pending titles
-async def request_popular_api() -> dict:
-    try:
-        return {"status": "success", "data": await popular_pending()}
-    except Exception as e:
-        return {"status": "error", "message": str(e), "data": []}
-
-
-#----- Admin: list all content requests
-async def get_requests_api() -> dict:
-    try:
-        return {"status": "success", "data": await list_requests()}
-    except Exception as e:
-        LOGGER.error(f"Requests API error: {e}")
-        return {"status": "error", "message": str(e)}
-
-
-#----- Admin: uploaded / denied / banned / pending
-async def update_request_api(request_id: str, payload: dict) -> dict:
-    new_status = str(payload.get("status", "")).strip()
-    doc = await set_status(request_id, new_status)
-    if not doc:
-        raise HTTPException(status_code=404, detail="Request not found or invalid status.")
-    return {"status": "success", "data": doc}
-
-
-async def delete_request_api(request_id: str) -> dict:
-    if not await delete_request(request_id):
-        raise HTTPException(status_code=404, detail="Request not found.")
-    return {"status": "success", "message": "Request deleted."}
-
-
-#----- Admin subscription management
-async def get_subscription_plans_api() -> dict:
-    try:
-        plans = await db.get_subscription_plans()
-        return {"status": "success", "data": plans}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-
-async def add_subscription_plan_api(payload: dict) -> dict:
-    try:
-        days = int(payload.get("days", 0))
-        price = float(payload.get("price", 0.0))
-        currency = str(payload.get("currency") or "INR").upper().strip()
-        if days <= 0 or price < 0:
-            raise HTTPException(status_code=400, detail="Invalid plan parameters")
-            
-        plan_id = await db.add_subscription_plan(days, price, currency)
-        if plan_id:
-            return {"status": "success", "message": "Plan added successfully", "plan_id": plan_id}
-        else:
-            raise HTTPException(status_code=500, detail="Failed to add plan")
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-async def update_subscription_plan_api(plan_id: str, payload: dict) -> dict:
-    try:
-        days = int(payload.get("days", 0))
-        price = float(payload.get("price", 0.0))
-        currency = str(payload.get("currency") or "INR").upper().strip()
-        if days <= 0 or price < 0:
-             raise HTTPException(status_code=400, detail="Invalid plan parameters")
-             
-        success = await db.update_subscription_plan(plan_id, days, price, currency)
-        if success:
-             return {"status": "success", "message": "Plan updated successfully"}
-        else:
-             raise HTTPException(status_code=404, detail="Plan not found or update failed")
-    except HTTPException:
-         raise
-    except Exception as e:
-         raise HTTPException(status_code=500, detail=str(e))
-
-async def delete_subscription_plan_api(plan_id: str) -> dict:
-    try:
-        success = await db.delete_subscription_plan(plan_id)
-        if success:
-            return {"status": "success", "message": "Plan deleted successfully"}
-        else:
-            raise HTTPException(status_code=404, detail="Plan not found")
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-async def get_all_subscribers_api() -> dict:
-    try:
-        users = await db.get_all_subscribers()
-        for u in users:
-            u["is_admin"] = db._is_owner(u.get("_id"))
-        return {"status": "success", "data": users}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-
-async def manage_subscriber_api(user_id: int, payload: dict) -> dict:
-    try:
-        action = payload.get("action")
-        days = int(payload.get("days", 0))
-
-        if action not in ["extend", "reduce", "delete", "remove"]:
-            raise HTTPException(status_code=400, detail="Invalid action")
-
-        success = await db.manage_subscriber(user_id, action, days)
-
-        #----- On revoke/remove, kick the user from the group immediately (ban+unban)
-        if success and action in ("delete", "remove") and SettingsManager.current().subscription:
-            group_id = SettingsManager.current().subscription_group_id
-            if group_id:
-                try:
-                    await StreamBot.ban_chat_member(group_id, user_id)
-                    await StreamBot.unban_chat_member(group_id, user_id)
-                except Exception as exc:
-                    LOGGER.warning(f"Revoke: could not remove user {user_id} from group: {exc}")
-
-        #----- Reflect the change immediately in the stremio membership cache
-        if success:
-            try:
-                invalidate_membership_cache(user_id)
-            except Exception:
-                pass
-
-        if success:
-            verb = {"extend": "extended", "reduce": "reduced", "delete": "revoked", "remove": "removed"}.get(action, "updated")
-            return {"status": "success", "message": f"User subscription {verb} successfully"}
-        else:
-            raise HTTPException(status_code=404, detail="User not found or update failed")
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 #----- Access management
 async def get_all_tokens_api() -> dict:
     try:
         tokens = await db.get_all_api_tokens()
         now = datetime.utcnow()
         result = []
-
-        #----- Pre-load subscribers keyed by user_id for O(1) lookup
-        subscriber_map = {}
-        if SettingsManager.current().subscription:
-            try:
-                for u in await db.get_all_subscribers():
-                    uid = str(u.get("_id"))
-                    subscriber_map[uid] = u
-            except Exception:
-                pass
 
         #----- Display name, preferring a real name/alias over the "User <id>" placeholder
         def display_name(user, user_id, token_name=None):
@@ -813,101 +612,50 @@ async def get_all_tokens_api() -> dict:
                     return o
             return placeholder or "Telegram User"
 
-        sub_on = SettingsManager.current().subscription
-
-        #----- Unified access entry from optional user + token records
-        def build_entry(user_id, user, token_doc):
-            token_doc = token_doc or {}
-            user_found = bool(user)
-            sub_status = user.get("subscription_status") if user else None
-            is_admin = bool(token_doc.get("is_admin")) or db._is_owner(user_id)
-            lifetime = bool(token_doc.get("subscription_exempt"))
-            token_str = token_doc.get("token")
-
-            token_expiry = token_doc.get("expires_at")
-            user_sub_expiry = user.get("subscription_expiry") if user else None
-
-            #----- Sub OFF: token's own expiry (display only). Sub ON: token expiry is an
-            #----- admin grant, otherwise fall back to the subscription's expiry.
-            if not sub_on:
-                expiry = token_expiry
-                is_expired = False
-            elif is_admin or lifetime:
-                expiry = None
-                is_expired = False
-            elif token_expiry is not None:
-                expiry = token_expiry
-                is_expired = token_expiry < now
-            elif user_found and sub_status == "active" and user_sub_expiry:
-                expiry = user_sub_expiry
-                is_expired = user_sub_expiry < now
-            else:
-                expiry = user_sub_expiry
-                is_expired = True
-
-            created = token_doc.get("created_at") or (user.get("created_at") if user else None)
-            limits = token_doc.get("limits") or {}
-            usage = token_doc.get("usage") or {}
-            has_active_sub = sub_on and user_found and sub_status == "active" and bool(user_sub_expiry) and user_sub_expiry > now
-            never_expires = not expiry and (is_admin or lifetime or not sub_on)
-
-            return {
+        for t in tokens:
+            user_id = t.get("user_id")
+            user = None
+            if user_id:
+                try:
+                    user = await db.get_user(int(user_id))
+                except Exception:
+                    pass
+            is_admin = bool(t.get("is_admin")) or db._is_owner(user_id)
+            lifetime = bool(t.get("subscription_exempt"))
+            expiry = t.get("expires_at")
+            is_expired = bool(expiry and not is_admin and not lifetime and expiry < now)
+            created = t.get("created_at")
+            limits = t.get("limits") or {}
+            usage = t.get("usage") or {}
+            token_str = t.get("token")
+            result.append({
                 "token": token_str,
                 "user_id": user_id,
-                "user_name": display_name(user, user_id, token_doc.get("name")),
-                "user_found": user_found,
+                "user_name": display_name(user, user_id, t.get("name")),
+                "user_found": bool(user),
                 "is_admin": is_admin,
                 "lifetime": lifetime,
-                "never_expires": never_expires,
-                "has_token": bool(token_str),
-                "has_active_sub": has_active_sub,
+                "never_expires": not expiry or is_admin or lifetime,
+                "has_token": True,
                 "created_at": created.isoformat() if created else None,
                 "expires_at": expiry.isoformat() if expiry else None,
                 "is_expired": is_expired,
-                "sub_status": sub_status,
                 "daily_limit_gb": limits.get("daily_limit_gb") or 0,
                 "monthly_limit_gb": limits.get("monthly_limit_gb") or 0,
                 "daily_bytes": (usage.get("daily") or {}).get("bytes", 0),
                 "monthly_bytes": (usage.get("monthly") or {}).get("bytes", 0),
-                "addon_url": (
-                    f"{SettingsManager.current().base_url}/stremio/{token_str}/manifest.json"
-                    if token_str else None
-                ),
-            }
+                "addon_url": f"{SettingsManager.current().base_url}/stremio/{token_str}/manifest.json" if token_str else None,
+            })
 
-        seen_user_ids = set()
-
-        #----- 1. Process all existing tokens
-        for t in tokens:
-            token_user_id = t.get("user_id")
-
-            user = None
-            if token_user_id:
-                uid_str = str(token_user_id)
-                user = subscriber_map.get(uid_str)
-                if not user:
-                    try:
-                        user = await db.get_user(int(token_user_id))
-                    except Exception:
-                        pass
-                seen_user_ids.add(uid_str)
-
-            result.append(build_entry(token_user_id, user, t))
-
-        #----- 2. Add subscribers who have no token
-        for uid_str, u in subscriber_map.items():
-            if uid_str in seen_user_ids:
-                continue
-            result.append(build_entry(u.get("_id"), u, None))
-
-        #----- Sort: active-with-token first, active-no-token next, expired last
-        result.sort(key=lambda x: (x["is_expired"], not x["has_token"]))
-        return {"tokens": result, "subscription": sub_on}
+        #----- Active first, expired last
+        result.sort(key=lambda x: x["is_expired"])
+        return {"tokens": result}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 async def revoke_token_api(token: str) -> dict:
+    token_cache.clear_cache()  # changes must apply to the next request, not 15 s later
     try:
         success = await db.revoke_api_token(token)
         if success:
@@ -919,17 +667,18 @@ async def revoke_token_api(token: str) -> dict:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-#----- Assign or extend a subscription for any user_id
+#----- Give a Telegram user a token, expiring in `days` (0 = never)
 async def assign_plan_api(user_id: int, days: int) -> dict:
     try:
-        #----- Use the real Telegram name so the Plans page shows it (not "User <id>")
         name = await _fetch_tg_name(user_id)
-        #----- 0 / empty days means "never expires"
+        doc = await db.ensure_api_token_for_user(user_id, name)
+        if not doc or not doc.get("token"):
+            raise HTTPException(status_code=500, detail="Could not create token.")
         if days and days > 0:
-            result = await db.assign_subscription(user_id, days, name)
+            doc = await db.update_token_expiry(doc["token"], "set", days) or doc
         else:
-            result = await db.set_user_never_expires(user_id, name)
-        return {"status": "success", "data": result}
+            await db.set_token_lifetime(doc["token"], True)
+        return {"status": "success", "data": {"token": doc.get("token")}}
     except HTTPException:
         raise
     except Exception as e:
@@ -1692,54 +1441,6 @@ async def get_user_activity_api(page: int = 1, per_page: int = 5):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-async def session_send_code_api(payload: dict):
-    try:
-        return await start_login(payload.get("phone"))
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-async def session_verify_code_api(payload: dict):
-    try:
-        return await submit_code(payload.get("login_id"), payload.get("code"))
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-async def session_verify_password_api(payload: dict):
-    try:
-        return await submit_password(payload.get("login_id"), payload.get("password"))
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-async def session_status_api():
-    return await get_session_status()
-
-
-async def session_disconnect_api():
-    return await disconnect_session()
-
-
-async def session_reconnect_api():
-    try:
-        return await reconnect_session()
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-async def session_remove_api():
-    return await remove_session()
-
-
-
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Settings API
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1787,12 +1488,12 @@ async def update_settings_api(payload: dict) -> dict:
         del payload["session_secret"]
 
     #----- Type coercion and validation
-    bool_keys = {"replace_mode", "duplicate_protection", "hide_catalog", "subscription", "show_proxy_and_non_proxy_both", "mediaflow_proxy", "announce_new_content", "delete_on_metadata_fail", "better_poster_enabled", "rpdb_enabled", "spatial_poster_enabled", "fanart_enabled", "fanart_shuffle", "fanart_low_res_poster"}
+    bool_keys = {"replace_mode", "duplicate_protection", "hide_catalog", "show_proxy_and_non_proxy_both", "mediaflow_proxy", "announce_new_content", "delete_on_metadata_fail", "better_poster_enabled", "rpdb_enabled", "spatial_poster_enabled", "fanart_enabled", "fanart_shuffle", "fanart_low_res_poster"}
     for key in bool_keys:
         if key in payload:
             payload[key] = bool(payload[key])
 
-    list_str_keys = {"auth_channels", "multi_tokens", "extra_databases", "global_search_channels", "anime_channels", "manual_channels"}
+    list_str_keys = {"auth_channels", "multi_tokens", "extra_databases", "anime_channels", "manual_channels"}
     for key in list_str_keys:
         if key in payload:
             if not isinstance(payload[key], list):
@@ -1820,8 +1521,6 @@ async def update_settings_api(payload: dict) -> dict:
         if key in payload:
             payload[key] = str(payload[key] or "")[:20000]
 
-    if "default_streaming" in payload and payload["default_streaming"] not in ("bots", "userbot"):
-        raise HTTPException(status_code=400, detail="default_streaming must be 'bots' or 'userbot'")
 
     if "rpdb_api_key" in payload:
         payload["rpdb_api_key"] = str(payload["rpdb_api_key"] or "").strip()
@@ -1849,19 +1548,6 @@ async def update_settings_api(payload: dict) -> dict:
                     detail=f"Invalid database URI (must start with mongodb:// or mongodb+srv://): {uri[:30]}…"
                 )
 
-    if "approver_ids" in payload:
-        if not isinstance(payload["approver_ids"], list):
-            raise HTTPException(status_code=400, detail="'approver_ids' must be a list.")
-        try:
-            payload["approver_ids"] = [int(v) for v in payload["approver_ids"] if str(v).strip()]
-        except (ValueError, TypeError):
-            raise HTTPException(status_code=400, detail="All approver_ids must be integers.")
-
-    if "subscription_group_id" in payload:
-        try:
-            payload["subscription_group_id"] = int(payload["subscription_group_id"])
-        except (ValueError, TypeError):
-            raise HTTPException(status_code=400, detail="'subscription_group_id' must be an integer.")
     def _validate_channel_id(channel: str, field: str) -> str:
         channel = str(channel).strip()
         if not channel:
@@ -1880,14 +1566,6 @@ async def update_settings_api(payload: dict) -> dict:
             if c:
                 cleaned.append(c)
         payload["auth_channels"] = cleaned
-
-    if "global_search_channels" in payload:
-        cleaned = []
-        for channel in payload["global_search_channels"]:
-            c = _validate_channel_id(channel, "global search channel")
-            if c:
-                cleaned.append(c)
-        payload["global_search_channels"] = cleaned
 
     if "anime_channels" in payload:
         cleaned = []
@@ -1918,7 +1596,7 @@ async def update_settings_api(payload: dict) -> dict:
     #----- The same channel id may not appear in more than one channel field.
     #----- Only AUTH ∩ ANIME is allowed, because an anime channel is an auth channel
     #----- that's flagged as anime (the receiver only indexes files from auth channels).
-    _channel_fields = ("auth_channels", "manual_channels", "global_search_channels",
+    _channel_fields = ("auth_channels", "manual_channels",
                        "anime_channels", "announcement_channel", "skip_channel")
     if any(field in payload for field in _channel_fields):
         current = SettingsManager.current()
@@ -1931,7 +1609,6 @@ async def update_settings_api(payload: dict) -> dict:
         groups = {
             "AUTH": _norm_ids(payload.get("auth_channels", list(current.auth_channels))),
             "MANUAL": _norm_ids(payload.get("manual_channels", list(current.manual_channels))),
-            "GLOBAL SEARCH": _norm_ids(payload.get("global_search_channels", list(current.global_search_channels))),
             "ANIME": _norm_ids(payload.get("anime_channels", list(current.anime_channels))),
             "ANNOUNCEMENT": _norm_ids(payload.get("announcement_channel", current.announcement_channel)),
             "SKIP": _norm_ids(payload.get("skip_channel", current.skip_channel)),
@@ -1955,7 +1632,7 @@ async def update_settings_api(payload: dict) -> dict:
     for key in ("tmdb_api", "base_url", "upstream_repo", "upstream_branch",
                 "admin_username", "admin_password", "session_secret", "http_proxy_url",
                 "cf_stream_url", "cf_stream_secret", "cf_stream_mode",
-                "mediaflow_password", "payment_instructions", "payment_qr_url",
+                "mediaflow_password",
                 "announcement_channel", "skip_channel"):
         if key in payload and isinstance(payload[key], str):
             payload[key] = payload[key].strip()
@@ -2504,361 +2181,89 @@ async def restart_app_api() -> dict:
     return {"status": "success", "message": "Restart initiated — the server will be back shortly."}
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Skipped files (could not be indexed)
+# ─────────────────────────────────────────────────────────────────────────────
 
-_bot_admin_apply_state: dict = {
-    "running": False,
-    "status": "idle",
-    "total": 0,
-    "done": 0,
-    "results": [],
-    "error": "",
-    "task": None,
-}
+_skipped_retry_all = {"running": False, "done": 0, "ok": 0, "total": 0}
 
 
-def _norm_chat_id(ch):
-    s = str(ch).strip()
-    if not s:
-        return None
-    return int(s) if s.lstrip("-").isdigit() else s
+async def list_skipped_api(status: str = "pending", page: int = 1, per_page: int = 50) -> dict:
+    per_page = min(max(per_page, 1), 200)
+    data = await db.list_skipped_files(status=status or None, page=max(page, 1), per_page=per_page)
+    items = [{
+        "id": d["_id"], "chat_id": d.get("chat_id"), "msg_id": d.get("msg_id"),
+        "file_name": d.get("file_name") or "", "caption": d.get("caption") or "",
+        "size": get_readable_file_size(d.get("raw_size") or 0),
+        "reason": d.get("reason") or "", "status": d.get("status", "pending"),
+        "attempts": d.get("attempts", 0), "created_at": d.get("created_at"),
+    } for d in data["items"]]
+    return {"total": data["total"], "page": page, "per_page": per_page, "items": items,
+            "retry_all": dict(_skipped_retry_all), "import": dict(import_state)}
 
 
-async def _managed_bots() -> list[dict]:
-    bots: list[dict] = []
-    for cid in sorted(multi_clients.keys()):
-        client = multi_clients.get(cid)
-        if client is None:
-            continue
-        me = getattr(client, "me", None)
-        if me is None:
-            try:
-                me = await client.get_me()
-            except Exception as e:
-                LOGGER.warning(f"[BotAdmin] Could not resolve bot client {cid}: {e}")
-                me = None
-        if not me:
-            continue
-        bots.append({
-            "client_id": cid,
-            "user_id": me.id,
-            "username": me.username,
-            "name": me.first_name or me.username or f"Bot {cid + 1}",
-            "is_main": cid == 0,
-        })
-    return bots
-
-
-def _bot_served_channels() -> list[dict]:
-    s = SettingsManager.current()
-    order: list[str] = []
-    mapping: dict[str, dict] = {}
-
-    def add(ch, role):
-        nid = _norm_chat_id(ch)
-        if nid is None:
-            return
-        key = str(nid)
-        if key not in mapping:
-            mapping[key] = {"id": nid, "roles": []}
-            order.append(key)
-        if role not in mapping[key]["roles"]:
-            mapping[key]["roles"].append(role)
-
-    for ch in s.auth_channels:
-        add(ch, "auth")
-    for ch in s.manual_channels:
-        add(ch, "manual")
-    for ch in s.anime_channels:
-        add(ch, "anime")
-    if s.announcement_channel:
-        add(s.announcement_channel, "announce")
-    if s.skip_channel:
-        add(s.skip_channel, "skip")
-    return [mapping[k] for k in order]
-
-
-def _bot_admin_privileges() -> ChatPrivileges:
-    return ChatPrivileges(
-        can_manage_chat=True,
-        can_post_messages=True,
-        can_edit_messages=True,
-        can_delete_messages=True,
-        can_invite_users=True,
-        can_pin_messages=False,
-        can_promote_members=False,
-        can_change_info=False,
-        can_restrict_members=False,
-        can_manage_video_chats=False,
-        is_anonymous=False,
+async def retry_skipped_api(skipped_id: str, payload: dict) -> dict:
+    client = _scan_client()
+    if client is None:
+        raise HTTPException(status_code=503, detail="Bot is not ready.")
+    season = payload.get("season")
+    try:
+        season = int(season) if season not in (None, "") else None
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Season must be a number.")
+    return await retry_skipped(
+        client, skipped_id,
+        id_override=str(payload.get("id") or ""), title=str(payload.get("title") or ""), season=season,
     )
 
 
-def _no_privileges() -> ChatPrivileges:
-    return ChatPrivileges(
-        can_manage_chat=False,
-        can_post_messages=False,
-        can_edit_messages=False,
-        can_delete_messages=False,
-        can_invite_users=False,
-        can_pin_messages=False,
-        can_promote_members=False,
-        can_change_info=False,
-        can_restrict_members=False,
-        can_manage_video_chats=False,
-        is_anonymous=False,
-    )
+async def ignore_skipped_api(skipped_id: str, payload: dict) -> dict:
+    ignored = bool(payload.get("ignored", True))
+    if not await db.set_skipped_file(skipped_id, status="ignored" if ignored else "pending"):
+        raise HTTPException(status_code=404, detail="Not found.")
+    return {"status": "success"}
 
 
-async def _bot_member_status(chat_id, bot_user_id) -> str:
-    try:
-        m = await botmod.Userbot.get_chat_member(chat_id, bot_user_id)
-        st = m.status
-        if st in (ChatMemberStatus.OWNER, ChatMemberStatus.ADMINISTRATOR):
-            return "admin"
-        if st == ChatMemberStatus.BANNED:
-            return "banned"
-        if st == ChatMemberStatus.RESTRICTED:
-            return "restricted"
-        if st == ChatMemberStatus.MEMBER:
-            return "member"
-        return "missing"
-    except Exception:
-        return "missing"
+async def delete_skipped_api(skipped_id: str) -> dict:
+    if not await db.delete_skipped_file(skipped_id):
+        raise HTTPException(status_code=404, detail="Not found.")
+    return {"status": "success"}
 
 
-def _friendly_promote_error(exc) -> str:
-    msg = str(exc)
-    up = msg.upper()
-    if "CHAT_ADMIN_REQUIRED" in up:
-        return "Your session account isn't an admin with rights to do this here."
-    if "USER_CREATOR" in up or "ADMIN_RANK" in up:
-        return "Can't modify the channel creator."
-    if "ADD_ADMINS" in up or ("PROMOTE" in up and "RIGHT" in up):
-        return "Your session account can't grant these rights (it doesn't hold them itself)."
-    if "PARTICIPANT" in up or "USER_NOT_MUTUAL_CONTACT" in up:
-        return "The bot isn't in the channel and couldn't be added automatically."
-    if "BOTS_TOO_MUCH" in up:
-        return "This channel already has the maximum number of bots."
-    return msg
+#----- Retry every pending skipped file one by one (gentle on Telegram and the metadata APIs)
+async def retry_all_skipped_api() -> dict:
+    st = _skipped_retry_all
+    if st["running"]:
+        return {"status": "running", **st}
+    client = _scan_client()
+    if client is None:
+        raise HTTPException(status_code=503, detail="Bot is not ready.")
+    ids = [d["_id"] for d in (await db.list_skipped_files("pending", 1, 5000))["items"]]
+    st.update(running=True, done=0, ok=0, total=len(ids))
 
-
-async def _session_rights(chat_id) -> dict:
-    try:
-        me = await botmod.Userbot.get_chat_member(chat_id, "me")
-    except Exception as e:
-        return {"manageable": False, "status": "unknown", "reason": f"Couldn't check your rights: {e}"}
-    st = me.status
-    if st == ChatMemberStatus.OWNER:
-        return {"manageable": True, "status": "owner", "reason": ""}
-    if st == ChatMemberStatus.ADMINISTRATOR:
-        can_promote = bool(getattr(me, "privileges", None) and me.privileges.can_promote_members)
-        return {
-            "manageable": can_promote,
-            "status": "admin_can_promote" if can_promote else "admin_no_promote",
-            "reason": "" if can_promote else "You're an admin here but without the 'Add New Admins' permission.",
-        }
-    return {"manageable": False, "status": "not_admin", "reason": "Your session account is not an admin here."}
-
-
-async def bot_admin_scan_api() -> dict:
-    if botmod.Userbot is None:
-        return {"status": "error", "reason": "no_session",
-                "message": "Connect your Telegram session from the Settings page to manage channel admins."}
-
-    bots = await _managed_bots()
-    if len(bots) <= 1:
-        return {"status": "error", "reason": "single_token", "bots": bots,
-                "message": "Add at least one extra bot token (multi-token) to use this tool."}
-
-    channels = _bot_served_channels()
-    managed_ids = {b["user_id"] for b in bots}
-    out: list[dict] = []
-
-    for ch in channels:
-        cid = ch["id"]
-        entry = {
-            "id": str(cid), "roles": ch["roles"], "name": str(cid),
-            "accessible": False, "manageable": False, "session_status": "",
-            "reason": "", "bots": {}, "orphans": [],
-        }
-
+    async def _run():
         try:
-            chat = await botmod.Userbot.get_chat(cid)
-            entry["name"] = getattr(chat, "title", None) or getattr(chat, "first_name", None) or str(cid)
-            entry["accessible"] = True
-        except Exception as e:
-            entry["reason"] = f"Session account can't access this channel: {e}"
-            out.append(entry)
-            continue
-
-        rights = await _session_rights(cid)
-        entry["manageable"] = rights["manageable"]
-        entry["session_status"] = rights["status"]
-        entry["reason"] = rights["reason"]
-
-        for b in bots:
-            entry["bots"][str(b["user_id"])] = await _bot_member_status(cid, b["user_id"])
-
-        try:
-            async for m in botmod.Userbot.get_chat_members(cid, filter=ChatMembersFilter.ADMINISTRATORS):
-                u = getattr(m, "user", None)
-                if u and getattr(u, "is_bot", False) and u.id not in managed_ids:
-                    entry["orphans"].append({
-                        "user_id": u.id, "username": u.username,
-                        "name": u.first_name or u.username or str(u.id),
-                    })
-        except Exception as e:
-            LOGGER.warning(f"[BotAdmin] Could not list admins for {cid}: {e}")
-
-        out.append(entry)
-
-    return {"status": "success", "data": {"bots": bots, "channels": out}}
-
-
-async def _promote_one(chat_id, bot: dict, privileges: ChatPrivileges, _retry: bool = True) -> dict:
-    label = bot.get("name") or (f"@{bot['username']}" if bot.get("username") else str(bot["user_id"]))
-    bid = bot["user_id"]
-
-    if await _bot_member_status(chat_id, bid) == "admin":
-        return {"bot": label, "user_id": bid, "status": "already", "message": "Already an admin."}
-
-    try:
-        await botmod.Userbot.promote_chat_member(chat_id, bid, privileges=privileges)
-        return {"bot": label, "user_id": bid, "status": "added", "message": "Promoted to admin."}
-    except FloodWait as fw:
-        wait = int(getattr(fw, "value", getattr(fw, "x", 5)) or 5)
-        if _retry:
-            await asyncio.sleep(wait + 1)
-            return await _promote_one(chat_id, bot, privileges, _retry=False)
-        return {"bot": label, "user_id": bid, "status": "error",
-                "message": f"Rate-limited by Telegram (wait {wait}s) — try again."}
-    except Exception as e:
-        up = str(e).upper()
-        if _retry and ("PARTICIPANT" in up or "USER_NOT_MUTUAL_CONTACT" in up):
-            try:
-                await botmod.Userbot.add_chat_members(chat_id, bid)
-                await asyncio.sleep(0.5)
-                await botmod.Userbot.promote_chat_member(chat_id, bid, privileges=privileges)
-                return {"bot": label, "user_id": bid, "status": "added", "message": "Added and promoted to admin."}
-            except Exception as e2:
-                return {"bot": label, "user_id": bid, "status": "error", "message": _friendly_promote_error(e2)}
-        return {"bot": label, "user_id": bid, "status": "error", "message": _friendly_promote_error(e)}
-
-
-async def _demote_one(chat_id, user) -> dict:
-    label = getattr(user, "first_name", None) or (f"@{user.username}" if getattr(user, "username", None) else str(user.id))
-    try:
-        await botmod.Userbot.promote_chat_member(chat_id, user.id, privileges=_no_privileges())
-        return {"bot": label, "user_id": user.id, "status": "demoted", "message": "Admin rights removed (orphan)."}
-    except Exception as e:
-        return {"bot": label, "user_id": user.id, "status": "error", "message": _friendly_promote_error(e)}
-
-
-async def _run_bot_admin_apply(channel_ids, selected, demote_orphans, managed_ids) -> None:
-    state = _bot_admin_apply_state
-    privileges = _bot_admin_privileges()
-    try:
-        for raw in channel_ids:
-            cid = _norm_chat_id(raw)
-            ch_result = {"id": str(cid), "name": str(cid), "items": []}
-
-            try:
-                chat = await botmod.Userbot.get_chat(cid)
-                ch_result["name"] = getattr(chat, "title", None) or getattr(chat, "first_name", None) or str(cid)
-            except Exception as e:
-                ch_result["items"].append({"bot": "—", "status": "error", "message": f"Channel not accessible: {e}"})
-                state["results"].append(ch_result)
-                state["done"] += 1
-                continue
-
-            rights = await _session_rights(cid)
-            if not rights["manageable"]:
-                ch_result["items"].append({
-                    "bot": "—", "status": "skipped",
-                    "message": rights["reason"] or "Your session account can't add admins here.",
-                })
-                state["results"].append(ch_result)
-                state["done"] += 1
-                continue
-
-            for b in selected:
-                ch_result["items"].append(await _promote_one(cid, b, privileges))
-                await asyncio.sleep(0.3)
-
-            if demote_orphans:
+            for sid in ids:
                 try:
-                    async for m in botmod.Userbot.get_chat_members(cid, filter=ChatMembersFilter.ADMINISTRATORS):
-                        u = getattr(m, "user", None)
-                        if u and getattr(u, "is_bot", False) and u.id not in managed_ids:
-                            ch_result["items"].append(await _demote_one(cid, u))
-                            await asyncio.sleep(0.3)
+                    if (await retry_skipped(client, sid)).get("ok"):
+                        st["ok"] += 1
                 except Exception as e:
-                    ch_result["items"].append({"bot": "orphans", "status": "error", "message": f"Couldn't scan orphans: {e}"})
+                    LOGGER.warning(f"[Skipped] retry-all failed for {sid}: {e}")
+                st["done"] += 1
+                await asyncio.sleep(1)
+        finally:
+            st["running"] = False
 
-            state["results"].append(ch_result)
-            state["done"] += 1
-
-        state["status"] = "completed"
-    except Exception as e:
-        LOGGER.error(f"[BotAdmin] Apply run failed: {e}")
-        state["status"] = "error"
-        state["error"] = str(e)
-    finally:
-        state["running"] = False
+    asyncio.create_task(_run())
+    return {"status": "started", **st}
 
 
-async def bot_admin_apply_api(payload: dict | None = None) -> dict:
-    if botmod.Userbot is None:
-        raise HTTPException(status_code=503, detail="No Telegram session connected. Connect one from Settings.")
-
-    if _bot_admin_apply_state["running"]:
-        raise HTTPException(status_code=409, detail="An apply run is already in progress.")
-
-    payload = payload or {}
-    channel_ids = payload.get("channel_ids") or []
-    if not isinstance(channel_ids, list) or not channel_ids:
-        raise HTTPException(status_code=400, detail="Select at least one channel.")
-
-    bots = await _managed_bots()
-    if len(bots) <= 1:
-        raise HTTPException(status_code=400, detail="Need a session string and more than one bot token.")
-
-    bot_by_id = {str(b["user_id"]): b for b in bots}
-    sel_ids = payload.get("bot_ids")
-    if isinstance(sel_ids, list) and sel_ids:
-        selected = [bot_by_id[str(x)] for x in sel_ids if str(x) in bot_by_id]
-    else:
-        selected = bots
-    if not selected:
-        raise HTTPException(status_code=400, detail="No matching bots selected.")
-
-    demote_orphans = bool(payload.get("demote_orphans"))
-    managed_ids = {b["user_id"] for b in bots}
-
-    _bot_admin_apply_state.update({
-        "running": True,
-        "status": "running",
-        "total": len(channel_ids),
-        "done": 0,
-        "results": [],
-        "error": "",
-    })
-    _bot_admin_apply_state["task"] = asyncio.create_task(
-        _run_bot_admin_apply(channel_ids, selected, demote_orphans, managed_ids)
-    )
-    return {"status": "started", "total": len(channel_ids)}
-
-
-async def bot_admin_apply_status_api() -> dict:
-    st = _bot_admin_apply_state
-    return {
-        "status": "success",
-        "data": {
-            "running": st["running"],
-            "state": st["status"],
-            "total": st["total"],
-            "done": st["done"],
-            "results": st["results"],
-            "error": st["error"],
-        },
-    }
+#----- Add files already sitting in the skip channel to the list (runs in the background)
+async def import_skipped_api() -> dict:
+    if import_state["running"]:
+        return {"status": "running", **import_state}
+    client = _scan_client()
+    if client is None:
+        raise HTTPException(status_code=503, detail="Bot is not ready.")
+    asyncio.create_task(import_skip_channel(client))
+    return {"status": "started", **import_state}

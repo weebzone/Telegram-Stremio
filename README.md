@@ -947,3 +947,23 @@ If Telegram-Stremio is useful to you, you can support its development here:
 <sub>Want to help? Open an issue or a pull request.</sub>
 
 </div>
+
+## Notes for small hosts (1 GB RAM)
+
+- Add swap so a short memory spike does not kill the container:
+  `sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile`
+  and add `/swapfile none swap sw 0 0` to `/etc/fstab`.
+- `docker-compose.yaml` caps the container at 850 MB. Raise `mem_limit` if you have more RAM.
+- Each bot opens Telegram media connections to 4 data centers at boot. Set `PREWARM_DCS="4,5"` (only the DCs your files live in) or `PREWARM_DCS="none"` in `config.env` to use less memory.
+- Leave `UPSTREAM_REPO` empty (and clear it in Settings) unless you want every boot to overwrite the code with that repository.
+
+## Skipped files
+
+Files the indexer cannot match are listed under **Skipped** in the admin menu with the reason. Add a title, an IMDb id (`tt1234567`) or a TMDB link, and press Retry. Files with no resolution in the name use the real video height.
+
+Combined seasons (`Show S02 Combined`, `Show S02 E01-E13`) appear as an extra stream of **Season 2, Episode 1**, labelled `Full` or `E01-E13`. If you indexed combined files before this change, run the migration once (dry run first):
+
+```bash
+uv run python scripts/migrate_combined.py
+uv run python scripts/migrate_combined.py --apply
+```

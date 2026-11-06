@@ -562,7 +562,7 @@
             if (bots.length) {
                 const rows = bots.map(b => {
                     const idx = Number(b.client_index);
-                    const name = idx < 0 ? 'Userbot' : ('Bot ' + (idx + 1));
+                    const name = 'Bot ' + (idx + 1);
                     const dc = (b.dc ?? b.dc_id);
                     const color = b.status === 'healthy' ? '#22c55e' : (b.status === 'degraded' ? '#f59e0b' : '#ef4444');
                     return `<tr>

@@ -9,8 +9,6 @@ import Backend
 from Backend.helper.encrypt import encode_string
 from Backend.helper.metadata.common import (
     ensure_media_ids,
-    COMBINED_EPISODE_BASE,
-    COMBINED_SEASON,
     ID_REFS,
     extract_default_id,
     format_imdb_images,
@@ -66,6 +64,8 @@ async def metadata(
     msg_id,
     override_id: str = None,
     season_hint: int = None,
+    fallback_quality: str = None,
+    force_anime: bool = False,
 ) -> dict | None:
     if is_multipart_video(filename):
         LOGGER.info(f"Skipping {filename}: split video file not meant to be combined in Stremio")
@@ -92,7 +92,7 @@ async def metadata(
     season = parsed.get("season")
     episode = parsed.get("episode")
     year = parsed.get("year")
-    quality = parsed.get("quality")
+    quality = parsed.get("quality") or fallback_quality  # real video height when the name has no resolution
 
     if season_hint is not None and episode and not season and not isinstance(episode, list):
         season = season_hint
@@ -129,7 +129,7 @@ async def metadata(
 
     # On anime channels, recover absolute from the raw filename when
     # PTN/GuessIt treated a numbered release as a movie (no season/episode).
-    anime_channel_early = _is_anime_channel(channel)
+    anime_channel_early = force_anime or _is_anime_channel(channel)
     if (
         anime_channel_early
         and not season
@@ -172,7 +172,7 @@ async def metadata(
         group_key = f"{channel}:{quality}:{_normalize(base)}.zip"
         part_number = 1
 
-    anime_channel = _is_anime_channel(channel)
+    anime_channel = force_anime or _is_anime_channel(channel)
 
     try:
         # TV path: classic SxxExx, or absolute/orphan episode on anime channels

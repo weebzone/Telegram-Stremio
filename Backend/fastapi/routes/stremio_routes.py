@@ -21,9 +21,8 @@ from Backend.fastapi.security.tokens import verify_token
 from Backend.helper.cf_stream import cf_enabled, cf_stream_url
 from Backend.fastapi.themes import DEFAULT_THEME, DEFAULT_STYLE, get_theme
 from Backend.helper.fanart import fanart_artwork
-from Backend.helper.global_search import global_search, is_global_search_enabled
 from Backend.helper.metadata.providers.cinemeta import get_detail, get_season
-from Backend.helper.metadata import resolve_cover_url, COMBINED_SEASON, COMBINED_EPISODE_BASE, tmdb_api_key
+from Backend.helper.metadata import resolve_cover_url, tmdb_api_key
 from Backend.helper.database import convert_objectid_to_str
 from Backend.helper.split_files import parse_combined_episodes, combined_name_key
 from Backend.helper.settings_manager import SettingsManager
@@ -56,20 +55,6 @@ def build_proxy_url(original_url: str) -> str | None:
         return url
     return f"{base}{original_url}"
 
-_membership_cache: dict = {}
-_MEMBERSHIP_TTL = 60
-_MEMBERSHIP_CACHE_MAX = 5000
-
-
-#----- Drop cached membership results for one user or all users
-def invalidate_membership_cache(user_id: int | None = None) -> None:
-    if user_id is None:
-        _membership_cache.clear()
-        return
-    for key in [k for k in _membership_cache if k[1] == user_id]:
-        _membership_cache.pop(key, None)
-
-
 #----- Effective (mode, allowed_tokens) for a title, honouring per-item overrides
 def _effective_visibility(catalog: dict, item: dict) -> tuple:
     if item.get("visibility") in ("public", "tokens", "owner"):
@@ -91,8 +76,6 @@ def _token_can_view(mode: str, allowed_tokens: list, token_data: Optional[dict] 
         return False
     if mode == "tokens":
         return token_data.get("token") in (allowed_tokens or [])
-    if SettingsManager.current().subscription:
-        return not token_data.get("subscription_expired")
     return True
 
 
@@ -616,16 +599,9 @@ async def get_manifest(token: str, token_data: dict = Depends(verify_token)):
     addon_desc = "Streams movies and series from your Telegram."
     addon_version = ADDON_VERSION
 
-    #----- Show expiry info in the addon: token's own expiry first, else the subscription
+    #----- Show the token's expiry in the addon
     try:
         expiry_obj = token_data.get("expires_at")
-        if expiry_obj is None and SettingsManager.current().subscription:
-            user_id = token_data.get("user_id")
-            if user_id:
-                user = await db.get_user(int(user_id))
-                if user and user.get("subscription_status") == "active":
-                    expiry_obj = user.get("subscription_expiry")
-
         if expiry_obj:
             expiry_str = expiry_obj.strftime("%d %b %Y").lstrip("0")
             addon_desc = (
@@ -1604,186 +1580,7 @@ def _binge_group(quality: str, suffix: str = "") -> str:
     return f"telegram-stremio-{quality}" + (f"-{route}" if route else "")
 
 
-def _streams_from_global_results(token: str, global_results: list) -> list:
-    streams = []
-    for r in global_results:
-        is_split = bool(r.get("is_split"))
-        _, stream_title = format_stream_details(r["title"], r["quality"], r["size"], is_split=is_split)
-        stream_name = sort_name = f"🌐 GLOBAL {r['quality']}"
-        stream_title = f"{stream_title}\n📡 {r['source_chat']}"
-        if is_split:
-            kind = "zip parts" if r.get("is_zip") else "parts"
-            stream_title += f" · 📦 {r.get('part_count', 0)} {kind}"
-        size_bytes = parse_size_to_bytes(r.get("size", ""))
-        custom = format_stream(SettingsManager.current(), r["title"], size_bytes, addon_name="🌐 Global",
-                               is_split=is_split, parts=r.get("part_count", 0), channel=r.get("source_chat"))
-        if custom:
-            stream_name, stream_title = custom
-        url = f"{SettingsManager.current().base_url}/dl/{token}/{r['token']}/{quote(r['title'])}"
-        if cf_enabled():
-            cf_url = cf_stream_url(token, r['token'], quote(r['title']))
-            if SettingsManager.current().cf_stream_mode == "cloudflare":
-                url = cf_url
-            else:
-                streams.append({"name": f"{stream_name} (Cloudflare)", "title": stream_title, "url": cf_url, "size_bytes": size_bytes, "sort_name": sort_name,
-                                "behaviorHints": {"bingeGroup": _binge_group(f"global-{r['quality']}", "(Cloudflare)")}})
-        streams.append({"name": stream_name, "title": stream_title, "url": url, "size_bytes": size_bytes, "sort_name": sort_name,
-                        "behaviorHints": {"bingeGroup": _binge_group(f"global-{r['quality']}")}})
-    return streams
-
-
-async def _global_streams_for(
-    token: str,
-    imdb_id: str = None,
-    media_type: str = "series",
-    season_num: Optional[int] = None,
-    episode_num: Optional[int] = None,
-    kitsu_id: Optional[int] = None,
-    absolute_episode: Optional[int] = None,
-    is_anime: bool = False,
-) -> list:
-    expected_title = ""
-    year = None
-    cinemeta_videos = []
-
-    if kitsu_id is not None:
-        expected_title, year = await _kitsu_title_year(int(kitsu_id))
-        is_anime = True
-    elif imdb_id:
-        imdb_media_type = "tvSeries" if media_type == "series" else "movie"
-        detail = await get_detail(imdb_id=imdb_id, media_type=imdb_media_type)
-        if not detail or not detail.get("title"):
-            return []
-        expected_title = detail["title"]
-        year = (detail.get("releaseDetailed") or {}).get("year") or None
-        cinemeta_videos = detail.get("videos") or []
-        if season_num is not None and episode_num is not None and absolute_episode is None:
-            try:
-                await get_season(imdb_id=imdb_id, season_id=season_num, episode_id=episode_num)
-            except Exception:
-                pass
-
-    if not expected_title:
-        return []
-
-    search_season = season_num
-    search_episode = episode_num
-    if is_anime and absolute_episode is not None:
-        search_season = None
-        search_episode = absolute_episode
-    elif is_anime and season_num is None and episode_num is not None:
-        search_season = None
-        search_episode = episode_num
-
-    abs_ep = absolute_episode
-    map_source = None
-    if (
-        abs_ep is None
-        and media_type == "series"
-        and imdb_id
-        and season_num is not None
-        and episode_num is not None
-    ):
-        try:
-            from Backend.helper.metadata.episode_maps import absolute_from_imdb_episode
-
-            mapped = await absolute_from_imdb_episode(
-                imdb_id,
-                int(season_num),
-                int(episode_num),
-                title=expected_title,
-                videos=cinemeta_videos,
-            )
-            if mapped and mapped.get("is_anime"):
-                is_anime = True
-                map_source = mapped.get("source")
-                abs_ep = mapped.get("absolute_episode")
-                if abs_ep is None and int(season_num) == 1:
-                    abs_ep = int(episode_num)
-        except Exception as e:
-            LOGGER.warning(f"[GLOBAL SEARCH] anime map lookup failed for {imdb_id}: {e}")
-
-    mapped_from_sxx = (
-        abs_ep is not None
-        and absolute_episode is None
-        and season_num is not None
-        and episode_num is not None
-    )
-    if mapped_from_sxx:
-        search_season = None
-        search_episode = int(abs_ep)
-        LOGGER.info(
-            f"[GLOBAL SEARCH] Anime mapped S{int(season_num):02d}E{int(episode_num):02d} "
-            f"→ absolute {int(abs_ep)} for '{expected_title}'"
-            + (f" (via {map_source})" if map_source else "")
-            + "; trying absolute first"
-        )
-
-    auth_channels = SettingsManager.current().auth_channels
-    try:
-        global_results = await global_search(
-            expected_title,
-            auth_channels,
-            year=year,
-            season=search_season,
-            episode=search_episode,
-        )
-    except Exception as e:
-        LOGGER.error(f"[GLOBAL SEARCH] search failed for '{expected_title}': {e}")
-        global_results = []
-
-    if not global_results and mapped_from_sxx:
-        LOGGER.info(
-            f"[GLOBAL SEARCH] Absolute {int(abs_ep)} empty for '{expected_title}'; "
-            f"falling back to S{int(season_num):02d}E{int(episode_num):02d}"
-        )
-        try:
-            global_results = await global_search(
-                expected_title,
-                auth_channels,
-                year=year,
-                season=season_num,
-                episode=episode_num,
-            )
-        except Exception as e:
-            LOGGER.error(f"[GLOBAL SEARCH] SxxExx fallback failed for '{expected_title}': {e}")
-            global_results = []
-
-    return _streams_from_global_results(token, global_results)
-
-
-#----- Cached check that a user is still in the subscription group (fail-open)
-async def _is_subscription_member(user_id: int) -> bool:
-    group_id = SettingsManager.current().subscription_group_id
-    if not group_id:
-        return True
-
-    cache_key = (group_id, user_id)
-    cached = _membership_cache.get(cache_key)
-    now_ts = time.monotonic()
-    if cached and (now_ts - cached[0]) < _MEMBERSHIP_TTL:
-        return cached[1]
-
-    try:
-        member = await StreamBot.get_chat_member(group_id, user_id)
-        result = member.status not in (ChatMemberStatus.LEFT, ChatMemberStatus.BANNED)
-    except UserNotParticipant:
-        result = False
-    except Exception as e:
-        LOGGER.warning(f"[SUBSCRIPTION] Membership check failed for user {user_id}: {e}")
-        return True
-
-    if len(_membership_cache) >= _MEMBERSHIP_CACHE_MAX:
-        for k in [k for k, v in _membership_cache.items() if (now_ts - v[0]) >= _MEMBERSHIP_TTL]:
-            _membership_cache.pop(k, None)
-        if len(_membership_cache) >= _MEMBERSHIP_CACHE_MAX:
-            _membership_cache.clear()
-
-    _membership_cache[cache_key] = (now_ts, result)
-    return result
-
-
-#----- Resolve playable streams for a title (Telegram library or Global Search)
+#----- Resolve playable streams for a title from the Telegram library
 @router.get("/{token}/stream/{media_type}/{id}.json")
 async def get_streams(
     token: str,
@@ -1800,34 +1597,16 @@ async def get_streams(
         request.headers.get("user-agent", ""),
     ))
 
-    if token_data.get("subscription_expired"):
+    if token_data.get("token_expired"):
         return {
             "streams": [
                 {
-                    "name": "🚫 Plan Expired",
-                    "title": "Your plan is expired.\nRenew it from the bot to continue watching.",
+                    "name": "🚫 Link Expired",
+                    "title": "Your access link has expired.\nAsk the admin for a new one.",
                     "url": get_streambot_url()
                 }
             ]
         }
-
-    #----- Subscription users must currently be members of the configured group.
-    #----- Admin, lifetime and admin-set token-expiry grants skip this check.
-    if (SettingsManager.current().subscription
-            and not token_data.get("is_admin")
-            and not token_data.get("subscription_exempt")
-            and not token_data.get("expires_at")):
-        user_id = token_data.get("user_id")
-        if user_id and not await _is_subscription_member(int(user_id)):
-            return {
-                "streams": [
-                    {
-                        "name": "📢 Join Required",
-                        "title": "First join the channel to stream it.\nThen wait for 2 min for verification",
-                        "url": get_streambot_url()
-                    }
-                ]
-            }
 
     if token_data.get("limit_exceeded"):
         limit_type = token_data["limit_exceeded"]
@@ -1875,7 +1654,6 @@ async def get_streams(
 
     streams = []
 
-    is_combined = season_num == COMBINED_SEASON and episode_num is not None and episode_num >= COMBINED_EPISODE_BASE
 
     if media_details and "telegram" in media_details:
         fmt_meta = {
@@ -1890,7 +1668,7 @@ async def get_streams(
                 size = quality.get("size", "")
                 size_bytes = parse_size_to_bytes(size)
 
-                combined = parse_combined_episodes(filename) if is_combined else None
+                combined = parse_combined_episodes(filename)
                 episode_start = combined.get("start") or 0 if combined else 0
                 name_key = combined_name_key(filename) if combined else ""
 
@@ -1928,25 +1706,6 @@ async def get_streams(
                         add("(Direct)", original_url)
                     else:
                         add("", proxy_url or original_url, bool(proxy_url))
-    elif is_global_search_enabled():
-        try:
-            is_anime = bool(is_kitsu or (media_details and media_details.get("is_anime")))
-            log_id = f"kitsu:{kitsu_id}" if is_kitsu else imdb_id
-            LOGGER.info(f"{log_id}:{season_num}:{episode_num}:abs={absolute_episode}|{media_type}")
-            streams.extend(
-                await _global_streams_for(
-                    token,
-                    imdb_id=imdb_id,
-                    media_type=media_type,
-                    season_num=season_num,
-                    episode_num=episode_num,
-                    kitsu_id=kitsu_id,
-                    absolute_episode=absolute_episode,
-                    is_anime=is_anime,
-                )
-            )
-        except Exception as e:
-            LOGGER.error(f"[GLOBAL SEARCH] stream search failed for {id}: {e}")
 
     #----- Per-token quality filter (fall back to all if it would hide everything)
     config = token_data.get("config") or {}
@@ -1960,15 +1719,10 @@ async def get_streams(
         return {"streams": [_no_stream()]}
 
     ascending = config.get("quality_sort") == "asc"
-    if is_combined:
-        streams.sort(key=lambda s: s.get("episode_start", 0))
-        streams.sort(key=lambda s: s.get("name_key", ""))
-        streams.sort(key=lambda s: get_resolution_priority(s.get("sort_name", s.get("name", ""))), reverse=not ascending)
-    else:
-        streams.sort(
-            key=lambda s: (get_resolution_priority(s.get("sort_name", s.get("name", ""))), s.get("size_bytes", 0)),
-            reverse=not ascending
-        )
+    streams.sort(
+        key=lambda s: (get_resolution_priority(s.get("sort_name", s.get("name", ""))), s.get("size_bytes", 0)),
+        reverse=not ascending
+    )
     name_count: dict = {}
     for s in streams:
         name_count[s["name"]] = name_count.get(s["name"], 0) + 1
@@ -2029,21 +1783,12 @@ async def configure_addon(token: str, request: Request):
         token_expiry = token_doc.get("expires_at")
         if is_admin:
             status_color, status_text, expiry_str = "#22c55e", "Admin", "Never"
-        elif token_doc.get("subscription_exempt"):
-            status_color, status_text, expiry_str = "#22c55e", "Active", "Never"
         elif token_expiry is not None:
             expiry_str = _fmt(token_expiry)
             if _expired(token_expiry):
                 status_color, status_text = "#ef4444", "Expired"
             else:
                 status_color, status_text = "#22c55e", "Active"
-        elif SettingsManager.current().subscription:
-            expiry = user.get("subscription_expiry") if user else None
-            if user and user.get("subscription_status") == "active" and expiry and not _expired(expiry):
-                status_color, status_text, expiry_str = "#22c55e", "Active", _fmt(expiry)
-            else:
-                status_color, status_text = "#ef4444", "Expired"
-                expiry_str = _fmt(expiry) if expiry else "N/A"
         else:
             status_color, status_text, expiry_str = "#22c55e", "Active", "Never"
 
