@@ -23,11 +23,18 @@ dependencies = [
     "tgcrypto>=1.2.5",
     "themoviedb>=1.0.2",
     "uvicorn>=0.34.2",
-    "uvloop>=0.22.1",
+    "uvloop>=0.22.1; sys_platform != 'win32'",
     "zstandard>=0.25.0",
 ]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["."]
 
 [dependency-groups]
 dev = [
     "deptry>=0.23.1",
+    "pytest>=9.2.0",
+    "pytest-asyncio>=1.4.1.post1",
 ]

@@ -85,6 +85,12 @@ def parse_range_header(range_header: str, file_size: int):
     return start, end
 
 
+#----- Chunk-aligned fetch plan for bytes [start, end]: (offset, first_cut, last_cut, part_count)
+def part_math(start: int, end: int, chunk_size: int):
+    offset = start - (start % chunk_size)
+    return offset, start - offset, (end % chunk_size) + 1, end // chunk_size - offset // chunk_size + 1
+
+
 #----- Pick the least-loaded client, preferring the target DC, round-robin on ties
 def select_best_client(target_dc: int) -> int:
     global _rr_counter
@@ -330,10 +336,7 @@ async def media_streamer(request: Request, chat_id: int, msg_id: int, token: str
     start, end = parse_range_header(range_header, file_size)
     req_length = end - start + 1
     chunk_size = 1024 * 1024
-    offset = start - (start % chunk_size)
-    first_part_cut = start - offset
-    last_part_cut = (end % chunk_size) + 1
-    part_count = math.ceil(end / chunk_size) - math.floor(offset / chunk_size)
+    offset, first_part_cut, last_part_cut, part_count = part_math(start, end, chunk_size)
     stream_id = secrets.token_hex(8)
     decoded_name = unquote(request.path_params.get("name", ""))
     final_title = await _lookup_title(stream_id_hash, decoded_name)
@@ -465,10 +468,7 @@ async def global_media_streamer(request: Request, chat_id: int, msg_id: int, tok
     start, end = parse_range_header(range_header, file_size)
     req_length = end - start + 1
     chunk_size = 1024 * 1024
-    offset = start - (start % chunk_size)
-    first_part_cut = start - offset
-    last_part_cut = (end % chunk_size) + 1
-    part_count = math.ceil(end / chunk_size) - math.floor(offset / chunk_size)
+    offset, first_part_cut, last_part_cut, part_count = part_math(start, end, chunk_size)
     stream_id = secrets.token_hex(8)
 
     file_name, mime_type = _resolve_filename_mime(file_id)
