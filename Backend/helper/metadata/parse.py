@@ -26,6 +26,22 @@ _EXPLICIT_SXXEXX_RE = re.compile(r"(?i)\bs\d{1,2}[._\s-]*e\d{1,3}\b")
 _EXPLICIT_NXNN_RE = re.compile(r"(?i)\b\d{1,2}x\d{2,3}\b")
 _EXPLICIT_SEASON_WORD_RE = re.compile(r"(?i)\b(?:season|series)\s*0*\d{1,2}\b")
 
+# Captions often repeat the season/episode inside the title ("Lost S06 E08", "You S04P01") and sites
+# add their own name; none of that belongs in a provider search.
+_TITLE_TAIL_RE = re.compile(
+    r"(?i)[\s._-]+S\d{1,2}(?:[\s._-]*(?:EP|E|P)[\s._-]*\d{1,3}(?:[\s._-]*(?:-|~|to)[\s._-]*(?:EP|E)?[\s._-]*\d{1,3})?)?\s*$"
+)
+_SITE_TAIL_RE = re.compile(r"(?i)[\s._-]+(openload|pahe(?:\.in)?)\s*$")
+_SEASON_PART_RE = re.compile(r"(?i)\bS(\d{1,2})[\s._-]*P(?:ART)?[\s._-]*\d{1,2}\b")
+
+
+def clean_title_tail(title: str) -> str:
+    previous = None
+    while title and title != previous:
+        previous = title
+        title = _SITE_TAIL_RE.sub("", _TITLE_TAIL_RE.sub("", title)).strip(" .-_")
+    return title
+
 
 def parse_media_name(name: str) -> dict:
     try:
@@ -81,6 +97,13 @@ def parse_media_name(name: str) -> dict:
             parsed["season"] = None
     except (TypeError, ValueError):
         pass
+
+    if parsed.get("season") is None:
+        part = _SEASON_PART_RE.search(name)
+        if part and int(part.group(1)) > 0:
+            parsed["season"] = int(part.group(1))   # "S04P01" = season 4, part 1
+    if parsed.get("title"):
+        parsed["title"] = clean_title_tail(parsed["title"])
 
     return parsed
 

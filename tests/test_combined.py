@@ -61,3 +61,26 @@ def test_migration_puts_a_range_pack_on_its_first_episode():
     eps = {e["episode_number"]: [q["name"] for q in e["telegram"]] for e in new["seasons"][0]["episodes"]}
     assert moved == 1 and new["seasons"][0]["season_number"] == 2
     assert eps == {5: ["Show S02 E05-E08 1080p.mkv"], 1: ["Show S02 Combined 1080p.mkv"]}
+
+
+import pytest
+
+from Backend.helper.split_files import combined_name_key
+
+
+@pytest.mark.parametrize("name,expected", [
+    ("You_2018_S02_COMBINED_NF_WEBRiP_720P_10bit_HEVC_Hindi_DD5_1_+_English.mkv", {"season": 2, "start": None, "end": None}),
+    ("@CineOne_You_S04P01_2023_COMBINED_720p_10bit_NF_WEBRip_x.mkv", {"season": 4, "start": None, "end": None}),
+    ("You (2018) S01 COMBINED NF WEBRiP 720P 10bit HEVC (Hindi.mkv", {"season": 1, "start": None, "end": None}),
+    ("Show_S03_E01-E10_1080p.mkv", {"season": 3, "start": 1, "end": 10}),
+])
+def test_combined_detected_with_underscores_and_season_part(name, expected):
+    assert parse_combined_episodes(name) == expected
+
+
+def test_season_letter_inside_a_word_is_not_a_season():
+    assert parse_combined_episodes("Moves_2018_Combined.mkv") is None      # "s_2018" must not read as season 201
+
+
+def test_combined_name_key_ignores_separators():
+    assert combined_name_key("You_S02_COMBINED_720p.mkv") == combined_name_key("You S02 COMBINED 720p.mkv")

@@ -50,7 +50,7 @@ _COMBINED_EPISODES_RE = re.compile(
     r"E(?:P|PISODE)?[\s._-]*0*(\d{1,4})[\s._-]*(?:-|–|~|\+|&|,|to)+[\s._-]*(?:E(?:P|PISODE)?[\s._-]*)?0*(\d{1,4})(?=\D|$)",
     re.IGNORECASE,
 )
-_COMBINED_SEASON_RE = re.compile(r"S(?:EASON)?[\s._-]*0*(\d{1,3})", re.IGNORECASE)
+_COMBINED_SEASON_RE = re.compile(r"\bS(?:EASON)?[\s._-]*0*(\d{1,3})(?=\D|$)", re.IGNORECASE)
 _COMBINED_KEYWORD_RE = re.compile(r"\bcombined\b", re.IGNORECASE)
 
 
@@ -65,6 +65,7 @@ def parse_combined_episodes(filename: str) -> Optional[dict]:
     if not filename:
         return None
 
+    filename = filename.replace("_", " ")   # "\b" does not split on underscores: You_S02_COMBINED
     match = _COMBINED_EPISODES_RE.search(filename)
     if match:
         start, end = int(match.group(1)), int(match.group(2))
@@ -83,7 +84,7 @@ def parse_combined_episodes(filename: str) -> Optional[dict]:
 def combined_name_key(filename: str) -> str:
     if not filename:
         return ""
-    name = _COMBINED_EPISODES_RE.sub("", filename)
+    name = _COMBINED_EPISODES_RE.sub("", filename.replace("_", " "))
     name = _COMBINED_KEYWORD_RE.sub("", name)
     return re.sub(r"[\s._-]+", " ", name).strip().lower()
 
