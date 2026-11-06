@@ -26,6 +26,16 @@ STALE_STREAM_IDLE = 180
 _STALE_CLEANER_STARTED = False
 
 
+#----- Give back a stream's load slot exactly once (stale cleaner and stream end can both call this)
+def release_load(entry: Dict) -> None:
+    if entry.get("load_released"):
+        return
+    entry["load_released"] = True
+    idx = entry.get("client_index")
+    if idx in work_loads:
+        work_loads[idx] = max(0, work_loads[idx] - 1)
+
+
 async def _cleanup_stale_streams():
     while True:
         try:
@@ -46,9 +56,7 @@ async def _cleanup_stale_streams():
                         entry["status"] = "stale"
                         entry["end_ts"] = now
                         RECENT_STREAMS.appendleft(entry)
-                        idx = entry.get("client_index")
-                        if idx is not None and idx in work_loads:
-                            work_loads[idx] = max(0, work_loads[idx] - 1)
+                        release_load(entry)
                 except Exception:
                     pass
         except Exception:
@@ -486,10 +494,7 @@ class ByteStreamer:
 
                     asyncio.create_task(delayed_pop())
                 finally:
-                    try:
-                        work_loads[client_index] -= 1
-                    except Exception:
-                        pass
+                    release_load(stream_entry)
 
                 stop_event.set()
 
