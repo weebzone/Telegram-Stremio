@@ -30,3 +30,23 @@ def test_absolute_episode_not_split_into_season(name, expected):
     p = parse_media_name(name)
     assert p["season"] is None
     assert extract_absolute_episode(name, p) == expected
+
+
+# --- real names from the skip channel -------------------------------------------------------------
+@pytest.mark.parametrize("caption,title,season,episode", [
+    ("[S06 EP08] Lost S06 E08 1080p BluRay x264", "Lost", 6, 8),               # caption repeats S/E in the title
+    ("[S06 EP01] Lost S06 E01-E02 1080p BluRay", "Lost", 6, 1),
+    ("Lost.S06.E08.1080p.BluRay.x264-Pahe.in.mkv", "Lost", 6, 8),
+])
+def test_trailing_season_episode_tokens_are_not_part_of_the_title(caption, title, season, episode):
+    p = parse_media_name(caption)
+    assert (p["title"], p["season"], p["episode"] if not isinstance(p["episode"], list) else p["episode"][0]) == (title, season, episode)
+
+
+def test_season_part_tag_gives_the_season_and_a_clean_title():
+    p = parse_media_name("You S04P01 2023 COMBINED 720p 10bit WEBRip")
+    assert p["title"] == "You" and p["season"] == 4 and p["year"] == 2023
+
+
+def test_trailing_site_names_and_punctuation_are_dropped():
+    assert parse_media_name("Godhi Banna Sadharana Mykattu Openload.mp4")["title"] == "Godhi Banna Sadharana Mykattu"
