@@ -144,9 +144,14 @@ The app is great for personal, single-user use, but it's intentionally lighter t
 * Add this manifest URL into **Stremio Addons** or **Nuvio Addons**. It serves as the primary streaming engine for both players.
 
 ### 2. Nuvio Collection & Logo Buttons (Optional)
-* **URL:** `https://<YOUR_DOMAIN>/stremio/<TOKEN>/nuvio-collection.json`
-* The bot sends these collection links (full, OTT-only, explore-only) on `/start` and on subscription approval.
-* Import the URL or JSON file into **Nuvio (Settings ⚙️ → Collections → Import)** to display horizontal **Landscape Logo Buttons** (*Netflix*, *JioHotstar*, *Prime Video*, *Apple TV*, *Bollywood*, *Anime*, *Marvel*, *Star Wars*) on the Nuvio home screen!
+* **Master 4-in-1 Collection URL:** `https://<YOUR_DOMAIN>/stremio/<TOKEN>/nuvio-collection.json`
+* **Modular URLs:**
+  * **Discover:** `https://<YOUR_DOMAIN>/stremio/<TOKEN>/nuvio-discover-collection.json`
+  * **Streaming Platforms:** `https://<YOUR_DOMAIN>/stremio/<TOKEN>/nuvio-ott-collection.json`
+  * **Franchises & Universes:** `https://<YOUR_DOMAIN>/stremio/<TOKEN>/nuvio-franchises-collection.json`
+  * **Regional & Spotlight:** `https://<YOUR_DOMAIN>/stremio/<TOKEN>/nuvio-spotlight-collection.json`
+* The bot provides these collection links on `/start` and on subscription approval.
+* Import the URL or JSON file into **Nuvio (Settings ⚙️ → Collections → Import)** to display horizontal **Landscape Logo Buttons** (*Discover, Netflix, JioHotstar, Prime Video, Apple TV+, Marvel, DCU, Star Wars, Dune, LOTR, Harry Potter, Bollywood, Anime, K-Drama*) on the Nuvio home screen!
 
 > ⚠️ **Important for Server Hosts:**  
 > For Nuvio collections to populate platform-specific titles (instead of falling back to default latest movies/series), make sure to enable the **Auto Catalogs** (**Netflix, Hotstar, Prime Video, Apple TV, Bollywood, etc.**) under **Dashboard → Catalogs** and click **Sync**.
