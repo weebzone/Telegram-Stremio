@@ -135,21 +135,64 @@ The app is great for personal, single-user use, but it's intentionally lighter t
 
 ---
 
-## 📱 Nuvio Integration & Custom Catalogs Setup
+## 📱 Nuvio Integration & Collections Setup
 
-`Telegram-Stremio` seamlessly supports **Nuvio** alongside Stremio!
+`Telegram-Stremio` seamlessly supports **Nuvio** alongside Stremio! To ensure collections load without errors, follow this step-by-step setup order.
 
-### 1. Main Addon URL (Stremio & Nuvio)
+---
+
+### ⚠️ Crucial Order of Setup (Avoid Addon Errors)
+
+> [!IMPORTANT]
+> **Always install the Addon Manifest FIRST before importing Collections!**  
+> Nuvio collections link directly to your server's catalog IDs (`telegram.media.<token>`). If you import a collection without installing the addon manifest first, Nuvio will show blank rows or "Addon not found" errors.
+
+```
+Step 1: Install Addon Manifest  ──►  Step 2: Import Collection URL  ──►  Step 3: Enjoy Streaming
+```
+
+---
+
+### Step 1: Install Addon Manifest (Stremio & Nuvio)
 * **URL:** `https://<YOUR_DOMAIN>/stremio/<TOKEN>/manifest.json`
-* Add this manifest URL into **Stremio Addons** or **Nuvio Addons**. It serves as the primary streaming engine for both players.
+* **In Nuvio:** Go to **Addons (🧩)** → click **Add Addon (+)** → paste your Manifest URL → click **Install**.
+* This registers your personal media catalogs with Nuvio's playback engine.
 
-### 2. Nuvio Collection & Logo Buttons (Optional)
-* **URL:** `https://<YOUR_DOMAIN>/stremio/<TOKEN>/nuvio-collection.json`
-* The bot sends these collection links (full, OTT-only, explore-only) on `/start` and on subscription approval.
-* Import the URL or JSON file into **Nuvio (Settings ⚙️ → Collections → Import)** to display horizontal **Landscape Logo Buttons** (*Netflix*, *JioHotstar*, *Prime Video*, *Apple TV*, *Bollywood*, *Anime*, *Marvel*, *Star Wars*) on the Nuvio home screen!
+---
 
-> ⚠️ **Important for Server Hosts:**  
-> For Nuvio collections to populate platform-specific titles (instead of falling back to default latest movies/series), make sure to enable the **Auto Catalogs** (**Netflix, Hotstar, Prime Video, Apple TV, Bollywood, etc.**) under **Dashboard → Catalogs** and click **Sync**.
+### Step 2: Import Nuvio Collections & Logo Buttons
+After installing the addon manifest, import your preferred collection layout:
+
+* **Master 4-in-1 Collection URL (Recommended):**  
+  `https://<YOUR_DOMAIN>/stremio/<TOKEN>/nuvio-collection.json`  
+  *(Includes Discover, Streaming Platforms, Franchises & Universes, and Regional & Spotlight all in one)*
+
+* **Modular Collection URLs (For Separate Tabs):**
+  * **Discover:** `https://<YOUR_DOMAIN>/stremio/<TOKEN>/nuvio-discover-collection.json`
+  * **Streaming Platforms:** `https://<YOUR_DOMAIN>/stremio/<TOKEN>/nuvio-ott-collection.json`
+  * **Franchises & Universes:** `https://<YOUR_DOMAIN>/stremio/<TOKEN>/nuvio-franchises-collection.json`
+  * **Regional & Spotlight:** `https://<YOUR_DOMAIN>/stremio/<TOKEN>/nuvio-spotlight-collection.json`
+
+**How to Import in Nuvio:**
+1. Open Nuvio and tap **Settings (⚙️)**.
+2. Select **Collections** → tap **Import (+)**.
+3. Choose **Import from URL**, paste your collection link, and tap **Save**.
+4. Return to the Nuvio Home Screen to see your horizontal landscape cards (*Discover, Netflix, Prime Video, JioHotstar, Apple TV+, HBO Max, Sagas, Bollywood, Anime, K-Drama, Seasonal Specials*).
+
+---
+
+### Step 3: Server Host Prerequisites & Troubleshooting
+
+> [!TIP]
+> **Why are my OTT or Regional rows empty or showing default movies?**
+> 1. Log in to your **Web Admin Dashboard → Catalogs**.
+> 2. Ensure the built-in **Auto Catalogs** (**Netflix, Prime Video, JioHotstar, Apple TV, Bollywood, Anime, etc.**) are enabled.
+> 3. Click **Sync Catalogs** to index content from your media channels into these collection categories.
+>
+> **Encountered an "Addon Error" or "Join Required" card?**
+> * **Join Required:** You must join your admin's Telegram subscription channel/group. Wait 2 minutes after joining for verification.
+> * **Plan Expired:** Your subscription period has ended. Open the Telegram bot and renew your plan.
+> * **Limit Reached:** Your daily or monthly streaming bandwidth limit was reached. Contact the server admin to upgrade your tier.
 
 ---
 
