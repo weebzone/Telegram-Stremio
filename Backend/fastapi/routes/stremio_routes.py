@@ -1915,7 +1915,7 @@ async def get_streams(
             "streams": [
                 {
                     "name": "🚫 Plan Expired",
-                    "title": "Your plan is expired.\nRenew it from the bot to continue watching.",
+                    "title": "Your plan has expired.\nRenew it from the bot to continue watching.\n\n📖 Need help? Check the README / Setup Guide or contact your admin.",
                     "url": get_streambot_url()
                 }
             ]
@@ -1933,7 +1933,7 @@ async def get_streams(
                 "streams": [
                     {
                         "name": "📢 Join Required",
-                        "title": "First join the channel to stream it.\nThen wait for 2 min for verification",
+                        "title": "First join the channel to stream it.\nThen wait 2 min for verification.\n\n📖 Read the README or contact your bot admin for setup instructions.",
                         "url": get_streambot_url()
                     }
                 ]
@@ -1943,9 +1943,9 @@ async def get_streams(
         limit_type = token_data["limit_exceeded"]
 
         title = (
-            "🚫 Daily Limit Reached – Upgrade Required"
+            "🚫 Daily Limit Reached – Upgrade Required\n\n📖 Read the README or contact your bot admin to upgrade."
             if limit_type == "daily"
-            else "🚫 Monthly Limit Reached – Upgrade Required"
+            else "🚫 Monthly Limit Reached – Upgrade Required\n\n📖 Read the README or contact your bot admin to upgrade."
         )
 
         return {
