@@ -25,7 +25,7 @@ from Backend.helper.metadata.providers.cinemeta import get_detail, get_season
 from Backend.helper.metadata import resolve_cover_url, tmdb_api_key
 from Backend.helper.database import convert_objectid_to_str
 from Backend.helper.split_files import parse_combined_episodes, combined_name_key
-from Backend.helper.stream_badges import badge_lines
+from Backend.helper.stream_badges import badge_images, badge_lines
 from Backend.helper.settings_manager import SettingsManager
 from Backend.helper.stream_formatter import format_stream
 from Backend.helper.subtitles import get_subtitles_for, stremio_subtitle_entries
@@ -1703,7 +1703,8 @@ async def get_streams(
                             name = f"{name} {label}"
                     streams.append({"name": f"{name} {suffix}".strip(), "title": title, "url": url, "size_bytes": size_bytes,
                                     "episode_start": episode_start, "name_key": name_key, "sort_name": sort_name,
-                                    "behaviorHints": {"bingeGroup": _binge_group(quality_str, suffix)}})
+                                    "behaviorHints": {"bingeGroup": _binge_group(quality_str, suffix)},
+                                    "badges": badge_images(filename, SettingsManager.current().base_url)})
 
                 if cf_url:
                     add("" if cf_only else "(Cloudflare)", cf_url)

@@ -50,6 +50,12 @@ _QUALITY = sorted(_compile(set(_QUALITY_GROUPS)), key=lambda r: _QUALITY_GROUPS.
 _LANGUAGE = _compile({"language"})
 
 
+#----- The pack's rules expect spaced titles; "Atmos.7.1.ITA" -> "Atmos 7.1 ITA", "DD5_1" -> "DD5.1"
+def _normalize(filename: str) -> str:
+    text = re.sub(r"(?<=\d)_(?=\d)", ".", filename or "")
+    return re.sub(r"[._](?!\d)|(?<!\d)[._]", " ", text)
+
+
 def _matches(rules, text):
     seen, out = set(), []
     for _, label, rx in rules:
@@ -62,7 +68,21 @@ def _matches(rules, text):
 #----- (quality_line, language_line); either is "" when nothing matched. Cached: ~200 regexes per name.
 @lru_cache(maxsize=4096)
 def badge_lines(filename: str) -> tuple[str, str]:
-    #----- The pack's rules expect spaced titles; "Atmos.7.1.ITA" -> "Atmos 7.1 ITA" (dots inside numbers stay)
-    text = re.sub(r"(?<=\d)_(?=\d)", ".", filename or "")          # DD5_1 -> DD5.1
-    text = re.sub(r"[._](?!\d)|(?<!\d)[._]", " ", text)
+    text = _normalize(filename)
     return " · ".join(_matches(_QUALITY, text)), " · ".join(_matches(_LANGUAGE, text))
+
+
+_ALL = [(f["name"], f["imageURL"].rsplit("/", 1)[1], re.compile(f["pattern"]))
+        for f in _PACK["filters"] if f.get("isEnabled", True) and f["groupId"] not in ("delivery", "service", "live", "container")]
+
+
+@lru_cache(maxsize=4096)
+def _image_names(text: str) -> tuple:
+    return tuple((name, image) for name, image, rx in _ALL if rx.search(text))
+
+
+#----- Prism badges as {name, imageURL} for a "badges" field on each stream. No Nuvio release reads
+#----- this yet (see README); it is here so badges appear for everyone once a client does.
+def badge_images(filename: str, base_url: str) -> list:
+    return [{"name": n, "imageURL": f"{base_url}/badges/prism/{img}"} for n, img in _image_names(_normalize(filename))]
+
