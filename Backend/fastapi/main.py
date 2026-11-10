@@ -8,6 +8,7 @@ from fastapi.templating import Jinja2Templates
 
 from Backend import __version__
 from Backend.fastapi.themes import DEFAULT_THEME, DEFAULT_STYLE, get_theme
+from Backend.fastapi.routes.badge_routes import router as badge_router
 from Backend.fastapi.routes.api_routes import (
     add_custom_catalog_item_api,
     apply_media_rescan_api,
@@ -153,6 +154,7 @@ async def _startup():
 app.include_router(stream_router)
 app.include_router(cf_router)
 app.include_router(stremio_router)
+app.include_router(badge_router)
 
 
 #----- Public routes (no authentication)

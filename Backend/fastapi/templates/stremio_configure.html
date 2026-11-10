@@ -191,7 +191,17 @@ if (!navigator.clipboard) Object.defineProperty(navigator, 'clipboard', { value:
     </div>
 
     <div class="url-box" id="murl">{{ manifest_url }}</div>
-    <button onclick="copyUrl()" class="btn-copy"><i class="fa-solid fa-copy"></i> Copy URL</button>
+    <button onclick="copyUrl('murl', this)" class="btn-copy"><i class="fa-solid fa-copy"></i> Copy URL</button>
+
+    <div class="steps" style="margin-top:22px">
+        <b>Using Nuvio? Add quality badges</b>
+        <ol>
+            <li>In Nuvio open <b>Profile → Layout → Streams → Fusion badge URLs</b></li>
+            <li>Paste the link below, then open any stream list</li>
+        </ol>
+    </div>
+    <div class="url-box" id="burl">{{ badge_url }}</div>
+    <button onclick="copyUrl('burl', this)" class="btn-copy"><i class="fa-solid fa-copy"></i> Copy badge link</button>
 </div>
 
 <div class="card" style="text-align:left">
@@ -336,12 +346,12 @@ loadConfig();
 </script>
 
 <script>
-function copyUrl() {
-    const url = document.getElementById('murl').textContent.trim();
+function copyUrl(id, b) {
+    const url = document.getElementById(id).textContent.trim();
+    const label = b.innerHTML;
     navigator.clipboard.writeText(url).then(() => {
-        const b = document.querySelector('.btn-copy');
         b.innerHTML = '<i class="fa-solid fa-check"></i> Copied!';
-        setTimeout(() => b.innerHTML = '<i class="fa-solid fa-copy"></i> Copy URL', 2000);
+        setTimeout(() => b.innerHTML = label, 2000);
     });
 }
 </script>

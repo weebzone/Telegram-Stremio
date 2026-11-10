@@ -1797,6 +1797,7 @@ async def configure_addon(token: str, request: Request):
         "theme": get_theme(request.session.get("theme", DEFAULT_THEME), request.session.get("style", DEFAULT_STYLE)),
         "manifest_url": manifest_url,
         "web_install_url": web_install_url,
+        "badge_url": f"{SettingsManager.current().base_url}/badges/prism.json",
         "user_name": user_name,
         "expiry_str": expiry_str,
         "status_text": status_text,

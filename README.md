@@ -967,3 +967,8 @@ Combined seasons (`Show S02 Combined`, `Show S02 E01-E13`) appear as an extra st
 uv run python scripts/migrate_combined.py
 uv run python scripts/migrate_combined.py --apply
 ```
+
+## Nuvio badges
+
+The server hosts the Prism badge pack from [nuvio-badge-kit](https://github.com/jyotiprakash101/nuvio-badge-kit) (MIT) at `/badges/prism.json`. Badge images download from GitHub once and are then served from `cache/badges/`. Nuvio only shows image badges from packs a user adds, so each user pastes this link once in **Profile → Layout → Streams → Fusion badge URLs**. The addon install page shows the link with a copy button.
+

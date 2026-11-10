@@ -11,3 +11,4 @@ log.txt
 test.py
 config.env
 *.pyc
+cache/
