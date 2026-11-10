@@ -25,6 +25,7 @@ from Backend.helper.metadata.providers.cinemeta import get_detail, get_season
 from Backend.helper.metadata import resolve_cover_url, tmdb_api_key
 from Backend.helper.database import convert_objectid_to_str
 from Backend.helper.split_files import parse_combined_episodes, combined_name_key
+from Backend.helper.stream_badges import badge_lines
 from Backend.helper.settings_manager import SettingsManager
 from Backend.helper.stream_formatter import format_stream
 from Backend.helper.subtitles import get_subtitles_for, stremio_subtitle_entries
@@ -429,8 +430,14 @@ def format_stream_details(filename: str, quality: str, size: str, is_split: bool
         f"📁 {filename}",
         f"{size_emoji} {size}",
     ]
-    if codec_info:
+    #----- Text badges (same rules as the Prism image pack) replace the old codec line when they find anything
+    quality_badges, language_badges = badge_lines(filename)
+    if quality_badges:
+        stream_title_parts.append(f"✦ {quality_badges}")
+    elif codec_info:
         stream_title_parts.append(codec_info)
+    if language_badges:
+        stream_title_parts.append(f"🗣 {language_badges}")
 
     stream_title = "\n".join(stream_title_parts)
     return (stream_name, stream_title)

@@ -5,7 +5,6 @@ Fusion badge URLs); it does not read badges from addons. This serves the pack fr
 that one link is all users need and nothing depends on GitHub after the first download.
 """
 import copy
-import json
 import os
 import re
 from pathlib import Path
@@ -15,15 +14,14 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 
 from Backend.helper.settings_manager import SettingsManager
+from Backend.helper.stream_badges import _PACK
 from Backend.logger import LOGGER
 
 router = APIRouter()
 
-_ASSETS = Path(__file__).resolve().parents[2] / "assets" / "badges"
 CACHE_DIR = Path(os.getenv("BADGE_CACHE_DIR", "cache/badges/prism"))
 _UPSTREAM = "https://raw.githubusercontent.com/jyotiprakash101/nuvio-badge-kit/964d2e70c480fee71ef7e3ee6fa21562cd6364ca/v2/Prism/"
 
-_PACK = json.loads((_ASSETS / "prism.json").read_text(encoding="utf-8"))
 _IMAGES = {f["imageURL"].rsplit("/", 1)[1] for f in _PACK["filters"]}   # the only names we ever fetch
 _NAME_RE = re.compile(r"^[a-z0-9][a-z0-9._-]*\.webp$")
 _pack_cache: dict = {}
