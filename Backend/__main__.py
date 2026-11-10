@@ -9,6 +9,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from Backend import __version__, db
 from Backend.fastapi import server
 from Backend.fastapi.main import app
+from Backend.helper import client_health
 from Backend.helper.link_checker import DeadLinkChecker
 from Backend.helper.pyro import restart_notification, setup_bot_commands
 from Backend.helper.scan_manager import dbcheck_manager, duplicate_manager, scan_manager
@@ -16,7 +17,7 @@ from Backend.helper.passwords import verify_password
 from Backend.helper.settings_manager import SettingsManager
 from Backend.logger import LOGGER
 import Backend.pyrofork.bot as botmod
-from Backend.pyrofork.bot import StreamBot
+from Backend.pyrofork.bot import StreamBot, multi_clients
 from Backend.pyrofork.clients import initialize_clients
 
 loop = asyncio.get_event_loop()
@@ -65,6 +66,7 @@ async def start_services():
 
         link_checker_task = DeadLinkChecker(db, app, check_interval_hours=24)
         loop.create_task(link_checker_task.start())
+        loop.create_task(client_health.watchdog(multi_clients))  # reconnect bots stuck on a dead socket
 
         LOGGER.info("Telegram-Stremio Started Successfully!")
         await idle()

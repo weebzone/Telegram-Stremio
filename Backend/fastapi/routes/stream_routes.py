@@ -17,6 +17,7 @@ from Backend.fastapi.security.credentials import require_auth
 from Backend.fastapi.security.tokens import verify_token
 from Backend.helper.bounded import BoundedDict
 from Backend.helper.analytics import client_ip_from, record_stream_start
+from Backend.helper import client_health
 from Backend.helper.custom_dl import ACTIVE_STREAMS, RECENT_STREAMS, ByteStreamer
 from Backend.helper.encrypt import decode_string
 from Backend.helper.pyro import get_thumb_download_target
@@ -91,7 +92,7 @@ def part_math(start: int, end: int, chunk_size: int):
 
 
 #----- Pick the least-loaded client, preferring the target DC, round-robin on ties
-def select_best_client(target_dc: int) -> int:
+def select_best_client(target_dc: int, exclude=()) -> int:
     global _rr_counter
 
     def _score(idx: int) -> int:
@@ -103,6 +104,7 @@ def select_best_client(target_dc: int) -> int:
         matching = []
     if not matching:
         matching = list(multi_clients.keys())
+    matching = [i for i in matching if i not in exclude] or matching
     if not matching:
         return 0
     min_score = min(_score(i) for i in matching)
@@ -138,11 +140,24 @@ def _prefetch_for(index: int) -> tuple[int, int]:
     return get_parallel_prefetch(len(multi_clients) - 1)
 
 
-#----- Run fetch(streamer) on the best bot in the pool
-async def _db_client(fetch):
-    index = select_best_client(0)
-    streamer = _get_streamer(multi_clients[index], index)
-    return index, streamer, await fetch(streamer)
+#----- Run fetch(streamer) on the best bot in the pool; a bot with a dead connection is skipped
+#----- (and reconnected in the background) so the viewer still gets their stream.
+async def _db_client(fetch, attempts: int = 3):
+    tried: set = set()
+    last_error = None
+    for _ in range(max(1, min(attempts, len(multi_clients)))):
+        index = select_best_client(0, exclude=tried)
+        tried.add(index)
+        client = multi_clients[index]
+        streamer = _get_streamer(client, index)
+        try:
+            return index, streamer, await fetch(streamer)
+        except OSError as e:
+            last_error = e
+            client_failures[index] = client_failures.get(index, 0) + 1
+            client_health.schedule_heal(index, client)
+            LOGGER.warning(f"Bot {index} connection error ({e}); trying another bot")
+    raise last_error
 
 
 #----- Resolve a stream title from the TTL cache, DB, or the decoded URL name
@@ -346,6 +361,8 @@ async def media_streamer(request: Request, chat_id: int, msg_id: int, token: str
                 return (ec_idx, ec_streamer, ec_fid)
             except Exception as e:
                 LOGGER.warning("Extra client %s file_id fetch failed: %s", ec_idx, e)
+                if isinstance(e, OSError):
+                    client_health.schedule_heal(ec_idx, ec_client)
                 return None
 
         results = await asyncio.gather(*[_get_extra_file_id(i) for i in other_indices[:parallelism - 1]])
