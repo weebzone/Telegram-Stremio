@@ -28,7 +28,7 @@ AUTO_CATALOG_DEFINITIONS = [
     {"key": "korean", "name": "Korean", "group": "Language"},
 
     {"key": "top_rated", "name": "Top Rated", "group": "Smart"},
-    {"key": "recently_added", "name": "Recently Added", "group": "Smart"},
+    {"key": "latest_releases", "name": "Latest Releases", "group": "Smart"},
 
     {"key": "netflix", "name": "Netflix", "group": "OTT"},
     {"key": "prime_video", "name": "Prime Video", "group": "OTT"},
@@ -116,7 +116,8 @@ def _doc_item(doc: dict) -> dict:
     }
 
 
-RECENT = "Recently Added"
+RECENT = "Latest Releases"
+_LEGACY_RECENT = "Recently Added"
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
@@ -133,6 +134,10 @@ def release_date(doc: dict, details: Optional[dict] = None) -> Optional[str]:
                   details.get("first_air_date"), doc.get("release_date")]
     known = next((d for d in candidates if d and str(d) <= today), None)
     return known or (f"{doc['release_year']}-01-01" if doc.get("release_year") else None)
+
+
+def _stored_tags(doc: dict) -> List[str]:
+    return [RECENT if tag == _LEGACY_RECENT else tag for tag in (doc.get("auto_tags") or [])]
 
 
 def _catalog_item(doc: dict, tag: str) -> dict:
@@ -179,20 +184,40 @@ def _is_already_synced(doc: dict) -> bool:
 
     if not synced_at:
         return False
-    if RECENT in (doc.get("auto_tags") or []) and not doc.get("release_date"):
+    if RECENT in _stored_tags(doc) and not doc.get("release_date"):
         return False
     if doc_updated_on and source_updated_on and doc_updated_on != source_updated_on:
         return False
     return True
 
 
+async def _settings_state(db) -> dict:
+    col = db.dbs["tracking"]["state"]
+    state = await col.find_one({"_id": "auto_catalog_settings"}) or {}
+    if state.get("latest_releases_default"):
+        return state
+    keys = {"latest_releases" if k == "recently_added" else k for k in (state.get("enabled_keys") or [])}
+    keys.add("latest_releases")
+    state = {**state, "enabled_keys": sorted(keys), "latest_releases_default": True}
+    await col.update_one(
+        {"_id": "auto_catalog_settings"},
+        {"$set": {"enabled_keys": state["enabled_keys"], "latest_releases_default": True}},
+        upsert=True,
+    )
+    await db.dbs["tracking"]["custom_catalogs"].update_one(
+        {"auto_key": "auto_recently_added"},
+        {"$set": {"auto_key": "auto_latest_releases", "name": RECENT}},
+    )
+    return state
+
+
 async def has_auto_catalog_settings(db) -> bool:
-    state = await db.dbs["tracking"]["state"].find_one({"_id": "auto_catalog_settings"})
-    return bool(state and isinstance(state.get("enabled_keys"), list))
+    state = await _settings_state(db)
+    return isinstance(state.get("enabled_keys"), list)
 
 
 async def get_auto_catalog_settings(db) -> dict:
-    state = await db.dbs["tracking"]["state"].find_one({"_id": "auto_catalog_settings"}) or {}
+    state = await _settings_state(db)
     configured = isinstance(state.get("enabled_keys"), list)
 
     enabled_keys = state.get("enabled_keys") if configured else []
@@ -438,7 +463,7 @@ async def _classify_one(db, client: httpx.AsyncClient, semaphore: asyncio.Semaph
             return doc, classification
         except Exception as e:
             LOGGER.warning(f"Auto catalog classification failed for {doc.get('title')} ({doc.get('tmdb_id')}): {e}")
-            return doc, {"auto_tags": doc.get("auto_tags", []) or []}
+            return doc, {"auto_tags": _stored_tags(doc)}
 
 
 async def sync_single_media(db, *, tmdb_id, media_type: str) -> dict:
@@ -669,7 +694,7 @@ async def run_auto_catalog_sync(db, *, force: bool = False, force_refresh: bool 
         if not tmdb_api_key():
             LOGGER.warning(
                 "Auto catalog: no TMDB API key configured — only 'Top Rated' and "
-                "'Recently Added' will populate; language & OTT catalogs need a TMDB key."
+                "'Latest Releases' will populate; language & OTT catalogs need a TMDB key."
             )
 
         #----- Group a title's stored/fresh tags into the catalogs it belongs to
@@ -696,7 +721,7 @@ async def run_auto_catalog_sync(db, *, force: bool = False, force_refresh: bool 
                     #----- Already-tagged titles skip TMDB; reuse their stored tags
                     if already_synced:
                         skipped += 1
-                        collect(doc, doc.get("auto_tags") or [])
+                        collect(doc, _stored_tags(doc))
                         continue
 
                     classified += 1

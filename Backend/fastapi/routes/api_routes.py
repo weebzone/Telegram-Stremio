@@ -1648,9 +1648,9 @@ async def update_auto_catalog_settings_api(payload: dict):
 
 
 _DEFAULT_CATALOG_ENTRIES = [
-    {"id": "latest_movies", "name": "Latest Movies", "group": "Default Movies", "type": "movie"},
+    {"id": "latest_movies", "name": "Recently Added Movies", "group": "Default Movies", "type": "movie"},
     {"id": "top_movies", "name": "Popular Movies", "group": "Default Movies", "type": "movie"},
-    {"id": "latest_series", "name": "Latest Series", "group": "Default TV", "type": "series"},
+    {"id": "latest_series", "name": "Recently Added Series", "group": "Default TV", "type": "series"},
     {"id": "top_series", "name": "Popular Series", "group": "Default TV", "type": "series"},
 ]
 

@@ -665,7 +665,7 @@ async def get_manifest(token: str, token_data: dict = Depends(verify_token)):
             {
                 "type": "movie",
                 "id": "latest_movies",
-                "name": "Latest",
+                "name": "Recently Added",
                 "extra": [
                     {"name": "genre", "isRequired": False, "options": GENRES},
                     {"name": "skip"}
@@ -686,7 +686,7 @@ async def get_manifest(token: str, token_data: dict = Depends(verify_token)):
             {
                 "type": "series",
                 "id": "latest_series",
-                "name": "Latest",
+                "name": "Recently Added",
                 "extra": [
                     {"name": "genre", "isRequired": False, "options": GENRES},
                     {"name": "skip"}
@@ -912,6 +912,8 @@ async def build_nuvio_collection_data(token: str, collection_type: str = "full",
     kdrama_series = get_cat_id("k-drama", "auto_kdrama", "series", strict=True) or get_cat_id("korean", "auto_korean", "series", strict=True)
     anime_movie = get_cat_id("anime", "auto_anime", "movie", strict=True)
     anime_series = get_cat_id("anime", "auto_anime", "series", strict=True)
+    latest_releases_movie = get_cat_id("latest releases", "auto_latest_releases", "movie", strict=True)
+    latest_releases_series = get_cat_id("latest releases", "auto_latest_releases", "series", strict=True)
 
     # =========================================================================
     # 01 ✦ DISCOVER COLLECTION (TMDB Global Trends + Local Addon Fallback)
@@ -948,6 +950,25 @@ async def build_nuvio_collection_data(token: str, collection_type: str = "full",
                 "focusGifEnabled": False
             },
             {
+                "id": "folder-discover-latest-releases",
+                "title": "Latest Releases",
+                "sources": [
+                    {"type": "movie", "addonId": addon_id, "provider": "addon", "catalogId": latest_releases_movie},
+                    {"type": "series", "addonId": addon_id, "provider": "addon", "catalogId": latest_releases_series}
+                ],
+                "hideTitle": False,
+                "tileShape": "landscape",
+                "focusGifUrl": "",
+                "titleLogoUrl": f"{K_IMG}/Discover/Premieres/logo.webp",
+                "coverImageUrl": f"{K_IMG}/Discover/Premieres/cover.webp",
+                "heroBackdropUrl": f"{K_IMG}/Discover/Premieres/backdrop.webp",
+                "catalogSources": [
+                    {"type": "movie", "addonId": addon_id, "catalogId": latest_releases_movie},
+                    {"type": "series", "addonId": addon_id, "catalogId": latest_releases_series}
+                ],
+                "focusGifEnabled": False
+            },
+            {
                 "id": "folder-discover-popular",
                 "title": "Popular Hits",
                 "sources": [
@@ -970,7 +991,7 @@ async def build_nuvio_collection_data(token: str, collection_type: str = "full",
             },
             {
                 "id": "folder-discover-latest",
-                "title": "Latest Releases",
+                "title": "Recently Added",
                 "sources": [
                     {"type": "movie", "addonId": addon_id, "provider": "addon", "catalogId": "latest_movies"},
                     {"type": "series", "addonId": addon_id, "provider": "addon", "catalogId": "latest_series"},
@@ -1002,9 +1023,9 @@ async def build_nuvio_collection_data(token: str, collection_type: str = "full",
                 "hideTitle": False,
                 "tileShape": "landscape",
                 "focusGifUrl": "",
-                "titleLogoUrl": f"{K_IMG}/Discover/Premieres/logo.webp",
-                "coverImageUrl": f"{K_IMG}/Discover/Premieres/cover.webp",
-                "heroBackdropUrl": f"{K_IMG}/Discover/Premieres/backdrop.webp",
+                "titleLogoUrl": f"{NUVIO_CDN}/RecentlyAdded_logo.webp",
+                "coverImageUrl": f"{NUVIO_CDN}/RecentlyAdded_cover.webp",
+                "heroBackdropUrl": f"{NUVIO_CDN}/RecentlyAdded_backdrop.webp",
                 "catalogSources": [
                     {"type": "movie", "addonId": addon_id, "catalogId": "latest_movies"},
                     {"type": "series", "addonId": addon_id, "catalogId": "latest_series"}
@@ -2342,9 +2363,9 @@ async def configure_addon(token: str, request: Request):
 #----- Catalogs this token can see, in effective (token or global) order
 async def _addon_catalogs_for_token(token_data: dict) -> list:
     entries = [
-        {"id": "latest_movies", "name": "Latest Movies", "type": "movie"},
+        {"id": "latest_movies", "name": "Recently Added Movies", "type": "movie"},
         {"id": "top_movies", "name": "Popular Movies", "type": "movie"},
-        {"id": "latest_series", "name": "Latest Series", "type": "series"},
+        {"id": "latest_series", "name": "Recently Added Series", "type": "series"},
         {"id": "top_series", "name": "Popular Series", "type": "series"},
         {"id": "trending_movies", "name": "Trending Movies", "type": "movie"},
         {"id": "trending_series", "name": "Trending Series", "type": "series"},
