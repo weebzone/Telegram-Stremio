@@ -589,13 +589,22 @@ class Database:
         return str(result.inserted_id)
 
     #----- slim=True keeps only distinct (media_type, visibility, allowed_tokens) per item
-    async def get_custom_catalogs(self, visible_only: bool = False, slim: bool = False) -> List[dict]:
+    async def get_custom_catalogs(self, visible_only: bool = False, slim: bool = False, item_fields: Optional[tuple] = None) -> List[dict]:
         pipeline = [{"$match": {"visible": True} if visible_only else {}}, {"$sort": {"updated_at": DESCENDING}}]
         if slim:
             pipeline.append({"$addFields": {"items": {"$setUnion": [{"$map": {
                 "input": {"$ifNull": ["$items", []]},
                 "in": {"media_type": "$$this.media_type", "visibility": "$$this.visibility", "allowed_tokens": "$$this.allowed_tokens"},
             }}]}}})
+        if item_fields is not None:
+            pipeline.append({"$addFields": {"item_count": {"$size": {"$ifNull": ["$items", []]}}}})
+            if item_fields:
+                pipeline.append({"$addFields": {"items": {"$map": {
+                    "input": {"$ifNull": ["$items", []]},
+                    "in": {f: f"$$this.{f}" for f in item_fields},
+                }}}})
+            else:
+                pipeline.append({"$project": {"items": 0}})
         catalogs = await self.dbs["tracking"]["custom_catalogs"].aggregate(pipeline).to_list(None)
         return [self._normalize_catalog(convert_objectid_to_str(catalog)) for catalog in catalogs]
 

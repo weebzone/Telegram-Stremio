@@ -733,7 +733,7 @@ function getSelectedCatalog() {
 function updateStats() {
   const total = catalogs.length;
   const visible = catalogs.filter(c => (c.visibility || 'public') !== 'owner').length;
-  const items = catalogs.reduce((sum, c) => sum + ((c.items || []).length), 0);
+  const items = catalogs.reduce((sum, c) => sum + (c.item_count || 0), 0);
   document.getElementById('stat-total').textContent = total;
   document.getElementById('stat-visible').textContent = visible;
   document.getElementById('stat-items').textContent = items;
@@ -798,7 +798,7 @@ function renderCatalogs() {
 
   box.innerHTML = catalogs.map(c => {
     const isActive = c._id === selectedCatalogId;
-    const count = (c.items || []).length;
+    const count = c.item_count || 0;
     const mode = c.visibility || 'public';
     const meta = VIS_META[mode] || VIS_META.public;
     return `<div class="catalog-card p-4 ${isActive ? 'active' : ''}">
@@ -859,7 +859,7 @@ function updateSelectedHeader() {
   const meta = VIS_META[mode] || VIS_META.public;
   visibilityPill.className = `pill vis-chip ${meta.chip}`;
   visibilityPill.textContent = `${meta.icon} ${visibilityLabel(mode)}`;
-  countPill.textContent = `${(catalog.items || []).length} title${(catalog.items || []).length === 1 ? '' : 's'}`;
+  countPill.textContent = `${catalog.item_count || 0} title${catalog.item_count === 1 ? '' : 's'}`;
   document.getElementById('selected-title').textContent = catalog.name || 'Selected Catalog';
   document.getElementById('selected-subtitle').textContent = 'Manage titles and choose who can see this catalog in Stremio.';
 

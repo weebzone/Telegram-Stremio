@@ -1410,8 +1410,9 @@ async def list_custom_catalogs_api(
     media_type: str | None = None,
 ):
     try:
-        catalogs = await db.get_custom_catalogs()
-        if tmdb_id is not None and db_index is not None and media_type:
+        check_current = tmdb_id is not None and db_index is not None and bool(media_type)
+        catalogs = await db.get_custom_catalogs(item_fields=("tmdb_id", "db_index", "media_type") if check_current else ())
+        if check_current:
             normalized_type = _normalize_media_type(media_type)
             for catalog in catalogs:
                 catalog["contains_current"] = any(
@@ -1420,6 +1421,8 @@ async def list_custom_catalogs_api(
                     and item.get("media_type") == normalized_type
                     for item in catalog.get("items", []) or []
                 )
+        for catalog in catalogs:
+            catalog.pop("items", None)
         return {"catalogs": catalogs}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

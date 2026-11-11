@@ -47,7 +47,7 @@ async def _cleanup_stale_streams():
                         entry["end_ts"] = now
                         RECENT_STREAMS.appendleft(entry)
                         idx = entry.get("client_index")
-                        if idx is not None and idx in work_loads:
+                        if entry.pop("load_held", False) and idx in work_loads:
                             work_loads[idx] = max(0, work_loads[idx] - 1)
                 except Exception:
                     pass
@@ -164,6 +164,7 @@ class ByteStreamer:
             "part_count": part_count,
             "prefetch": prefetch,
             "meta": meta or {},
+            "load_held": True,
         }
 
         ACTIVE_STREAMS[stream_id] = registry_entry
@@ -484,10 +485,8 @@ class ByteStreamer:
 
                     asyncio.create_task(delayed_pop())
                 finally:
-                    try:
-                        work_loads[client_index] -= 1
-                    except Exception:
-                        pass
+                    if stream_entry.pop("load_held", False):
+                        work_loads[client_index] = max(0, work_loads.get(client_index, 0) - 1)
 
                 stop_event.set()
 
@@ -619,7 +618,6 @@ async def _speed_test_single_client(
                     chunk = getattr(r, "bytes", None)
                     if not chunk:
                         eof_reached = True
-                        queue.task_done()
                         continue
                     bytes_got = len(chunk)
                     total_bytes += bytes_got
