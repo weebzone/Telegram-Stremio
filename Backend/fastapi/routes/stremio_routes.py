@@ -877,8 +877,8 @@ async def build_nuvio_collection_data(token: str, collection_type: str = "full",
     zee5_series = get_cat_id("zee", "auto_zee5", "series", strict=True)
     crunchyroll_movie = get_cat_id("crunchyroll", "auto_crunchyroll", "movie", strict=True)
     crunchyroll_series = get_cat_id("crunchyroll", "auto_crunchyroll", "series", strict=True)
-    bollywood_movie = get_cat_id("bollywood", "auto_bollywood", "movie", fallback="latest_movies", strict=False)
-    bollywood_series = get_cat_id("bollywood", "auto_bollywood", "series", fallback="latest_series", strict=False)
+    bollywood_movie = get_cat_id("bollywood", "auto_bollywood", "movie", strict=True)
+    bollywood_series = get_cat_id("bollywood", "auto_bollywood", "series", strict=True)
     south_indian_movie = get_cat_id("south indian", "auto_south_indian", "movie", strict=True)
     south_indian_series = get_cat_id("south indian", "auto_south_indian", "series", strict=True)
     kdrama_movie = get_cat_id("korean", "auto_korean", "movie", strict=True)
@@ -982,24 +982,6 @@ async def build_nuvio_collection_data(token: str, collection_type: str = "full",
                     {"type": "movie", "addonId": addon_id, "catalogId": "latest_movies"},
                     {"type": "series", "addonId": addon_id, "catalogId": "latest_series"}
                 ],
-                "focusGifEnabled": False
-            },
-            {
-                "id": "folder-discover-toprated",
-                "title": "Top Rated All-Time",
-                "sources": [
-                    {"title": "IMDb: Top Rated Movies", "sortBy": "rank", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 2142753},
-                    {"title": "IMDb: Top Rated TV Shows", "sortBy": "rank", "sortHow": "asc", "provider": "trakt", "mediaType": "TV", "traktListId": 2143363},
-                    {"type": "movie", "addonId": addon_id, "provider": "addon", "catalogId": "top_movies"},
-                    {"type": "series", "addonId": addon_id, "provider": "addon", "catalogId": "top_series"}
-                ],
-                "hideTitle": False,
-                "tileShape": "landscape",
-                "focusGifUrl": "",
-                "titleLogoUrl": f"{K_IMG}/Discover/Top%20Rated/logo.webp",
-                "coverImageUrl": f"{K_IMG}/Discover/Top%20Rated/cover.webp",
-                "heroBackdropUrl": f"{K_IMG}/Discover/Top%20Rated/backdrop.webp",
-                "catalogSources": [],
                 "focusGifEnabled": False
             }
         ],
@@ -1513,33 +1495,34 @@ async def build_nuvio_collection_data(token: str, collection_type: str = "full",
     }
 
     # Sanitize all collections to guarantee Nuvio never encounters a null catalogId:
-    def _sanitize_collection(coll: dict, auto_hide_empty: bool = False) -> dict:
+    def _sanitize_collection(coll: dict) -> dict:
         cleaned_folders = []
         for f in coll.get("folders") or []:
             sources = [
                 s for s in (f.get("sources") or [])
-                if s.get("provider") != "addon" or s.get("catalogId")
+                if s.get("provider") == "addon" and s.get("catalogId")
             ]
-            catalog_sources = [
-                cs for cs in (f.get("catalogSources") or [])
-                if cs.get("catalogId")
-            ]
-            if auto_hide_empty and not sources:
+            if not sources:
                 continue
             folder_copy = dict(f)
             folder_copy["sources"] = sources
-            folder_copy["catalogSources"] = catalog_sources
+            folder_copy["catalogSources"] = [
+                cs for cs in (f.get("catalogSources") or [])
+                if cs.get("catalogId")
+            ]
             cleaned_folders.append(folder_copy)
         coll_copy = dict(coll)
         coll_copy["folders"] = cleaned_folders
         return coll_copy
 
-    discover_collection = _sanitize_collection(discover_collection)
-    ott_collection = _sanitize_collection(ott_collection, auto_hide_empty=True)
-    franchises_collection = _sanitize_collection(franchises_collection)
-    spotlight_collection = _sanitize_collection(spotlight_collection)
-
-    return [discover_collection, ott_collection, franchises_collection, spotlight_collection]
+    by_type = {
+        "discover": [discover_collection],
+        "ott": [ott_collection],
+        "franchises": [franchises_collection],
+        "spotlight": [spotlight_collection],
+    }
+    collections = by_type.get(collection_type, [discover_collection, ott_collection, franchises_collection, spotlight_collection])
+    return [c for c in map(_sanitize_collection, collections) if c["folders"]]
 
 
 #----- Dynamic Nuvio Collection JSON for this token

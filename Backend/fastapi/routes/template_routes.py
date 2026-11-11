@@ -1,3 +1,4 @@
+import secrets
 import time
 
 from fastapi import Depends, Form, HTTPException, Request
@@ -6,7 +7,7 @@ from fastapi.templating import Jinja2Templates
 
 from Backend import StartTime, __version__, db
 from Backend.config import Telegram
-from Backend.fastapi.security.credentials import get_current_user, is_authenticated, require_auth, verify_credentials
+from Backend.fastapi.security.credentials import get_current_user, is_authenticated, require_auth, revoke_session, verify_credentials
 from Backend.fastapi.themes import DEFAULT_THEME, DEFAULT_STYLE, get_all_themes, get_all_styles, get_theme
 from Backend.helper.analytics import get_activity_overview
 from Backend.helper.custom_dl import ACTIVE_STREAMS, RECENT_STREAMS
@@ -54,6 +55,7 @@ async def login_post(request: Request, username: str = Form(...), password: str 
     if verify_credentials(username, password):
         request.session["authenticated"] = True
         request.session["username"] = username
+        request.session["sid"] = secrets.token_urlsafe(16)
         return RedirectResponse(url="/", status_code=302)
     ctx = _base_context(request)
     ctx["error"] = "Invalid credentials"
@@ -62,7 +64,7 @@ async def login_post(request: Request, username: str = Form(...), password: str 
 
 #----- Clear the session and return to login
 async def logout(request: Request):
-    request.session.clear()
+    revoke_session(request)
     return RedirectResponse(url="/login", status_code=302)
 
 
