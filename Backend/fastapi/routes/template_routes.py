@@ -9,7 +9,8 @@ from Backend import StartTime, __version__, db
 from Backend.config import Telegram
 from Backend.fastapi.security.credentials import get_current_user, is_authenticated, require_auth, revoke_session, verify_credentials
 from Backend.fastapi.themes import DEFAULT_THEME, DEFAULT_STYLE, get_all_themes, get_all_styles, get_theme
-from Backend.helper.analytics import get_activity_overview
+from Backend.helper.analytics import client_ip_from, get_activity_overview
+from Backend.helper.bounded import BoundedDict
 from Backend.helper.custom_dl import ACTIVE_STREAMS, RECENT_STREAMS
 from Backend.helper.metadata import resolve_cover_url
 from Backend.helper.pyro import get_readable_time
@@ -51,12 +52,26 @@ async def login_page(request: Request):
 
 
 #----- Handle login submission
+_FAILED_LOGINS = BoundedDict(1000)
+_LOGIN_MAX_FAILS = 5
+_LOGIN_WINDOW = 15 * 60
+
+
 async def login_post(request: Request, username: str = Form(...), password: str = Form(...)):
+    ip = client_ip_from(request)
+    now = time.time()
+    fails = [t for t in _FAILED_LOGINS.get(ip, []) if now - t < _LOGIN_WINDOW]
+    if len(fails) >= _LOGIN_MAX_FAILS:
+        ctx = _base_context(request)
+        ctx["error"] = "Too many failed attempts. Try again in 15 minutes."
+        return templates.TemplateResponse("login.html", ctx, status_code=429)
     if verify_credentials(username, password):
+        _FAILED_LOGINS.pop(ip, None)
         request.session["authenticated"] = True
         request.session["username"] = username
         request.session["sid"] = secrets.token_urlsafe(16)
         return RedirectResponse(url="/", status_code=302)
+    _FAILED_LOGINS[ip] = fails + [now]
     ctx = _base_context(request)
     ctx["error"] = "Invalid credentials"
     return templates.TemplateResponse("login.html", ctx)

@@ -1026,6 +1026,7 @@ class Database:
         raw_items = catalog.get("items", []) or []
         if db_media_type:
             raw_items = [item for item in raw_items if item.get("media_type") == db_media_type]
+        raw_items = sorted(raw_items, key=lambda i: str(i.get("release_date") or ""), reverse=True)
 
         total_count = len(raw_items)
         skip = (page - 1) * page_size
@@ -2504,7 +2505,7 @@ class Database:
             #----- Direct update in the telegram array for movies
             result = await self.dbs[db_key]["movie"].update_one(
                 {"tmdb_id": tmdb_id, "telegram.id": quality_id},
-                {"$set": {"telegram.$.is_dead": True, "updated_on": datetime.utcnow()}}
+                {"$set": {"telegram.$.is_dead": True}}
             )
             return result.modified_count > 0
             
@@ -2527,7 +2528,6 @@ class Database:
                 if found: break
                 
             if found:
-                tv["updated_on"] = datetime.utcnow()
                 result = await self.dbs[db_key]["tv"].replace_one({"tmdb_id": tmdb_id}, tv)
                 return result.modified_count > 0
                 
