@@ -38,8 +38,6 @@ async def start_services():
         await asyncio.sleep(0.5)
 
         await scan_manager.load(db)
-        from Backend.helper.auto_catalog import get_auto_catalog_settings
-        await get_auto_catalog_settings(db)
         dbcheck_manager.bind_db(db)
         duplicate_manager.bind_db(db)
         await asyncio.sleep(0.3)
