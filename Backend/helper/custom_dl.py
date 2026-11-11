@@ -106,7 +106,7 @@ class ByteStreamer:
                         await asyncio.sleep(1)
                     except Exception:
                         break
-                if imported:
+                if imported and dc not in self.client.media_sessions:
                     self.client.media_sessions[dc] = session
                 else:
                     await session.stop()
@@ -249,7 +249,6 @@ class ByteStreamer:
                         tries += 1
                         backoff = min(0.5 * (2 ** (tries - 1)), 10.0)
                         await asyncio.sleep(backoff)
-            c_idx = session_pool[(seq_idx + tries) % len(session_pool)][0]
             return seq_idx, None
 
         async def producer():
