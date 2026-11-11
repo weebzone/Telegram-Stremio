@@ -66,6 +66,8 @@ async def start_services():
 
         LOGGER.info("Initializing Multi Clients...")
         await initialize_clients()
+        from Backend.fastapi.routes.stream_routes import warm_streamers
+        warm_streamers()
         await asyncio.sleep(2)
 
         await setup_bot_commands(StreamBot)

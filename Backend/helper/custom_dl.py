@@ -84,17 +84,17 @@ class ByteStreamer:
         test_mode = await self.client.storage.test_mode()
         current_dc = await self.client.storage.dc_id()
         for dc in common_dcs:
-            if dc in self.client.media_sessions or dc == current_dc:
+            if dc in self.client.media_sessions:
                 continue
             try:
-                auth_key = await Auth(self.client, dc, test_mode).create()
+                auth_key = await self.client.storage.auth_key() if dc == current_dc else await Auth(self.client, dc, test_mode).create()
                 session = Session(self.client, dc, auth_key, test_mode, is_media=True)
                 session.no_updates = True
                 session.timeout = 30
                 session.sleep_threshold = 60
                 await session.start()
-                imported = False
-                for _ in range(6):
+                imported = dc == current_dc
+                for _ in range(0 if imported else 6):
                     try:
                         exported = await self.client.invoke(raw.functions.auth.ExportAuthorization(dc_id=dc))
                         await session.send(raw.functions.auth.ImportAuthorization(id=exported.id,bytes=exported.bytes,))
@@ -207,12 +207,10 @@ class ByteStreamer:
                     LOGGER.warning("Skipping extra client %s (session setup failed): %s", ec_idx, e)
 
         async def fetch_chunk_with_retries(seq_idx: int, off: int) -> Tuple[int, Optional[bytes]]:
-            slot = seq_idx % len(session_pool)
-            c_idx, c_session, c_loc_box, c_refresh = session_pool[slot]
-
             tries = 0
             flood_tries = 0
             while tries < 3 and flood_tries < 5 and not stop_event.is_set():
+                c_idx, c_session, c_loc_box, c_refresh = session_pool[(seq_idx + tries) % len(session_pool)]
                 try:
                     r = await asyncio.wait_for(
                         c_session.send(
@@ -251,6 +249,7 @@ class ByteStreamer:
                         tries += 1
                         backoff = min(0.5 * (2 ** (tries - 1)), 10.0)
                         await asyncio.sleep(backoff)
+            c_idx = session_pool[(seq_idx + tries) % len(session_pool)][0]
             return seq_idx, None
 
         async def producer():
