@@ -765,6 +765,15 @@ async def admin_backup_export(_: bool = Depends(require_auth)):
         headers={"Content-Disposition": 'attachment; filename="telegram-stremio-backup.json"'},
     )
 
+@app.get("/api/admin/backup/library")
+async def admin_backup_library(_: bool = Depends(require_auth)):
+    from fastapi.responses import StreamingResponse
+    from Backend.helper.backup import export_library
+    return StreamingResponse(
+        export_library(), media_type="application/gzip",
+        headers={"Content-Disposition": 'attachment; filename="telestremio-catalog.json.gz"'},
+    )
+
 @app.post("/api/admin/backup/import")
 async def admin_backup_import(payload: dict, _: bool = Depends(require_auth)):
     return await import_config_api(payload)
