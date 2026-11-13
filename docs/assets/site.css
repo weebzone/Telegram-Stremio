@@ -314,3 +314,6 @@ footer a { text-decoration: none; } footer a:hover { color: var(--fg); }
 .deploy-btns { display: flex; flex-wrap: wrap; gap: 10px; margin: 14px 0; }
 .deploy-btns img { height: 32px; width: auto; }
 .feature code { font-size: .88em; padding: 1px 5px; border-radius: 5px; background: var(--surface-2); }
+.tour { margin: 32px 0 8px; }
+.tour .window { transform: none; }
+.tour video { display: block; width: 100%; height: auto; aspect-ratio: 1280 / 800; background: #0e0e0d; }

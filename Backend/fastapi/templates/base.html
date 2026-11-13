@@ -782,7 +782,7 @@ document.getElementById('theme-cycle')?.addEventListener('click', () => {
 
     const input = document.getElementById('cmdk-input');
     const list = document.getElementById('cmdk-list');
-    let items = [], sel = 0, media = [], seq = 0, timer;
+    let items = [], sel = 0, media = [], seq = 0, timer, searching = false;
 
     function actions(q) {
         const m = s => s.toLowerCase().includes(q);
@@ -802,6 +802,7 @@ document.getElementById('theme-cycle')?.addEventListener('click', () => {
         const q = input.value.trim().toLowerCase();
         items = actions(q);
         sel = Math.min(sel, Math.max(items.length - 1, 0));
+        if (searching && q.length > 1) items.unshift({ group: 'Titles', label: 'Searching titles…', icon: 'fa-solid fa-circle-notch fa-spin', run: () => {} });
         if (!items.length) { list.innerHTML = `<div class="cmdk-empty">${q.length > 1 ? 'Nothing matches “' + escapeHtml(input.value) + '”' : 'Type to search'}</div>`; return; }
         let last = '';
         list.innerHTML = items.map((it, i) => {
@@ -816,15 +817,20 @@ document.getElementById('theme-cycle')?.addEventListener('click', () => {
     function searchMedia() {
         clearTimeout(timer);
         const q = input.value.trim();
-        if (q.length < 2) { media = []; render(); return; }
         const id = ++seq;
+        if (q.length < 2) { media = []; searching = false; render(); return; }
+        searching = true;
         timer = setTimeout(async () => {
             try {
                 const res = await Promise.all(['movie', 'tv'].map(t => fetch(`/api/media/list?media_type=${t}&page_size=5&search=${encodeURIComponent(q)}`).then(r => r.ok ? r.json() : {})));
                 if (id !== seq) return;
                 media = [...(res[0].movies || []).map(x => ({ ...x, media_type: 'movie' })), ...(res[1].tv_shows || []).map(x => ({ ...x, media_type: 'tv' }))].slice(0, 8);
-                render();
-            } catch (e) {}
+            } catch (e) {
+                if (id !== seq) return;
+                media = [];
+            }
+            searching = false;
+            render();
         }, 180);
     }
 
@@ -835,9 +841,9 @@ document.getElementById('theme-cycle')?.addEventListener('click', () => {
         cmdk.showModal();
         input.focus();
     }
-    function run(i) { const it = items[i]; if (!it) return; cmdk.close(); it.run(); }
+    function run(i) { const it = items[i]; if (!it || it.label === 'Searching titles…') return; cmdk.close(); it.run(); }
 
-    input.addEventListener('input', () => { sel = 0; render(); searchMedia(); });
+    input.addEventListener('input', () => { sel = 0; searchMedia(); render(); });
     input.addEventListener('keydown', e => {
         if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
             e.preventDefault();

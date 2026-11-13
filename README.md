@@ -80,6 +80,11 @@ Manage everything from a web panel built on the TeleStremio app design: three th
 </p>
 
 <p align="center">
+  <a href="https://weebzone.github.io/Telegram-Stremio/media/demo.mp4"><img src="docs/media/demo.gif" width="100%" alt="60-second tour of the web panel" /></a>
+  <br /><sub>60-second tour of the web panel. <a href="https://weebzone.github.io/Telegram-Stremio/media/demo.mp4">Watch it as a video</a>.</sub>
+</p>
+
+<p align="center">
   <img src="docs/shots/ink-home.webp" width="49%" alt="Home" />
   <img src="docs/shots/paper-media.webp" width="49%" alt="Media library" />
 </p>
