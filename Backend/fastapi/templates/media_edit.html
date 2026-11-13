@@ -1,49 +1,23 @@
 {% extends "base.html" %}
 
-{% block title %}Edit {{ media_type|title }} - Fyvio Backend{% endblock %}
+{% block title %}{{ media_details.title if media_details else "Edit" }} - Telegram Stremio{% endblock %}
 
 {% block content %}
 <style>
-  .glass-card {
-    background: color-mix(in srgb, var(--card) 94%, var(--bg));
-    border: 1px solid color-mix(in srgb, var(--border) 95%, transparent);
-    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.22);
-  }
 
-  .glass-card-soft {
-    background: color-mix(in srgb, var(--card) 86%, var(--bg));
-    border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
-  }
+  .glass-card { background: var(--card); border: 1px solid var(--border); }
 
-  .section-title {
-    color: var(--text);
-    font-weight: 800;
-    letter-spacing: -0.02em;
-  }
+  .glass-card-soft { background: var(--bg); border: 1px solid var(--border); }
+
+  .section-title { color: var(--text); font-weight: 600; letter-spacing: -0.015em; }
 
   .muted {
     color: var(--text-sec);
   }
 
-  .field-label {
-    display: block;
-    font-size: 0.875rem;
-    font-weight: 700;
-    margin-bottom: 0.5rem;
-    color: var(--text);
-  }
+  .field-label { display: block; font-size: .72rem; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; margin-bottom: .45rem; color: var(--text-sec); }
 
-  .field-input, .field-textarea {
-    width: 100%;
-    border-radius: 1rem;
-    border: 1px solid color-mix(in srgb, var(--border) 95%, transparent);
-    background: color-mix(in srgb, var(--bg) 76%, transparent);
-    color: var(--text);
-    padding: 0.9rem 1rem;
-    outline: none;
-    transition: all 0.2s ease;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
-  }
+  .field-input, .field-textarea { width: 100%; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg); color: var(--text); padding: .75rem 1rem; outline: none; transition: border-color .18s var(--ease), box-shadow .18s var(--ease); }
 
   [data-sub-row] .sub-url { min-width: 0; }
   @media (min-width: 640px) {
@@ -55,111 +29,64 @@
     color: color-mix(in srgb, var(--text-sec) 85%, transparent);
   }
 
-  .field-input:focus, .field-textarea:focus {
-    border-color: var(--primary);
-    box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 18%, transparent);
+  .field-input:focus, .field-textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--ring); }
+
+  .hero-wrap { position: relative; overflow: hidden; isolation: isolate; background: #0e0e0d; color: #f3f1ec; min-height: 280px; }
+  .hero-backdrop { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 25%; opacity: .7; }
+  .hero-gradient { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(14,14,13,.94) 0%, rgba(14,14,13,.72) 42%, rgba(14,14,13,.2) 100%), linear-gradient(0deg, rgba(14,14,13,.9) 0%, transparent 55%); }
+  .hero-body { position: relative; z-index: 1; display: flex; align-items: flex-end; gap: 1.75rem; padding: 2rem; }
+  .hero-poster { width: 168px; aspect-ratio: 2 / 3; object-fit: cover; border-radius: 14px; flex-shrink: 0; background: #232321; box-shadow: 0 12px 32px rgba(0,0,0,.45); }
+  .hero-info { min-width: 0; flex: 1; display: flex; flex-direction: column; align-items: flex-start; gap: .9rem; }
+  .hero-logo { display: block; max-width: min(100%, 380px); max-height: 110px; object-fit: contain; object-position: left bottom; filter: drop-shadow(0 2px 10px rgba(0,0,0,.55)); animation: logo-in .4s var(--ease); }
+  @keyframes logo-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  .hero-title { font-size: clamp(1.6rem, 3.6vw, 2.4rem); font-weight: 600; line-height: 1.1; letter-spacing: -.02em; text-wrap: balance; overflow-wrap: anywhere; }
+  .hero-meta { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem .9rem; font-size: .92rem; color: rgba(243,241,236,.78); }
+  .hero-meta > span + span::before { content: "·"; margin-right: .9rem; color: rgba(243,241,236,.45); }
+  .hero-rating { color: #f5c451; font-weight: 500; }
+  .hero-rating i { font-size: .78rem; }
+  .hero-genres { display: flex; flex-wrap: wrap; gap: .4rem; }
+  .hero-chip { padding: .2rem .7rem; border-radius: 9999px; font-size: .8rem; color: #f3f1ec; background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.16); }
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+  @media (max-width: 767.98px) {
+    .hero-body { flex-direction: column; align-items: center; text-align: center; padding: 1.5rem 1.25rem; gap: 1.25rem; }
+    .hero-gradient { background: linear-gradient(0deg, rgba(14,14,13,.96) 0%, rgba(14,14,13,.7) 55%, rgba(14,14,13,.35) 100%); }
+    .hero-poster { width: 132px; }
+    .hero-info { align-items: center; }
+    .hero-logo { max-height: 80px; object-position: center; }
+    .hero-meta, .hero-genres { justify-content: center; }
   }
 
-  .hero-wrap {
-    position: relative;
-    overflow: hidden;
-    isolation: isolate;
-  }
 
-  .hero-backdrop {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    opacity: .34;
-    transform: scale(1.04);
-  }
 
-  .hero-gradient {
-    position: absolute;
-    inset: 0;
-    background:
-      linear-gradient(180deg, color-mix(in srgb, var(--bg) 10%, transparent) 0%, color-mix(in srgb, var(--bg) 52%, transparent) 60%, color-mix(in srgb, var(--bg) 96%, transparent) 100%),
-      radial-gradient(circle at top left, color-mix(in srgb, var(--primary) 18%, transparent), transparent 42%),
-      radial-gradient(circle at bottom right, color-mix(in srgb, var(--accent) 16%, transparent), transparent 38%);
-  }
+  .pill { display: inline-flex; align-items: center; gap: .35rem; padding: .25rem .7rem; border-radius: 9999px; font-size: .8rem; font-weight: 500; border: 1px solid var(--border); background: color-mix(in srgb, var(--card) 70%, transparent); color: var(--text); }
 
-  .pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    padding: 0.4rem 0.8rem;
-    border-radius: 9999px;
-    font-size: 0.82rem;
-    font-weight: 700;
-    border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
-    background: color-mix(in srgb, var(--bg) 66%, transparent);
-    color: var(--text);
-  }
+  .quality-row { background: var(--bg); border: 1px solid var(--border); }
 
-  .quality-row {
-    background: color-mix(in srgb, var(--bg) 70%, transparent);
-    border: 1px solid color-mix(in srgb, var(--border) 92%, transparent);
-  }
+  .quality-badge { border-radius: 9999px; padding: .2rem .65rem; font-size: .75rem; font-weight: 500; }
 
-  .quality-badge {
-    border-radius: 9999px;
-    padding: 0.35rem 0.8rem;
-    font-size: 0.75rem;
-    font-weight: 800;
-    letter-spacing: .02em;
-  }
+  .btn-ui { display: inline-flex; align-items: center; justify-content: center; gap: .45rem; border-radius: 9999px; padding: .6rem 1.1rem; font-size: .9rem; font-weight: 500; transition: background-color .18s var(--ease), border-color .18s var(--ease), transform .12s var(--ease), filter .18s var(--ease); border: 1px solid transparent; white-space: nowrap; }
 
-  .btn-ui {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.45rem;
-    border-radius: 1rem;
-    padding: 0.8rem 1.15rem;
-    font-size: 0.92rem;
-    font-weight: 800;
-    transition: all 0.2s ease;
-    border: 1px solid transparent;
-    white-space: nowrap;
-  }
+  .btn-ui:active { transform: scale(.97); }
 
-  .btn-ui:hover {
-    transform: translateY(-1px);
-  }
-
-  .btn-primary {
-    background: var(--primary);
-    color: white;
-    box-shadow: 0 10px 24px color-mix(in srgb, var(--primary) 26%, transparent);
-  }
+  .btn-primary { background: var(--primary); color: var(--on-primary); }
 
   .btn-primary:hover { filter: brightness(1.03); }
 
-  .btn-ghost {
-    background: color-mix(in srgb, var(--bg) 74%, transparent);
-    color: var(--text);
-    border-color: color-mix(in srgb, var(--border) 95%, transparent);
-  }
+  .btn-ghost { background: transparent; color: var(--text); border-color: var(--border); }
+  .btn-ghost:hover { background: var(--card-high); }
 
   .btn-danger {
-    background: color-mix(in srgb, rgb(239 68 68) 16%, transparent);
-    color: rgb(248 113 113);
-    border-color: color-mix(in srgb, rgb(239 68 68) 26%, transparent);
+    background: color-mix(in srgb, var(--danger) 16%, transparent);
+    color: var(--danger);
+    border-color: color-mix(in srgb, var(--danger) 26%, transparent);
   }
 
-  .btn-success {
-    background: color-mix(in srgb, rgb(34 197 94) 16%, transparent);
-    color: rgb(74 222 128);
-    border-color: color-mix(in srgb, rgb(34 197 94) 26%, transparent);
-  }
+  .btn-success { background: transparent; color: var(--text); border-color: var(--border); }
+  .btn-success i { color: var(--ok); }
+  .btn-success:hover, .btn-info:hover { background: var(--card-high); }
 
-  .btn-info {
-    background: color-mix(in srgb, rgb(59 130 246) 16%, transparent);
-    color: rgb(96 165 250);
-    border-color: color-mix(in srgb, rgb(59 130 246) 26%, transparent);
-  }
+  .btn-info { background: transparent; color: var(--text); border-color: var(--border); }
+  .btn-info i { color: var(--info); }
 
   .season-content {
     transition: max-height 0.32s ease, opacity 0.25s ease, transform 0.25s ease;
@@ -177,33 +104,67 @@
     overflow-wrap: anywhere;
   }
 
-  .match-card {
-    background: color-mix(in srgb, var(--bg) 72%, transparent);
-    border: 1px solid color-mix(in srgb, var(--border) 92%, transparent);
-    border-radius: 1.25rem;
-    padding: 1rem;
-    transition: all 0.2s ease;
+  .file-list { display: flex; flex-direction: column; gap: .5rem; }
+  .file-row { display: flex; align-items: center; gap: .85rem; padding: .7rem .75rem .7rem .85rem; border-radius: var(--radius-sm); background: var(--bg); border: 1px solid var(--border); min-width: 0; transition: border-color .15s var(--ease); }
+  .file-row:hover { border-color: var(--hairline-strong); }
+  .file-main { min-width: 0; flex: 1; }
+  .file-name { font-size: .88rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .file-sub { font-size: .78rem; color: var(--text-sec); }
+  .file-actions { display: flex; gap: .25rem; flex-shrink: 0; }
+  .q-badge { flex-shrink: 0; min-width: 3.4rem; text-align: center; padding: .2rem .5rem; border-radius: 8px; font-size: .74rem; font-weight: 600; background: var(--card-high); color: var(--text); }
+  .q-badge.q-4k { background: color-mix(in srgb, var(--primary) 16%, transparent); color: var(--primary); }
+  .q-badge.q-1080p { background: color-mix(in srgb, var(--info) 15%, transparent); color: var(--info); }
+  .icon-act { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 9999px; border: 1px solid transparent; background: transparent; color: var(--text-sec); font-size: .82rem; cursor: pointer; transition: background-color .15s var(--ease), color .15s var(--ease), transform .12s var(--ease); }
+  .icon-act:hover { background: var(--card-high); color: var(--text); }
+  .icon-act.danger:hover { background: color-mix(in srgb, var(--danger) 12%, transparent); color: var(--danger); }
+  .icon-act:active { transform: scale(.9); }
+
+  .season-tabs { display: flex; gap: .4rem; overflow-x: auto; scrollbar-width: none; margin: 0 0 1rem; padding-bottom: 2px; }
+  .season-tabs::-webkit-scrollbar { display: none; }
+  .season-tab { flex-shrink: 0; padding: .45rem .95rem; border-radius: 9999px; border: 1px solid var(--border); background: transparent; color: var(--text-sec); font-size: .86rem; cursor: pointer; white-space: nowrap; transition: all .15s var(--ease); }
+  .season-tab span { margin-left: .35rem; font-size: .76rem; opacity: .7; }
+  .season-tab:hover { color: var(--text); }
+  .season-tab[aria-selected="true"] { color: var(--primary); border-color: color-mix(in srgb, var(--primary) 50%, var(--border)); background: color-mix(in srgb, var(--primary) 10%, transparent); }
+  .season-block { animation: edit-panel-in .22s ease; }
+  .season-head { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding-bottom: .9rem; margin-bottom: .25rem; border-bottom: 1px solid var(--border); }
+
+  .ep-list { display: flex; flex-direction: column; }
+  .ep { padding: 1rem 0; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: .75rem; min-width: 0; }
+  .ep:last-child { border-bottom: 0; padding-bottom: 0; }
+  .ep-top { display: flex; gap: 1rem; min-width: 0; }
+  .ep-thumb { position: relative; flex-shrink: 0; width: 176px; aspect-ratio: 16 / 9; border-radius: 12px; overflow: hidden; background: linear-gradient(135deg, var(--card-high), var(--bg)); }
+  .ep-thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .ep-fallback { position: absolute; inset: 0; display: grid; place-items: center; font-size: 1.35rem; font-weight: 600; letter-spacing: -.02em; color: var(--text-sec); }
+  .ep-num { position: absolute; left: 6px; bottom: 6px; min-width: 22px; padding: 1px 7px; border-radius: 99px; font-size: .7rem; text-align: center; color: #fff; background: rgba(0,0,0,.72); }
+  .ep-thumb:not(:has(img)) .ep-num { display: none; }
+  .ep-info { min-width: 0; flex: 1; }
+  .ep-title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: .5rem; }
+  .ep-title { font-weight: 500; line-height: 1.3; padding-top: .15rem; overflow-wrap: anywhere; }
+  .ep-meta { font-size: .8rem; color: var(--text-sec); margin-top: .15rem; font-variant-numeric: tabular-nums; }
+  .ep-overview { font-size: .85rem; color: var(--text-sec); margin-top: .4rem; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .content-empty { text-align: center; padding: 2.5rem 1rem; color: var(--text-sec); font-size: .92rem; }
+  .content-empty i { display: grid; place-items: center; width: 48px; height: 48px; margin: 0 auto .75rem; border-radius: 99px; background: var(--card-high); }
+  @media (max-width: 640px) {
+    .ep-thumb { width: 120px; }
+    .ep-overview { -webkit-line-clamp: 3; }
+    .file-row { gap: .6rem; padding: .6rem .4rem .6rem .65rem; }
+    .file-name { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; font-size: .84rem; line-height: 1.3; }
+    .q-badge { min-width: 3rem; font-size: .7rem; padding: .2rem .4rem; }
+    .file-actions { gap: 0; }
+    .icon-act { width: 32px; height: 32px; }
+    .season-head .btn-ui { width: 40px; height: 40px; padding: 0; flex-shrink: 0; }
   }
 
-  .match-card:hover {
-    transform: translateY(-2px);
-    border-color: color-mix(in srgb, var(--primary) 35%, transparent);
-    box-shadow: 0 14px 28px rgba(0, 0, 0, 0.18);
-  }
+  .match-card { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 1rem; transition: border-color .2s var(--ease); }
+
+  .match-card:hover { border-color: color-mix(in srgb, var(--primary) 40%, var(--border)); }
 
   .match-card.active {
     border-color: var(--primary);
     box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 18%, transparent);
   }
 
-  .match-thumb {
-    width: 4.75rem;
-    height: 7rem;
-    border-radius: 1rem;
-    object-fit: cover;
-    border: 1px solid rgba(255,255,255,0.08);
-    flex-shrink: 0;
-  }
+  .match-thumb { width: 4.5rem; height: 6.75rem; border-radius: 10px; object-fit: cover; background: var(--card-high); flex-shrink: 0; }
 
   @keyframes spin {
     to { transform: rotate(360deg); }
@@ -245,7 +206,7 @@
       content: attr(data-label);
       display: block;
       font-size: 0.62rem;
-      font-weight: 700;
+      font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.05em;
       opacity: 0.55;
@@ -254,53 +215,15 @@
     .st-actions .btn-ui { flex: 1; }
   }
 
-  .edit-tabs {
-    position: sticky;
-    top: 0.5rem;
-    z-index: 20;
-    display: flex;
-    gap: 0.4rem;
-    overflow-x: auto;
-    padding: 0.4rem;
-    margin-bottom: 1.5rem;
-    border-radius: 1.25rem;
-    scrollbar-width: none;
-    background: color-mix(in srgb, var(--card) 90%, var(--bg));
-    border: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
-    box-shadow: 0 12px 34px rgba(0, 0, 0, 0.22);
-    -webkit-backdrop-filter: blur(10px);
-    backdrop-filter: blur(10px);
-  }
+  .edit-tabs { position: sticky; top: .75rem; z-index: 20; display: flex; gap: 2px; overflow-x: auto; padding: 4px; margin-bottom: 1.5rem; border-radius: 9999px; scrollbar-width: none; background: var(--card); border: 1px solid var(--border); }
 
   .edit-tabs::-webkit-scrollbar { display: none; }
 
-  .edit-tab {
-    flex: 1 0 auto;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.45rem;
-    white-space: nowrap;
-    padding: 0.65rem 1rem;
-    border-radius: 0.95rem;
-    font-size: 0.9rem;
-    font-weight: 800;
-    color: var(--text-sec);
-    border: 1px solid transparent;
-    cursor: pointer;
-    transition: color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
-  }
+  .edit-tab { flex: 1 0 auto; display: inline-flex; align-items: center; justify-content: center; gap: .45rem; white-space: nowrap; padding: .55rem 1rem; border-radius: 9999px; font-size: .9rem; font-weight: 500; color: var(--text-sec); border: 0; background: transparent; cursor: pointer; transition: color .18s var(--ease), background-color .2s var(--ease); }
 
-  .edit-tab:hover {
-    color: var(--text);
-    background: color-mix(in srgb, var(--bg) 60%, transparent);
-  }
+  .edit-tab:hover { color: var(--text); }
 
-  .edit-tab.active {
-    color: #fff;
-    background: var(--primary);
-    box-shadow: 0 8px 20px color-mix(in srgb, var(--primary) 30%, transparent);
-  }
+  .edit-tab.active { color: var(--primary); background: var(--card-high); }
 
   .edit-panel {
     animation: edit-panel-in 0.22s ease;
@@ -311,6 +234,7 @@
     to { opacity: 1; transform: translateY(0); }
   }
 
+  @media (max-width: 767.98px) { .edit-tabs { top: calc(64px + env(safe-area-inset-top)); } }
   @media (max-width: 640px) {
     .edit-tab {
       flex: 0 0 auto;
@@ -320,74 +244,46 @@
   }
 </style>
 
-<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8">
-    <div class="glass-card rounded-3xl p-5 sm:p-6 mb-6 sm:mb-8">
-        <div class="flex flex-col gap-4">
-            <a id="back-to-list" href="/media/manage?media_type={{ media_type }}"
-               class="inline-flex items-center gap-2 text-primary font-semibold hover:opacity-90 w-fit">
-                <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                          d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
-                </svg>
-                Back to {{ media_type|title }}s
-            </a>
-
-            <div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-3">
-                <div>
-                    <h1 class="section-title text-2xl sm:text-3xl lg:text-4xl">Edit {{ media_type|title }}</h1>
-                    <p class="muted mt-1 text-sm sm:text-base">TMDB ID: {{ tmdb_id }} · DB Index: {{ db_index }}</p>
-                </div>
-            </div>
-        </div>
-    </div>
+<div>
+    <header class="mb-6">
+        <a id="back-to-list" href="/media/manage?media_type={{ media_type }}" class="inline-flex items-center gap-2 text-sm text-text-secondary hover:text-text transition-colors">
+            <i class="fa-solid fa-arrow-left text-xs"></i> {{ 'Movies' if media_type == 'movie' else 'TV shows' }}
+        </a>
+        <p class="text-sm text-text-secondary mt-3">Edit {{ 'movie' if media_type == 'movie' else 'series' }} · TMDB {{ tmdb_id }} · DB {{ db_index }}</p>
+    </header>
 
     {% if media_details %}
-    <div class="glass-card rounded-3xl overflow-hidden mb-6 sm:mb-8">
+    <div class="glass-card rounded-3xl overflow-hidden mb-6">
         <div class="hero-wrap">
             {% if media_details.backdrop %}
-            <img src="{{ cover_url(media_details.backdrop) }}" alt="{{ media_details.title }} backdrop" class="hero-backdrop"
-                 onerror="this.style.display='none'">
+            <img src="{{ cover_url(media_details.backdrop) }}" alt="" class="hero-backdrop" decoding="async" onerror="this.remove()">
             {% endif %}
             <div class="hero-gradient"></div>
 
-            <div class="relative z-10 p-5 sm:p-6 lg:p-8">
-                <div class="flex flex-col md:flex-row md:items-end gap-5 sm:gap-6">
-                    <div class="mx-auto md:mx-0 flex-shrink-0">
-                        <img src="{{ cover_url(media_details.poster) or '/static/placeholder.jpg' }}"
-                             alt="{{ media_details.title }}"
-                             class="w-36 sm:w-40 md:w-48 h-54 sm:h-60 md:h-72 object-cover rounded-2xl shadow-2xl border border-hairline-strong"
-                             onerror="this.src='https://placeholder.photo/300x450/e5e7eb/9ca3af?text=No+Image'">
+            <div class="hero-body">
+                <img src="{{ cover_url(media_details.poster) or '/static/placeholder.svg' }}" alt="{{ media_details.title }} poster"
+                     class="hero-poster" onerror="this.onerror=null;this.src='/static/placeholder.svg'">
+
+                <div class="hero-info">
+                    {% if media_details.logo %}
+                    <img src="{{ cover_url(media_details.logo) }}" alt="{{ media_details.title }}" class="hero-logo" decoding="async"
+                         onload="if (this.naturalWidth < 40) this.onerror()"
+                         onerror="this.remove(); document.getElementById('hero-title').classList.remove('sr-only')">
+                    {% endif %}
+                    <h2 id="hero-title" class="hero-title{{ ' sr-only' if media_details.logo else '' }}">{{ media_details.title }}</h2>
+
+                    <div class="hero-meta">
+                        {% if media_details.rating %}<span class="hero-rating"><i class="fa-solid fa-star"></i> {{ media_details.rating }}</span>{% endif %}
+                        {% if media_details.release_year %}<span>{{ media_details.release_year }}{% if media_details.release_year_end and media_details.release_year_end != media_details.release_year %}–{{ media_details.release_year_end }}{% endif %}</span>{% endif %}
+                        {% if media_details.runtime %}<span>{{ media_details.runtime }}</span>{% endif %}
+                        <span>{{ 'Movie' if media_type == 'movie' else 'Series' }}</span>
                     </div>
 
-                    <div class="flex-1 min-w-0 text-center md:text-left">
-                        <h2 class="text-2xl sm:text-3xl md:text-4xl font-black tracking-tight text-white drop-shadow">
-                            {{ media_details.title }}
-                        </h2>
-
-                        <div class="flex flex-wrap justify-center md:justify-start items-center gap-2 sm:gap-3 mt-4">
-                            {% if media_details.rating %}
-                            <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-yellow-400 text-black text-sm font-extrabold shadow-sm">
-                                ⭐ {{ media_details.rating }}
-                            </span>
-                            {% endif %}
-                            <span class="inline-flex items-center px-3 py-1 rounded-full bg-surface-3 text-white text-sm font-semibold border border-hairline-strong">
-                                {{ media_details.release_year }}
-                            </span>
-                            {% if media_details.genres %}
-                            <span class="inline-flex items-center px-3 py-1 rounded-full bg-surface-3 text-white text-sm font-semibold border border-hairline-strong">
-                                {{ media_details.genres|length }} genre{{ 's' if media_details.genres|length != 1 else '' }}
-                            </span>
-                            {% endif %}
-                        </div>
-
-                        {% if media_details.genres %}
-                        <div class="flex flex-wrap justify-center md:justify-start gap-2 mt-4">
-                            {% for genre in media_details.genres[:8] %}
-                            <span class="pill">{{ genre }}</span>
-                            {% endfor %}
-                        </div>
-                        {% endif %}
+                    {% if media_details.genres %}
+                    <div class="hero-genres">
+                        {% for genre in media_details.genres[:6] %}<span class="hero-chip">{{ genre }}</span>{% endfor %}
                     </div>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -403,11 +299,11 @@
 
     {% if media_details %}
     <div class="edit-tabs" role="tablist" id="edit-tabs">
-        <button type="button" class="edit-tab active" data-tab="details" onclick="switchEditTab('details')">📝 <span>Details</span></button>
-        <button type="button" class="edit-tab" data-tab="content" onclick="switchEditTab('content')">🎬 <span>Content</span></button>
-        <button type="button" class="edit-tab" data-tab="subtitles" onclick="switchEditTab('subtitles')">💬 <span>Subtitles</span></button>
-        <button type="button" class="edit-tab" data-tab="catalog" onclick="switchEditTab('catalog')">📚 <span>Catalog</span></button>
-        <button type="button" class="edit-tab" data-tab="rescan" onclick="switchEditTab('rescan')">🔄 <span>Rescan</span></button>
+        <button type="button" class="edit-tab active" data-tab="details" onclick="switchEditTab('details')"><i class="fa-solid fa-pen"></i> <span>Details</span></button>
+        <button type="button" class="edit-tab" data-tab="content" onclick="switchEditTab('content')"><i class="fa-solid fa-film"></i> <span>Content</span></button>
+        <button type="button" class="edit-tab" data-tab="subtitles" onclick="switchEditTab('subtitles')"><i class="fa-solid fa-closed-captioning"></i> <span>Subtitles</span></button>
+        <button type="button" class="edit-tab" data-tab="catalog" onclick="switchEditTab('catalog')"><i class="fa-solid fa-layer-group"></i> <span>Catalog</span></button>
+        <button type="button" class="edit-tab" data-tab="rescan" onclick="switchEditTab('rescan')"><i class="fa-solid fa-rotate"></i> <span>Rescan</span></button>
     </div>
     {% endif %}
 
@@ -422,7 +318,7 @@
             </div>
             <div class="flex items-center gap-2">
                 <span class="pill">IMDb / TMDb re-match</span>
-                <button type="button" class="btn-ui btn-ghost" onclick="tagMediaFiles()" title="Add the IMDB link to every file's caption">🏷️ Tag files</button>
+                <button type="button" class="btn-ui btn-ghost" onclick="tagMediaFiles()" title="Add the IMDB link to every file's caption"><i class="fa-solid fa-tag"></i> Tag files</button>
             </div>
         </div>
 
@@ -435,7 +331,7 @@
                 value="{{ media_details.title if media_details else '' }}"
             >
             <button type="button" class="btn-ui btn-primary" onclick="searchRescanCandidates()">
-                🔎 Search Matches
+                <i class="fa-solid fa-magnifying-glass"></i> Search Matches
             </button>
         </div>
 
@@ -445,9 +341,9 @@
 
         <div id="rescan-preview" class="hidden mt-5 rounded-3xl border border-hairline bg-surface p-4 sm:p-5">
             <div class="flex items-start gap-4">
-                <img id="rescan-preview-poster" src="/static/placeholder.jpg" alt="Selected poster" class="match-thumb">
+                <img id="rescan-preview-poster" src="/static/placeholder.svg" alt="Selected poster" class="match-thumb">
                 <div class="min-w-0 flex-1">
-                    <h4 id="rescan-preview-title" class="text-white font-bold text-lg"></h4>
+                    <h4 id="rescan-preview-title" class="text-text font-semibold text-lg"></h4>
                     <p id="rescan-preview-subtitle" class="muted text-sm mt-1"></p>
                     <p id="rescan-preview-ids" class="muted text-xs mt-2 break-all"></p>
                 </div>
@@ -456,7 +352,7 @@
             <div class="flex flex-col sm:flex-row justify-end gap-3 mt-5">
                 <button type="button" onclick="clearRescanSelection()" class="btn-ui btn-ghost">Cancel</button>
                 <button type="button" onclick="applyRescanSelection()" class="btn-ui btn-primary">
-                    ✨ Apply Selected Match
+                    <i class="fa-solid fa-wand-magic-sparkles"></i> Apply Selected Match
                 </button>
             </div>
         </div>
@@ -479,7 +375,7 @@
                 <option value="">Loading catalogs...</option>
             </select>
             <button type="button" onclick="addCurrentMediaToCatalog()" class="btn-ui btn-primary">
-                ➕ Add to Catalog
+                <i class="fa-solid fa-plus"></i> Add to Catalog
             </button>
             <button type="button" onclick="removeCurrentMediaFromCatalog()" class="btn-ui btn-danger">
                 Remove
@@ -512,10 +408,10 @@
         .me-token-row { display: flex; align-items: center; gap: .6rem; padding: .5rem .65rem; border-radius: .7rem; cursor: pointer; }
         .me-token-row:hover { background: color-mix(in srgb, var(--primary) 10%, transparent); }
         .me-token-row input { width: 1.05rem; height: 1.05rem; accent-color: var(--primary); cursor: pointer; flex-shrink: 0; }
-        .me-chip { display: inline-flex; align-items: center; gap: .35rem; padding: .3rem .7rem; border-radius: 9999px; font-size: .75rem; font-weight: 800; border: 1px solid var(--border); max-width: 100%; }
-        .me-chip-hidden { color: rgb(248 113 113); background: color-mix(in srgb, rgb(239 68 68) 14%, transparent); border-color: color-mix(in srgb, rgb(239 68 68) 30%, transparent); }
-        .me-chip-custom { color: rgb(96 165 250); background: color-mix(in srgb, rgb(59 130 246) 14%, transparent); border-color: color-mix(in srgb, rgb(59 130 246) 30%, transparent); }
-        .me-chip-auto { color: rgb(52 211 153); background: color-mix(in srgb, rgb(16 185 129) 14%, transparent); border-color: color-mix(in srgb, rgb(16 185 129) 30%, transparent); }
+        .me-chip { display: inline-flex; align-items: center; gap: .35rem; padding: .3rem .7rem; border-radius: 9999px; font-size: .75rem; font-weight: 600; border: 1px solid var(--border); max-width: 100%; }
+        .me-chip-hidden { color: var(--danger); background: color-mix(in srgb, var(--danger) 14%, transparent); border-color: color-mix(in srgb, var(--danger) 30%, transparent); }
+        .me-chip-custom { color: var(--info); background: color-mix(in srgb, var(--info) 14%, transparent); border-color: color-mix(in srgb, var(--info) 30%, transparent); }
+        .me-chip-auto { color: var(--ok); background: color-mix(in srgb, var(--ok) 14%, transparent); border-color: color-mix(in srgb, var(--ok) 30%, transparent); }
         .me-chip-empty { color: var(--text-sec); background: color-mix(in srgb, var(--bg) 70%, transparent); }
     </style>
 
@@ -583,152 +479,130 @@
                 <button type="button" onclick="goBackToList()" class="btn-ui btn-ghost">
                     Cancel
                 </button>
-                <button type="submit" class="btn-ui btn-primary">
-                    Save Changes
+                <button type="submit" class="btn-ui btn-primary" data-shortcut-save>
+                    Save changes
                 </button>
             </div>
         </form>
     </div>
 
     {% if media_details %}
-    <div class="glass-card edit-panel hidden rounded-3xl p-5 sm:p-6 lg:p-8" data-panel="content">
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5 sm:mb-6">
-            <h3 class="section-title text-xl sm:text-2xl">Available Content</h3>
-            <div class="flex items-center gap-2">
-                <button type="button" onclick="openAddStream()" class="btn-ui btn-success">
-                    ➕ {{ 'Add Season / Episode / Stream' if media_type == 'tv' else 'Add Stream' }}
-                </button>
+    <div class="glass-card edit-panel hidden rounded-3xl p-5 sm:p-6" data-panel="content">
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-5">
+            <div class="min-w-0">
+                <h3 class="section-title text-lg">{{ 'Files' if media_type == 'movie' else 'Episodes' }}</h3>
+                <p class="muted text-sm mt-0.5">
+                {%- if media_type == 'movie' -%}
+                    {{ (media_details.telegram or [])|length }} file{{ '' if (media_details.telegram or [])|length == 1 else 's' }} indexed from Telegram
+                {%- else -%}
+                    {% set ns = namespace(eps=0) %}{% for s in media_details.seasons or [] %}{% set ns.eps = ns.eps + s.episodes|length %}{% endfor %}
+                    {{ (media_details.seasons or [])|length }} season{{ '' if (media_details.seasons or [])|length == 1 else 's' }} · {{ ns.eps }} episode{{ '' if ns.eps == 1 else 's' }}
+                {%- endif -%}
+                </p>
             </div>
+            <button type="button" onclick="openAddStream()" class="btn-ui btn-ghost">
+                <i class="fa-solid fa-plus"></i> {{ 'Add episode or file' if media_type == 'tv' else 'Add file' }}
+            </button>
         </div>
 
         {% if media_type == 'movie' and media_details.telegram %}
-        <div class="space-y-3" id="movie-quality-list">
-            {% set sorted_qualities = media_details.telegram|sort(attribute='quality') %}
-            {% for quality in sorted_qualities %}
-            <div class="quality-row rounded-2xl p-4 sm:p-5" data-quality-row>
-                <div class="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
-                    <div class="min-w-0 flex-1">
-                        <div class="flex flex-wrap items-center gap-2 sm:gap-3">
-                            <span class="quality-badge bg-blue-500/15 text-blue-300 border border-blue-500/20">
-                                {{ quality.quality }}
-                            </span>
-                            <span class="pill">{{ quality.size }}</span>
-                        </div>
-                        <p class="muted mt-3 text-sm break-all">{{ quality.name }}</p>
-                    </div>
-
-                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 w-full sm:w-auto xl:min-w-[24rem]">
-                        <button onclick="copyStreamLink('{{ quality.id }}', '{{ quality.name }}')" class="btn-ui btn-success w-full" title="Copy direct stream link">
-                            📋 Copy Link
-                        </button>
-                        <button onclick="runSpeedTest('{{ quality.id }}', 'movie', '{{ quality.quality }}')" class="btn-ui btn-info w-full">
-                            🚀 Speed Test
-                        </button>
-                        <button onclick="deleteQuality('{{ quality.id }}', this)" class="btn-ui btn-danger w-full">
-                            Delete
-                        </button>
-                    </div>
+        <div class="file-list" id="movie-quality-list">
+            {% for quality in media_details.telegram|sort(attribute='quality', reverse=true) %}
+            <div class="file-row" data-quality-row>
+                <span class="q-badge q-{{ (quality.quality or '')|lower|replace('2160p','4k') }}">{{ quality.quality }}</span>
+                <div class="file-main">
+                    <p class="file-name" title="{{ quality.name }}">{{ quality.name }}</p>
+                    <p class="file-sub">{{ quality.size }}{% if quality.parts %} · {{ quality.parts|length }} parts{% endif %}</p>
+                </div>
+                <div class="file-actions">
+                    <button type="button" class="icon-act" data-id="{{ quality.id }}" data-name="{{ quality.name }}" onclick="copyStreamLink(this.dataset.id, this.dataset.name)" title="Copy stream link" aria-label="Copy stream link"><i class="fa-solid fa-link"></i></button>
+                    <button type="button" class="icon-act" data-id="{{ quality.id }}" data-q="{{ quality.quality }}" onclick="runSpeedTest(this.dataset.id, 'movie', this.dataset.q)" title="Speed test" aria-label="Speed test"><i class="fa-solid fa-gauge-high"></i></button>
+                    <button type="button" class="icon-act danger" data-id="{{ quality.id }}" onclick="deleteQuality(this.dataset.id, this)" title="Delete file" aria-label="Delete file"><i class="fa-solid fa-trash-can"></i></button>
                 </div>
             </div>
             {% endfor %}
         </div>
-        <div id="content-empty-state" class="hidden text-center py-10">
-            <p class="muted text-sm sm:text-base">No content available</p>
+        <div id="content-empty-state" class="hidden content-empty">
+            <i class="fa-solid fa-film"></i><p>No files left. Add one to make this title playable.</p>
         </div>
 
         {% elif media_type == 'tv' and media_details.seasons %}
-        <div class="space-y-4 sm:space-y-5" id="season-list">
-            {% for season in media_details.seasons|sort(attribute='season_number') %}
-            <div class="glass-card-soft rounded-3xl overflow-hidden border border-hairline" data-season-block data-season="{{ season.season_number }}">
-                <div class="px-4 sm:px-5 lg:px-6 py-4 sm:py-5 border-b border-hairline bg-surface">
-                    <div class="flex items-center justify-between gap-3">
-                        <div class="min-w-0">
-                            <h4 class="section-title text-base sm:text-lg lg:text-xl">Season {{ season.season_number }}</h4>
-                            <p class="muted text-xs sm:text-sm mt-1" data-ep-count>{{ season.episodes|length }} episode{{ 's' if season.episodes|length != 1 else '' }}</p>
-                        </div>
+        {% set seasons_sorted = media_details.seasons|sort(attribute='season_number') %}
+        <div class="season-tabs" id="season-tabs" role="tablist"></div>
 
-                        <div class="flex items-center gap-2 flex-shrink-0">
-                            <button type="button" onclick="deleteTVSeason({{ season.season_number }}, this)" class="btn-ui btn-danger px-3 py-2 text-xs sm:text-sm" title="Delete entire Season {{ season.season_number }}">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                                <span class="hidden sm:inline">Delete Season</span>
-                            </button>
-                            <button type="button" onclick="toggleSeason({{ loop.index0 }})" class="btn-ui btn-ghost px-3 py-2">
-                                <svg id="season-arrow-{{ loop.index0 }}" class="w-4 h-4 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-                                </svg>
-                            </button>
-                        </div>
+        <div id="season-list">
+            {% for season in seasons_sorted %}
+            <section class="season-block{{ '' if loop.first else ' hidden' }}" data-season-block data-season="{{ season.season_number }}">
+                <div class="season-head">
+                    <div class="min-w-0 flex-1">
+                        <h4 class="font-semibold whitespace-nowrap">{{ 'Specials' if season.season_number == 0 else 'Season ' ~ season.season_number }}</h4>
+                        <p class="muted text-sm" data-ep-count>{{ season.episodes|length }} episode{{ 's' if season.episodes|length != 1 else '' }}</p>
                     </div>
+                    <button type="button" onclick="deleteTVSeason({{ season.season_number }}, this)" class="btn-ui btn-danger text-sm py-2 shrink-0" title="Delete season {{ season.season_number }}" aria-label="Delete season {{ season.season_number }}">
+                        <i class="fa-solid fa-trash-can text-xs"></i><span class="hidden sm:inline">Delete season</span>
+                    </button>
                 </div>
 
-                <div id="season-content-{{ loop.index0 }}" class="season-content">
-                    <div class="divide-y divide-hairline" data-episodes>
-                        {% for episode in season.episodes|sort(attribute='episode_number') %}
-                        <div class="p-4 sm:p-5" data-episode-block data-episode="{{ episode.episode_number }}">
-                            <div class="flex flex-col xl:flex-row xl:items-start gap-4">
-                                <div class="flex-shrink-0 w-12 h-12 rounded-2xl bg-primary/15 border border-primary/20 flex items-center justify-center mx-auto xl:mx-0">
-                                    <span class="text-sm font-black text-primary">{{ episode.episode_number }}</span>
+                <div class="ep-list" data-episodes>
+                    {% for episode in season.episodes|sort(attribute='episode_number') %}
+                    {% set ep_title = (episode.title or '')|trim %}
+                    <article class="ep" data-episode-block data-episode="{{ episode.episode_number }}">
+                        <div class="ep-top">
+                            <div class="ep-thumb">
+                                <span class="ep-fallback">E{{ episode.episode_number }}</span>
+                                {% if episode.episode_backdrop %}
+                                <img src="{{ cover_url(episode.episode_backdrop) }}" alt="" loading="lazy" decoding="async" onerror="this.remove()">
+                                {% endif %}
+                                <span class="ep-num">{{ episode.episode_number }}</span>
+                            </div>
+                            <div class="ep-info">
+                                <div class="ep-title-row">
+                                    <h5 class="ep-title">
+                                        {%- if ep_title and ep_title|lower != 'episode ' ~ episode.episode_number -%}{{ ep_title }}{%- else -%}Episode {{ episode.episode_number }}{%- endif -%}
+                                    </h5>
+                                    <button type="button" onclick="deleteTVEpisode({{ season.season_number }}, {{ episode.episode_number }}, this)" class="icon-act danger shrink-0" title="Delete episode" aria-label="Delete episode {{ episode.episode_number }}"><i class="fa-solid fa-trash-can"></i></button>
                                 </div>
-
-                                <div class="flex-1 min-w-0">
-                                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
-                                        <h5 class="text-sm sm:text-base font-semibold text-white text-center sm:text-left">{{ episode.title }}</h5>
-                                        <button onclick="deleteTVEpisode({{ season.season_number }}, {{ episode.episode_number }}, this)" class="btn-ui btn-danger px-3 py-2 text-xs sm:text-sm w-full sm:w-auto">
-                                            Delete Episode
-                                        </button>
-                                    </div>
-
-                                    <div class="space-y-2" data-ep-qualities>
-                                        {% if episode.telegram %}
-                                        {% set sorted_episode_qualities = episode.telegram|sort(attribute='quality') %}
-                                        {% for quality in sorted_episode_qualities %}
-                                        <div class="quality-row rounded-2xl p-3 sm:p-4" data-tv-quality>
-                                            <div class="flex flex-col xl:flex-row xl:items-center justify-between gap-3">
-                                                <div class="min-w-0 flex-1">
-                                                    <div class="flex flex-wrap items-center gap-2 sm:gap-3">
-                                                        <span class="quality-badge bg-green-500/15 text-green-300 border border-green-500/20">{{ quality.quality }}</span>
-                                                        <span class="pill">{{ quality.size }}</span>
-                                                    </div>
-                                                    <p class="muted text-xs sm:text-sm mt-2 break-all">{{ quality.name }}</p>
-                                                </div>
-
-                                                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 w-full sm:w-auto xl:min-w-[22rem]">
-                                                    <button onclick="copyStreamLink('{{ quality.id }}', '{{ quality.name }}')" class="btn-ui btn-success w-full text-xs sm:text-sm">
-                                                        📋 Copy
-                                                    </button>
-                                                    <button onclick="runSpeedTest('{{ quality.id }}', 'tv', '{{ quality.quality }}')" class="btn-ui btn-info w-full text-xs sm:text-sm">
-                                                        🚀 Speed Test
-                                                    </button>
-                                                    <button onclick="deleteTVQuality({{ season.season_number }}, {{ episode.episode_number }}, '{{ quality.id }}', this)" class="btn-ui btn-danger w-full text-xs sm:text-sm">
-                                                        Delete
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        {% endfor %}
-                                        {% else %}
-                                        <p class="muted text-xs sm:text-sm text-center sm:text-left" data-no-qualities>No qualities available</p>
-                                        {% endif %}
-                                    </div>
-                                </div>
+                                <p class="ep-meta">
+                                    S{{ '%02d'|format(season.season_number) }}E{{ '%02d'|format(episode.episode_number) }}
+                                    {%- if episode.released %} · <time data-date="{{ episode.released }}">{{ episode.released[:10] }}</time>{% endif %}
+                                    · {{ (episode.telegram or [])|length }} file{{ '' if (episode.telegram or [])|length == 1 else 's' }}
+                                </p>
+                                {% if episode.overview %}<p class="ep-overview">{{ episode.overview }}</p>{% endif %}
                             </div>
                         </div>
-                        {% endfor %}
-                    </div>
+                        <div class="file-list" data-ep-qualities>
+                            {% if episode.telegram %}
+                            {% for quality in episode.telegram|sort(attribute='quality', reverse=true) %}
+                            <div class="file-row" data-tv-quality>
+                <span class="q-badge q-{{ (quality.quality or '')|lower|replace('2160p','4k') }}">{{ quality.quality }}</span>
+                <div class="file-main">
+                    <p class="file-name" title="{{ quality.name }}">{{ quality.name }}</p>
+                    <p class="file-sub">{{ quality.size }}{% if quality.parts %} · {{ quality.parts|length }} parts{% endif %}</p>
+                </div>
+                <div class="file-actions">
+                    <button type="button" class="icon-act" data-id="{{ quality.id }}" data-name="{{ quality.name }}" onclick="copyStreamLink(this.dataset.id, this.dataset.name)" title="Copy stream link" aria-label="Copy stream link"><i class="fa-solid fa-link"></i></button>
+                    <button type="button" class="icon-act" data-id="{{ quality.id }}" data-q="{{ quality.quality }}" onclick="runSpeedTest(this.dataset.id, 'tv', this.dataset.q)" title="Speed test" aria-label="Speed test"><i class="fa-solid fa-gauge-high"></i></button>
+                    <button type="button" class="icon-act danger" data-id="{{ quality.id }}" onclick="deleteTVQuality({{ season.season_number }}, {{ episode.episode_number }}, this.dataset.id, this)" title="Delete file" aria-label="Delete file"><i class="fa-solid fa-trash-can"></i></button>
                 </div>
             </div>
+                            {% endfor %}
+                            {% else %}
+                            <p class="muted text-sm" data-no-qualities>No files for this episode</p>
+                            {% endif %}
+                        </div>
+                    </article>
+                    {% endfor %}
+                </div>
+            </section>
             {% endfor %}
         </div>
-        <div id="content-empty-state-tv" class="hidden text-center py-10">
-            <p class="muted text-sm sm:text-base">No content available</p>
+        <div id="content-empty-state-tv" class="hidden content-empty">
+            <i class="fa-solid fa-tv"></i><p>No episodes left. Add one to make this series playable.</p>
         </div>
         {% else %}
-        <div class="text-center py-10">
-            <svg class="mx-auto h-12 w-12 text-muted mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                      d="M7 4V2a1 1 0 011-1h8a1 1 0 011 1v2h4a1 1 0 110 2h-1v12a2 2 0 01-2-2V6H3a1 1 0 110-2h4zM9 6v10h6V6H9z" />
-            </svg>
-            <p class="muted text-sm sm:text-base">No content available</p>
+        <div class="content-empty">
+            <i class="fa-solid {{ 'fa-film' if media_type == 'movie' else 'fa-tv' }}"></i>
+            <p>Nothing indexed yet. Add a file from Telegram to make this title playable.</p>
         </div>
         {% endif %}
     </div>
@@ -739,7 +613,7 @@
                 <h3 class="section-title text-xl sm:text-2xl">Subtitles</h3>
                 <p class="muted text-sm mt-1">Attach subtitle files from a Telegram channel your bot can read.</p>
             </div>
-            <button type="button" onclick="openSubtitleModal()" class="btn-ui btn-success">➕ Add Subtitle</button>
+            <button type="button" onclick="openSubtitleModal()" class="btn-ui btn-success"><i class="fa-solid fa-plus"></i> Add Subtitle</button>
         </div>
         <div id="subtitle-list" class="space-y-2"></div>
         <div id="subtitle-empty" class="hidden text-center py-8"><p class="muted text-sm">No subtitles added yet.</p></div>
@@ -754,10 +628,10 @@
         <div class="glass-card speed-modal-shell rounded-2xl sm:rounded-3xl">
             <div class="flex items-start sm:items-center justify-between gap-3 px-4 sm:px-6 py-4 border-b border-hairline bg-surface">
                 <div class="min-w-0">
-                    <h2 class="text-base sm:text-xl font-black text-white leading-tight">🚀 DC Speed Test</h2>
+                    <h2 class="text-base sm:text-xl font-semibold text-text leading-tight"><i class="fa-solid fa-gauge-high"></i> DC Speed Test</h2>
                     <p id="st-label" class="text-[11px] sm:text-sm text-text-secondary mt-1 break-all"></p>
                 </div>
-                <button onclick="closeSpeedTest()" class="flex-shrink-0 text-text-secondary hover:text-white text-3xl leading-none transition-colors">&times;</button>
+                <button onclick="closeSpeedTest()" class="icon-btn shrink-0" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
             </div>
 
             <div class="speed-modal-body px-4 sm:px-6 py-5 sm:py-6">
@@ -791,7 +665,7 @@
 
             <div class="st-actions flex flex-row justify-end gap-3 px-4 sm:px-6 py-3 sm:py-4 border-t border-hairline bg-surface">
                 <button id="st-rerun-btn" onclick="rerunSpeedTest()" class="hidden btn-ui btn-primary">
-                    🔄 Re-run
+                    <i class="fa-solid fa-rotate"></i> Re-run
                 </button>
                 <button onclick="closeSpeedTest()" class="btn-ui btn-ghost">
                     Close
@@ -809,11 +683,11 @@
         color: var(--text); padding: 0.7rem 0.9rem; font-size: 0.9rem; outline: none;
     }
     #add-stream-modal .as-input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 16%, transparent); }
-    #add-stream-modal .as-label { display:block; font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-sec); margin-bottom:0.35rem; }
-    #add-stream-modal .as-btn { display:inline-flex; align-items:center; justify-content:center; gap:0.4rem; border-radius:0.85rem; padding:0.7rem 1.1rem; font-weight:700; font-size:0.88rem; border:1px solid transparent; cursor:pointer; white-space:nowrap; transition:filter .15s ease; }
+    #add-stream-modal .as-label { display:block; font-size:0.72rem; font-weight: 600; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-sec); margin-bottom:0.35rem; }
+    #add-stream-modal .as-btn { display:inline-flex; align-items:center; justify-content:center; gap:0.4rem; border-radius:0.85rem; padding:0.7rem 1.1rem; font-weight: 600; font-size:0.88rem; border:1px solid transparent; cursor:pointer; white-space:nowrap; transition:filter .15s ease; }
     #add-stream-modal .as-btn:hover { filter: brightness(1.06); }
     #add-stream-modal .as-btn-ghost { background: color-mix(in srgb, var(--bg) 74%, transparent); color: var(--text); border-color: color-mix(in srgb, var(--border) 95%, transparent); }
-    #add-stream-modal .as-btn-success { background: rgb(16 185 129); color:#fff; }
+    #add-stream-modal .as-btn-success { background: var(--ok); color:#fff; }
 </style>
 
 <div id="add-stream-modal" class="fixed inset-0 z-50 hidden" aria-modal="true" role="dialog">
@@ -821,8 +695,8 @@
     <div class="absolute inset-0 flex items-end sm:items-center justify-center p-0 sm:p-4">
         <div class="glass-card w-full sm:max-w-xl rounded-t-3xl sm:rounded-3xl max-h-[92dvh] sm:max-h-[90dvh] flex flex-col">
             <div class="flex items-center justify-between gap-3 px-4 sm:px-6 py-4 border-b border-hairline">
-                <h2 class="text-base sm:text-xl font-black text-text">➕ Add Stream</h2>
-                <button onclick="closeAddStream()" class="text-text-secondary hover:text-text text-3xl leading-none">&times;</button>
+                <h2 class="text-base sm:text-xl font-semibold text-text"><i class="fa-solid fa-plus"></i> Add Stream</h2>
+                <button onclick="closeAddStream()" class="icon-btn shrink-0" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
             </div>
 
             <div class="px-4 sm:px-6 py-5 space-y-4 overflow-y-auto flex-1 min-h-0">
@@ -847,7 +721,7 @@
                 <div>
                     <div class="flex items-center justify-between gap-2">
                         <label class="as-label" style="margin-bottom:0">Telegram message link(s) *</label>
-                        <button type="button" onclick="addStreamPart()" class="text-xs font-bold text-primary shrink-0"><i class="fa-solid fa-plus"></i> Add split part</button>
+                        <button type="button" onclick="addStreamPart()" class="text-xs font-semibold text-primary shrink-0"><i class="fa-solid fa-plus"></i> Add split part</button>
                     </div>
                     <div id="as-parts" class="space-y-2 mt-2"></div>
                     <p class="text-xs text-text-secondary mt-2">Add more parts only for a split file (they join into one stream, in order).</p>
@@ -884,26 +758,26 @@
     <div class="absolute inset-0 flex items-end sm:items-center justify-center p-0 sm:p-4">
         <div class="glass-card w-full sm:max-w-xl rounded-t-3xl sm:rounded-3xl max-h-[92dvh] sm:max-h-[90dvh] flex flex-col">
             <div class="flex items-center justify-between gap-3 px-4 sm:px-6 py-4 border-b border-hairline">
-                <h2 class="text-base sm:text-xl font-black text-text">➕ Add Subtitle</h2>
-                <button onclick="closeSubtitleModal()" class="text-text-secondary hover:text-text text-3xl leading-none">&times;</button>
+                <h2 class="text-base sm:text-xl font-semibold text-text"><i class="fa-solid fa-plus"></i> Add Subtitle</h2>
+                <button onclick="closeSubtitleModal()" class="icon-btn shrink-0" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
             </div>
             <div class="px-4 sm:px-6 py-5 space-y-4 overflow-y-auto flex-1 min-h-0">
                 {% if media_type == 'tv' %}
                 <div class="grid grid-cols-2 gap-3">
                     <div>
-                        <label class="block text-xs font-bold uppercase tracking-wider text-text-secondary mb-2">Season *</label>
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Season *</label>
                         <input id="sub-season" type="number" min="0" class="field-input" placeholder="1">
                     </div>
                     <div>
-                        <label class="block text-xs font-bold uppercase tracking-wider text-text-secondary mb-2">Episode *</label>
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Episode *</label>
                         <input id="sub-episode" type="number" min="0" class="field-input" placeholder="1">
                     </div>
                 </div>
                 {% endif %}
                 <div>
                     <div class="flex items-center justify-between gap-2 mb-2">
-                        <label class="block text-xs font-bold uppercase tracking-wider text-text-secondary">Subtitle link(s) *</label>
-                        <button type="button" onclick="addSubtitleRow()" class="text-xs font-bold text-primary shrink-0"><i class="fa-solid fa-plus"></i> Add another</button>
+                        <label class="block text-xs font-semibold uppercase tracking-wider text-text-secondary">Subtitle link(s) *</label>
+                        <button type="button" onclick="addSubtitleRow()" class="text-xs font-semibold text-primary shrink-0"><i class="fa-solid fa-plus"></i> Add another</button>
                     </div>
                     <div id="subtitle-rows" class="space-y-3"></div>
                     <p class="muted text-xs mt-2">Forward the subtitle file to a channel your bot admins (a MANUAL channel is recommended), then paste its message link. Language is auto-detected but you can override it.</p>
@@ -960,7 +834,7 @@
         document.getElementById('rescan-preview-title').textContent = item.title || 'Unknown title';
         document.getElementById('rescan-preview-subtitle').textContent = `${item.subtitle || 'Match'}${item.year ? ` • ${item.year}` : ''}`;
         document.getElementById('rescan-preview-ids').textContent = `IMDb: ${item.imdb_id || 'N/A'} • TMDb: ${item.tmdb_id || 'N/A'}`;
-        document.getElementById('rescan-preview-poster').src = item.poster || '/static/placeholder.jpg';
+        document.getElementById('rescan-preview-poster').src = item.poster || '/static/placeholder.svg';
         document.getElementById('rescan-preview').classList.remove('hidden');
     }
 
@@ -1017,14 +891,14 @@
                 >
                     <div class="flex items-start gap-4">
                         <img
-                            src="${item.poster || '/static/placeholder.jpg'}"
+                            src="${item.poster || '/static/placeholder.svg'}"
                             alt="${escapeHtml(item.title || 'Poster')}"
                             class="match-thumb"
-                            onerror="this.src='/static/placeholder.jpg'"
+                            onerror="this.src='/static/placeholder.svg'"
                         >
                         <div class="min-w-0 flex-1">
                             <div class="flex flex-wrap items-center gap-2">
-                                <h4 class="text-white font-bold text-base sm:text-lg">${escapeHtml(item.title || 'Unknown title')}</h4>
+                                <h4 class="text-text font-semibold text-base sm:text-lg">${escapeHtml(item.title || 'Unknown title')}</h4>
                                 <span class="pill">${escapeHtml(item.year || '—')}</span>
                             </div>
                             <p class="muted text-sm mt-2">${escapeHtml(item.subtitle || '')}</p>
@@ -1358,7 +1232,7 @@
             <label class="me-token-row">
                 <input type="checkbox" value="${escapeHtml(t.token)}" ${sel.has(t.token) ? 'checked' : ''}>
                 <span class="min-w-0">
-                    <span class="font-bold text-sm block truncate text-white">${escapeHtml(t.user_name || 'User')}</span>
+                    <span class="font-semibold text-sm block truncate text-text">${escapeHtml(t.user_name || 'User')}</span>
                     <span class="muted text-xs block truncate">${escapeHtml((t.token || '').slice(0, 12))}…${t.user_id ? ' · ' + escapeHtml(t.user_id) : ''}</span>
                 </span>
             </label>`).join('');
@@ -1452,9 +1326,9 @@
         box.innerHTML = inList.map(c => {
             const hidden = (c.visibility === 'owner') || (c.visible === false);
             const kind = c.auto ? 'auto' : (hidden ? 'hidden' : 'custom');
-            const icon = c.auto ? '✨' : (hidden ? '🔒' : '🎯');
+            const icon = c.auto ? '<i class="fa-solid fa-wand-magic-sparkles"></i>' : (hidden ? '<i class="fa-solid fa-lock"></i>' : '<i class="fa-solid fa-bullseye"></i>');
             const label = c.auto ? 'Auto' : (hidden ? 'Hidden' : 'Custom');
-            const excl = c.exclusive ? ' · 🔐' : '';
+            const excl = c.exclusive ? ' · <i class="fa-solid fa-lock"></i>' : '';
             return `<span class="me-chip me-chip-${kind}" title="${escapeHtml(label)} catalog">${icon} ${escapeHtml(c.name)}${excl}</span>`;
         }).join('');
     }
@@ -1663,9 +1537,9 @@
 
     function _speedClass(mbps) {
         if (mbps === null) return 'text-text-secondary';
-        if (mbps >= 20) return 'text-emerald-300 font-bold';
-        if (mbps >= 5) return 'text-amber-300 font-bold';
-        return 'text-rose-300 font-bold';
+        if (mbps >= 20) return 'text-emerald-300 font-semibold';
+        if (mbps >= 5) return 'text-amber-300 font-semibold';
+        return 'text-rose-300 font-semibold';
     }
 
     function _miniBar(value, max, color) {
@@ -1685,11 +1559,11 @@
             : '<span class="text-text-secondary">—</span>';
         const badge = isErr
             ? `<span class="px-2 py-0.5 rounded-full text-xs font-medium bg-rose-500/15 text-rose-200 border border-rose-500/20">Error</span>`
-            : `<span class="px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-500/15 text-emerald-200 border border-emerald-500/20">✓ OK</span>`;
+            : `<span class="px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-500/15 text-emerald-200 border border-emerald-500/20"><i class="fa-solid fa-check mr-1"></i>OK</span>`;
         const tr = document.createElement('tr');
         tr.className = `transition-colors ${isErr ? 'opacity-70' : ''}`;
         tr.innerHTML = `
-            <td class="px-4 py-3 font-medium text-white">${medal}Bot ${r.client_index + 1} <span class="text-xs text-text-secondary">(DC ${r.dc_id})</span></td>
+            <td class="px-4 py-3 font-medium text-text">${medal}Bot ${r.client_index + 1} <span class="text-xs text-text-secondary">(DC ${r.dc_id})</span></td>
             <td data-label="Ping" class="px-4 py-3 text-text">${ping}</td>
             <td data-label="Speed" class="px-4 py-3 text-text">${speed}${isErr ? `<div class="text-xs text-rose-300 mt-1 break-words">${r.error}</div>` : ''}</td>
             <td data-label="Time" class="px-4 py-3 text-text-secondary text-sm">${r.time_taken_sec !== null ? `${r.time_taken_sec.toFixed(2)}s` : '—'}</td>
@@ -1726,7 +1600,7 @@
             if (!summaryEl) return;
 
             if (best) {
-                summaryEl.textContent = `🏆 Fastest: DC ${best.dc_id} — ${best.speed_mbps.toFixed(2)} MB/s | ${completedCount}/${totalCount} client(s) done`;
+                summaryEl.textContent = `Fastest: DC ${best.dc_id} — ${best.speed_mbps.toFixed(2)} MB/s | ${completedCount}/${totalCount} client(s) done`;
             } else {
                 summaryEl.textContent = `${completedCount}/${totalCount} client(s) done`;
             }
@@ -1752,7 +1626,7 @@
                 document.getElementById('st-results').classList.remove('hidden');
 
                 if (msg.target_dc && msg.target_dc !== "?") {
-                    document.getElementById('st-label').innerHTML += ` &nbsp;|&nbsp; Target DC: <span class="text-white font-semibold">${msg.target_dc}</span>`;
+                    document.getElementById('st-label').innerHTML += ` &nbsp;|&nbsp; Target DC: <span class="text-text font-semibold">${msg.target_dc}</span>`;
                 }
 
                 const tbody = document.getElementById('st-tbody');
@@ -1761,7 +1635,7 @@
                     const tr = document.createElement('tr');
                     tr.className = 'animate-pulse';
                     tr.innerHTML = `
-                        <td class="px-4 py-3 font-medium text-text-secondary">🔄 Bot ${i + 1}</td>
+                        <td class="px-4 py-3 font-medium text-text-secondary"><i class="fa-solid fa-rotate"></i> Bot ${i + 1}</td>
                         <td data-label="Ping" class="px-4 py-3"><span class="text-muted">testing…</span></td>
                         <td data-label="Speed" class="px-4 py-3"><span class="text-muted">testing…</span></td>
                         <td data-label="Time" class="px-4 py-3 text-muted">—</td>
@@ -1803,7 +1677,7 @@
 
                 for (let i = 0; i < allResults.length; i++) {
                     const r = allResults[i];
-                    const tr = _resultRow(r, i === 0 && r.speed_mbps ? '🥇 ' : '', maxSpeed);
+                    const tr = _resultRow(r, i === 0 && r.speed_mbps ? '<i class="fa-solid fa-medal text-warn mr-1"></i>' : '', maxSpeed);
                     tbody.appendChild(tr);
                 }
 
@@ -2136,6 +2010,42 @@
         if (document.getElementById('subtitle-list')) {
             loadSubtitleLanguages().then(loadSubtitles);
         }
+    });
+
+    (function seasonTabs() {
+        const list = document.getElementById('season-list');
+        const tabs = document.getElementById('season-tabs');
+        if (!list || !tabs) return;
+        let active = list.querySelector('[data-season-block]')?.dataset.season;
+        function render() {
+            const blocks = [...list.querySelectorAll('[data-season-block]')];
+            if (!blocks.some(b => b.dataset.season === active)) active = blocks[0]?.dataset.season;
+            tabs.hidden = blocks.length < 2;
+            tabs.innerHTML = blocks.map(b => {
+                const n = b.dataset.season;
+                const eps = b.querySelectorAll('[data-episode-block]').length;
+                return `<button type="button" class="season-tab" role="tab" data-season-tab="${n}" aria-selected="${n === active}">${n === '0' ? 'Specials' : 'Season ' + n}<span>${eps}</span></button>`;
+            }).join('');
+            blocks.forEach(b => b.classList.toggle('hidden', b.dataset.season !== active));
+        }
+        tabs.addEventListener('click', e => {
+            const t = e.target.closest('[data-season-tab]');
+            if (!t) return;
+            active = t.dataset.seasonTab;
+            render();
+        });
+        new MutationObserver(render).observe(list, { childList: true, subtree: true });
+        render();
+    })();
+
+    document.querySelectorAll('.file-list').forEach(list => {
+        const rank = row => parseInt(row.querySelector('.q-badge')?.textContent, 10) || (/4k/i.test(row.querySelector('.q-badge')?.textContent) ? 2160 : 0);
+        [...list.querySelectorAll(':scope > .file-row')].sort((a, b) => rank(b) - rank(a)).forEach(r => list.appendChild(r));
+    });
+
+    document.querySelectorAll('time[data-date]').forEach(el => {
+        const d = new Date(el.dataset.date);
+        if (!isNaN(d)) el.textContent = d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
     });
 </script>
 {% endblock %}

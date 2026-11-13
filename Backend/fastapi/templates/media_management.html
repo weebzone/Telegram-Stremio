@@ -1,76 +1,61 @@
 {% extends "base.html" %}
 
-{% block title %}Media Management - Telegram Stremio{% endblock %}
+{% block title %}Media - Telegram Stremio{% endblock %}
 
 {% block content %}
-<div class="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-    <!-- Unified toolbar -->
-    <section class="glass-panel rounded-3xl p-4 sm:p-5 mb-6 sm:mb-8">
-        <div class="flex flex-col xl:flex-row xl:items-center gap-4">
-            <h1 class="text-xl sm:text-2xl font-extrabold tracking-tight text-text shrink-0">
-                <i class="fa-solid fa-clapperboard text-primary mr-2"></i>Media Library
-            </h1>
+<div>
+    <header class="page-head">
+        <div>
+            <h1 class="page-title">{{ 'Movies' if media_type == 'movie' else 'TV shows' }}</h1>
+            <p class="page-sub" id="page-count">Your indexed library</p>
+        </div>
+        <div class="page-actions">
+            <button type="button" onclick="openManualAdd()" class="btn-primary px-4 py-2 text-sm"><i class="fa-solid fa-plus"></i> Add title</button>
+        </div>
+    </header>
 
-            <div class="relative flex-1 min-w-0">
-                <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-text-secondary text-sm"></i>
-                <input type="text" id="search-input"
-                       placeholder="Search {{ media_type }}s by title..."
-                       class="w-full pl-11 pr-24 py-3 rounded-2xl bg-background text-text placeholder:text-text-secondary border border-border focus:outline-none focus:ring-2 focus:ring-primary/60 focus:border-primary transition">
-                <div class="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                    <button onclick="clearSearch()" title="Clear"
-                            class="w-9 h-9 inline-flex items-center justify-center rounded-xl text-text-secondary hover:bg-surface-2 transition">
-                        <i class="fa-solid fa-rotate-left"></i>
-                    </button>
-                    <button onclick="searchMedia()" title="Search"
-                            class="w-9 h-9 inline-flex items-center justify-center rounded-xl bg-primary text-white shadow-lg shadow-primary/20">
-                        <i class="fa-solid fa-magnifying-glass"></i>
-                    </button>
-                </div>
-            </div>
-
-            <div class="flex flex-wrap items-center gap-2">
-                <a href="/media/manage?media_type=movie{% if custom %}&custom=1{% endif %}"
-                   class="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-full text-sm font-bold transition border {% if media_type == 'movie' %}bg-primary text-white border-primary shadow-lg shadow-primary/20{% else %}glass-panel text-text hover:bg-surface-2 border-hairline{% endif %}">
-                    <i class="fa-solid fa-film"></i> Movies
-                </a>
-                <a href="/media/manage?media_type=tv{% if custom %}&custom=1{% endif %}"
-                   class="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-full text-sm font-bold transition border {% if media_type == 'tv' %}bg-primary text-white border-primary shadow-lg shadow-primary/20{% else %}glass-panel text-text hover:bg-surface-2 border-hairline{% endif %}">
-                    <i class="fa-solid fa-tv"></i> TV
-                </a>
-                <label class="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-full text-sm font-bold transition border cursor-pointer select-none {% if custom %}bg-amber-500/15 text-amber-300 border-amber-500/40{% else %}glass-panel text-text hover:bg-surface-2 border-hairline{% endif %}">
-                    <input type="checkbox" {% if custom %}checked{% endif %}
-                           onchange="window.location.href='/media/manage?media_type={{ media_type }}' + (this.checked ? '&custom=1' : '')"
-                           class="w-4 h-4 rounded accent-amber-500 cursor-pointer">
-                    <i class="fa-solid fa-star"></i> Custom
-                </label>
-                <button type="button" onclick="openManualAdd()"
-                   class="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-full text-sm font-bold transition border bg-emerald-500 text-white border-emerald-500 shadow-lg shadow-emerald-500/20 hover:bg-emerald-500/90">
-                    <i class="fa-solid fa-plus"></i> Add
-                </button>
-            </div>
+    <section class="flex flex-col md:flex-row md:items-center gap-3 mb-6">
+        <div class="flex items-center gap-2 shrink-0">
+        <div class="seg shrink-0" role="tablist">
+            <a href="/media/manage?media_type=movie{% if custom %}&custom=1{% endif %}" role="tab" aria-selected="{{ 'true' if media_type == 'movie' else 'false' }}"><i class="fa-solid fa-film"></i>Movies</a>
+            <a href="/media/manage?media_type=tv{% if custom %}&custom=1{% endif %}" role="tab" aria-selected="{{ 'true' if media_type == 'tv' else 'false' }}"><i class="fa-solid fa-tv"></i>TV shows</a>
+        </div>
+        <label class="chip-toggle shrink-0">
+            <input type="checkbox" class="sr-only" {% if custom %}checked{% endif %}
+                   onchange="window.location.href='/media/manage?media_type={{ media_type }}' + (this.checked ? '&custom=1' : '')">
+            <i class="fa-solid fa-star text-xs"></i> Custom
+        </label>
+        </div>
+        <div class="relative flex-1 min-w-0">
+            <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-text-secondary text-sm pointer-events-none"></i>
+            <input type="search" id="search-input" enterkeyhint="search" autocomplete="off"
+                   placeholder="Search {{ 'movies' if media_type == 'movie' else 'TV shows' }}"
+                   class="field pl-11 pr-12 py-2.5">
+            <button onclick="clearSearch()" title="Clear search" aria-label="Clear search"
+                    class="icon-btn absolute right-1 top-1/2 -translate-y-1/2 w-9 h-9">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
         </div>
     </section>
 
     <!-- Loading Indicator -->
-    <div id="loading" class="hidden text-center py-16">
-        <div class="inline-flex items-center justify-center w-14 h-14 rounded-full border border-hairline glass-panel mb-4">
-            <div class="animate-spin rounded-full h-7 w-7 border-b-2 border-primary"></div>
-        </div>
+    <div id="loading" class="hidden">
+        <i class="fa-solid fa-circle-notch fa-spin text-2xl text-primary mb-3"></i>
         <p class="text-text-secondary">Loading {{ media_type }}s...</p>
     </div>
 
     <!-- Error Display -->
     <div id="error-display" class="hidden mb-6 sm:mb-8">
-        <div class="glass-panel rounded-3xl p-5 sm:p-6 border border-red-500/30">
+        <div class="glass-panel p-5 border-danger/30">
             <div class="flex items-start gap-3">
                 <div class="w-11 h-11 rounded-2xl bg-red-500/15 flex items-center justify-center shrink-0">
                     <i class="fa-solid fa-triangle-exclamation text-red-400"></i>
                 </div>
                 <div class="flex-1">
-                    <h3 class="text-lg font-bold text-red-300">Error Loading Media</h3>
+                    <h3 class="text-lg font-semibold text-red-300">Error Loading Media</h3>
                     <p id="error-message" class="mt-2 text-sm text-red-200/90"></p>
                     <button onclick="retryLoad()"
-                            class="mt-4 inline-flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-4 py-2.5 rounded-2xl transition font-bold shadow-lg shadow-primary/20">
+                            class="mt-4 inline-flex items-center gap-2 bg-primary hover:bg-primary/90 text-on-primary px-4 py-2.5 rounded-2xl transition font-semibold">
                         <i class="fa-solid fa-rotate-right"></i>
                         Try Again
                     </button>
@@ -81,17 +66,17 @@
 
     <!-- Media Grid -->
     <div id="media-grid"
-         class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4 sm:gap-5 mb-6 sm:mb-8">
+         class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-x-3 gap-y-5 mb-8">
         <!-- Media items will be loaded here -->
     </div>
 
     <!-- No Results -->
     <div id="no-results" class="hidden text-center py-16">
-        <div class="glass-panel rounded-3xl p-8 max-w-xl mx-auto">
-            <div class="mx-auto w-16 h-16 rounded-2xl bg-surface flex items-center justify-center mb-4 border border-hairline">
-                <i class="fa-solid fa-box-open text-3xl text-text-secondary"></i>
+        <div class="max-w-md mx-auto">
+            <div class="mx-auto w-12 h-12 rounded-full bg-card-high grid place-items-center mb-4">
+                <i class="fa-solid fa-box-open text-text-secondary"></i>
             </div>
-            <h3 class="text-xl font-bold text-text mb-2">No {{ media_type }}s found</h3>
+            <h3 class="text-lg font-semibold mb-1">Nothing found</h3>
             <p class="text-sm text-text-secondary mb-6">
                 {% if media_type == 'movie' %}
                 No movies match your search criteria.
@@ -99,8 +84,7 @@
                 No TV shows match your search criteria.
                 {% endif %}
             </p>
-            <button onclick="clearSearch()"
-                    class="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-5 py-3 rounded-2xl transition font-bold shadow-lg shadow-primary/20">
+            <button onclick="clearSearch()" class="btn-ghost px-4 py-2 text-sm">
                 <i class="fa-solid fa-clapperboard"></i>
                 Show All {{ media_type|title }}s
             </button>
@@ -109,15 +93,13 @@
 
     <!-- Pagination -->
     <div id="pagination" class="hidden mt-6 sm:mt-8">
-        <div class="glass-panel rounded-3xl p-3 sm:p-4 overflow-x-auto">
-            <div class="flex justify-center items-center gap-2 min-w-max px-1" id="pagination-inner"></div>
-        </div>
+        <div class="overflow-x-auto"><div class="flex justify-center items-center gap-1.5 min-w-max mx-auto" id="pagination-inner"></div></div>
     </div>
 
     <!-- Media Info -->
     <div id="media-info" class="hidden mt-6">
-        <div class="glass-panel rounded-3xl p-4 sm:p-5">
-            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 text-sm text-text-secondary">
+        <div>
+            <div class="flex flex-col sm:flex-row justify-center items-center gap-1 sm:gap-4 text-sm text-text-secondary">
                 <span id="results-info"></span>
                 <span id="db-info"></span>
             </div>
@@ -132,10 +114,13 @@
     const mediaType = '{{ media_type }}';
     const isCustom = {{ 'true' if custom else 'false' }};
 
+    const PAGE_SIZE = 30;
+
     function showLoading() {
         isLoading = true;
-        document.getElementById('loading').classList.remove('hidden');
-        document.getElementById('media-grid').classList.add('hidden');
+        const grid = document.getElementById('media-grid');
+        if (grid.children.length) grid.classList.add('is-busy');
+        else grid.innerHTML = Array.from({ length: 12 }, () => '<div class="m-skel"><div></div><p></p><p></p></div>').join('');
         document.getElementById('no-results').classList.add('hidden');
         document.getElementById('pagination').classList.add('hidden');
         document.getElementById('media-info').classList.add('hidden');
@@ -144,8 +129,8 @@
 
     function hideLoading() {
         isLoading = false;
-        document.getElementById('loading').classList.add('hidden');
-        document.getElementById('media-grid').classList.remove('hidden');
+        const grid = document.getElementById('media-grid');
+        grid.classList.remove('hidden', 'is-busy');
     }
 
     function showError(message) {
@@ -176,7 +161,7 @@
         syncPageUrl(page, search);
 
         try {
-            const url = `/api/media/list?media_type=${mediaType}&page=${page}&page_size=24&search=${encodeURIComponent(search)}&custom=${isCustom ? 1 : 0}`;
+            const url = `/api/media/list?media_type=${mediaType}&page=${page}&page_size=${PAGE_SIZE}&search=${encodeURIComponent(search)}&custom=${isCustom ? 1 : 0}`;
             const response = await fetch(url, {
                 method: 'GET',
                 credentials: 'same-origin',
@@ -210,7 +195,7 @@
             }
 
             document.getElementById('no-results').classList.add('hidden');
-            grid.innerHTML = mediaItems.map(item => createMediaCard(item)).join('');
+            grid.innerHTML = mediaItems.map((item, idx) => createMediaCard(item, idx)).join('');
             updatePagination(data.current_page || page, data.total_pages || 1);
             updateMediaInfo(data);
 
@@ -258,77 +243,42 @@
         const qs = collectQualities(item);
         if (!qs.length) return '';
         const isSplit = qs.some(q => q.group_key || (q.parts && q.parts.length));
-        const totalBytes = qs.reduce((sum, q) => sum + sizeToBytes(q.size), 0);
         const labels = allQualityLabels(qs);
-        const size = bytesToSize(totalBytes);
-        const qpills = labels.map((l, i) =>
-            `<span class="px-1.5 py-[3px] rounded-md ${i === 0 ? 'bg-primary text-white' : 'bg-white/20 text-white'} text-[10px] font-extrabold leading-none backdrop-blur-sm">${l}</span>`
-        ).join('');
-        const split = isSplit
-            ? `<span class="px-1.5 py-[3px] rounded-md bg-purple-600/90 text-white text-[10px] font-extrabold leading-none"><i class="fa-solid fa-puzzle-piece"></i></span>` : '';
-        const sizeTag = size
-            ? `<span class="px-1.5 py-[3px] rounded-md bg-black/70 text-white text-[10px] font-bold leading-none whitespace-nowrap"><i class="fa-solid fa-hard-drive mr-1 opacity-70"></i>${size}</span>` : '';
-        return `
-            <div class="absolute inset-x-0 bottom-0 px-2 pb-2 pt-10 bg-gradient-to-t from-black/85 via-black/40 to-transparent pointer-events-none">
-                <div class="flex items-end justify-between gap-2">
-                    <span class="flex items-center gap-1 flex-wrap">${qpills}${split}</span>
-                    ${sizeTag}
-                </div>
-            </div>`;
+        const pills = labels.slice(0, 2).map(l => `<span class="q-chip">${l}</span>`).join('');
+        return `<div class="absolute left-2 bottom-2 flex gap-1">${pills}${isSplit ? '<span class="q-chip" title="Split file"><i class="fa-solid fa-puzzle-piece"></i></span>' : ''}</div>`;
     }
 
-    function createMediaCard(item) {
-    const title = item.title || item.name || 'Unknown Title';
-    const year = item.release_year || 'Unknown Year';
-    const rating = item.rating ? `⭐ ${parseFloat(item.rating).toFixed(1)}` : '';
-    const poster = item.poster || 'https://via.placeholder.com/300x450/e5e7eb/9ca3af?text=No+Image';
+    function thumb(url) {
+        return String(url)
+            .replace(/(image\.tmdb\.org\/t\/p\/)(?:original|w\d+)\//, '$1w342/')
+            .replace(/(images\.metahub\.space\/poster\/)(?:medium|large)\//, '$1small/');
+    }
 
-    // Escape title for data attribute safety
-    const safeTitle = title.replace(/"/g, '&quot;');
-
-    return `
-        <div class="group overflow-hidden rounded-3xl glass-panel border border-hairline hover:border-primary/30 transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl">
-            <div class="relative overflow-hidden">
-                <img src="${poster}" alt="${title}" class="w-full aspect-[2/3] object-cover transition duration-300 group-hover:scale-105" onerror="this.src='https://via.placeholder.com/300x450/e5e7eb/9ca3af?text=No+Image'" loading="lazy">
-                <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-
-                <div class="absolute top-3 left-3">
-                    <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-black/60 text-white text-[11px] font-bold border border-hairline">
-                        <i class="fa-solid fa-calendar-days"></i> ${year}
-                    </span>
-                </div>
-                ${Number(item.tmdb_id) < 0 ? `
-                <div class="absolute top-3 right-3">
-                    <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-500/90 text-white text-[11px] font-bold border border-amber-400/40">
-                        <i class="fa-solid fa-star"></i> Custom
-                    </span>
-                </div>` : ''}
+    function createMediaCard(item, idx = 0) {
+        const title = escapeHtml(item.title || item.name || 'Unknown title');
+        const year = escapeHtml(item.release_year || '');
+        const qs = collectQualities(item);
+        const size = bytesToSize(qs.reduce((sum, q) => sum + sizeToBytes(q.size), 0));
+        const href = `/media/edit?tmdb_id=${encodeURIComponent(item.tmdb_id)}&db_index=${encodeURIComponent(item.db_index)}&media_type=${encodeURIComponent(mediaType)}&page=${currentPage}${currentSearch ? `&search=${encodeURIComponent(currentSearch)}` : ''}`;
+        const meta = [year, size].filter(Boolean).join(' · ');
+        return `
+        <article class="m-card">
+            <a href="${href}" class="m-poster" aria-label="Edit ${title}">
+                ${item.poster ? `<img src="${escapeHtml(thumb(item.poster))}" alt="" width="185" height="278" loading="${idx < 12 ? 'eager' : 'lazy'}" ${idx < 6 ? 'fetchpriority="high"' : ''} decoding="async" onerror="this.remove()">` : ''}
+                <span class="m-fallback"><i class="fa-solid ${mediaType === 'movie' ? 'fa-film' : 'fa-tv'}"></i></span>
+                ${item.rating ? `<span class="m-rating">★ ${parseFloat(item.rating).toFixed(1)}</span>` : ''}
+                ${Number(item.tmdb_id) < 0 ? '<span class="m-custom"><i class="fa-solid fa-star"></i> Custom</span>' : ''}
                 ${mediaBadges(item)}
-            </div>
-
-            <div class="p-4">
-                <h3 class="font-bold text-sm sm:text-base text-text line-clamp-2 min-h-[2.75rem]" title="${title}">${title}</h3>
-                <div class="mt-2 flex items-center justify-between text-xs text-text-secondary">
-                    <span>DB #${item.db_index ?? '-'}</span>
-                    <span>${mediaType === 'movie' ? 'Movie' : 'TV Show'}</span>
-                </div>
-
-                <div class="mt-4 flex gap-2">
-                    <a href="/media/edit?tmdb_id=${encodeURIComponent(item.tmdb_id)}&db_index=${encodeURIComponent(item.db_index)}&media_type=${encodeURIComponent(mediaType)}&page=${currentPage}${currentSearch ? `&search=${encodeURIComponent(currentSearch)}` : ''}"
-                       class="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 rounded-2xl bg-primary hover:bg-primary/90 text-white text-xs font-bold transition shadow-lg shadow-primary/20">
-                        <i class="fa-solid fa-pen-to-square"></i> Edit
-                    </a>
-                    <button onclick="deleteMedia(this)"
-                            data-tmdb-id="${item.tmdb_id}" 
-                            data-db-index="${item.db_index ?? ''}" 
-                            data-title="${safeTitle}"
-                            class="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-2xl glass-panel hover:bg-red-500/10 text-red-300 text-xs font-bold transition border border-hairline">
-                        <i class="fa-solid fa-trash"></i>
-                    </button>
-                </div>
-            </div>
-        </div>
-    `;
+            </a>
+            <button onclick="deleteMedia(this)" data-tmdb-id="${escapeHtml(item.tmdb_id)}" data-db-index="${escapeHtml(item.db_index ?? '')}" data-title="${title}"
+                    class="m-del" aria-label="Delete ${title}" title="Delete">
+                <i class="fa-solid fa-trash-can"></i>
+            </button>
+            <a href="${href}" class="block mt-2 min-w-0">
+                <h3 class="text-sm font-medium leading-snug truncate" title="${title}">${title}</h3>
+                <p class="text-xs text-text-secondary truncate">${meta}</p>
+            </a>
+        </article>`;
     }
 
     function updatePagination(currentPage, totalPages) {
@@ -347,7 +297,7 @@
         if (currentPage > 1) {
             paginationHTML += `
                 <button onclick='loadMedia(${currentPage - 1}, ${JSON.stringify(currentSearch)})'
-                        class="px-4 py-2 rounded-2xl glass-panel hover:bg-surface-2 text-text text-sm font-bold transition border border-hairline">
+                        class="pg-btn">
                     Previous
                 </button>
             `;
@@ -359,7 +309,7 @@
         if (startPage > 1) {
             paginationHTML += `
                 <button onclick='loadMedia(1, ${JSON.stringify(currentSearch)})'
-                        class="px-4 py-2 rounded-2xl glass-panel hover:bg-surface-2 text-text text-sm font-bold transition border border-hairline">
+                        class="pg-btn">
                     1
                 </button>
             `;
@@ -372,10 +322,7 @@
             const isActive = i === currentPage;
             paginationHTML += `
                 <button onclick='loadMedia(${i}, ${JSON.stringify(currentSearch)})'
-                        class="px-4 py-2 rounded-2xl text-sm font-bold transition border
-                               ${isActive
-                                   ? 'bg-primary text-white border-primary shadow-lg shadow-primary/20'
-                                   : 'glass-panel hover:bg-surface-2 text-text border-hairline'}">
+                        class="pg-btn" ${isActive ? 'aria-current="page"' : ''}>
                     ${i}
                 </button>
             `;
@@ -387,7 +334,7 @@
             }
             paginationHTML += `
                 <button onclick='loadMedia(${totalPages}, ${JSON.stringify(currentSearch)})'
-                        class="px-4 py-2 rounded-2xl glass-panel hover:bg-surface-2 text-text text-sm font-bold transition border border-hairline">
+                        class="pg-btn">
                     ${totalPages}
                 </button>
             `;
@@ -396,7 +343,7 @@
         if (currentPage < totalPages) {
             paginationHTML += `
                 <button onclick='loadMedia(${currentPage + 1}, ${JSON.stringify(currentSearch)})'
-                        class="px-4 py-2 rounded-2xl glass-panel hover:bg-surface-2 text-text text-sm font-bold transition border border-hairline">
+                        class="pg-btn">
                     Next
                 </button>
             `;
@@ -411,12 +358,13 @@
         const dbInfo = document.getElementById('db-info');
 
         const totalCount = data.total_count || 0;
-        const pageSize = 24;
+        const pageSize = PAGE_SIZE;
         const current = data.current_page || 1;
         const startItem = totalCount === 0 ? 0 : ((current - 1) * pageSize) + 1;
         const endItem = Math.min(current * pageSize, totalCount);
 
-        resultsInfo.textContent = `Showing ${startItem}-${endItem} of ${totalCount} ${mediaType}s`;
+        resultsInfo.textContent = `Showing ${startItem}-${endItem} of ${totalCount}`;
+        document.getElementById('page-count').textContent = `${totalCount} title${totalCount === 1 ? '' : 's'}${currentSearch ? ` matching “${currentSearch}”` : ''}`;
 
         if (data.databases_checked && data.databases_checked.length > 0) {
             dbInfo.textContent = `Databases checked: ${data.databases_checked.join(', ')}`;
@@ -525,7 +473,7 @@
 
     #pagination .overflow-x-auto::-webkit-scrollbar-thumb {
         border-radius: 999px;
-        background: rgba(255, 255, 255, 0.2);
+        background: color-mix(in srgb, var(--text) 20%, transparent);
     }
 
     .ma-input {
@@ -539,22 +487,22 @@
         outline: none;
     }
     .ma-input:focus { border-color: var(--primary); }
-    .ma-label { display:block; font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-secondary,var(--text-sec)); margin-bottom:0.35rem; }
-    .ma-tab { flex:1; padding:0.55rem; border-radius:0.75rem; font-weight:700; font-size:0.85rem; border:1px solid var(--border); background:transparent; color:var(--text); cursor:pointer; }
+    .ma-label { display:block; font-size:0.72rem; font-weight: 600; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-secondary,var(--text-sec)); margin-bottom:0.35rem; }
+    .ma-tab { flex:1; padding:0.55rem; border-radius:0.75rem; font-weight: 600; font-size:0.85rem; border:1px solid var(--border); background:transparent; color:var(--text); cursor:pointer; }
     .ma-tab.active { background:var(--primary); color:#fff; border-color:var(--primary); }
     .ma-catalog-picker { max-height:10rem; overflow-y:auto; border:1px solid var(--border); border-radius:0.85rem; padding:.4rem; display:flex; flex-direction:column; gap:.25rem; background:var(--background, var(--bg)); }
     .ma-cat-row { display:flex; align-items:center; gap:.55rem; padding:.45rem .6rem; border-radius:.6rem; cursor:pointer; transition:background .15s ease; }
     .ma-cat-row:hover { background:color-mix(in srgb, var(--primary) 10%, transparent); }
     .ma-cat-row.disabled { opacity:.4; pointer-events:none; }
     .ma-cat-row input { width:1rem; height:1rem; accent-color:var(--primary); cursor:pointer; flex-shrink:0; }
-    .ma-cat-excl { font-size:.65rem; font-weight:800; padding:.15rem .4rem; border-radius:9999px; background:color-mix(in srgb, rgb(239 68 68) 16%, transparent); color:rgb(248 113 113); border:1px solid color-mix(in srgb, rgb(239 68 68) 30%, transparent); }
+    .ma-cat-excl { font-size:.65rem; font-weight: 600; padding:.15rem .4rem; border-radius:9999px; background:color-mix(in srgb, var(--danger) 16%, transparent); color:var(--danger); border:1px solid color-mix(in srgb, var(--danger) 30%, transparent); }
     .ma-search-results { max-height:16rem; overflow-y:auto; margin-top:.5rem; display:flex; flex-direction:column; gap:.4rem; }
     .ma-result-row { display:flex; align-items:center; gap:.7rem; padding:.5rem; border-radius:.7rem; border:1px solid var(--border); background:var(--background, var(--bg)); cursor:pointer; text-align:left; transition:border-color .15s ease; }
     .ma-result-row:hover { border-color:var(--primary); }
     .ma-result-poster { width:2.5rem; height:3.75rem; object-fit:cover; border-radius:.4rem; flex-shrink:0; background:var(--surface,#222); }
     .ma-result-meta { min-width:0; flex:1; }
-    .ma-src-badge { font-size:.6rem; font-weight:800; padding:.1rem .4rem; border-radius:9999px; background:color-mix(in srgb, var(--primary) 16%, transparent); color:var(--primary); border:1px solid color-mix(in srgb, var(--primary) 30%, transparent); text-transform:uppercase; }
-    .ma-linked-chip { display:inline-flex; align-items:center; gap:.5rem; padding:.35rem .7rem; border-radius:9999px; font-size:.78rem; font-weight:700; background:color-mix(in srgb, rgb(16 185 129) 14%, transparent); color:rgb(52 211 153); border:1px solid color-mix(in srgb, rgb(16 185 129) 30%, transparent); }
+    .ma-src-badge { font-size:.6rem; font-weight: 600; padding:.1rem .4rem; border-radius:9999px; background:color-mix(in srgb, var(--primary) 16%, transparent); color:var(--primary); border:1px solid color-mix(in srgb, var(--primary) 30%, transparent); text-transform:uppercase; }
+    .ma-linked-chip { display:inline-flex; align-items:center; gap:.5rem; padding:.35rem .7rem; border-radius:9999px; font-size:.78rem; font-weight: 600; background:color-mix(in srgb, var(--ok) 14%, transparent); color:var(--ok); border:1px solid color-mix(in srgb, var(--ok) 30%, transparent); }
     .ma-unlink-btn { background:none; border:none; color:inherit; font-size:1.1rem; line-height:1; cursor:pointer; padding:0 .1rem; }
 </style>
 
@@ -564,8 +512,8 @@
     <div class="absolute inset-0 flex items-start sm:items-center justify-center p-2 sm:p-4 overflow-y-auto">
         <div class="glass-panel rounded-3xl w-full max-w-2xl my-4">
             <div class="flex items-center justify-between gap-3 px-5 sm:px-6 py-4 border-b border-hairline">
-                <h2 class="text-lg sm:text-xl font-extrabold text-text"><i class="fa-solid fa-plus text-emerald-400"></i> Add Content Manually</h2>
-                <button onclick="closeManualAdd()" class="text-text-secondary hover:text-text text-3xl leading-none">&times;</button>
+                <h2 class="text-lg sm:text-xl font-semibold text-text"><i class="fa-solid fa-plus text-emerald-400"></i> Add Content Manually</h2>
+                <button onclick="closeManualAdd()" class="icon-btn shrink-0" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
             </div>
 
             <div class="px-5 sm:px-6 py-5 space-y-5 max-h-[75vh] overflow-y-auto">
@@ -583,7 +531,7 @@
                     <label class="ma-label">Search title (TMDB / Cinemeta) — optional</label>
                     <div class="flex flex-col sm:flex-row gap-2">
                         <input id="ma-search-query" class="ma-input" placeholder="Title, IMDb id/link or TMDB id/link">
-                        <button type="button" onclick="maSearchTitles()" class="px-4 py-2.5 rounded-xl bg-primary text-white font-bold text-sm shrink-0"><i class="fa-solid fa-magnifying-glass"></i> Search</button>
+                        <button type="button" onclick="maSearchTitles()" class="px-4 py-2.5 rounded-xl bg-primary text-on-primary font-semibold text-sm shrink-0"><i class="fa-solid fa-magnifying-glass"></i> Search</button>
                     </div>
                     <p id="ma-search-state" class="text-xs text-text-secondary mt-1 hidden"></p>
                     <div id="ma-search-results" class="ma-search-results hidden"></div>
@@ -651,7 +599,7 @@
                 <div class="space-y-3">
                     <div class="flex items-center justify-between gap-2">
                         <label class="ma-label" style="margin-bottom:0">Stream link(s) *</label>
-                        <button type="button" onclick="maAddPart()" class="text-xs font-bold text-primary shrink-0"><i class="fa-solid fa-plus"></i> Add split part</button>
+                        <button type="button" onclick="maAddPart()" class="text-xs font-semibold text-primary shrink-0"><i class="fa-solid fa-plus"></i> Add split part</button>
                     </div>
                     <div id="ma-parts" class="space-y-2"></div>
                     <p class="text-xs text-text-secondary">Add more parts only for a split file (they join into one stream, in order).</p>
@@ -684,8 +632,8 @@
             </div>
 
             <div class="flex flex-col sm:flex-row justify-end gap-3 px-5 sm:px-6 py-4 border-t border-hairline">
-                <button onclick="closeManualAdd()" class="px-5 py-2.5 rounded-2xl glass-panel border border-hairline text-text font-bold text-sm">Cancel</button>
-                <button id="ma-submit" onclick="submitManualAdd()" class="px-5 py-2.5 rounded-2xl bg-emerald-500 text-white font-bold text-sm">Add Content</button>
+                <button onclick="closeManualAdd()" class="px-5 py-2.5 rounded-2xl glass-panel border border-hairline text-text font-semibold text-sm">Cancel</button>
+                <button id="ma-submit" onclick="submitManualAdd()" class="px-5 py-2.5 rounded-2xl bg-primary text-on-primary font-semibold text-sm">Add Content</button>
             </div>
         </div>
     </div>
@@ -724,10 +672,10 @@
             state.textContent = `Found ${maSearchList.length} match${maSearchList.length > 1 ? 'es' : ''}. Pick one to auto-fill.`;
             box.innerHTML = maSearchList.map((r, i) => `
                 <button type="button" class="ma-result-row" onclick="maPickResult(${i})">
-                    <img class="ma-result-poster" src="${maEsc(r.poster) || '/static/placeholder.jpg'}" onerror="this.src='/static/placeholder.jpg'">
+                    <img class="ma-result-poster" src="${maEsc(r.poster) || '/static/placeholder.svg'}" onerror="this.src='/static/placeholder.svg'">
                     <span class="ma-result-meta">
                         <span class="flex items-center gap-2">
-                            <span class="text-sm font-bold text-white truncate">${maEsc(r.title)}</span>
+                            <span class="text-sm font-semibold text-text truncate">${maEsc(r.title)}</span>
                             <span class="ma-src-badge">${maEsc(r.source)}</span>
                         </span>
                         <span class="text-xs text-text-secondary block truncate">${maEsc(r.year || '—')} · IMDb: ${maEsc(r.imdb_id || 'N/A')} · TMDB: ${maEsc(r.tmdb_id || 'N/A')}</span>
@@ -792,7 +740,7 @@
                 const safe = (s) => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
                 return `<label class="ma-cat-row" data-exclusive="${c.exclusive ? '1' : '0'}">
                     <input type="checkbox" value="${safe(c._id)}" onchange="onMaCatalogCheck(this)">
-                    <span class="text-sm font-semibold text-white truncate">${safe(c.name)}</span>
+                    <span class="text-sm font-semibold text-text truncate">${safe(c.name)}</span>
                     ${c.exclusive ? '<span class="ma-cat-excl">Exclusive</span>' : ''}
                 </label>`;
             }).join('');
@@ -841,7 +789,7 @@
         document.getElementById('ma-parts').innerHTML =
             `<div class="flex flex-col sm:flex-row gap-2" data-part>
                 <input class="ma-input ma-part-url" placeholder="https://t.me/c/123456/789">
-                <button type="button" onclick="maResolve()" class="px-4 py-2.5 rounded-xl glass-panel border border-hairline text-text font-bold text-sm shrink-0">Resolve</button>
+                <button type="button" onclick="maResolve()" class="px-4 py-2.5 rounded-xl glass-panel border border-hairline text-text font-semibold text-sm shrink-0">Resolve</button>
              </div>`;
     }
 
@@ -850,7 +798,7 @@
         div.className = 'flex flex-col sm:flex-row gap-2';
         div.setAttribute('data-part', '');
         div.innerHTML = `<input class="ma-input ma-part-url" placeholder="Split part link (in order)">
-            <button type="button" onclick="this.closest('[data-part]').remove()" class="px-4 py-2.5 rounded-xl border border-hairline text-red-300 font-bold text-sm shrink-0">Remove</button>`;
+            <button type="button" onclick="this.closest('[data-part]').remove()" class="px-4 py-2.5 rounded-xl border border-hairline text-red-300 font-semibold text-sm shrink-0">Remove</button>`;
         document.getElementById('ma-parts').appendChild(div);
     }
 
@@ -994,5 +942,30 @@
             document.getElementById('ma-quality-custom').classList.toggle('hidden', e.target.value !== '__custom');
         });
     });
+    if (new URLSearchParams(location.search).get('add') === '1') document.addEventListener('DOMContentLoaded', () => { history.replaceState(null, '', location.pathname + '?media_type=' + mediaType); openManualAdd(); });
 </script>
+<style>
+    .m-card { position: relative; min-width: 0; contain: layout paint style; }
+    #media-grid { transition: opacity .2s var(--ease); }
+    #media-grid.is-busy { opacity: .45; pointer-events: none; }
+    .m-skel > div { aspect-ratio: 2 / 3; border-radius: 12px; }
+    .m-skel > p { height: .7rem; margin-top: .55rem; border-radius: 99px; width: 80%; }
+    .m-skel > p + p { width: 50%; margin-top: .4rem; }
+    .m-skel > * { background: linear-gradient(90deg, var(--card) 25%, var(--card-high) 37%, var(--card) 63%); background-size: 400% 100%; animation: m-shimmer 1.3s ease infinite; }
+    @keyframes m-shimmer { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
+    .m-del { position: absolute; z-index: 3; top: 6px; left: 6px; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 99px; border: 0; font-size: .75rem; color: #fff; background: rgba(0,0,0,.72); opacity: 0; transition: opacity .18s var(--ease), background-color .18s var(--ease); cursor: pointer; }
+    .m-card:hover .m-del, .m-del:focus-visible { opacity: 1; }
+    .m-del:hover { background: var(--danger); }
+    @media (hover: none) { .m-del { opacity: 1; width: 26px; height: 26px; } }
+    .m-poster { position: relative; display: block; aspect-ratio: 2 / 3; border-radius: 12px; overflow: hidden; background: var(--card-high); }
+    .m-poster img { position: relative; z-index: 1; width: 100%; height: 100%; object-fit: cover; transition: transform .4s var(--ease); }
+    @media (hover: none) { .m-poster:hover img { transform: none; } }
+    .m-poster:hover img { transform: scale(1.04); }
+    .m-fallback { position: absolute; inset: 0; display: grid; place-items: center; color: var(--text-sec); font-size: 1.5rem; }
+    .m-rating, .m-custom, .q-chip { position: absolute; z-index: 2; padding: 2px 7px; border-radius: 99px; font-size: .72rem; line-height: 1.4; color: #fff; background: rgba(0,0,0,.72); }
+    .m-rating { top: 6px; right: 6px; font-size: .66rem; padding: 1px 6px; }
+    .m-custom { bottom: 6px; right: 6px; background: var(--primary); color: var(--on-primary); }
+    .q-chip { position: static; font-size: .62rem; padding: 1px 6px; }
+    .m-poster > div { z-index: 2; }
+</style>
 {% endblock %}

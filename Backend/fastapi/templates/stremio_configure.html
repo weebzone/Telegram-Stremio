@@ -5,18 +5,23 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Install Telegram Stremio Addon</title>
 
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='{{ theme.colors.primary | replace('#','%23') }}'/%3E%3Cpath d='M12.5 9.5l10 6.5-10 6.5z' fill='white'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"/>
+<meta name="theme-color" content="{{ theme.colors.background }}">
+<link rel="icon" type="image/svg+xml" href="/pwa-icon.svg">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 
 <style>
 :root {
     color-scheme: {{ 'dark' if theme.is_dark else 'light' }};
     --primary: {{ theme.colors.primary }};
-    --secondary: {{ theme.colors.secondary }};
-    --accent: {{ theme.colors.accent }};
+    --on-primary: {{ theme.colors.on_primary }};
+    --card-high: {{ theme.colors.card_high }};
+    --ok: {{ theme.colors.ok }};
+    --danger: {{ theme.colors.danger }};
+    --secondary: var(--primary);
+    --accent: var(--primary);
     --bg: {{ theme.colors.background }};
     --card: {{ theme.colors.card }};
     --border: {{ theme.colors.border }};
@@ -24,16 +29,17 @@
     --text-sec: {{ theme.colors.text_secondary }};
     --surface: color-mix(in srgb, var(--text) 5%, transparent);
     --surface-2: color-mix(in srgb, var(--text) 9%, transparent);
-    --hairline: color-mix(in srgb, var(--text) 12%, transparent);
+    --hairline: var(--border);
     --hairline-strong: color-mix(in srgb, var(--text) 20%, transparent);
     --ring: color-mix(in srgb, var(--primary) 35%, transparent);
     --shadow-color: {{ '0,0,0' if theme.is_dark else '15,23,42' }};
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
+button, input, select, textarea { font-family: inherit; }
 
 body {
-    font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font-family: 'Space Grotesk', system-ui, -apple-system, 'Segoe UI', sans-serif;
     -webkit-font-smoothing: antialiased;
     background-color: var(--bg);
     color: var(--text);
@@ -45,25 +51,15 @@ body {
 }
 
 .wrap { width: 100%; max-width: 960px; margin: auto; }
-.layout { display: grid; gap: 16px; grid-template-columns: 1fr; align-items: start; }
+.layout { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); align-items: start; }
+.layout > * { min-width: 0; }
 @media (min-width: 860px) { .layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
 
-body::before {
-    content: "";
-    position: fixed;
-    inset: 0;
-    z-index: -1;
-    pointer-events: none;
-    background-image:
-        radial-gradient(circle at 15% 10%, color-mix(in srgb, var(--primary) 14%, transparent), transparent 40%),
-        radial-gradient(circle at 85% 85%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 40%);
-}
 
 .card {
-    background: color-mix(in srgb, var(--card) 90%, var(--bg));
-    border: 1px solid var(--hairline);
-    border-radius: 1.75rem;
-    box-shadow: 0 24px 60px rgba(var(--shadow-color), {{ '0.45' if theme.is_dark else '0.16' }});
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 20px;
     padding: clamp(24px, 4vw, 36px);
     width: 100%;
     text-align: center;
@@ -71,18 +67,16 @@ body::before {
 
 .brand { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 20px; }
 .brand-logo {
-    width: 44px; height: 44px; border-radius: 9999px;
-    background: var(--primary); color: #fff;
+    width: 44px; height: 44px; border-radius: 14px;
+    background: var(--primary); color: var(--on-primary);
     display: flex; align-items: center; justify-content: center;
-    font-size: 1rem; box-shadow: 0 0 18px color-mix(in srgb, var(--primary) 55%, transparent);
+    font-size: 1rem;
 }
 .brand-name {
-    font-size: 1.6rem; font-weight: 800; letter-spacing: 0.02em;
-    background: linear-gradient(90deg, var(--primary), var(--accent));
-    -webkit-background-clip: text; background-clip: text; color: transparent;
+    font-size: 1.4rem; font-weight: 600; letter-spacing: -0.01em; color: var(--text);
 }
 
-h1 { font-size: 1.15rem; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+h1 { font-size: 1.15rem; font-weight: 600; color: var(--text); margin-bottom: 6px; }
 .sub-title { color: var(--text-sec); font-size: 0.85rem; margin-bottom: 26px; line-height: 1.5; }
 
 .info-row {
@@ -91,21 +85,20 @@ h1 { font-size: 1.15rem; font-weight: 700; color: var(--text); margin-bottom: 6p
     border-radius: 0.85rem; padding: 12px 16px; margin-bottom: 10px; font-size: 0.88rem;
 }
 .info-label { color: var(--text-sec); font-weight: 500; }
-.info-val { font-weight: 700; color: var(--text); }
+.info-val { font-weight: 600; color: var(--text); }
 .status-badge {
     display: inline-flex; align-items: center; gap: 0.35rem;
-    padding: 3px 12px; border-radius: 9999px; font-size: 0.78rem; font-weight: 700;
-    background: {{ status_color }}22; color: {{ status_color }};
+    padding: 3px 12px; border-radius: 9999px; font-size: 0.78rem; font-weight: 600;
+    background: color-mix(in srgb, {{ 'var(--ok)' if status_text == 'Active' else 'var(--danger)' }} 14%, transparent); color: {{ 'var(--ok)' if status_text == 'Active' else 'var(--danger)' }};
 }
 
 .btn-install {
     display: flex; align-items: center; justify-content: center; gap: 0.6rem;
     width: 100%; margin: 26px 0 12px;
-    background: linear-gradient(135deg, var(--primary), var(--secondary));
-    color: #fff; font-weight: 700; font-size: 0.98rem;
-    padding: 14px 24px; border-radius: 1rem; border: none;
+    background: var(--primary);
+    color: var(--on-primary); font-weight: 500; font-size: 0.98rem;
+    padding: 13px 24px; border-radius: 9999px; border: none;
     cursor: pointer; text-decoration: none;
-    box-shadow: 0 10px 26px color-mix(in srgb, var(--primary) 32%, transparent);
     transition: filter .2s ease, transform .12s ease;
 }
 .btn-install:hover { filter: brightness(1.08); }
@@ -136,7 +129,7 @@ h1 { font-size: 1.15rem; font-weight: 700; color: var(--text); margin-bottom: 6p
 .btn-copy {
     margin-top: 10px; width: 100%; padding: 10px;
     background: var(--surface); border: 1px solid var(--hairline); color: var(--text-sec);
-    border-radius: 0.7rem; cursor: pointer; font-size: 0.85rem; font-weight: 600;
+    border-radius: 9999px; cursor: pointer; font-size: 0.85rem; font-weight: 500;
     transition: background .2s ease, color .2s ease, border-color .2s ease;
 }
 .btn-copy:hover { background: var(--surface-2); color: var(--text); border-color: var(--hairline-strong); }
@@ -228,18 +221,18 @@ if (!navigator.clipboard) Object.defineProperty(navigator, 'clipboard', { value:
 
 <style>
 .cfg-block { margin: 14px 0; }
-.cfg-title { font-size: .8rem; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--text-sec); margin-bottom: 8px; }
+.cfg-title { font-size: .8rem; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--text-sec); margin-bottom: 8px; }
 .cfg-hint { font-size: .72rem; color: var(--text-sec); margin-top: 6px; }
 .seg { display: flex; gap: 6px; background: var(--surface); border: 1px solid var(--hairline); border-radius: .8rem; padding: 4px; }
-.seg-btn { flex: 1; padding: 9px; border-radius: .6rem; border: none; background: transparent; color: var(--text-sec); font-weight: 700; font-size: .82rem; cursor: pointer; }
+.seg-btn { flex: 1; padding: 9px; border-radius: .6rem; border: none; background: transparent; color: var(--text-sec); font-weight: 600; font-size: .82rem; cursor: pointer; }
 .seg-btn.active { background: var(--primary); color: #fff; }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
-.qchip { padding: 7px 14px; border-radius: 9999px; border: 1px solid var(--hairline); background: var(--surface); color: var(--text); font-weight: 800; font-size: .8rem; cursor: pointer; }
+.qchip { padding: 7px 14px; border-radius: 9999px; border: 1px solid var(--hairline); background: var(--surface); color: var(--text); font-weight: 600; font-size: .8rem; cursor: pointer; }
 .qchip.on { background: linear-gradient(135deg, var(--primary), var(--accent)); color: #fff; border-color: transparent; }
 .cfg-catalogs { display: flex; flex-direction: column; gap: 6px; }
 .cfg-cat { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--hairline); border-radius: .7rem; background: var(--surface); }
 .cfg-cat.hidden-cat { opacity: .5; }
-.cfg-cat .nm { flex: 1; min-width: 0; font-weight: 700; font-size: .85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cfg-cat .nm { flex: 1; min-width: 0; font-weight: 600; font-size: .85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cfg-eye, .cfg-arr { width: 30px; height: 26px; border-radius: .5rem; border: 1px solid var(--hairline); background: var(--bg); color: var(--text); cursor: pointer; font-size: .72rem; }
 .cfg-arr:disabled { opacity: .35; cursor: not-allowed; }
 </style>
@@ -272,12 +265,12 @@ function renderCatalogs() {
     document.getElementById('cfg-catalogs').innerHTML = cfgCatalogs.map((c, i) => {
         const key = catKey(c);
         const hidden = cfg.hidden_catalogs.includes(key) || cfg.hidden_catalogs.includes(c.id);
-        const tag = c.type === 'series' ? '📺 TV' : '🎬 Movie';
+        const tag = c.type === 'series' ? 'Series' : 'Movie';
         return `<div class="cfg-cat ${hidden ? 'hidden-cat' : ''}">
             <button class="cfg-eye" title="Show/hide" onclick="toggleHide(${i})"><i class="fa-solid fa-eye${hidden ? '-slash' : ''}"></i></button>
             <span class="nm">${escapeCfg(c.name)} <small style="opacity:.6">· ${tag}</small></span>
-            <button class="cfg-arr" ${i === 0 ? 'disabled' : ''} onclick="moveCat(${i}, -1)">▲</button>
-            <button class="cfg-arr" ${i === cfgCatalogs.length - 1 ? 'disabled' : ''} onclick="moveCat(${i}, 1)">▼</button>
+            <button class="cfg-arr" ${i === 0 ? 'disabled' : ''} onclick="moveCat(${i}, -1)" aria-label="Move up"><i class="fa-solid fa-chevron-up"></i></button>
+            <button class="cfg-arr" ${i === cfgCatalogs.length - 1 ? 'disabled' : ''} onclick="moveCat(${i}, 1)" aria-label="Move down"><i class="fa-solid fa-chevron-down"></i></button>
         </div>`;
     }).join('') || '<p class="cfg-hint">No catalogs available.</p>';
 }

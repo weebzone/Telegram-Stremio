@@ -21,7 +21,7 @@ from Backend.config import Telegram
 from Backend.helper.analytics import client_ip_from, record_client
 from Backend.fastapi.security.tokens import verify_token
 from Backend.helper.cf_stream import cf_enabled, cf_stream_url
-from Backend.fastapi.themes import DEFAULT_THEME, DEFAULT_STYLE, get_theme
+from Backend.fastapi.themes import get_theme, theme_key
 from Backend.helper.fanart import fanart_artwork
 from Backend.helper.global_search import global_search, is_global_search_enabled
 from Backend.helper.metadata.providers.cinemeta import get_detail, get_season
@@ -2350,7 +2350,7 @@ async def configure_addon(token: str, request: Request):
 
     return templates.TemplateResponse("stremio_configure.html", {
         "request": request,
-        "theme": get_theme(request.session.get("theme", DEFAULT_THEME), request.session.get("style", DEFAULT_STYLE)),
+        "theme": get_theme(theme_key(request)),
         "manifest_url": manifest_url,
         "web_install_url": web_install_url,
         "user_name": user_name,

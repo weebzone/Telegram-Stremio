@@ -3,81 +3,70 @@
 
 {% block content %}
 <style>
-  .rq-shell { max-width: 1180px; margin: 0 auto; }
-  .rq-tabs { display: flex; gap: 0.5rem; flex-wrap: wrap; }
-  .rq-tab { padding: 0.5rem 1.1rem; border-radius: 9999px; border: 1px solid var(--hairline, rgba(255,255,255,0.1));
-            cursor: pointer; font-weight: 700; font-size: 0.9rem; color: var(--text-sec); background: transparent; }
-  .rq-tab.active { background: var(--primary); color: var(--bg); border-color: var(--primary); }
-  .rq-filters { display: flex; gap: 0.35rem; flex-wrap: wrap; }
-  .rq-chip { padding: 0.3rem 0.8rem; border-radius: 9999px; border: 1px solid var(--hairline, rgba(255,255,255,0.1));
-             cursor: pointer; font-size: 0.78rem; font-weight: 600; color: var(--text-sec); background: transparent; }
-  .rq-chip.active { background: color-mix(in srgb, var(--primary) 20%, transparent); color: var(--primary); border-color: var(--primary); }
-  .rq-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 1rem; }
-  .rq-card { background: var(--surface, rgba(255,255,255,0.03)); border: 1px solid var(--hairline, rgba(255,255,255,0.08));
-             border-radius: 1rem; overflow: hidden; display: flex; flex-direction: column; }
-  .rq-poster { position: relative; aspect-ratio: 2/3; background: linear-gradient(135deg, #1f2937, #111827); }
+  .rq-tabs { display: inline-flex; padding: 4px; gap: 2px; border-radius: 9999px; background: var(--card); border: 1px solid var(--border); }
+  .rq-tab { padding: .45rem 1rem; border-radius: 9999px; cursor: pointer; font-size: .88rem; color: var(--text-sec); background: transparent; border: 0; transition: background-color .2s var(--ease), color .2s var(--ease); }
+  .rq-tab span { margin-left: .3rem; font-size: .78rem; opacity: .75; }
+  .rq-tab.active { background: var(--card-high); color: var(--primary); }
+  .rq-filters { display: flex; gap: .4rem; flex-wrap: wrap; }
+  .rq-chip { padding: .35rem .85rem; border-radius: 9999px; border: 1px solid var(--border); cursor: pointer; font-size: .82rem; color: var(--text-sec); background: transparent; transition: all .15s var(--ease); }
+  .rq-chip:hover { color: var(--text); }
+  .rq-chip.active { background: color-mix(in srgb, var(--primary) 12%, transparent); color: var(--primary); border-color: color-mix(in srgb, var(--primary) 50%, var(--border)); }
+  .rq-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 1.25rem 1rem; }
+  .rq-card { min-width: 0; display: flex; flex-direction: column; }
+  .rq-poster { position: relative; aspect-ratio: 2/3; border-radius: 14px; overflow: hidden; background: var(--card-high); }
   .rq-poster img { width: 100%; height: 100%; object-fit: cover; display: block; }
-  .rq-poster .noimg { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 2rem; color: var(--text-sec); }
-  .rq-count { position: absolute; top: 0.5rem; left: 0.5rem; background: rgba(0,0,0,0.65); color: #fff;
-              padding: 0.15rem 0.55rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 700; }
-  .rq-badge { position: absolute; top: 0.5rem; right: 0.5rem; padding: 0.15rem 0.55rem; border-radius: 9999px;
-              font-size: 0.65rem; font-weight: 800; text-transform: uppercase; }
-  .b-pending { background: #f59e0b; color: #111; }
-  .b-uploaded { background: #22c55e; color: #052e16; }
-  .b-denied { background: #64748b; color: #fff; }
-  .b-banned { background: #ef4444; color: #fff; }
-  .rq-body { padding: 0.7rem 0.8rem; flex: 1; display: flex; flex-direction: column; gap: 0.35rem; }
-  .rq-title { font-weight: 700; font-size: 0.92rem; line-height: 1.25; }
-  .rq-id { font-size: 0.72rem; color: var(--text-sec); word-break: break-all; }
-  .rq-actions { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.35rem; padding: 0 0.8rem 0.8rem; }
-  .rq-btn { border: none; border-radius: 0.55rem; padding: 0.45rem 0.3rem; font-size: 0.78rem; font-weight: 700; cursor: pointer;
-            display: flex; align-items: center; justify-content: center; gap: 0.3rem; }
+  .rq-poster .noimg { position: absolute; inset: 0; display: grid; place-items: center; font-size: 1.5rem; color: var(--text-sec); }
+  .rq-count, .rq-badge { position: absolute; top: 6px; padding: 2px 8px; border-radius: 9999px; font-size: .72rem; line-height: 1.4; background: rgba(0,0,0,.72); color: #fff; }
+  .rq-count { left: 6px; }
+  .rq-badge { right: 6px; text-transform: capitalize; }
+  .b-pending { background: var(--warn); color: #1a1405; }
+  .b-uploaded { background: var(--ok); color: #0b1a07; }
+  .b-denied { background: rgba(0,0,0,.72); }
+  .b-banned { background: var(--danger); color: #fff; }
+  .rq-body { padding: .6rem .1rem .5rem; display: flex; flex-direction: column; gap: .1rem; min-width: 0; }
+  .rq-title { font-weight: 500; font-size: .92rem; line-height: 1.3; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .rq-id { font-size: .75rem; color: var(--text-sec); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rq-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .35rem; margin-top: auto; }
+  .rq-btn { border: 1px solid var(--border); border-radius: 9999px; padding: .4rem .3rem; font-size: .78rem; cursor: pointer; background: transparent; color: var(--text); display: flex; align-items: center; justify-content: center; gap: .3rem; white-space: nowrap; transition: background-color .15s var(--ease), transform .12s var(--ease); }
+  .rq-btn:hover { background: var(--card-high); }
+  .rq-btn:active { transform: scale(.96); }
   .rq-btn.wide { grid-column: 1 / -1; }
-  .btn-up { background: #22c55e22; color: #22c55e; }
-  .btn-deny { background: #64748b22; color: #94a3b8; }
-  .btn-ban { background: #ef444422; color: #ef4444; }
-  .btn-reopen { background: #f59e0b22; color: #f59e0b; }
-  .btn-del { background: transparent; color: var(--text-sec); border: 1px solid var(--hairline, rgba(255,255,255,0.1)); }
-  .rq-btn:hover { filter: brightness(1.25); }
-  .rq-empty { text-align: center; padding: 3rem 1rem; color: var(--text-sec); }
-  .rq-toolbtn { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.55rem 1.1rem; border-radius: 0.7rem;
-                font-weight: 700; font-size: 0.85rem; cursor: pointer; text-decoration: none; transition: all .15s;
-                border: 1px solid var(--hairline, rgba(255,255,255,0.12)); background: var(--surface, rgba(255,255,255,0.04)); color: var(--text); }
-  .rq-toolbtn:hover { border-color: var(--primary); color: var(--primary); }
-  .rq-toolbtn.primary { background: var(--primary); color: var(--bg); border-color: var(--primary); }
-  .rq-toolbtn.primary:hover { filter: brightness(1.1); color: var(--bg); }
-  .rq-pager { display: flex; align-items: center; justify-content: center; gap: 0.9rem; margin-top: 1.75rem; }
-  .rq-pager button { border: 1px solid var(--hairline, rgba(255,255,255,0.12)); background: transparent; color: var(--text);
-                     border-radius: 0.6rem; padding: 0.45rem 1rem; cursor: pointer; font-weight: 700; }
-  .rq-pager button:disabled { opacity: 0.35; cursor: not-allowed; }
-  .rq-pager .pageinfo { color: var(--text-sec); font-size: 0.85rem; font-weight: 600; }
+  .btn-up i { color: var(--ok); }
+  .btn-deny i { color: var(--text-sec); }
+  .btn-ban i, .btn-del i { color: var(--danger); }
+  .btn-reopen i { color: var(--warn); }
+  .rq-empty { text-align: center; padding: 3.5rem 1rem; color: var(--text-sec); }
+  .rq-pager { display: flex; align-items: center; justify-content: center; gap: .75rem; margin-top: 2rem; }
+  .rq-pager button { min-width: 2.4rem; height: 2.4rem; padding: 0 .9rem; border: 1px solid var(--border); background: transparent; color: var(--text); border-radius: 9999px; cursor: pointer; }
+  .rq-pager button:hover:not(:disabled) { background: var(--card-high); }
+  .rq-pager button:disabled { opacity: .35; cursor: not-allowed; }
+  .rq-pager .pageinfo { color: var(--text-sec); font-size: .85rem; }
 </style>
 
 <div class="rq-shell">
-  <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+  <header class="page-head">
     <div>
-      <h1 class="section-title text-2xl sm:text-3xl">Content Requests</h1>
-      <p class="muted text-sm mt-1">Titles your users requested from the public request page.</p>
+      <h1 class="page-title">Requests</h1>
+      <p class="page-sub">Titles your users asked for on the public request page</p>
     </div>
-    <div class="flex items-center gap-2">
-      <button onclick="loadRequests()" class="rq-toolbtn"><i class="fa-solid fa-rotate"></i> Refresh</button>
-      <a href="/request" target="_blank" class="rq-toolbtn primary"><i class="fa-solid fa-arrow-up-right-from-square"></i> Public page</a>
+    <div class="page-actions">
+      <button onclick="loadRequests()" class="btn-ghost px-4 py-2 text-sm"><i class="fa-solid fa-rotate"></i> Refresh</button>
+      <a href="/request" target="_blank" rel="noopener" class="btn-primary px-4 py-2 text-sm"><i class="fa-solid fa-arrow-up-right-from-square"></i> Public page</a>
     </div>
-  </div>
+  </header>
 
-  <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
-    <div class="rq-tabs">
-      <button class="rq-tab active" data-type="movie" onclick="setType(this,'movie')">🎬 Movies <span id="cnt-movie">0</span></button>
-      <button class="rq-tab" data-type="tv" onclick="setType(this,'tv')">📺 TV Shows <span id="cnt-tv">0</span></button>
+  <div class="flex flex-col sm:flex-row sm:items-center gap-3 mb-6">
+    <div class="rq-tabs shrink-0 self-start">
+      <button class="rq-tab active" data-type="movie" onclick="setType(this,'movie')">Movies<span id="cnt-movie">0</span></button>
+      <button class="rq-tab" data-type="tv" onclick="setType(this,'tv')">TV shows<span id="cnt-tv">0</span></button>
     </div>
-  </div>
-
-  <div class="rq-filters mb-5">
+  <div class="rq-filters">
     <button class="rq-chip active" data-status="" onclick="setStatusFilter(this,'')">All</button>
     <button class="rq-chip" data-status="pending" onclick="setStatusFilter(this,'pending')">Pending</button>
     <button class="rq-chip" data-status="uploaded" onclick="setStatusFilter(this,'uploaded')">Uploaded</button>
     <button class="rq-chip" data-status="denied" onclick="setStatusFilter(this,'denied')">Denied</button>
     <button class="rq-chip" data-status="banned" onclick="setStatusFilter(this,'banned')">Banned</button>
+  </div>
   </div>
 
   <div id="rq-grid" class="rq-grid"></div>
@@ -142,7 +131,7 @@ function cardHtml(r) {
   return `<div class="rq-card">
     <div class="rq-poster">
       ${poster}
-      <span class="rq-count">👥 ${esc(r.request_count || 0)}</span>
+      <span class="rq-count"><i class="fa-solid fa-user-group"></i> ${esc(r.request_count || 0)}</span>
       <span class="rq-badge b-${esc(r.status)}">${esc(r.status)}</span>
     </div>
     <div class="rq-body">
@@ -170,7 +159,7 @@ function render() {
   const grid = document.getElementById('rq-grid');
   grid.innerHTML = pageItems.length
     ? pageItems.map(cardHtml).join('')
-    : `<div class="rq-empty" style="grid-column:1/-1"><i class="fa-solid fa-inbox" style="font-size:2rem;opacity:.5"></i><p class="mt-2">No ${curStatus || ''} ${curType === 'tv' ? 'TV' : 'movie'} requests.</p></div>`;
+    : `<div class="rq-empty" style="grid-column:1/-1"><span class="mx-auto mb-3 grid place-items-center w-12 h-12 rounded-full bg-card-high"><i class="fa-solid fa-inbox"></i></span><p>No ${curStatus || ''} ${curType === 'tv' ? 'TV' : 'movie'} requests.</p></div>`;
 
   const pager = document.getElementById('rq-pager');
   if (items.length > PER_PAGE) {
@@ -193,7 +182,7 @@ async function loadRequests() {
     allRequests = data.data || [];
     render();
   } catch (e) {
-    grid.innerHTML = `<p style="color:#ef4444;grid-column:1/-1">Failed to load requests.</p>`;
+    grid.innerHTML = `<p style="color:var(--danger);grid-column:1/-1">Failed to load requests.</p>`;
   }
 }
 

@@ -3,184 +3,111 @@
 
 {% block content %}
 <style>
-    .access-shell { display: flex; flex-direction: column; gap: 1.5rem; }
-
-    .page-hero, .section-panel, .table-shell, .stat-card, .mobile-token-card, .empty-state, .modal-glass {
-        background: color-mix(in srgb, var(--card) 50%, transparent);
-        backdrop-filter: blur(20px);
-        -webkit-backdrop-filter: blur(20px);
-        border: 1px solid var(--border);
-        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.22);
-    }
-    .page-hero, .section-panel, .table-shell, .stat-card, .mobile-token-card, .empty-state { border-radius: 1.5rem; }
-
-    .hero-glow { position: relative; overflow: hidden; isolation: isolate; }
-    .hero-glow::before {
-        content: ""; position: absolute; inset: -30% auto auto -10%;
-        width: 16rem; height: 16rem; border-radius: 9999px;
-        background: color-mix(in srgb, var(--primary) 18%, transparent);
-        filter: blur(52px); z-index: -1; pointer-events: none;
-    }
-    .hero-glow::after {
-        content: ""; position: absolute; inset: auto -4% -34% auto;
-        width: 14rem; height: 14rem; border-radius: 9999px;
-        background: color-mix(in srgb, var(--accent) 16%, transparent);
-        filter: blur(52px); z-index: -1; pointer-events: none;
-    }
-
+    .access-shell { display: flex; flex-direction: column; gap: 2rem; }
+    .section-panel, .stat-card, .mobile-token-card, .modal-glass { background: var(--card); border: 1px solid var(--border); }
+    .section-panel { border-radius: var(--radius); }
+    .empty-state { border-radius: var(--radius-sm); }
     .section-title { color: var(--text); }
-    .section-muted { color: var(--text-sec); }
+    .section-muted, .text-soft { color: var(--text-sec); }
 
-    .glass-btn {
-        border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
-        background: color-mix(in srgb, var(--card) 92%, var(--bg));
-        color: var(--text); transition: all 0.25s ease; box-shadow: 0 8px 24px rgba(0,0,0,0.14);
-    }
-    .glass-btn:hover { transform: translateY(-1px); border-color: color-mix(in srgb, var(--primary) 35%, var(--border)); }
+    .glass-btn { display: inline-flex; align-items: center; justify-content: center; gap: .5rem; border: 1px solid var(--border); background: transparent; color: var(--text); border-radius: 9999px !important; font-weight: 500 !important; transition: background-color .15s var(--ease), border-color .15s var(--ease), transform .12s var(--ease); white-space: nowrap; }
+    .glass-btn:hover { background: var(--card-high); }
+    .glass-btn:active { transform: scale(.97); }
+    .glass-btn:disabled { opacity: .45; }
+    .glass-btn-primary { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
+    .glass-btn-primary:hover { background: var(--primary); filter: brightness(1.07); }
+    .glass-btn-success { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 35%, transparent); background: color-mix(in srgb, var(--ok) 10%, transparent); }
+    .glass-btn-warning { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 35%, transparent); background: color-mix(in srgb, var(--warn) 10%, transparent); }
+    .glass-btn-danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 35%, transparent); background: color-mix(in srgb, var(--danger) 10%, transparent); }
+    .glass-btn-purple, .glass-btn-gold { color: var(--primary); border-color: color-mix(in srgb, var(--primary) 35%, transparent); background: color-mix(in srgb, var(--primary) 10%, transparent); }
 
-    .glass-btn-primary {
-        background: linear-gradient(135deg, color-mix(in srgb, var(--primary) 88%, white 8%), color-mix(in srgb, var(--accent) 82%, var(--primary) 18%));
-        color: white; border: 1px solid color-mix(in srgb, var(--primary) 50%, transparent);
-    }
-    .glass-btn-primary:hover { filter: brightness(1.05); }
-    .glass-btn-success { background: linear-gradient(135deg, #22c55e, #16a34a); color: #fff; border-color: transparent; }
-    .glass-btn-warning { background: linear-gradient(135deg, #f59e0b, #d97706); color: #fff; border-color: transparent; }
-    .glass-btn-danger { background: linear-gradient(135deg, #ef4444, #dc2626); color: #fff; border-color: transparent; }
-    .glass-btn-purple { background: linear-gradient(135deg, #a855f7, #9333ea); color: #fff; border-color: transparent; }
-    .glass-btn-gold { background: linear-gradient(135deg, #f5c518, #d4a90a); color: #1a1a1a; border-color: transparent; }
+    .glass-input, .glass-select { width: 100%; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg); color: var(--text); padding: .7rem 1rem; outline: none; font-size: .9rem; transition: border-color .18s var(--ease), box-shadow .18s var(--ease); }
+    .glass-input::placeholder { color: var(--text-sec); }
+    .glass-input:focus, .glass-select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--ring); }
 
-    .glass-input, .glass-select {
-        width: 100%; border-radius: 1rem;
-        border: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
-        background: color-mix(in srgb, var(--bg) 68%, transparent);
-        color: var(--text); padding: 0.85rem 1rem; outline: none; transition: all 0.2s ease;
-    }
-    .glass-input::placeholder { color: color-mix(in srgb, var(--text-sec) 85%, transparent); }
-    .glass-input:focus, .glass-select:focus {
-        border-color: color-mix(in srgb, var(--primary) 65%, var(--border));
-        box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 12%, transparent);
-    }
+    .stats-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.5rem; padding: 1.25rem; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); }
+    .stat-value { font-size: 1.5rem; font-weight: 600; line-height: 1.1; font-variant-numeric: tabular-nums; }
+    .stat-label { margin-top: .2rem; font-size: .85rem; color: var(--text-sec); }
 
-    .stat-card { padding: 1.25rem; text-align: center; position: relative; overflow: hidden; }
-    .stat-card::before {
-        content: ""; position: absolute; width: 7rem; height: 7rem; border-radius: 9999px;
-        filter: blur(42px); top: -25%; right: -10%; opacity: 0.7; pointer-events: none;
-    }
-    .stat-primary::before { background: color-mix(in srgb, var(--primary) 24%, transparent); }
-    .stat-success::before { background: color-mix(in srgb, #22c55e 24%, transparent); }
-    .stat-danger::before { background: color-mix(in srgb, #ef4444 24%, transparent); }
-    .stat-value { font-size: 1.9rem; font-weight: 800; line-height: 1; position: relative; z-index: 1; }
-    .stat-label {
-        margin-top: 0.55rem; font-size: 0.76rem; font-weight: 700; letter-spacing: 0.08em;
-        text-transform: uppercase; color: var(--text-sec); position: relative; z-index: 1;
-    }
-
-    .table-shell { overflow: hidden; }
+    .table-shell { overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-sm); }
     .access-table { width: 100%; border-collapse: separate; border-spacing: 0; }
-    .access-table thead th {
-        background: color-mix(in srgb, var(--bg) 65%, transparent);
-        color: var(--text-sec); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em;
-        border-bottom: 1px solid color-mix(in srgb, var(--border) 92%, transparent);
-    }
-    .access-table tbody tr { transition: background 0.22s ease; }
-    .access-table tbody tr:hover { background: color-mix(in srgb, var(--primary) 6%, transparent); }
-    .access-table td { border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent); color: var(--text); vertical-align: top; }
+    .access-table thead th { background: var(--card); color: var(--text-sec); font-size: .72rem; font-weight: 500 !important; text-transform: uppercase; letter-spacing: .08em; border-bottom: 1px solid var(--border); }
+    .access-table tbody tr { transition: background-color .15s var(--ease); }
+    .access-table tbody tr:hover { background: var(--surface); }
+    .access-table td { border-bottom: 1px solid var(--border); color: var(--text); vertical-align: top; }
     .access-table tbody tr:last-child td { border-bottom: none; }
-    .row-expired { background: color-mix(in srgb, #ef4444 8%, transparent); }
+    .row-expired { background: color-mix(in srgb, var(--danger) 5%, transparent); }
 
-    .status-badge {
-        display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.45rem 0.8rem;
-        border-radius: 9999px; font-size: 0.78rem; font-weight: 700; border: 1px solid transparent;
-    }
-    .status-active { background: color-mix(in srgb, #22c55e 16%, transparent); color: #86efac; border-color: color-mix(in srgb, #22c55e 28%, transparent); }
-    .status-expired { background: color-mix(in srgb, #ef4444 14%, transparent); color: #fca5a5; border-color: color-mix(in srgb, #ef4444 28%, transparent); }
-    .status-warning { background: color-mix(in srgb, #f59e0b 16%, transparent); color: #fde68a; border-color: color-mix(in srgb, #f59e0b 28%, transparent); }
-    .status-lifetime { background: color-mix(in srgb, #a855f7 16%, transparent); color: #d8b4fe; border-color: color-mix(in srgb, #a855f7 28%, transparent); }
-    .status-gold { background: color-mix(in srgb, #f5c518 18%, transparent); color: #f5c518; }
+    .status-badge { display: inline-flex; align-items: center; gap: .4rem; padding: .2rem .65rem; border-radius: 9999px; font-size: .75rem; font-weight: 500; white-space: nowrap; }
+    .status-active { background: color-mix(in srgb, var(--ok) 14%, transparent); color: var(--ok); }
+    .status-expired { background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--danger); }
+    .status-warning { background: color-mix(in srgb, var(--warn) 14%, transparent); color: var(--warn); }
+    .status-lifetime { background: color-mix(in srgb, var(--primary) 14%, transparent); color: var(--primary); }
+    .status-gold { background: color-mix(in srgb, var(--warn) 14%, transparent); color: var(--warn); }
 
-    .action-chip { border-radius: 9999px; padding: 0.5rem 0.85rem; font-size: 0.72rem; font-weight: 700; border: 1px solid transparent; transition: all 0.2s ease; white-space: nowrap; }
-    .action-chip:hover { transform: translateY(-1px); }
+    .action-chip { display: inline-flex; align-items: center; gap: .35rem; border-radius: 9999px; padding: .35rem .75rem; font-size: .75rem; font-weight: 500; border: 1px solid var(--border); background: transparent; color: var(--text); transition: background-color .15s var(--ease), transform .12s var(--ease); white-space: nowrap; }
+    .action-chip:hover { background: var(--card-high); }
+    .action-chip:active { transform: scale(.96); }
+    .action-chip.text-danger { color: var(--danger); }
 
-    .addon-box { padding: 0.8rem; border-radius: 1rem; background: color-mix(in srgb, var(--bg) 56%, transparent); border: 1px solid color-mix(in srgb, var(--border) 70%, transparent); }
-    .usage-box { font-size: 0.72rem; line-height: 1.5; }
+    .addon-box { padding: .7rem .8rem; border-radius: 12px; background: var(--bg); border: 1px solid var(--border); min-width: 0; overflow-wrap: anywhere; }
+    .usage-box { font-size: .75rem; line-height: 1.55; }
 
-    .mobile-token-card { padding: 1rem; }
-    .mobile-token-card + .mobile-token-card { margin-top: 0.9rem; }
+    .mobile-token-card { padding: 1rem; border-radius: var(--radius-sm); min-width: 0; }
+    .mobile-token-card + .mobile-token-card { margin-top: .75rem; }
     .mobile-grid { display: none; }
 
     .pagination-shell { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
     .pagination-text { color: var(--text-sec); }
-    .pagination-btn { min-width: 92px; }
+    .pagination-shell .controls { display: flex; align-items: center; gap: .5rem; }
+    .pagination-btn { min-width: 88px; }
 
-    .modal-backdrop { background: rgba(4, 8, 18, 0.58); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
-    .modal-glass { border-radius: 1.6rem; padding: 1.4rem; border: 1px solid color-mix(in srgb, var(--border) 95%, transparent); width: min(92vw, 32rem); }
-    .modal-field label { color: var(--text-sec); font-size: 0.82rem; font-weight: 700; margin-bottom: 0.55rem; display: block; }
+    .modal-backdrop { background: var(--scrim); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
+    .modal-glass { border-radius: var(--radius); padding: 1.4rem; width: min(100%, 32rem); max-height: calc(100dvh - 2rem); overflow-y: auto; box-shadow: var(--shadow-strong); }
+    .modal-field label { color: var(--text-sec); font-size: .78rem; font-weight: 500 !important; margin-bottom: .45rem; display: block; }
 
-    .text-soft { color: var(--text-sec); }
     .no-scrollbar::-webkit-scrollbar { display: none; }
     .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
     @media (max-width: 1024px) { .access-table th, .access-table td { padding-left: 1rem; padding-right: 1rem; } }
-    @media (max-width: 767px) {
+    @media (max-width: 767.98px) {
         .desktop-table-wrap { display: none; }
         .mobile-grid { display: block; }
-        .page-hero, .section-panel { padding: 1rem; border-radius: 1.35rem; }
+        .section-panel { padding: 1rem; }
+        .stats-row { padding: 1rem; gap: 1rem; }
         .pagination-shell { flex-direction: column; align-items: stretch; }
-        .pagination-shell .controls { width: 100%; display: grid; grid-template-columns: 1fr auto 1fr; gap: 0.6rem; align-items: center; }
+        .pagination-shell .controls { width: 100%; display: grid; grid-template-columns: 1fr auto 1fr; }
         .pagination-btn { width: 100%; }
     }
 </style>
 
-<div class="access-shell py-2 sm:py-4">
-    <section class="page-hero hero-glow p-5 sm:p-6 lg:p-8">
-        <div class="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-                <div class="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-bold tracking-[0.18em] uppercase mb-3"
-                     style="border-color: color-mix(in srgb, var(--primary) 28%, var(--border)); color: var(--text-sec); background: color-mix(in srgb, var(--primary) 10%, transparent);">
-                    <i class="fas fa-shield-halved text-[11px]" style="color: var(--primary);"></i>
-                    Access Control Hub
-                </div>
-                <h1 class="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight section-title">Tokens &amp; Access</h1>
-                <p class="mt-2 text-sm sm:text-base section-muted max-w-2xl">
-                    One place for everything: create addon tokens, set data limits, mark lifetime access, link users and manage subscriptions.
-                </p>
-            </div>
-
-            <div class="flex flex-wrap gap-3">
-                <button onclick="openCreateModal()" class="glass-btn glass-btn-primary rounded-2xl px-5 py-3 text-sm font-bold inline-flex items-center gap-2">
-                    <i class="fas fa-plus"></i> New Token
-                </button>
-                <button onclick="loadTokens()" class="glass-btn rounded-2xl px-5 py-3 text-sm font-bold inline-flex items-center gap-2">
-                    <i class="fas fa-rotate-right"></i> Refresh
-                </button>
-            </div>
+<div class="access-shell">
+    <header class="page-head" style="margin-bottom:0">
+        <div>
+            <h1 class="page-title">Tokens</h1>
+            <p class="page-sub">Addon tokens, data limits, lifetime access and linked users</p>
         </div>
+        <div class="page-actions">
+            <button onclick="loadTokens()" class="glass-btn px-4 py-2 text-sm"><i class="fa-solid fa-rotate-right"></i> Refresh</button>
+            <button onclick="openCreateModal()" class="glass-btn glass-btn-primary px-4 py-2 text-sm"><i class="fa-solid fa-plus"></i> New token</button>
+        </div>
+    </header>
+
+    <section class="stats-row">
+        <div><div class="stat-value" id="stat-total">–</div><div class="stat-label">Total</div></div>
+        <div><div class="stat-value" style="color: var(--ok);" id="stat-active">–</div><div class="stat-label">Active</div></div>
+        <div><div class="stat-value" style="color: var(--danger);" id="stat-expired">–</div><div class="stat-label">Expired</div></div>
     </section>
 
-    <section class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div class="stat-card stat-primary">
-            <div class="stat-value" style="color: var(--primary);" id="stat-total">–</div>
-            <div class="stat-label">Total Tokens</div>
-        </div>
-        <div class="stat-card stat-success">
-            <div class="stat-value" style="color: #4ade80;" id="stat-active">–</div>
-            <div class="stat-label">Active</div>
-        </div>
-        <div class="stat-card stat-danger">
-            <div class="stat-value" style="color: #f87171;" id="stat-expired">–</div>
-            <div class="stat-label">Expired / No Sub</div>
-        </div>
-    </section>
-
-    <section class="section-panel p-4 sm:p-5 lg:p-6">
+    <section class="section-panel p-5">
         <div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 mb-5">
             <div>
-                <h2 class="text-lg sm:text-xl font-bold section-title">Access Tokens</h2>
+                <h2 class="text-lg font-semibold section-title">All tokens</h2>
                 <p class="text-sm section-muted mt-1">Search, filter, and manage every token and its access.</p>
             </div>
 
             <div class="w-full lg:w-auto grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <input id="search-input" type="text" placeholder="Search by name or user ID..." class="glass-input" oninput="currentPage=1; renderPage()">
+                <input id="search-input" type="text" data-shortcut-search placeholder="Search by name or user ID..." class="glass-input" oninput="currentPage=1; renderPage()">
                 <select id="filter-status" class="glass-select" onchange="currentPage=1; renderPage()">
                     <option value="all">All Status</option>
                     <option value="active">Active</option>
@@ -195,8 +122,8 @@
         </div>
 
         <div class="desktop-table-wrap table-shell">
-            <div class="overflow-x-auto no-scrollbar">
-                <table class="access-table min-w-[1180px] text-sm">
+            <div class="overflow-x-auto">
+                <table class="access-table min-w-[980px] text-sm">
                     <thead>
                         <tr>
                             <th class="px-4 py-4 text-left font-semibold">Status</th>
@@ -204,7 +131,7 @@
                             <th class="px-4 py-4 text-left font-semibold">Addon Link</th>
                             <th class="px-4 py-4 text-left font-semibold">Usage / Limits</th>
                             <th class="px-4 py-4 text-left font-semibold">Expires</th>
-                            <th class="px-4 py-4 text-center font-semibold">Actions</th>
+                            <th class="px-4 py-4 text-right font-semibold">Actions</th>
                         </tr>
                     </thead>
                     <tbody id="token-table-body">
@@ -221,9 +148,9 @@
         <div class="pagination-shell mt-5" id="pagination-bar">
             <div id="page-info" class="pagination-text text-sm"></div>
             <div class="controls">
-                <button id="btn-prev" onclick="changePage(-1)" class="glass-btn pagination-btn rounded-xl px-4 py-2.5 text-sm font-semibold">‹ Prev</button>
-                <span id="page-num" class="text-sm font-bold text-center section-title px-2"></span>
-                <button id="btn-next" onclick="changePage(1)" class="glass-btn pagination-btn rounded-xl px-4 py-2.5 text-sm font-semibold">Next ›</button>
+                <button id="btn-prev" onclick="changePage(-1)" class="glass-btn pagination-btn px-4 py-2 text-sm font-semibold"><i class="fa-solid fa-chevron-left text-xs"></i> Prev</button>
+                <span id="page-num" class="text-sm font-semibold text-center section-title px-2"></span>
+                <button id="btn-next" onclick="changePage(1)" class="glass-btn pagination-btn px-4 py-2 text-sm font-semibold">Next <i class="fa-solid fa-chevron-right text-xs"></i></button>
             </div>
         </div>
     </section>
@@ -234,7 +161,7 @@
     <div class="modal-glass">
         <div class="flex items-start justify-between gap-4 mb-5">
             <div>
-                <h3 class="text-xl font-bold section-title">Create Token</h3>
+                <h3 class="text-xl font-semibold section-title">Create Token</h3>
                 <p class="text-sm text-soft mt-1">Generate a new Stremio addon token.</p>
             </div>
             <button onclick="closeModal('create-modal')" class="glass-btn rounded-full w-10 h-10 flex items-center justify-center"><i class="fas fa-xmark"></i></button>
@@ -262,8 +189,8 @@
         </div>
 
         <div class="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-6">
-            <button onclick="closeModal('create-modal')" class="glass-btn rounded-2xl px-5 py-3 text-sm font-bold">Cancel</button>
-            <button onclick="createToken()" class="glass-btn glass-btn-primary rounded-2xl px-5 py-3 text-sm font-bold">Create Token</button>
+            <button onclick="closeModal('create-modal')" class="glass-btn px-4 py-2 text-sm font-semibold">Cancel</button>
+            <button onclick="createToken()" class="glass-btn glass-btn-primary px-4 py-2 text-sm font-semibold">Create Token</button>
         </div>
     </div>
 </div>
@@ -273,7 +200,7 @@
     <div class="modal-glass">
         <div class="flex items-start justify-between gap-4 mb-5">
             <div>
-                <h3 class="text-xl font-bold section-title">Edit Data Limits</h3>
+                <h3 class="text-xl font-semibold section-title">Edit Data Limits</h3>
                 <p class="text-sm text-soft mt-1">Set 0 for unlimited.</p>
             </div>
             <button onclick="closeModal('limits-modal')" class="glass-btn rounded-full w-10 h-10 flex items-center justify-center"><i class="fas fa-xmark"></i></button>
@@ -290,8 +217,8 @@
             </div>
         </div>
         <div class="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-6">
-            <button onclick="closeModal('limits-modal')" class="glass-btn rounded-2xl px-5 py-3 text-sm font-bold">Cancel</button>
-            <button onclick="saveLimits()" class="glass-btn glass-btn-primary rounded-2xl px-5 py-3 text-sm font-bold">Save</button>
+            <button onclick="closeModal('limits-modal')" class="glass-btn px-4 py-2 text-sm font-semibold">Cancel</button>
+            <button onclick="saveLimits()" class="glass-btn glass-btn-primary px-4 py-2 text-sm font-semibold">Save</button>
         </div>
     </div>
 </div>
@@ -301,7 +228,7 @@
     <div class="modal-glass">
         <div class="flex items-start justify-between gap-4 mb-5">
             <div>
-                <h3 class="text-xl font-bold section-title" id="assign-modal-title">Assign Subscription Plan</h3>
+                <h3 class="text-xl font-semibold section-title" id="assign-modal-title">Assign Subscription Plan</h3>
                 <p class="text-sm text-soft mt-1" id="assign-user-label">User: –</p>
             </div>
             <button onclick="closeModal('assign-modal')" class="glass-btn rounded-full w-10 h-10 flex items-center justify-center"><i class="fas fa-xmark"></i></button>
@@ -325,8 +252,8 @@
             </div>
         </div>
         <div class="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-6">
-            <button onclick="closeModal('assign-modal')" class="glass-btn rounded-2xl px-5 py-3 text-sm font-bold">Cancel</button>
-            <button onclick="assignPlan()" class="glass-btn glass-btn-primary rounded-2xl px-5 py-3 text-sm font-bold">Assign &amp; Activate</button>
+            <button onclick="closeModal('assign-modal')" class="glass-btn px-4 py-2 text-sm font-semibold">Cancel</button>
+            <button onclick="assignPlan()" class="glass-btn glass-btn-primary px-4 py-2 text-sm font-semibold">Assign &amp; Activate</button>
         </div>
     </div>
 </div>
@@ -336,7 +263,7 @@
     <div class="modal-glass">
         <div class="flex items-start justify-between gap-4 mb-5">
             <div>
-                <h3 class="text-xl font-bold section-title" id="sub-action-title">Manage Subscription</h3>
+                <h3 class="text-xl font-semibold section-title" id="sub-action-title">Manage Subscription</h3>
                 <p class="text-sm text-soft mt-1" id="sub-action-desc"></p>
             </div>
             <button onclick="closeModal('sub-action-modal')" class="glass-btn rounded-full w-10 h-10 flex items-center justify-center"><i class="fas fa-xmark"></i></button>
@@ -349,8 +276,8 @@
             <input type="number" id="sub-action-days" value="30" min="1" class="glass-input">
         </div>
         <div class="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-6">
-            <button onclick="closeModal('sub-action-modal')" class="glass-btn rounded-2xl px-5 py-3 text-sm font-bold">Cancel</button>
-            <button id="sub-action-btn" onclick="submitSubAction()" class="glass-btn glass-btn-success rounded-2xl px-5 py-3 text-sm font-bold">Confirm</button>
+            <button onclick="closeModal('sub-action-modal')" class="glass-btn px-4 py-2 text-sm font-semibold">Cancel</button>
+            <button id="sub-action-btn" onclick="submitSubAction()" class="glass-btn glass-btn-success px-4 py-2 text-sm font-semibold">Confirm</button>
         </div>
     </div>
 </div>
@@ -405,7 +332,7 @@
             </div>`;
         }
         return t.addon_url
-            ? `<div class="addon-box"><button onclick="copyLink('${escHtml(t.addon_url)}')" class="glass-btn glass-btn-primary rounded-xl px-3 py-2 text-xs font-bold inline-flex items-center gap-2"><i class="fas fa-copy"></i> Copy Install Link</button></div>`
+            ? `<button onclick="copyLink('${escHtml(t.addon_url)}')" class="action-chip"><i class="fa-solid fa-link"></i> Copy install link</button>`
             : `<div class="addon-box text-soft text-xs">—</div>`;
     }
 
@@ -436,21 +363,21 @@
 
         if (subEnabled) {
             if (t.user_id) {
-                btns += `<button onclick="openAssignModal(${t.user_id}, '${safeName}', '')" class="action-chip glass-btn-primary">Assign</button>`;
-                btns += `<button onclick="openSubModal(${t.user_id}, '${safeName}', 'extend', '')" class="action-chip glass-btn-success">Extend</button>`;
-                btns += `<button onclick="openSubModal(${t.user_id}, '${safeName}', 'reduce', '')" class="action-chip glass-btn-warning">Reduce</button>`;
-                btns += `<button onclick="openSubModal(${t.user_id}, '${safeName}', 'delete', '')" class="action-chip glass-btn-danger">Revoke</button>`;
+                btns += `<button onclick="openAssignModal(${t.user_id}, '${safeName}', '')" class="action-chip">Assign</button>`;
+                btns += `<button onclick="openSubModal(${t.user_id}, '${safeName}', 'extend', '')" class="action-chip">Extend</button>`;
+                btns += `<button onclick="openSubModal(${t.user_id}, '${safeName}', 'reduce', '')" class="action-chip">Reduce</button>`;
+                btns += `<button onclick="openSubModal(${t.user_id}, '${safeName}', 'delete', '')" class="action-chip text-danger">Revoke</button>`;
             } else if (t.token) {
-                btns += `<button onclick="linkUser('${tokenArg}')" class="action-chip glass-btn-purple">Link User</button>`;
+                btns += `<button onclick="linkUser('${tokenArg}')" class="action-chip">Link User</button>`;
             }
         } else if (t.has_token) {
-            btns += `<button onclick="openAssignModal(${t.user_id || null}, '${safeName}', '${tokenArg}')" class="action-chip glass-btn-primary">Set Expiry</button>`;
-            btns += `<button onclick="openSubModal(${t.user_id || null}, '${safeName}', 'extend', '${tokenArg}')" class="action-chip glass-btn-success">Extend</button>`;
-            btns += `<button onclick="openSubModal(${t.user_id || null}, '${safeName}', 'reduce', '${tokenArg}')" class="action-chip glass-btn-warning">Reduce</button>`;
-            if (!t.user_id) btns += `<button onclick="linkUser('${tokenArg}')" class="action-chip glass-btn-purple">Link User</button>`;
+            btns += `<button onclick="openAssignModal(${t.user_id || null}, '${safeName}', '${tokenArg}')" class="action-chip">Set Expiry</button>`;
+            btns += `<button onclick="openSubModal(${t.user_id || null}, '${safeName}', 'extend', '${tokenArg}')" class="action-chip">Extend</button>`;
+            btns += `<button onclick="openSubModal(${t.user_id || null}, '${safeName}', 'reduce', '${tokenArg}')" class="action-chip">Reduce</button>`;
+            if (!t.user_id) btns += `<button onclick="linkUser('${tokenArg}')" class="action-chip">Link User</button>`;
         }
 
-        if (t.token) btns += `<button onclick="revokeToken('${tokenArg}')" class="action-chip glass-btn">Delete</button>`;
+        if (t.token) btns += `<button onclick="revokeToken('${tokenArg}')" class="action-chip text-danger">Delete</button>`;
         return btns;
     }
 
@@ -468,7 +395,7 @@
                     <td class="px-4 py-4">${addonHtml(t)}</td>
                     <td class="px-4 py-4">${usageHtml(t)}</td>
                     <td class="px-4 py-4 text-xs">${expiryHtml(t)}</td>
-                    <td class="px-4 py-4"><div class="flex flex-wrap gap-2 justify-center">${buildActions(t)}</div></td>
+                    <td class="px-4 py-4" style="width:300px"><div class="flex flex-wrap gap-1.5 justify-end">${buildActions(t)}</div></td>
                 </tr>`;
         }).join('');
     }
@@ -490,14 +417,14 @@
                     </div>
                     <div class="grid grid-cols-1 gap-3 mb-3">
                         <div class="rounded-2xl px-4 py-3" style="background: color-mix(in srgb, var(--bg) 55%, transparent); border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);">
-                            <div class="text-[11px] uppercase tracking-[0.14em] text-soft font-bold mb-1">Addon Access</div>${addonHtml(t)}
+                            <div class="text-[11px] uppercase tracking-[0.14em] text-soft font-semibold mb-1">Addon Access</div>${addonHtml(t)}
                         </div>
                         <div class="grid grid-cols-2 gap-3">
                             <div class="rounded-2xl px-4 py-3" style="background: color-mix(in srgb, var(--bg) 55%, transparent); border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);">
-                                <div class="text-[11px] uppercase tracking-[0.14em] text-soft font-bold mb-1">Usage / Limits</div>${usageHtml(t)}
+                                <div class="text-[11px] uppercase tracking-[0.14em] text-soft font-semibold mb-1">Usage / Limits</div>${usageHtml(t)}
                             </div>
                             <div class="rounded-2xl px-4 py-3" style="background: color-mix(in srgb, var(--bg) 55%, transparent); border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);">
-                                <div class="text-[11px] uppercase tracking-[0.14em] text-soft font-bold mb-1">Expires</div>
+                                <div class="text-[11px] uppercase tracking-[0.14em] text-soft font-semibold mb-1">Expires</div>
                                 <div class="text-sm font-semibold ${t.is_expired ? 'text-red-300' : 'section-title'} break-words">
                                     ${t.never_expires ? 'Never expires' : (t.expires_at ? fmtDate(t.expires_at) : '—')}
                                 </div>
@@ -707,9 +634,9 @@
         document.getElementById('sub-action-desc').innerHTML = descs[action];
         const daysGroup = document.getElementById('sub-action-days-group');
         const btn = document.getElementById('sub-action-btn');
-        if (action === 'delete') { daysGroup.style.display = 'none'; btn.className = 'glass-btn glass-btn-danger rounded-2xl px-5 py-3 text-sm font-bold'; }
-        else if (action === 'reduce') { daysGroup.style.display = 'block'; btn.className = 'glass-btn glass-btn-warning rounded-2xl px-5 py-3 text-sm font-bold'; }
-        else { daysGroup.style.display = 'block'; btn.className = 'glass-btn glass-btn-success rounded-2xl px-5 py-3 text-sm font-bold'; }
+        if (action === 'delete') { daysGroup.style.display = 'none'; btn.className = 'glass-btn glass-btn-danger px-4 py-2 text-sm font-semibold'; }
+        else if (action === 'reduce') { daysGroup.style.display = 'block'; btn.className = 'glass-btn glass-btn-warning px-4 py-2 text-sm font-semibold'; }
+        else { daysGroup.style.display = 'block'; btn.className = 'glass-btn glass-btn-success px-4 py-2 text-sm font-semibold'; }
         document.getElementById('sub-action-days').value = 30;
         openModal('sub-action-modal');
     }

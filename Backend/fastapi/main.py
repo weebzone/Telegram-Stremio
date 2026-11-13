@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from Backend import __version__
-from Backend.fastapi.themes import DEFAULT_THEME, DEFAULT_STYLE, get_theme
+from Backend.fastapi.themes import get_theme, theme_key
 from Backend.fastapi.routes.api_routes import (
     add_custom_catalog_item_api,
     add_subscription_plan_api,
@@ -191,14 +191,12 @@ async def logout_route(request: Request):
     return await logout(request)
 
 @app.post("/set-theme")
-async def set_theme_route(request: Request, theme: str = Form(None), style: str = Form(None)):
-    return await set_theme(request, theme, style)
+async def set_theme_route(request: Request, theme: str = Form(None)):
+    return await set_theme(request, theme)
 
 @app.get("/manifest.webmanifest")
 async def pwa_manifest(request: Request):
-    theme_name = request.session.get("theme", DEFAULT_THEME)
-    style_name = request.session.get("style", DEFAULT_STYLE)
-    theme = get_theme(theme_name, style_name)
+    theme = get_theme(theme_key(request))
     return JSONResponse(
         {
             "name": "Telegram Stremio",
@@ -231,14 +229,12 @@ async def pwa_manifest(request: Request):
 
 @app.get("/pwa-icon.svg")
 async def pwa_icon(request: Request):
-    theme_name = request.session.get("theme", DEFAULT_THEME)
-    style_name = request.session.get("style", DEFAULT_STYLE)
-    theme = get_theme(theme_name, style_name)
+    theme = get_theme(theme_key(request))
     primary = theme["colors"]["primary"]
     svg = (
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">'
         f'<rect width="512" height="512" rx="96" fill="{primary}"/>'
-        f'<path d="M200 152l176 104-176 104z" fill="white"/>'
+        f'<path d="M200 152l176 104-176 104z" fill="{theme["colors"]["on_primary"]}"/>'
         f'</svg>'
     )
     return Response(

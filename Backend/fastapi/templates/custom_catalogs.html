@@ -4,33 +4,12 @@
 
 {% block content %}
 <style>
-  .catalog-page {
-    --soft-bg: color-mix(in srgb, var(--bg) 78%, transparent);
-    --card-bg: color-mix(in srgb, var(--card) 92%, var(--bg));
-    --card-bg-strong: color-mix(in srgb, var(--card) 82%, transparent);
-    --line: color-mix(in srgb, var(--border) 90%, transparent);
-    --primary-soft: color-mix(in srgb, var(--primary) 15%, transparent);
-    --accent-soft: color-mix(in srgb, var(--accent) 14%, transparent);
-  }
 
-  .glass-card {
-    position: relative;
-    overflow: hidden;
-    background: var(--card-bg);
-    border: 1px solid var(--line);
-    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.18);
-  }
+  .catalog-page { --line: var(--border); --soft-bg: var(--bg); --card-bg: var(--card); }
 
-  .glass-card::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    background:
-      radial-gradient(circle at 12% 0%, var(--primary-soft), transparent 36%),
-      radial-gradient(circle at 95% 10%, var(--accent-soft), transparent 34%);
-    opacity: .9;
-  }
+  .glass-card { position: relative; background: var(--card); border: 1px solid var(--border); }
+
+  .glass-card::before { content: none; }
 
   .glass-card > * { position: relative; z-index: 1; }
 
@@ -40,214 +19,61 @@
     place-items: stretch;
   }
 
-  .hero-orb {
-    width: 4.25rem;
-    height: 4.25rem;
-    border-radius: 9999px;
-    background: linear-gradient(135deg, var(--primary), var(--accent));
-    box-shadow: 0 0 45px color-mix(in srgb, var(--primary) 45%, transparent);
-    display: grid;
-    place-items: center;
-    color: var(--bg);
-  }
+  .hero-orb { width: 2.5rem; height: 2.5rem; border-radius: 9999px; display: grid; place-items: center; background: var(--card-high); color: var(--primary); }
 
-  .section-title {
-    color: var(--text);
-    font-weight: 900;
-    letter-spacing: -0.035em;
-  }
+  .section-title { color: var(--text); font-weight: 600; letter-spacing: -0.015em; }
 
   .muted { color: var(--text-sec); }
 
-  .field-label {
-    display: block;
-    font-size: 0.875rem;
-    font-weight: 800;
-    margin-bottom: 0.55rem;
-    color: var(--text);
-  }
+  .field-label { display: block; font-size: .72rem; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; margin-bottom: .45rem; color: var(--text-sec); }
 
-  .field-input,
-  .field-select {
-    width: 100%;
-    border-radius: 1rem;
-    border: 1px solid var(--line);
-    background: color-mix(in srgb, var(--bg) 84%, var(--card) 16%);
-    color: var(--text);
-    padding: 0.9rem 1rem;
-    outline: none;
-    transition: all .2s ease;
-    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text) 5%, transparent);
-  }
+  .field-input, .field-select { width: 100%; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg); color: var(--text); padding: .75rem 1rem; outline: none; transition: border-color .18s var(--ease), box-shadow .18s var(--ease); }
 
   .field-input::placeholder { color: color-mix(in srgb, var(--text-sec) 82%, transparent); }
 
-  .field-input:focus,
-  .field-select:focus {
-    border-color: var(--primary);
-    box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 18%, transparent);
-  }
+  .field-input:focus, .field-select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--ring); }
 
-  .btn-ui {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: .55rem;
-    border-radius: 1rem;
-    padding: .85rem 1.15rem;
-    font-weight: 900;
-    transition: all .2s ease;
-    border: 1px solid transparent;
-    white-space: nowrap;
-  }
+  .btn-ui { display: inline-flex; align-items: center; justify-content: center; gap: .5rem; border-radius: 9999px; padding: .6rem 1.1rem; font-size: .9rem; font-weight: 500; transition: background-color .18s var(--ease), border-color .18s var(--ease), transform .12s var(--ease), filter .18s var(--ease); border: 1px solid transparent; white-space: nowrap; }
 
-  .btn-ui:hover { transform: translateY(-1px); }
-  .btn-ui:active { transform: translateY(0) scale(.99); }
+  .btn-ui:hover { }
 
-  .btn-primary {
-    background: linear-gradient(135deg, var(--primary), var(--accent));
-    color: var(--bg);
-    box-shadow: 0 14px 28px color-mix(in srgb, var(--primary) 24%, transparent);
-  }
+  .btn-ui:active { transform: scale(.97); }
 
-  .btn-ghost {
-    background: color-mix(in srgb, var(--bg) 70%, transparent);
-    color: var(--text);
-    border-color: var(--line);
-  }
+  .btn-primary { background: var(--primary); color: var(--on-primary); }
 
-  .btn-danger {
-    background: color-mix(in srgb, rgb(239 68 68) 16%, var(--card));
-    color: rgb(248 113 113);
-    border-color: color-mix(in srgb, rgb(239 68 68) 32%, var(--border));
-  }
+  .btn-ghost { background: transparent; color: var(--text); border-color: var(--border); }
 
-  .pill {
-    display: inline-flex;
-    align-items: center;
-    gap: .45rem;
-    padding: .42rem .85rem;
-    border-radius: 9999px;
-    font-size: .78rem;
-    font-weight: 900;
-    border: 1px solid var(--line);
-    background: color-mix(in srgb, var(--bg) 66%, transparent);
-    color: var(--text);
-  }
+  .btn-danger { background: color-mix(in srgb, var(--danger) 12%, transparent); color: var(--danger); border-color: color-mix(in srgb, var(--danger) 30%, transparent); }
 
-  .stat-card,
-  .catalog-card,
-  .media-card,
-  .empty-state {
-    background: color-mix(in srgb, var(--bg) 72%, var(--card) 28%);
-    border: 1px solid var(--line);
-    border-radius: 1.45rem;
-    transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease, background .2s ease;
-  }
+  .pill { display: inline-flex; align-items: center; gap: .4rem; padding: .2rem .65rem; border-radius: 9999px; font-size: .75rem; font-weight: 500; border: 1px solid var(--border); color: var(--text-sec); white-space: nowrap; }
 
-  .catalog-card:hover,
-  .media-card:hover {
-    transform: translateY(-2px);
-    border-color: color-mix(in srgb, var(--primary) 42%, var(--border));
-    box-shadow: 0 16px 34px rgba(0,0,0,.16);
-  }
+  .stat-card, .catalog-card, .media-card, .empty-state { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); min-width: 0; transition: border-color .2s var(--ease), background-color .2s var(--ease); }
 
-  .catalog-card.active {
-    border-color: var(--primary);
-    background:
-      linear-gradient(135deg, color-mix(in srgb, var(--primary) 13%, transparent), transparent),
-      color-mix(in srgb, var(--bg) 70%, var(--card) 30%);
-    box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 14%, transparent);
-  }
+  .catalog-card:hover, .media-card:hover { border-color: color-mix(in srgb, var(--primary) 40%, var(--border)); }
 
-  .poster {
-    width: 4.25rem;
-    height: 6.35rem;
-    object-fit: cover;
-    border-radius: 1rem;
-    border: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
-    background: color-mix(in srgb, var(--bg) 80%, transparent);
-    flex-shrink: 0;
-  }
+  .catalog-card.active { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 7%, var(--bg)); }
 
-  .switch {
-    width: 3.1rem;
-    height: 1.7rem;
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--border) 80%, transparent);
-    position: relative;
-    cursor: pointer;
-    transition: .2s ease;
-    border: 1px solid var(--line);
-    flex-shrink: 0;
-  }
+  .poster { width: 3.5rem; height: 5.25rem; object-fit: cover; border-radius: 10px; background: var(--card-high); flex-shrink: 0; }
+
+  .switch { width: 2.9rem; height: 1.65rem; border-radius: 999px; background: var(--card-high); position: relative; cursor: pointer; transition: background-color .2s var(--ease); border: 1px solid var(--border); flex-shrink: 0; }
 
   /* Toggle row (visibility exclusive / search) */
-  .toggle-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: .75rem;
-    border-radius: 1rem;
-    padding: .75rem .85rem;
-    background: color-mix(in srgb, var(--bg) 64%, transparent);
-    border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
-    cursor: pointer;
-  }
 
-  .switch::after {
-    content: "";
-    width: 1.25rem;
-    height: 1.25rem;
-    border-radius: 999px;
-    background: var(--text);
-    position: absolute;
-    left: .18rem;
-    top: .17rem;
-    transition: .2s ease;
-    box-shadow: 0 4px 12px rgba(0,0,0,.24);
-  }
+  .toggle-row { display: flex; align-items: center; justify-content: space-between; gap: .75rem; border-radius: var(--radius-sm); padding: .75rem .85rem; background: var(--bg); border: 1px solid var(--border); cursor: pointer; }
 
-  .switch-input:checked + .switch {
-    background: linear-gradient(135deg, var(--primary), var(--accent));
-  }
+  .switch::after { content: ""; width: 1.15rem; height: 1.15rem; border-radius: 999px; background: var(--text-sec); position: absolute; left: .2rem; top: .2rem; transition: transform .25s var(--spring), background-color .2s var(--ease); }
 
-  .switch-input:checked + .switch::after {
-    left: 1.55rem;
-    background: var(--bg);
-  }
+  .switch-input:checked + .switch { background: var(--primary); border-color: var(--primary); }
 
-  .mini-tab {
-    border-radius: 999px;
-    padding: .48rem .9rem;
-    border: 1px solid var(--line);
-    color: var(--text-sec);
-    background: color-mix(in srgb, var(--bg) 56%, transparent);
-    font-weight: 900;
-    font-size: .8rem;
-  }
+  .switch-input:checked + .switch::after { transform: translateX(1.22rem); background: var(--on-primary); }
 
-  .mini-tab.active {
-    color: var(--bg);
-    border-color: transparent;
-    background: linear-gradient(135deg, var(--primary), var(--accent));
-  }
+  .mini-tab { border-radius: 999px; padding: .4rem .85rem; border: 1px solid var(--border); color: var(--text-sec); background: transparent; font-weight: 500; font-size: .82rem; }
 
-  .skeleton {
-    min-height: 5.5rem;
-    border-radius: 1.45rem;
-    background: linear-gradient(90deg,
-      color-mix(in srgb, var(--bg) 72%, var(--card) 28%),
-      color-mix(in srgb, var(--primary) 9%, var(--card)),
-      color-mix(in srgb, var(--bg) 72%, var(--card) 28%));
-    background-size: 220% 100%;
-    animation: shimmer 1.2s infinite linear;
-    border: 1px solid var(--line);
-  }
+  .mini-tab.active { color: var(--primary); border-color: color-mix(in srgb, var(--primary) 50%, var(--border)); background: color-mix(in srgb, var(--primary) 10%, transparent); }
 
-  @keyframes shimmer {
-    to { background-position: -220% 0; }
-  }
+  .skeleton { min-height: 5.5rem; border-radius: var(--radius-sm); background: linear-gradient(90deg, var(--bg) 25%, var(--card-high) 37%, var(--bg) 63%); background-size: 400% 100%; animation: shimmer 1.4s infinite ease; border: 1px solid var(--border); }
+
+  @keyframes shimmer { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
 
   /* ── Collapsible catalog list ── */
   .catalog-list-wrapper {
@@ -263,11 +89,9 @@
     position: absolute;
     bottom: 0; left: 0; right: 0;
     height: 76px;
-    background: linear-gradient(to bottom,
-      transparent,
-      color-mix(in srgb, var(--bg) 94%, var(--card) 6%));
+    background: linear-gradient(to bottom, transparent, var(--card));
     pointer-events: none;
-    border-radius: 0 0 1.45rem 1.45rem;
+    border-radius: 0 0 var(--radius-sm) var(--radius-sm);
   }
 
   #catalog-expand-btn {
@@ -314,17 +138,7 @@
     opacity: 1;
   }
 
-  .token-picker {
-    max-height: 12rem;
-    overflow-y: auto;
-    border: 1px solid var(--line);
-    border-radius: 1rem;
-    padding: .5rem;
-    display: flex;
-    flex-direction: column;
-    gap: .35rem;
-    background: color-mix(in srgb, var(--bg) 70%, transparent);
-  }
+  .token-picker { max-height: 12rem; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: .4rem; display: flex; flex-direction: column; gap: .25rem; background: var(--bg); }
   .token-row {
     display: flex;
     align-items: center;
@@ -337,118 +151,72 @@
   }
   .token-row:hover { background: color-mix(in srgb, var(--primary) 10%, transparent); }
   .token-row input { width: 1.05rem; height: 1.05rem; accent-color: var(--primary); cursor: pointer; flex-shrink: 0; }
-  .vis-chip {
-    display: inline-flex; align-items: center; gap: .4rem;
-    padding: .3rem .7rem; border-radius: 9999px; font-size: .72rem; font-weight: 900;
-    border: 1px solid var(--line);
-  }
-  .vis-public { color: rgb(52 211 153); background: color-mix(in srgb, rgb(16 185 129) 14%, transparent); border-color: color-mix(in srgb, rgb(16 185 129) 30%, transparent); }
-  .vis-tokens { color: rgb(96 165 250); background: color-mix(in srgb, rgb(59 130 246) 14%, transparent); border-color: color-mix(in srgb, rgb(59 130 246) 30%, transparent); }
-  .vis-owner  { color: rgb(248 113 113); background: color-mix(in srgb, rgb(239 68 68) 14%, transparent); border-color: color-mix(in srgb, rgb(239 68 68) 30%, transparent); }
 
-  .auto-chip {
-    display: inline-flex; align-items: center; gap: .45rem;
-    padding: .5rem .85rem; border-radius: 9999px; font-weight: 800; font-size: .82rem;
-    border: 1px solid var(--line); color: var(--text-sec);
-    background: color-mix(in srgb, var(--bg) 60%, transparent);
-    cursor: pointer; transition: all .15s ease;
-  }
+  .vis-chip { display: inline-flex; align-items: center; gap: .35rem; padding: .15rem .6rem; border-radius: 9999px; font-size: .72rem; font-weight: 500; border: 1px solid transparent; }
+  .vis-public { color: var(--ok); background: color-mix(in srgb, var(--ok) 14%, transparent); border-color: color-mix(in srgb, var(--ok) 30%, transparent); }
+  .vis-tokens { color: var(--info); background: color-mix(in srgb, var(--info) 14%, transparent); border-color: color-mix(in srgb, var(--info) 30%, transparent); }
+  .vis-owner  { color: var(--danger); background: color-mix(in srgb, var(--danger) 14%, transparent); border-color: color-mix(in srgb, var(--danger) 30%, transparent); }
+
+  .auto-chip { display: inline-flex; align-items: center; gap: .45rem; padding: .45rem .85rem; border-radius: 9999px; font-weight: 500; font-size: .84rem; border: 1px solid var(--border); color: var(--text-sec); background: transparent; cursor: pointer; transition: all .15s var(--ease); }
   .auto-chip .dot { width: .6rem; height: .6rem; border-radius: 9999px; background: var(--border); transition: all .15s ease; }
   .auto-chip:hover { border-color: color-mix(in srgb, var(--primary) 45%, var(--border)); }
-  .auto-chip.on {
-    color: var(--bg); border-color: transparent;
-    background: linear-gradient(135deg, var(--primary), var(--accent));
-  }
-  .auto-chip.on .dot { background: var(--bg); box-shadow: 0 0 8px color-mix(in srgb, var(--bg) 60%, transparent); }
 
-  .order-row {
-    display: flex; align-items: center; gap: .85rem;
-    border-radius: 1rem; padding: .7rem .9rem;
-    background: color-mix(in srgb, var(--bg) 66%, transparent);
-    border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
-  }
-  .drag-idx {
-    width: 1.9rem; height: 1.9rem; flex-shrink: 0;
-    display: grid; place-items: center; border-radius: 9999px;
-    font-weight: 900; font-size: .8rem; color: var(--text-sec);
-    background: color-mix(in srgb, var(--primary) 12%, transparent);
-  }
-  .order-arrow {
-    width: 1.9rem; height: 1.5rem; border-radius: .55rem; font-size: .7rem; font-weight: 900;
-    border: 1px solid var(--line); background: color-mix(in srgb, var(--bg) 60%, transparent);
-    color: var(--text); cursor: pointer; transition: all .15s ease;
-  }
+  .auto-chip.on { color: var(--primary); border-color: color-mix(in srgb, var(--primary) 55%, var(--border)); background: color-mix(in srgb, var(--primary) 10%, transparent); }
+  .auto-chip.on .dot { background: var(--primary); }
+
+  .order-row { display: flex; align-items: center; gap: .85rem; border-radius: var(--radius-sm); padding: .65rem .85rem; background: var(--bg); border: 1px solid var(--border); min-width: 0; }
+
+  .drag-idx { width: 1.75rem; height: 1.75rem; flex-shrink: 0; display: grid; place-items: center; border-radius: 9999px; font-weight: 500; font-size: .78rem; color: var(--text-sec); background: var(--card-high); }
+
+  .order-arrow { width: 2rem; height: 1.6rem; border-radius: 9999px; font-size: .7rem; border: 1px solid var(--border); background: transparent; color: var(--text); cursor: pointer; transition: all .15s var(--ease); }
   .order-arrow:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); }
   .order-arrow:disabled { opacity: .35; cursor: not-allowed; }
 
-  @media (max-width: 640px) {
-    .hero-card { min-height: 13rem; }
-    .btn-ui { width: 100%; }
-  }
+
 </style>
 
-<div class="catalog-page max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8 space-y-6">
-  <div class="glass-card hero-card rounded-3xl p-5 sm:p-7 lg:p-8">
-    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
-      <div class="flex flex-col sm:flex-row sm:items-center gap-5">
-        <div class="hero-orb text-3xl">🎞️</div>
-        <div>
-          <div class="flex flex-wrap items-center gap-2 mb-3">
-            <span class="pill">Custom Stremio sections</span>
-          </div>
-          <h1 class="section-title text-2xl sm:text-4xl lg:text-5xl">Catalogs</h1>
-        </div>
-      </div>
-
-      <div class="grid grid-cols-3 gap-3 min-w-full sm:min-w-[26rem] lg:min-w-[30rem]">
-        <div class="stat-card p-4 text-center">
-          <p id="stat-total" class="section-title text-2xl">0</p>
-          <p class="muted text-xs font-bold mt-1">Catalogs</p>
-        </div>
-        <div class="stat-card p-4 text-center">
-          <p id="stat-visible" class="section-title text-2xl">0</p>
-          <p class="muted text-xs font-bold mt-1">Visible</p>
-        </div>
-        <div class="stat-card p-4 text-center">
-          <p id="stat-items" class="section-title text-2xl">0</p>
-          <p class="muted text-xs font-bold mt-1">Titles</p>
-        </div>
-      </div>
+<div class="catalog-page space-y-8">
+  <header class="page-head" style="margin-bottom:0">
+    <div>
+      <h1 class="page-title">Catalogs</h1>
+      <p class="page-sub">Custom and automatic sections shown in Stremio</p>
     </div>
+  </header>
+
+  <div class="glass-card rounded-3xl p-5 grid grid-cols-3 gap-6">
+    <div><p id="stat-total" class="text-xl font-semibold tabular">0</p><p class="muted text-sm">Catalogs</p></div>
+    <div><p id="stat-visible" class="text-xl font-semibold tabular">0</p><p class="muted text-sm">Visible</p></div>
+    <div><p id="stat-items" class="text-xl font-semibold tabular">0</p><p class="muted text-sm">Titles</p></div>
   </div>
 
-
-
-  <div class="glass-card rounded-3xl p-5 sm:p-6">
+  <div class="glass-card rounded-3xl p-5">
     <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
       <div>
         <div class="flex flex-wrap gap-2 mb-3">
-          <span class="pill">✨ Auto catalogs</span>
           <span id="auto-sync-status" class="pill">Checking status...</span>
         </div>
-        <h2 class="section-title text-xl sm:text-3xl">Auto Catalogs</h2>
+        <h2 class="section-title text-lg">Auto catalogs</h2>
         <p class="muted text-sm mt-2">Toggles save instantly. Sync rebuilds them across your library.</p>
       </div>
       <div class="flex flex-col sm:flex-row gap-3">
-        <button id="auto-sync-btn" onclick="runAutoSync()" class="btn-ui btn-primary lg:w-auto">⚡ Sync</button>
+        <button id="auto-sync-btn" onclick="runAutoSync()" class="btn-ui btn-primary lg:w-auto"><i class="fa-solid fa-bolt"></i> Sync</button>
       </div>
     </div>
 
-    <div id="auto-settings-list" class="mt-5 pt-5 border-t grid grid-cols-1 lg:grid-cols-3 gap-4" style="border-color: color-mix(in srgb, var(--border) 80%, transparent);">
+    <div id="auto-settings-list" class="mt-5 pt-5 border-t border-border grid grid-cols-1 lg:grid-cols-3 gap-4">
       <div class="skeleton"></div>
       <div class="skeleton"></div>
       <div class="skeleton"></div>
     </div>
   </div>
 
-  <div class="glass-card rounded-3xl p-5 sm:p-6">
+  <div class="glass-card rounded-3xl p-5">
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
       <div>
-        <div class="flex flex-wrap gap-2 mb-2"><span class="pill">↕ Ordering</span></div>
-        <h2 class="section-title text-xl sm:text-2xl">Catalog Order</h2>
+                <h2 class="section-title text-lg">Order</h2>
         <p class="muted text-sm mt-1">Arrange how catalogs appear in Stremio.</p>
       </div>
-      <button id="save-order-btn" onclick="saveCatalogOrder()" class="btn-ui btn-primary sm:w-auto hidden">💾 Save Order</button>
+      <button id="save-order-btn" onclick="saveCatalogOrder()" class="btn-ui btn-primary sm:w-auto hidden"><i class="fa-solid fa-floppy-disk"></i> Save order</button>
     </div>
     <div id="catalog-order-list" class="space-y-2">
       <div class="skeleton"></div>
@@ -458,10 +226,10 @@
 
   <div class="grid grid-cols-1 xl:grid-cols-[0.88fr_1.12fr] gap-6">
     <div class="space-y-6">
-      <div class="glass-card rounded-3xl p-5 sm:p-6">
+      <div class="glass-card rounded-3xl p-5">
         <div class="flex items-start justify-between gap-3 mb-5">
           <div>
-            <h2 class="section-title text-2xl">Create Catalog</h2>
+            <h2 class="section-title text-lg">Create catalog</h2>
             <p class="muted text-sm mt-1">Visibility decides who sees it in Stremio.</p>
           </div>
           <span class="pill">New</span>
@@ -488,17 +256,17 @@
             <div id="catalog-token-picker" class="token-picker"></div>
           </div>
 
-          <button class="btn-ui btn-primary w-full" type="submit">➕ Create Catalog</button>
+          <button class="btn-ui btn-primary w-full" type="submit"><i class="fa-solid fa-plus"></i> Create catalog</button>
         </form>
       </div>
 
-      <div class="glass-card rounded-3xl p-5 sm:p-6">
+      <div class="glass-card rounded-3xl p-5">
         <div class="flex items-center justify-between gap-3 mb-5">
           <div>
-            <h2 class="section-title text-2xl">Your Catalogs</h2>
+            <h2 class="section-title text-lg">Your catalogs</h2>
             <p class="muted text-sm mt-1">Select one to manage titles.</p>
           </div>
-          <button onclick="loadCatalogs()" class="btn-ui btn-ghost px-3 py-2 text-sm">↻</button>
+          <button onclick="loadCatalogs()" class="btn-ui btn-ghost w-10 h-10 !p-0" aria-label="Reload catalogs"><i class="fa-solid fa-rotate"></i></button>
         </div>
         <div id="catalog-list-wrapper" class="catalog-list-wrapper collapsed">
           <div id="catalog-list" class="space-y-3">
@@ -506,26 +274,26 @@
             <div class="skeleton"></div>
           </div>
         </div>
-        <button id="catalog-expand-btn" onclick="toggleCatalogExpand()" class="btn-ui btn-ghost w-full hidden">▾ Show all catalogs</button>
+        <button id="catalog-expand-btn" onclick="toggleCatalogExpand()" class="btn-ui btn-ghost w-full hidden">Show all catalogs</button>
       </div>
     </div>
 
-    <div class="glass-card rounded-3xl p-5 sm:p-6">
+    <div class="glass-card rounded-3xl p-5">
       <div class="flex flex-col md:flex-row md:items-start md:justify-between gap-3 mb-5">
         <div>
           <div class="flex flex-wrap gap-2 mb-3">
             <span id="selected-visibility-pill" class="pill hidden"></span>
             <span id="selected-count-pill" class="pill hidden"></span>
           </div>
-          <h2 id="selected-title" class="section-title text-2xl">Select a catalog</h2>
+          <h2 id="selected-title" class="section-title text-lg">Select a catalog</h2>
           <p id="selected-subtitle" class="muted text-sm mt-1">Choose a catalog from the left side to add or remove titles.</p>
         </div>
         <button id="delete-catalog-btn" onclick="deleteSelectedCatalog()" class="btn-ui btn-danger hidden md:w-auto">Delete Catalog</button>
       </div>
 
       <div id="catalog-empty-guide" class="empty-state p-6 sm:p-8 text-center">
-        <div class="text-4xl mb-3">📚</div>
-        <h3 class="section-title text-xl">No catalog selected</h3>
+        <div class="mx-auto mb-3 grid place-items-center w-12 h-12 rounded-full bg-card-high text-text-secondary"><i class="fa-solid fa-layer-group"></i></div>
+        <h3 class="section-title text-lg">No catalog selected</h3>
         <p class="muted mt-2 text-sm leading-6">Create a catalog or select an existing one. Then search from your existing media library and add titles instantly.</p>
       </div>
 
@@ -550,7 +318,7 @@
           <div id="ws-exclusive-wrap" class="hidden mt-3 space-y-2">
             <label class="toggle-row">
               <span class="min-w-0">
-                <span class="font-bold text-sm block">🔒 Only visible in this catalog</span>
+                <span class="font-semibold text-sm block"><i class="fa-solid fa-lock"></i> Only visible in this catalog</span>
                 <span class="muted text-xs block">Removed from Default, Auto and other catalogs.</span>
               </span>
               <input type="checkbox" id="ws-exclusive" class="switch-input hidden" onchange="onExclusiveChange()">
@@ -559,7 +327,7 @@
             <div id="ws-search-wrap" class="hidden">
               <label class="toggle-row">
                 <span class="min-w-0">
-                  <span class="font-bold text-sm block">🔎 Allow search</span>
+                  <span class="font-semibold text-sm block"><i class="fa-solid fa-magnifying-glass"></i> Allow search</span>
                   <span class="muted text-xs block">Let allowed users find these titles via search.</span>
                 </span>
                 <input type="checkbox" id="ws-searchable" class="switch-input hidden">
@@ -584,7 +352,7 @@
                 <option value="tv">Series</option>
               </select>
             </div>
-            <button onclick="searchMedia()" class="btn-ui btn-primary sm:w-auto">🔎 Search</button>
+            <button onclick="searchMedia()" class="btn-ui btn-primary sm:w-auto"><i class="fa-solid fa-magnifying-glass"></i> Search</button>
           </div>
         </div>
 
@@ -619,9 +387,9 @@ let subscriptionOn = false;
 let availableTokens = [];
 
 const VIS_META = {
-  public: { icon: '🌐', chip: 'vis-public' },
-  tokens: { icon: '🎯', chip: 'vis-tokens' },
-  owner:  { icon: '🔒', chip: 'vis-owner' },
+  public: { icon: '<i class="fa-solid fa-globe"></i>', chip: 'vis-public' },
+  tokens: { icon: '<i class="fa-solid fa-bullseye"></i>', chip: 'vis-tokens' },
+  owner:  { icon: '<i class="fa-solid fa-lock"></i>', chip: 'vis-owner' },
 };
 
 function publicLabel() { return subscriptionOn ? 'Active subscribers' : 'Everyone'; }
@@ -673,7 +441,7 @@ function renderTokenPicker(containerId, selected) {
     <label class="token-row">
       <input type="checkbox" value="${escapeHtml(t.token)}" ${sel.has(t.token) ? 'checked' : ''}>
       <span class="min-w-0">
-        <span class="font-bold text-sm block truncate">${escapeHtml(t.user_name || 'User')}</span>
+        <span class="font-semibold text-sm block truncate">${escapeHtml(t.user_name || 'User')}</span>
         <span class="muted text-xs block truncate">${escapeHtml((t.token || '').slice(0, 12))}…${t.user_id ? ' · ' + escapeHtml(t.user_id) : ''}</span>
       </span>
     </label>`).join('');
@@ -717,7 +485,7 @@ function onExclusiveChange() {
 }
 
 function posterOrFallback(item) {
-  return item.poster || 'https://via.placeholder.com/120x180/111827/94a3b8?text=No+Poster';
+  return item.poster || '/static/placeholder.svg';
 }
 
 function escapeHtml(value) {
@@ -743,11 +511,11 @@ function mediaCard(item, actionHtml) {
   const mediaType = item.media_type === 'tv' ? 'Series' : 'Movie';
   const genres = Array.isArray(item.genres) ? item.genres.slice(0, 2).join(' · ') : '';
   return `<div class="media-card p-3 flex gap-3">
-    <img src="${escapeHtml(posterOrFallback(item))}" class="poster" onerror="this.src='https://via.placeholder.com/120x180/111827/94a3b8?text=No+Poster'" alt="Poster">
+    <img src="${escapeHtml(posterOrFallback(item))}" class="poster" onerror="this.src='/static/placeholder.svg'" alt="Poster">
     <div class="min-w-0 flex-1">
       <div class="flex items-start justify-between gap-2">
         <div class="min-w-0">
-          <h4 class="font-black truncate" title="${escapeHtml(item.title)}">${escapeHtml(item.title)}</h4>
+          <h4 class="font-semibold truncate" title="${escapeHtml(item.title)}">${escapeHtml(item.title)}</h4>
           <p class="muted text-xs mt-1">${mediaType} · ${escapeHtml(item.release_year || 'Unknown')} · TMDb ${escapeHtml(item.tmdb_id || '')}</p>
         </div>
         <span class="pill text-[0.68rem] py-1 px-2">${escapeHtml(mediaType)}</span>
@@ -760,7 +528,7 @@ function mediaCard(item, actionHtml) {
 
 function emptyState(icon, title, message) {
   return `<div class="empty-state p-6 text-center col-span-full">
-    <div class="text-3xl mb-2">${icon}</div>
+    <div class="mx-auto mb-3 grid place-items-center w-11 h-11 rounded-full bg-card-high text-text-secondary">${icon}</div>
     <h4 class="section-title text-lg">${escapeHtml(title)}</h4>
     <p class="muted text-sm mt-1">${escapeHtml(message)}</p>
   </div>`;
@@ -779,7 +547,7 @@ async function loadCatalogs() {
     renderCatalogs();
     updateSelectedHeader();
   } catch (error) {
-    box.innerHTML = emptyState('⚠️', 'Unable to load catalogs', error.message || 'Please refresh and try again.');
+    box.innerHTML = emptyState('<i class="fa-solid fa-triangle-exclamation"></i>', 'Unable to load catalogs', error.message || 'Please refresh and try again.');
     showToast(error.message || 'Unable to load catalogs', 'error', 'Error');
   }
 }
@@ -790,7 +558,7 @@ function renderCatalogs() {
   const wrapper = document.getElementById('catalog-list-wrapper');
 
   if (!catalogs.length) {
-    box.innerHTML = emptyState('✨', 'No custom catalog yet', 'Create your first curated Stremio section above.');
+    box.innerHTML = emptyState('<i class="fa-solid fa-wand-magic-sparkles"></i>', 'No custom catalog yet', 'Create your first curated Stremio section above.');
     if (expandBtn) expandBtn.classList.add('hidden');
     if (wrapper) wrapper.classList.remove('collapsed');
     return;
@@ -804,13 +572,13 @@ function renderCatalogs() {
     return `<div class="catalog-card p-4 ${isActive ? 'active' : ''}">
       <button class="text-left w-full min-w-0" onclick="selectCatalog('${c._id}')">
         <div class="flex items-center gap-2 min-w-0">
-          <span class="text-xl">${c.auto ? '✨' : meta.icon}</span>
-          <h3 class="font-black truncate">${escapeHtml(c.name)}</h3>
+          <span class="text-primary w-5 text-center shrink-0">${c.auto ? '<i class="fa-solid fa-wand-magic-sparkles"></i>' : meta.icon}</span>
+          <h3 class="font-semibold truncate">${escapeHtml(c.name)}</h3>
           ${c.auto ? '<span class="pill text-[0.62rem] px-2 py-0.5">Auto</span>' : ''}
         </div>
         <div class="flex items-center gap-2 mt-2 flex-wrap">
           <span class="vis-chip ${meta.chip}">${meta.icon} ${escapeHtml(visibilityLabel(mode))}</span>
-          ${c.exclusive ? `<span class="vis-chip vis-owner">🔒 Exclusive${c.searchable ? ' · 🔎' : ''}</span>` : ''}
+          ${c.exclusive ? `<span class="vis-chip vis-owner"><i class="fa-solid fa-lock"></i> Exclusive${c.searchable ? ' · <i class="fa-solid fa-magnifying-glass"></i>' : ''}</span>` : ''}
           <span class="muted text-xs">${count} title${count === 1 ? '' : 's'}</span>
         </div>
       </button>
@@ -821,7 +589,7 @@ function renderCatalogs() {
   if (catalogs.length > 3) {
     if (expandBtn) {
       expandBtn.classList.remove('hidden');
-      expandBtn.textContent = catalogListExpanded ? '▴ Collapse list' : '▾ Show all catalogs';
+      expandBtn.textContent = catalogListExpanded ? 'Collapse list' : 'Show all catalogs';
     }
     if (wrapper) wrapper.classList.toggle('collapsed', !catalogListExpanded);
   } else {
@@ -936,9 +704,9 @@ async function searchMedia() {
     const results = data.results || [];
     box.innerHTML = results.length
       ? results.map(item => mediaCard(item, `<button class="btn-ui btn-primary px-3 py-2 text-sm" onclick="addItem(${item.tmdb_id}, ${item.db_index}, '${item.media_type}')">Add</button>`)).join('')
-      : emptyState('🔍', 'No title found', 'Try a shorter title or change movie/series type.');
+      : emptyState('<i class="fa-solid fa-magnifying-glass"></i>', 'No title found', 'Try a shorter title or change movie/series type.');
   } catch (error) {
-    box.innerHTML = emptyState('⚠️', 'Search failed', error.message || 'Please try again.');
+    box.innerHTML = emptyState('<i class="fa-solid fa-triangle-exclamation"></i>', 'Search failed', error.message || 'Please try again.');
   }
 }
 
@@ -969,9 +737,9 @@ async function loadCatalogItems() {
     const items = data.items || [];
     box.innerHTML = items.length
       ? items.map(item => mediaCard(item, `<button class="btn-ui btn-danger px-3 py-2 text-sm" onclick="removeItem(${item.tmdb_id}, ${item.db_index}, '${item.media_type}')">Remove</button>`)).join('')
-      : emptyState('➕', 'No titles added yet', 'Use search above to add media to this catalog.');
+      : emptyState('<i class="fa-solid fa-plus"></i>', 'No titles added yet', 'Use search above to add media to this catalog.');
   } catch (error) {
-    box.innerHTML = emptyState('⚠️', 'Unable to load titles', error.message || 'Please try again.');
+    box.innerHTML = emptyState('<i class="fa-solid fa-triangle-exclamation"></i>', 'Unable to load titles', error.message || 'Please try again.');
   }
 }
 
@@ -1079,21 +847,21 @@ const ORDER_GROUP_CLASS = { 'Default Movies': 'vis-tokens', 'Default TV': 'vis-t
 
 function renderCatalogOrder() {
   const box = document.getElementById('catalog-order-list');
-  if (!catalogOrder.length) { box.innerHTML = emptyState('📚', 'No catalogs', 'Create catalogs to reorder them.'); return; }
+  if (!catalogOrder.length) { box.innerHTML = emptyState('<i class="fa-solid fa-layer-group"></i>', 'No catalogs', 'Create catalogs to reorder them.'); return; }
   box.innerHTML = catalogOrder.map((e, i) => {
-    const typeLabel = e.type === 'series' ? '📺 TV' : '🎬 Movie';
+    const typeLabel = e.type === 'series' ? 'Series' : 'Movie';
     return `<div class="order-row">
       <span class="drag-idx">${i + 1}</span>
       <span class="min-w-0 flex-1">
-        <span class="font-black truncate block">${escapeHtml(e.name)}</span>
+        <span class="font-semibold truncate block">${escapeHtml(e.name)}</span>
         <span class="flex items-center gap-2 mt-1">
           <span class="vis-chip ${ORDER_GROUP_CLASS[e.group] || 'vis-tokens'}">${escapeHtml(e.group)}</span>
           <span class="muted text-xs">${typeLabel}</span>
         </span>
       </span>
       <span class="flex flex-col gap-1">
-        <button class="order-arrow" ${i === 0 ? 'disabled' : ''} onclick="moveCatalogOrder(${i}, -1)">▲</button>
-        <button class="order-arrow" ${i === catalogOrder.length - 1 ? 'disabled' : ''} onclick="moveCatalogOrder(${i}, 1)">▼</button>
+        <button class="order-arrow" ${i === 0 ? 'disabled' : ''} onclick="moveCatalogOrder(${i}, -1)" aria-label="Move up"><i class="fa-solid fa-chevron-up"></i></button>
+        <button class="order-arrow" ${i === catalogOrder.length - 1 ? 'disabled' : ''} onclick="moveCatalogOrder(${i}, 1)" aria-label="Move down"><i class="fa-solid fa-chevron-down"></i></button>
       </span>
     </div>`;
   }).join('');
@@ -1192,7 +960,7 @@ function toggleCatalogExpand() {
   const wrapper = document.getElementById('catalog-list-wrapper');
   const btn = document.getElementById('catalog-expand-btn');
   wrapper.classList.toggle('collapsed', !catalogListExpanded);
-  if (btn) btn.textContent = catalogListExpanded ? '▴ Collapse list' : '▾ Show all catalogs';
+  if (btn) btn.textContent = catalogListExpanded ? 'Collapse list' : 'Show all catalogs';
 }
 
 document.addEventListener('DOMContentLoaded', async () => {

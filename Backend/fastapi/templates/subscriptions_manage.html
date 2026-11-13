@@ -4,414 +4,107 @@
 
 {% block content %}
 <style>
-    .subs-shell {
-        display: flex;
-        flex-direction: column;
-        gap: 1.5rem;
+    .subs-shell { display: flex; flex-direction: column; gap: 2rem; }
+    .section-panel, .stat-card, .mobile-user-card, .modal-glass { background: var(--card); border: 1px solid var(--border); }
+    .section-panel { border-radius: var(--radius); }
+    .empty-state { border-radius: var(--radius-sm); }
+    .section-title { color: var(--text); }
+    .section-muted, .text-soft { color: var(--text-sec); }
+
+    .glass-btn { display: inline-flex; align-items: center; justify-content: center; gap: .5rem; border: 1px solid var(--border); background: transparent; color: var(--text); border-radius: 9999px !important; font-weight: 500 !important; transition: background-color .15s var(--ease), border-color .15s var(--ease), transform .12s var(--ease); white-space: nowrap; }
+    .glass-btn:hover { background: var(--card-high); }
+    .glass-btn:active { transform: scale(.97); }
+    .glass-btn:disabled { opacity: .45; }
+    .glass-btn-primary { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
+    .glass-btn-primary:hover { background: var(--primary); filter: brightness(1.07); }
+    .glass-btn-success { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 35%, transparent); background: color-mix(in srgb, var(--ok) 10%, transparent); }
+    .glass-btn-warning { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 35%, transparent); background: color-mix(in srgb, var(--warn) 10%, transparent); }
+    .glass-btn-danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 35%, transparent); background: color-mix(in srgb, var(--danger) 10%, transparent); }
+    .glass-btn-purple, .glass-btn-gold { color: var(--primary); border-color: color-mix(in srgb, var(--primary) 35%, transparent); background: color-mix(in srgb, var(--primary) 10%, transparent); }
+
+    .glass-input, .glass-select { width: 100%; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg); color: var(--text); padding: .7rem 1rem; outline: none; font-size: .9rem; transition: border-color .18s var(--ease), box-shadow .18s var(--ease); }
+    .glass-input::placeholder { color: var(--text-sec); }
+    .glass-input:focus, .glass-select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--ring); }
+
+    .stats-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.5rem; padding: 1.25rem; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); }
+    .stat-value { font-size: 1.5rem; font-weight: 600; line-height: 1.1; font-variant-numeric: tabular-nums; }
+    .stat-label { margin-top: .2rem; font-size: .85rem; color: var(--text-sec); }
+
+    .table-shell { overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+    .subs-table { width: 100%; border-collapse: separate; border-spacing: 0; }
+    .subs-table thead th { background: var(--card); color: var(--text-sec); font-size: .72rem; font-weight: 500 !important; text-transform: uppercase; letter-spacing: .08em; border-bottom: 1px solid var(--border); }
+    .subs-table tbody tr { transition: background-color .15s var(--ease); }
+    .subs-table tbody tr:hover { background: var(--surface); }
+    .subs-table td { border-bottom: 1px solid var(--border); color: var(--text); vertical-align: top; }
+    .subs-table tbody tr:last-child td { border-bottom: none; }
+    .row-expired { background: color-mix(in srgb, var(--danger) 5%, transparent); }
+
+    .status-badge { display: inline-flex; align-items: center; gap: .4rem; padding: .2rem .65rem; border-radius: 9999px; font-size: .75rem; font-weight: 500; white-space: nowrap; }
+    .status-active { background: color-mix(in srgb, var(--ok) 14%, transparent); color: var(--ok); }
+    .status-expired { background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--danger); }
+    .status-warning { background: color-mix(in srgb, var(--warn) 14%, transparent); color: var(--warn); }
+    .status-lifetime { background: color-mix(in srgb, var(--primary) 14%, transparent); color: var(--primary); }
+    .status-gold { background: color-mix(in srgb, var(--warn) 14%, transparent); color: var(--warn); }
+
+    .action-chip { display: inline-flex; align-items: center; gap: .35rem; border-radius: 9999px; padding: .35rem .75rem; font-size: .75rem; font-weight: 500; border: 1px solid var(--border); background: transparent; color: var(--text); transition: background-color .15s var(--ease), transform .12s var(--ease); white-space: nowrap; }
+    .action-chip:hover { background: var(--card-high); }
+    .action-chip:active { transform: scale(.96); }
+
+    .addon-box { padding: .7rem .8rem; border-radius: 12px; background: var(--bg); border: 1px solid var(--border); min-width: 0; overflow-wrap: anywhere; }
+    .usage-box { font-size: .75rem; line-height: 1.55; }
+
+    .mobile-user-card { padding: 1rem; border-radius: var(--radius-sm); min-width: 0; }
+    .mobile-user-card + .mobile-user-card { margin-top: .75rem; }
+    .mobile-grid { display: none; }
+
+    .pagination-shell { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+    .pagination-text { color: var(--text-sec); }
+    .pagination-shell .controls { display: flex; align-items: center; gap: .5rem; }
+    .pagination-btn { min-width: 88px; }
+
+    .modal-backdrop { background: var(--scrim); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
+    .modal-glass { border-radius: var(--radius); padding: 1.4rem; width: min(100%, 30rem); max-height: calc(100dvh - 2rem); overflow-y: auto; box-shadow: var(--shadow-strong); }
+    .modal-field label { color: var(--text-sec); font-size: .78rem; font-weight: 500 !important; margin-bottom: .45rem; display: block; }
+
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+    @media (max-width: 1024px) { .subs-table th, .subs-table td { padding-left: 1rem; padding-right: 1rem; } }
+    @media (max-width: 767.98px) {
+        .desktop-table-wrap { display: none; }
+        .mobile-grid { display: block; }
+        .section-panel { padding: 1rem; }
+        .stats-row { padding: 1rem; gap: 1rem; }
+        .pagination-shell { flex-direction: column; align-items: stretch; }
+        .pagination-shell .controls { width: 100%; display: grid; grid-template-columns: 1fr auto 1fr; }
+        .pagination-btn { width: 100%; }
     }
-
-    .page-hero,
-    .section-panel,
-    .table-shell,
-    .mobile-user-card,
-    .empty-state,
-    .modal-glass {
-        background: color-mix(in srgb, var(--card) 50%, transparent);
-        backdrop-filter: blur(20px);
-        -webkit-backdrop-filter: blur(20px);
-        border: 1px solid var(--border);
-        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.22);
-    }
-
-    .page-hero,
-    .section-panel,
-    .table-shell,
-    .empty-state {
-        border-radius: 1.5rem;
-    }
-
-    .hero-glow {
-        position: relative;
-        overflow: hidden;
-        isolation: isolate;
-    }
-
-    .hero-glow::before {
-        content: "";
-        position: absolute;
-        inset: -30% auto auto -10%;
-        width: 16rem;
-        height: 16rem;
-        border-radius: 9999px;
-        background: color-mix(in srgb, var(--primary) 18%, transparent);
-        filter: blur(50px);
-        z-index: -1;
-        pointer-events: none;
-    }
-
-    .hero-glow::after {
-        content: "";
-        position: absolute;
-        inset: auto -5% -35% auto;
-        width: 14rem;
-        height: 14rem;
-        border-radius: 9999px;
-        background: color-mix(in srgb, var(--accent) 16%, transparent);
-        filter: blur(50px);
-        z-index: -1;
-        pointer-events: none;
-    }
-
-    .section-title {
-        color: var(--text);
-    }
-
-    .section-muted {
-        color: var(--text-sec);
-    }
-
-    .glass-btn {
-        border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
-        background: color-mix(in srgb, var(--card) 92%, var(--bg));
-        color: var(--text);
-        transition: all 0.25s ease;
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
-    }
-
-    .glass-btn:hover {
-        transform: translateY(-1px);
-        border-color: color-mix(in srgb, var(--primary) 35%, var(--border));
-        box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
-    }
-
-    .glass-btn-primary {
-        background: linear-gradient(
-            135deg,
-            color-mix(in srgb, var(--primary) 88%, white 8%),
-            color-mix(in srgb, var(--accent) 82%, var(--primary) 18%)
-        );
-        color: white;
-        border: 1px solid color-mix(in srgb, var(--primary) 50%, transparent);
-        box-shadow: 0 10px 26px color-mix(in srgb, var(--primary) 22%, transparent);
-    }
-
-    .glass-btn-primary:hover {
-        filter: brightness(1.05);
-        box-shadow: 0 14px 34px color-mix(in srgb, var(--primary) 28%, transparent);
-    }
-
-    .glass-btn-danger {
-        background: linear-gradient(135deg, #ef4444, #dc2626);
-        color: #ffffff;
-        border-color: transparent;
-    }
-
-    .glass-btn-warning {
-        background: linear-gradient(135deg, #f59e0b, #d97706);
-        color: #ffffff;
-        border-color: transparent;
-    }
-
-    .glass-btn-success {
-        background: linear-gradient(135deg, #22c55e, #16a34a);
-        color: #ffffff;
-        border-color: transparent;
-    }
-
-    .glass-input,
-    .glass-select {
-        width: 100%;
-        border-radius: 1rem;
-        border: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
-        background: color-mix(in srgb, var(--bg) 68%, transparent);
-        color: var(--text);
-        padding: 0.85rem 1rem;
-        outline: none;
-        transition: all 0.2s ease;
-        box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);
-    }
-
-    .glass-input::placeholder {
-        color: color-mix(in srgb, var(--text-sec) 85%, transparent);
-    }
-
-    .glass-input:focus,
-    .glass-select:focus {
-        border-color: color-mix(in srgb, var(--primary) 65%, var(--border));
-        box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 12%, transparent);
-    }
-
-    .plan-card {
-        position: relative;
-        overflow: hidden;
-        border-radius: 1.5rem;
-        background: linear-gradient(
-            180deg,
-            color-mix(in srgb, var(--card) 96%, var(--bg)),
-            color-mix(in srgb, var(--card) 88%, var(--bg))
-        );
-        border: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
-        box-shadow: 0 12px 30px rgba(0,0,0,0.18);
-        transition: transform 0.28s ease, border-color 0.28s ease, box-shadow 0.28s ease;
-    }
-
-    .plan-card::before {
-        content: "";
-        position: absolute;
-        inset: -25% auto auto -5%;
-        width: 8rem;
-        height: 8rem;
-        border-radius: 9999px;
-        background: color-mix(in srgb, var(--primary) 18%, transparent);
-        filter: blur(36px);
-        pointer-events: none;
-    }
-
-    .plan-card:hover {
-        transform: translateY(-4px);
-        border-color: color-mix(in srgb, var(--primary) 30%, var(--border));
-        box-shadow: 0 18px 42px rgba(0,0,0,0.24);
-    }
-
-    .plan-actions {
-        opacity: 0;
-        transform: translateY(-4px);
-        transition: all 0.22s ease;
-    }
-
-    .plan-card:hover .plan-actions {
-        opacity: 1;
-        transform: translateY(0);
-    }
-
-    .metric-badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.45rem;
-        padding: 0.45rem 0.8rem;
-        border-radius: 9999px;
-        font-size: 0.78rem;
-        font-weight: 700;
-        letter-spacing: 0.03em;
-        border: 1px solid transparent;
-    }
-
-    .badge-active {
-        background: color-mix(in srgb, #22c55e 16%, transparent);
-        color: #86efac;
-        border-color: color-mix(in srgb, #22c55e 28%, transparent);
-    }
-
-    .badge-expired {
-        background: color-mix(in srgb, #ef4444 14%, transparent);
-        color: #fca5a5;
-        border-color: color-mix(in srgb, #ef4444 26%, transparent);
-    }
-
-    .table-shell {
-        overflow: hidden;
-    }
-
-    .subs-table {
-        width: 100%;
-        border-collapse: separate;
-        border-spacing: 0;
-    }
-
-    .subs-table thead th {
-        background: color-mix(in srgb, var(--bg) 65%, transparent);
-        color: var(--text-sec);
-        font-size: 0.72rem;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-        border-bottom: 1px solid color-mix(in srgb, var(--border) 92%, transparent);
-    }
-
-    .subs-table tbody tr {
-        transition: background 0.22s ease;
-    }
-
-    .subs-table tbody tr:hover {
-        background: color-mix(in srgb, var(--primary) 6%, transparent);
-    }
-
-    .subs-table td {
-        border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
-        color: var(--text);
-    }
-
-    .subs-table tbody tr:last-child td {
-        border-bottom: none;
-    }
-
-    .action-chip {
-        border-radius: 9999px;
-        padding: 0.45rem 0.8rem;
-        font-size: 0.72rem;
-        font-weight: 700;
-        border: 1px solid transparent;
-        transition: all 0.2s ease;
-        white-space: nowrap;
-    }
-
-    .action-chip:hover {
-        transform: translateY(-1px);
-    }
-
-    .mobile-user-card {
-        border-radius: 1.35rem;
-        padding: 1rem;
-    }
-
-    .mobile-user-card + .mobile-user-card {
-        margin-top: 0.9rem;
-    }
-
-    .mobile-grid {
-        display: none;
-    }
-
-    .pagination-shell {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 1rem;
-        flex-wrap: wrap;
-    }
-
-    .pagination-text {
-        color: var(--text-sec);
-    }
-
-    .pagination-btn {
-        min-width: 92px;
-    }
-
-    .modal-backdrop {
-        background: rgba(4, 8, 18, 0.58);
-        backdrop-filter: blur(10px);
-        -webkit-backdrop-filter: blur(10px);
-    }
-
-    .modal-glass {
-        border-radius: 1.6rem;
-        padding: 1.4rem;
-        border: 1px solid color-mix(in srgb, var(--border) 95%, transparent);
-        width: min(92vw, 30rem);
-    }
-
-    .modal-field label {
-        color: var(--text-sec);
-        font-size: 0.82rem;
-        font-weight: 700;
-        margin-bottom: 0.55rem;
-        display: block;
-    }
-
-    .text-soft {
-        color: var(--text-sec);
-    }
-
-    .no-scrollbar::-webkit-scrollbar {
-        display: none;
-    }
-
-    .no-scrollbar {
-        -ms-overflow-style: none;
-        scrollbar-width: none;
-    }
-
-    @media (max-width: 1024px) {
-        .subs-table th,
-        .subs-table td {
-            padding-left: 1rem;
-            padding-right: 1rem;
-        }
-    }
-
-    @media (max-width: 767px) {
-        .desktop-table-wrap {
-            display: none;
-        }
-
-        .mobile-grid {
-            display: block;
-        }
-
-        .page-hero {
-            padding: 1.25rem;
-            border-radius: 1.35rem;
-        }
-
-        .section-panel {
-            padding: 1rem;
-            border-radius: 1.35rem;
-        }
-
-        .pagination-shell {
-            flex-direction: column;
-            align-items: stretch;
-        }
-
-        .pagination-shell .controls {
-            width: 100%;
-            display: grid;
-            grid-template-columns: 1fr auto 1fr;
-            gap: 0.6rem;
-            align-items: center;
-        }
-
-        .pagination-btn {
-            width: 100%;
-        }
-
-        .plan-actions {
-            opacity: 1;
-            transform: none;
-        }
-    }
+    .plan-card { position: relative; border-radius: var(--radius-sm); background: var(--bg); border: 1px solid var(--border); transition: border-color .2s var(--ease), transform .25s var(--ease); min-width: 0; }
+    .plan-card:hover { border-color: color-mix(in srgb, var(--primary) 45%, var(--border)); transform: translateY(-2px); }
+    .metric-badge { display: inline-flex; align-items: center; gap: .4rem; padding: .2rem .65rem; border-radius: 9999px; font-size: .75rem; font-weight: 500; white-space: nowrap; }
+    .badge-active { background: color-mix(in srgb, var(--ok) 14%, transparent); color: var(--ok); }
+    .badge-expired { background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--danger); }
 </style>
 
-<div class="subs-shell py-2 sm:py-4">
+<div class="subs-shell">
     <!-- Hero -->
-    <section class="page-hero hero-glow p-5 sm:p-6 lg:p-8">
-        <div class="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-                <div class="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-bold tracking-[0.18em] uppercase mb-3"
-                     style="border-color: color-mix(in srgb, var(--primary) 28%, var(--border)); color: var(--text-sec); background: color-mix(in srgb, var(--primary) 10%, transparent);">
-                    <i class="fas fa-layer-group text-[11px]" style="color: var(--primary);"></i>
-                    Subscription Control Center
-                </div>
-                <h1 class="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight section-title">
-                    Subscription Management
-                </h1>
-                <p class="mt-2 text-sm sm:text-base section-muted max-w-2xl">
-                    Create plans, manage users, and monitor active or expired subscriptions.
-                </p>
-            </div>
-
-            <div class="flex flex-wrap gap-3">
-                <button onclick="openPlanModal()" class="glass-btn glass-btn-primary rounded-2xl px-5 py-3 text-sm font-bold inline-flex items-center gap-2">
-                    <i class="fas fa-plus"></i>
-                    Add Plan
-                </button>
-                <button onclick="backfillNames()" class="glass-btn rounded-2xl px-5 py-3 text-sm font-bold inline-flex items-center gap-2" title="Fetch real Telegram names for 'User <id>' entries">
-                    <i class="fas fa-id-badge"></i>
-                    Sync Names
-                </button>
-                <button onclick="fetchSubscribers()" class="glass-btn rounded-2xl px-5 py-3 text-sm font-bold inline-flex items-center gap-2">
-                    <i class="fas fa-rotate-right"></i>
-                    Refresh Users
-                </button>
-            </div>
+    <header class="page-head" style="margin-bottom:0">
+        <div>
+            <h1 class="page-title">Plans</h1>
+            <p class="page-sub">Subscription plans and the users on them</p>
         </div>
-    </section>
+        <div class="page-actions">
+            <button onclick="backfillNames()" class="glass-btn px-4 py-2 text-sm" title="Fetch real Telegram names for 'User <id>' entries"><i class="fa-solid fa-id-badge"></i> Sync names</button>
+            <button onclick="fetchSubscribers()" class="glass-btn px-4 py-2 text-sm"><i class="fa-solid fa-rotate-right"></i> Refresh</button>
+            <button onclick="openPlanModal()" class="glass-btn glass-btn-primary px-4 py-2 text-sm"><i class="fa-solid fa-plus"></i> Add plan</button>
+        </div>
+    </header>
 
     <!-- Plans -->
-    <section class="section-panel p-4 sm:p-5 lg:p-6">
+    <section class="section-panel p-5">
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
             <div>
-                <h2 class="text-lg sm:text-xl font-bold section-title">Subscription Plans</h2>
+                <h2 class="text-lg font-semibold section-title">Plans</h2>
             </div>
         </div>
 
@@ -423,10 +116,10 @@
     </section>
 
     <!-- Users -->
-    <section class="section-panel p-4 sm:p-5 lg:p-6">
+    <section class="section-panel p-5">
         <div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 mb-5">
             <div>
-                <h2 class="text-lg sm:text-xl font-bold section-title">User Subscriptions</h2>
+                <h2 class="text-lg font-semibold section-title">Subscribers</h2>
                 <p class="text-sm section-muted mt-1">Search, filter, paginate, and manage subscription access.</p>
             </div>
 
@@ -486,13 +179,13 @@
             <div id="sub-page-info" class="pagination-text text-sm"></div>
             <div class="controls">
                 <button id="sub-btn-prev" onclick="subChangePage(-1)"
-                    class="glass-btn pagination-btn rounded-xl px-4 py-2.5 text-sm font-semibold">
-                    ‹ Prev
+                    class="glass-btn pagination-btn px-4 py-2 text-sm font-semibold">
+                    <i class="fa-solid fa-chevron-left text-xs"></i> Prev
                 </button>
-                <span id="sub-page-num" class="text-sm font-bold text-center section-title px-2"></span>
+                <span id="sub-page-num" class="text-sm font-semibold text-center section-title px-2"></span>
                 <button id="sub-btn-next" onclick="subChangePage(1)"
-                    class="glass-btn pagination-btn rounded-xl px-4 py-2.5 text-sm font-semibold">
-                    Next ›
+                    class="glass-btn pagination-btn px-4 py-2 text-sm font-semibold">
+                    Next <i class="fa-solid fa-chevron-right text-xs"></i>
                 </button>
             </div>
         </div>
@@ -504,7 +197,7 @@
     <div class="modal-glass">
         <div class="flex items-start justify-between gap-4 mb-5">
             <div>
-                <h3 class="text-xl font-bold section-title" id="plan-modal-title">Add New Plan</h3>
+                <h3 class="text-xl font-semibold section-title" id="plan-modal-title">Add New Plan</h3>
                 <p class="text-sm text-soft mt-1">Create or update a subscription plan.</p>
             </div>
             <button onclick="closePlanModal()" class="glass-btn rounded-full w-10 h-10 flex items-center justify-center">
@@ -541,10 +234,10 @@
             </div>
 
             <div class="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-2">
-                <button type="button" onclick="closePlanModal()" class="glass-btn rounded-2xl px-5 py-3 text-sm font-bold">
+                <button type="button" onclick="closePlanModal()" class="glass-btn px-4 py-2 text-sm font-semibold">
                     Cancel
                 </button>
-                <button type="submit" class="glass-btn glass-btn-primary rounded-2xl px-5 py-3 text-sm font-bold">
+                <button type="submit" class="glass-btn glass-btn-primary px-4 py-2 text-sm font-semibold">
                     Save Plan
                 </button>
             </div>
@@ -557,7 +250,7 @@
     <div class="modal-glass">
         <div class="flex items-start justify-between gap-4 mb-5">
             <div>
-                <h3 class="text-xl font-bold section-title" id="user-modal-title">Manage User</h3>
+                <h3 class="text-xl font-semibold section-title" id="user-modal-title">Manage User</h3>
                 <div class="text-sm text-soft mt-1" id="user-modal-desc"></div>
             </div>
             <button onclick="closeUserModal()" class="glass-btn rounded-full w-10 h-10 flex items-center justify-center">
@@ -575,10 +268,10 @@
             </div>
 
             <div class="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-2">
-                <button type="button" onclick="closeUserModal()" class="glass-btn rounded-2xl px-5 py-3 text-sm font-bold">
+                <button type="button" onclick="closeUserModal()" class="glass-btn px-4 py-2 text-sm font-semibold">
                     Cancel
                 </button>
-                <button type="submit" class="glass-btn glass-btn-primary rounded-2xl px-5 py-3 text-sm font-bold" id="btn-user-save">
+                <button type="submit" class="glass-btn glass-btn-primary px-4 py-2 text-sm font-semibold" id="btn-user-save">
                     Confirm
                 </button>
             </div>
@@ -620,7 +313,7 @@
 
     function getAdminBadge(u) {
         return u.is_admin
-            ? '<span class="metric-badge" style="background: color-mix(in srgb, #f5c518 16%, transparent); color: #f5c518;"><i class="fas fa-crown text-[8px]"></i> Owner</span>'
+            ? '<span class="metric-badge" style="background: color-mix(in srgb, var(--warn) 16%, transparent); color: var(--warn);"><i class="fas fa-crown text-[8px]"></i> Owner</span>'
             : '';
     }
 
@@ -650,7 +343,7 @@
             }
 
             container.innerHTML = plans.map(p => `
-                <div class="plan-card p-5 sm:p-6">
+                <div class="plan-card p-5">
                     <div class="plan-actions absolute right-4 top-4 flex gap-2">
                         <button onclick="openPlanModal('${p._id}', ${p.days}, ${p.price}, '${p.currency || 'INR'}')"
                             class="glass-btn rounded-full w-9 h-9 flex items-center justify-center" title="Edit plan">
@@ -670,9 +363,9 @@
 
                         <div class="min-w-0">
                             <div class="text-sm font-semibold section-muted">${p.days} Days Plan</div>
-                            <div class="mt-1 text-3xl font-extrabold section-title tracking-tight">${currencySymbol(p.currency)}${p.price}</div>
+                            <div class="mt-1 text-3xl font-semibold section-title tracking-tight">${currencySymbol(p.currency)}${p.price}</div>
                     <div class="text-xs text-soft mt-0.5">${(p.currency || 'INR').toUpperCase()}</div>
-                            <div class="mt-3 inline-flex items-center gap-2 text-xs font-bold rounded-full px-3 py-1"
+                            <div class="mt-3 inline-flex items-center gap-2 text-xs font-semibold rounded-full px-3 py-1"
                                  style="background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--text-sec); border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);">
                                 <i class="fas fa-bolt" style="color: var(--accent);"></i>
                                 Premium Access
@@ -853,7 +546,7 @@
                     <div class="grid grid-cols-1 gap-3 mb-4">
                         <div class="rounded-2xl px-4 py-3"
                              style="background: color-mix(in srgb, var(--bg) 55%, transparent); border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);">
-                            <div class="text-[11px] uppercase tracking-[0.14em] text-soft font-bold mb-1">Expiry</div>
+                            <div class="text-[11px] uppercase tracking-[0.14em] text-soft font-semibold mb-1">Expiry</div>
                             <div class="text-sm font-semibold section-title">${expiry}</div>
                         </div>
                     </div>
@@ -970,24 +663,24 @@
 
         let title = '';
         let desc = '';
-        let btnClasses = 'glass-btn glass-btn-primary rounded-2xl px-5 py-3 text-sm font-bold';
+        let btnClasses = 'glass-btn glass-btn-primary px-4 py-2 text-sm font-semibold';
         let showDays = true;
 
         if (action === 'extend') {
             title = 'Extend Subscription';
             desc = `Add extra days to <b>${userName}</b>'s subscription.`;
             document.getElementById('days-action-label').innerText = 'add';
-            btnClasses = 'glass-btn glass-btn-success rounded-2xl px-5 py-3 text-sm font-bold';
+            btnClasses = 'glass-btn glass-btn-success px-4 py-2 text-sm font-semibold';
         } else if (action === 'reduce') {
             title = 'Reduce Subscription';
             desc = `Subtract days from <b>${userName}</b>'s subscription.`;
             document.getElementById('days-action-label').innerText = 'subtract';
-            btnClasses = 'glass-btn glass-btn-warning rounded-2xl px-5 py-3 text-sm font-bold';
+            btnClasses = 'glass-btn glass-btn-warning px-4 py-2 text-sm font-semibold';
         } else {
             title = 'Revoke Subscription';
             desc = `<b>Warning:</b> This will remove <b>${userName}</b>'s subscription access completely.`;
             showDays = false;
-            btnClasses = 'glass-btn glass-btn-danger rounded-2xl px-5 py-3 text-sm font-bold';
+            btnClasses = 'glass-btn glass-btn-danger px-4 py-2 text-sm font-semibold';
         }
 
         document.getElementById('user-modal-title').innerText = title;

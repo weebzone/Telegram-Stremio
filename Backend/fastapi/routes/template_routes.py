@@ -8,7 +8,7 @@ from fastapi.templating import Jinja2Templates
 from Backend import StartTime, __version__, db
 from Backend.config import Telegram
 from Backend.fastapi.security.credentials import get_current_user, is_authenticated, require_auth, revoke_session, verify_credentials
-from Backend.fastapi.themes import DEFAULT_THEME, DEFAULT_STYLE, get_all_themes, get_all_styles, get_theme
+from Backend.fastapi.themes import get_all_themes, get_theme, theme_key
 from Backend.helper.analytics import client_ip_from, get_activity_overview
 from Backend.helper.bounded import BoundedDict
 from Backend.helper.custom_dl import ACTIVE_STREAMS, RECENT_STREAMS
@@ -25,15 +25,12 @@ templates.env.globals["cover_url"] = resolve_cover_url
 
 #----- Shared template context (request, theme metadata) for every page
 def _base_context(request: Request) -> dict:
-    theme_name = request.session.get("theme", DEFAULT_THEME)
-    style_name = request.session.get("style", DEFAULT_STYLE)
+    theme_name = theme_key(request)
     return {
         "request": request,
-        "theme": get_theme(theme_name, style_name),
+        "theme": get_theme(theme_name),
         "themes": get_all_themes(),
-        "styles": get_all_styles(),
         "current_theme": theme_name,
-        "current_style": style_name,
     }
 
 
@@ -84,12 +81,11 @@ async def logout(request: Request):
 
 
 #----- Persist the chosen theme and return to the referring page
-async def set_theme(request: Request, theme: str = Form(None), style: str = Form(None)):
+async def set_theme(request: Request, theme: str = Form(None)):
+    response = RedirectResponse(url=request.headers.get("referer", "/"), status_code=302)
     if theme and theme in get_all_themes():
-        request.session["theme"] = theme
-    if style and style in get_all_styles():
-        request.session["style"] = style
-    return RedirectResponse(url=request.headers.get("referer", "/"), status_code=302)
+        response.set_cookie("theme", theme, max_age=31536000, samesite="lax")
+    return response
 
 
 #----- Main dashboard: aggregate DB stats and live/recent stream telemetry

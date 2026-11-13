@@ -8,76 +8,55 @@
 .bk-desc { color: var(--text-sec); font-size: 0.85rem; margin-bottom: 1rem; }
 .bk-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
 @media (max-width: 520px) { .bk-actions { grid-template-columns: 1fr; } }
-.bk-btn { display: flex; align-items: center; gap: 0.85rem; padding: 0.9rem 1.1rem; border-radius: 0.9rem; cursor: pointer;
+.bk-btn { display: flex; align-items: center; gap: 0.85rem; padding: 0.9rem 1.1rem; border-radius: var(--radius-sm); cursor: pointer;
           text-decoration: none; text-align: left; transition: all .15s;
-          border: 1px solid var(--border); background: color-mix(in srgb, var(--card) 92%, var(--bg)); }
+          border: 1px solid var(--border); background: var(--bg); }
 .bk-btn:hover { transform: translateY(-1px); border-color: var(--primary); }
 .bk-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
 .bk-ic { width: 2.5rem; height: 2.5rem; border-radius: 0.7rem; display: flex; align-items: center; justify-content: center; font-size: 1.05rem; flex-shrink: 0; }
 .bk-export .bk-ic { background: color-mix(in srgb, var(--primary) 18%, transparent); color: var(--primary); }
-.bk-import .bk-ic { background: #22c55e22; color: #22c55e; }
+.bk-import .bk-ic { background: color-mix(in srgb, var(--ok) 13%, transparent); color: var(--ok); }
 .bk-txt { display: flex; flex-direction: column; line-height: 1.25; }
 .bk-txt b { font-size: 0.95rem; color: var(--text); }
 .bk-chips { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.9rem; }
-.bk-chip { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.72rem; font-weight: 700; padding: 0.35rem 0.75rem; border-radius: 9999px; color: var(--text-sec); border: 1px solid var(--border); background: color-mix(in srgb, var(--card) 92%, var(--bg)); }
+.bk-chip { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.72rem; font-weight: 600; padding: 0.35rem 0.75rem; border-radius: 9999px; color: var(--text-sec); border: 1px solid var(--border); background: var(--bg); }
 .bk-txt small { font-size: 0.75rem; color: var(--text-sec); }
 .bk-status { margin-top: 0.9rem; font-size: 0.85rem; color: var(--text-sec); display: flex; align-items: center; gap: 0.5rem; }
 .bk-warn { color: var(--text-sec); font-size: 0.78rem; margin-top: 0.85rem; }
-.bk-warn i { color: var(--warning, #f59e0b); }
+.bk-warn i { color: var(--warning, var(--warn)); }
 
 /* ── Toggle switch ───────────────────────────────────────────────────────── */
 .toggle-wrap { display: flex; align-items: center; gap: 0.75rem; cursor: pointer; }
 .toggle-input { position: absolute; opacity: 0; width: 0; height: 0; }
 .toggle-track {
     display: inline-block; width: 3rem; height: 1.625rem;
-    border-radius: 9999px; background: var(--border);
+    border-radius: 9999px; background: var(--card-high); border: 1px solid var(--border); box-sizing: border-box;
     position: relative; transition: background 0.2s ease; flex-shrink: 0;
 }
 .toggle-track::after {
     content: ''; position: absolute;
-    top: 3px; left: 3px;
+    top: 2px; left: 2px;
     width: 20px; height: 20px;
-    border-radius: 50%; background: white;
-    transition: transform 0.2s ease;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+    border-radius: 50%; background: var(--text-sec);
+    transition: transform .25s var(--spring), background-color .2s var(--ease);
 }
 .toggle-input:checked + .toggle-track { background: var(--primary); }
-.toggle-input:checked + .toggle-track::after { transform: translateX(1.375rem); }
+.toggle-input:checked + .toggle-track { border-color: var(--primary); }
+.toggle-input:checked + .toggle-track::after { transform: translateX(1.375rem); background: var(--on-primary); }
+.toggle-input:focus-visible + .toggle-track { outline: 2px solid var(--primary); outline-offset: 2px; }
 .toggle-label { font-size: 0.9rem; color: var(--text); user-select: none; }
 
 /* ── Section cards ───────────────────────────────────────────────────────── */
-.settings-card {
-    background: color-mix(in srgb, var(--card) 94%, var(--bg));
-    border: 1px solid var(--border);
-    border-radius: 1.5rem;
-    padding: 1.5rem 1.75rem;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.15);
-}
-.settings-card h2 {
-    font-size: 1rem; font-weight: 800;
-    letter-spacing: 0.05em; text-transform: uppercase;
-    color: var(--primary); margin-bottom: 1.25rem;
-    display: flex; align-items: center; gap: 0.5rem;
-}
+.settings-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.35rem 1.5rem; }
+.settings-card h2 { font-size: 1.05rem; font-weight: 600; color: var(--text); margin-bottom: 1rem; display: flex; align-items: center; gap: .55rem; }
+
+.settings-card h2 i { color: var(--primary); font-size: .95rem; }
+@media (max-width: 640px) { .settings-card { padding: 1.1rem 1rem; } }
 
 /* ── Inputs ──────────────────────────────────────────────────────────────── */
-.s-input {
-    width: 100%;
-    background: color-mix(in srgb, var(--bg) 70%, transparent);
-    border: 1px solid var(--border);
-    color: var(--text);
-    border-radius: 0.75rem;
-    padding: 0.6rem 1rem;
-    font-size: 0.88rem;
-    outline: none;
-    transition: border-color 0.2s;
-}
-.s-input:focus { border-color: var(--primary); }
-.s-label {
-    display: block; font-size: 0.78rem; font-weight: 700;
-    color: var(--text-sec); text-transform: uppercase;
-    letter-spacing: 0.04em; margin-bottom: 0.4rem;
-}
+.s-input { width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: var(--radius-sm); padding: .65rem 1rem; font-size: .9rem; outline: none; transition: border-color .18s var(--ease), box-shadow .18s var(--ease); }
+.s-input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--ring); }
+.s-label { display: block; font-size: .72rem; font-weight: 500; color: var(--text-sec); text-transform: uppercase; letter-spacing: .1em; margin-bottom: .45rem; }
 
 /* ── Multi-value list ────────────────────────────────────────────────────── */
 .multi-list-items { display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 0.6rem; }
@@ -85,41 +64,17 @@
     display: flex; align-items: center; gap: 0.5rem;
 }
 .multi-item .s-input { flex: 1; }
-.channel-chip {
-    flex: 1; min-width: 0;
-    padding: 0.55rem 0.85rem;
-    background: color-mix(in srgb, var(--primary) 10%, transparent);
-    border: 1px solid color-mix(in srgb, var(--primary) 28%, transparent);
-    border-radius: 0.75rem;
-    font-size: 0.875rem; font-weight: 600;
-    color: var(--text);
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    user-select: none; cursor: default;
-}
+.channel-chip { flex: 1; min-width: 0; padding: .6rem .9rem; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: .88rem; font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; user-select: none; cursor: default; }
 .s-input[readonly] {
     opacity: 0.9;
     background: color-mix(in srgb, var(--primary) 8%, transparent);
     cursor: default;
 }
-.remove-btn {
-    width: 2rem; height: 2rem; flex-shrink: 0;
-    background: rgba(239,68,68,0.12); border: 1px solid rgba(239,68,68,0.25);
-    color: #ef4444; border-radius: 0.5rem;
-    font-size: 1rem; line-height: 1;
-    cursor: pointer; transition: background 0.15s;
-    display: flex; align-items: center; justify-content: center;
-}
-.remove-btn:hover { background: rgba(239,68,68,0.25); }
+.remove-btn { width: 2.25rem; height: 2.25rem; flex-shrink: 0; background: transparent; border: 1px solid var(--border); color: var(--danger); border-radius: 9999px; font-size: .9rem; line-height: 1; cursor: pointer; transition: background-color .15s var(--ease); display: flex; align-items: center; justify-content: center; }
+.remove-btn:hover { background: color-mix(in srgb, var(--danger) 25%, transparent); }
 .add-row { display: flex; gap: 0.5rem; }
-.add-btn {
-    flex-shrink: 0; padding: 0.6rem 1rem;
-    background: color-mix(in srgb, var(--primary) 15%, transparent);
-    border: 1px solid color-mix(in srgb, var(--primary) 40%, transparent);
-    color: var(--primary); border-radius: 0.75rem;
-    font-size: 0.82rem; font-weight: 700; cursor: pointer;
-    transition: background 0.15s; white-space: nowrap;
-}
-.add-btn:hover { background: color-mix(in srgb, var(--primary) 28%, transparent); }
+.add-btn { flex-shrink: 0; padding: .6rem 1.05rem; background: transparent; border: 1px solid var(--border); color: var(--text); border-radius: 9999px; font-size: .86rem; font-weight: 500; cursor: pointer; transition: background-color .15s var(--ease); white-space: nowrap; }
+.add-btn:hover { background: var(--card-high); }
 
 /* ── Anime channel checkbox ──────────────────────────────────────────────── */
 .auth-item .s-input { min-width: 0; }
@@ -128,7 +83,7 @@
     cursor: pointer; user-select: none; white-space: nowrap;
     padding: 0.4rem 0.6rem; border-radius: 0.6rem;
     border: 1px solid var(--border); background: transparent;
-    font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+    font-size: 0.7rem; font-weight: 600; text-transform: uppercase;
     letter-spacing: 0.03em; color: var(--text-sec); transition: all 0.15s;
 }
 .anime-check input { width: 0.95rem; height: 0.95rem; accent-color: var(--primary); cursor: pointer; margin: 0; }
@@ -147,26 +102,23 @@
 /* ── Stats grid ──────────────────────────────────────────────────────────── */
 .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px,1fr)); gap: 0.75rem; }
 .stat-box {
-    background: color-mix(in srgb, var(--bg) 55%, transparent);
+    background: var(--bg);
     border: 1px solid var(--border); border-radius: 0.9rem;
     padding: 0.75rem 0.9rem;
 }
-.stat-box .v { font-size: 1.3rem; font-weight: 800; }
-.stat-box .l { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-sec); }
+.stat-box .v { font-size: 1.3rem; font-weight: 600; }
+.stat-box .l { font-size: .8rem; color: var(--text-sec); }
 .hint { font-size: 0.78rem; color: var(--text-sec); }
 </style>
 
 <!-- Page header -->
-<div class="flex items-center justify-between mb-8">
+<div class="page-head">
     <div>
-        <h1 class="text-3xl font-extrabold">Settings</h1>
-        <p class="mt-1 text-sm" style="color:var(--text-sec)">
-            Runtime configuration — stored in the database, no restart needed.
-        </p>
+        <h1 class="page-title">Settings</h1>
+        <p class="page-sub">Stored in the database. Most changes apply without a restart.</p>
     </div>
-    <button id="save-btn" onclick="saveSettings()"
-        class="flex items-center gap-2 px-6 py-2.5 rounded-full font-bold text-sm text-white shadow-lg transition-all"
-        style="background:var(--primary); box-shadow:0 0 18px color-mix(in srgb,var(--primary) 40%,transparent)">
+    <button id="save-btn" data-shortcut-save onclick="saveSettings()"
+        class="btn-primary px-5 py-2.5 text-sm hidden md:inline-flex">
         <i class="fa-solid fa-floppy-disk"></i>
         <span id="save-label">Save Settings</span>
     </button>
@@ -222,8 +174,7 @@
             automatically once it's back online.
         </p>
         <button id="restart-btn" onclick="restartApp()"
-            class="flex items-center gap-2 px-6 py-2.5 rounded-full font-bold text-sm text-white shadow-lg transition-all"
-            style="background:#ef4444;box-shadow:0 0 18px rgba(239,68,68,0.4)">
+            class="btn-danger px-6 py-2.5 text-sm">
             <i class="fa-solid fa-power-off"></i>
             <span>Restart Now</span>
         </button>
@@ -292,7 +243,7 @@
                 </div>
                 <p style="font-size:0.75rem;color:var(--text-sec);margin-top:0.3rem">
                     {% if settings.admin_password_set is defined and settings.admin_password_set %}
-                        <i class="fa-solid fa-circle-check" style="color:#22c55e"></i> Password is set
+                        <i class="fa-solid fa-circle-check" style="color:var(--ok)"></i> Password is set
                     {% endif %}
                 </p>
             </div>
@@ -313,7 +264,7 @@
             <p style="font-size:0.75rem;color:var(--text-sec);margin-top:0.3rem">
                 Signs admin login sessions. Changing it logs out all admins after the next restart.
                 {% if settings.session_secret_set is defined and settings.session_secret_set %}
-                    <i class="fa-solid fa-circle-check" style="color:#22c55e"></i> Secret is set
+                    <i class="fa-solid fa-circle-check" style="color:var(--ok)"></i> Secret is set
                 {% endif %}
             </p>
         </div>
@@ -557,7 +508,7 @@
             <input type="text" id="formatter_sample" class="s-input" spellcheck="false" oninput="schedulePreview()"
                 value="Dune.Part.Two.2024.2160p.UHD.BluRay.REMUX.DV.HDR10.HEVC.TrueHD.Atmos.7.1.ITA.ENG-GROUP.mkv">
             <div style="display:flex;gap:0.9rem;margin-top:0.75rem;padding:0.9rem;border-radius:0.8rem;border:1px solid var(--border);background:#0f0f14;color:#e5e5e5;font-size:0.8rem">
-                <div id="formatter-preview-name" style="white-space:pre-wrap;font-weight:700;min-width:6.5rem;max-width:40%"></div>
+                <div id="formatter-preview-name" style="white-space:pre-wrap;font-weight: 600;min-width:6.5rem;max-width:40%"></div>
                 <div id="formatter-preview-desc" style="white-space:pre-wrap;min-width:0;overflow-wrap:anywhere"></div>
             </div>
         </div>
@@ -682,7 +633,7 @@
             <div class="sess-avatar"><i class="fa-solid fa-user-astronaut"></i></div>
             <div style="min-width:0;flex:1">
                 <div class="flex items-center gap-2 flex-wrap">
-                    <span id="sess-name" style="font-weight:800"></span>
+                    <span id="sess-name" style="font-weight: 600"></span>
                     <span id="sess-live" class="sess-pill"></span>
                 </div>
                 <div id="sess-username" style="color:var(--text-sec);font-size:0.82rem"></div>
@@ -748,16 +699,16 @@
 .sess-grid { display:grid; grid-template-columns:1fr 1fr; gap:0.75rem; margin-top:0.85rem; }
 @media (max-width:520px){ .sess-grid { grid-template-columns:1fr; } }
 .sess-grid > div { padding:0.7rem 0.9rem; border-radius:0.8rem; border:1px solid var(--border); background:color-mix(in srgb,var(--card) 92%,var(--bg)); }
-.sess-k { display:block; font-size:0.68rem; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-sec); font-weight:700; }
-.sess-v { display:block; font-weight:700; margin-top:0.2rem; word-break:break-all; }
-.sess-pill { font-size:0.62rem; font-weight:900; text-transform:uppercase; letter-spacing:0.05em; padding:0.15rem 0.55rem; border-radius:9999px; }
-.sess-pill.on { background:#22c55e22; color:#22c55e; }
-.sess-pill.off { background:#f59e0b22; color:#f59e0b; }
-.sess-btn { display:inline-flex; align-items:center; gap:0.5rem; padding:0.6rem 1.1rem; border-radius:9999px; font-weight:800; font-size:0.82rem; cursor:pointer; border:1px solid var(--border); background:color-mix(in srgb,var(--card) 92%,var(--bg)); color:var(--text); transition:all .15s; }
+.sess-k { display:block; font-size:0.68rem; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-sec); font-weight: 600; }
+.sess-v { display:block; font-weight: 600; margin-top:0.2rem; word-break:break-all; }
+.sess-pill { font-size:0.62rem; font-weight: 600; text-transform:uppercase; letter-spacing:0.05em; padding:0.15rem 0.55rem; border-radius:9999px; }
+.sess-pill.on { background:color-mix(in srgb, var(--ok) 13%, transparent); color:var(--ok); }
+.sess-pill.off { background:color-mix(in srgb, var(--warn) 13%, transparent); color:var(--warn); }
+.sess-btn { display:inline-flex; align-items:center; gap:0.5rem; padding:0.6rem 1.1rem; border-radius:9999px; font-weight: 600; font-size:0.82rem; cursor:pointer; border:1px solid var(--border); background:color-mix(in srgb,var(--card) 92%,var(--bg)); color:var(--text); transition:all .15s; }
 .sess-btn:hover { border-color:var(--primary); }
 .sess-btn.primary { background:var(--primary); color:#fff; border-color:transparent; }
-.sess-btn.warn { color:#f59e0b; }
-.sess-btn.danger { color:#ef4444; }
+.sess-btn.warn { color:var(--warn); }
+.sess-btn.danger { color:var(--danger); }
 </style>
 
 <script>
@@ -798,7 +749,7 @@ function sessShowStep(step) {
 function sessMsg(text, ok) {
     const el = document.getElementById('sess-msg');
     el.style.display = '';
-    el.style.color = ok ? '#22c55e' : '#ef4444';
+    el.style.color = ok ? 'var(--ok)' : 'var(--danger)';
     el.textContent = text;
 }
 
@@ -891,7 +842,7 @@ document.addEventListener('DOMContentLoaded', sessLoadStatus);
             <strong>Enable Global Search</strong>
             <span style="color:var(--text-sec);font-size:0.8rem;display:block">
                 Search media <strong>only in the channels listed below</strong>.
-                Results are tagged <strong>🌐 GLOBAL</strong> in the stream list
+                Results are tagged <strong>GLOBAL</strong> in the stream list
                 for items not in your local catalog.
             </span>
         </span>
@@ -921,7 +872,7 @@ document.addEventListener('DOMContentLoaded', sessLoadStatus);
 
             <p style="font-size:0.78rem;color:var(--text-sec);margin-bottom:0.75rem">
                 <i class="fa-solid fa-circle-info"
-                   style="color:var(--info,#3b82f6)"></i>
+                   style="color:var(--info,var(--info))"></i>
                 Leave empty to search globally across all channels the account can see.
                 Otherwise enter channel IDs in <code>-100xxxxxxxxxx</code> format only.
             </p>
@@ -1194,7 +1145,7 @@ document.addEventListener('DOMContentLoaded', sessLoadStatus);
                 <div class="multi-item" style="opacity:0.65">
                     <input type="text" class="s-input" value="{{ entry.uri_masked }}" disabled
                         style="cursor:not-allowed">
-                    <span style="flex-shrink:0;font-size:0.7rem;font-weight:700;text-transform:uppercase;
+                    <span style="flex-shrink:0;font-size:0.7rem;font-weight: 600;text-transform:uppercase;
                                  padding:0.4rem 0.7rem;border-radius:0.5rem;
                                  background:color-mix(in srgb,var(--text-sec) 15%,transparent);
                                  color:var(--text-sec);white-space:nowrap">
@@ -1220,7 +1171,7 @@ document.addEventListener('DOMContentLoaded', sessLoadStatus);
                         data-list="extra_databases" placeholder="mongodb+srv://user:pass@host/...">
                     <span title="{{ 'Connected' if entry.connected else 'Disconnected' }}"
                         style="flex-shrink:0;width:0.6rem;height:0.6rem;border-radius:50%;
-                               background:{{ '#22c55e' if entry.connected else '#ef4444' }}"></span>
+                               background:{{ 'var(--ok)' if entry.connected else 'var(--danger)' }}"></span>
                     <button class="remove-btn" onclick="removeItem(this)" title="Remove (only safe from the end of the list)">
                         <i class="fa-solid fa-xmark"></i>
                     </button>
@@ -1311,18 +1262,17 @@ document.addEventListener('DOMContentLoaded', sessLoadStatus);
     align-items:center;justify-content:center;background:rgba(0,0,0,0.72);backdrop-filter:blur(8px)">
     <div style="text-align:center;padding:2rem;max-width:420px">
         <i class="fa-solid fa-arrows-rotate fa-spin" style="font-size:2.5rem;color:var(--primary)"></i>
-        <h3 style="font-size:1.25rem;font-weight:800;margin-top:1rem;color:#fff">Restarting…</h3>
-        <p id="restart-overlay-msg" style="margin-top:0.5rem;font-size:0.9rem;color:rgba(255,255,255,0.75)">
+        <h3 style="font-size:1.25rem;font-weight: 600;margin-top:1rem;color:#fff">Restarting…</h3>
+        <p id="restart-overlay-msg" style="margin-top:0.5rem;font-size:0.9rem;color:color-mix(in srgb, var(--text) 75%, transparent)">
             Applying updates and bringing the server back online. Please wait.
         </p>
     </div>
 </div>
 
 <!-- Floating save (mobile) -->
-<div class="fixed bottom-6 right-6 md:hidden z-50">
-    <button onclick="saveSettings()"
-        class="w-14 h-14 rounded-full flex items-center justify-center text-white shadow-xl"
-        style="background:var(--primary)">
+<div class="fixed right-4 md:hidden z-30" style="bottom:calc(84px + env(safe-area-inset-bottom))">
+    <button onclick="saveSettings()" aria-label="Save settings" data-shortcut-save
+        class="btn-primary w-14 h-14" style="box-shadow:0 8px 24px rgba(0,0,0,.35)">
         <i class="fa-solid fa-floppy-disk text-lg"></i>
     </button>
 </div>
@@ -1779,11 +1729,11 @@ async function restoreBackup(input) {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || 'Restore failed');
-        if (status) status.innerHTML = '<i class="fa-solid fa-circle-check" style="color:#22c55e"></i> Imported successfully — reloading…';
+        if (status) status.innerHTML = '<i class="fa-solid fa-circle-check" style="color:var(--ok)"></i> Imported successfully — reloading…';
         showToast(data.message || 'Backup restored.', 'success', 'Restored');
         setTimeout(() => location.reload(), 1500);
     } catch (err) {
-        if (status) status.innerHTML = '<i class="fa-solid fa-circle-xmark" style="color:#ef4444"></i> ' + escapeHtmlAttr(err.message || 'Invalid backup file.');
+        if (status) status.innerHTML = '<i class="fa-solid fa-circle-xmark" style="color:var(--danger)"></i> ' + escapeHtmlAttr(err.message || 'Invalid backup file.');
         showToast(err.message || 'Invalid backup file.', 'error', 'Error');
         if (btn) btn.disabled = false;
     }
@@ -1956,7 +1906,7 @@ function rebuildDatabaseList(dbList) {
                    value="${escapeHtmlAttr(entry.full_uri || '')}" data-list="extra_databases">
             <span title="${entry.connected ? 'Connected' : 'Disconnected'}"
                 style="flex-shrink:0;width:0.6rem;height:0.6rem;border-radius:50%;
-                       background:${entry.connected ? '#22c55e' : '#ef4444'}"></span>
+                       background:${entry.connected ? 'var(--ok)' : 'var(--danger)'}"></span>
             <button class="remove-btn" onclick="removeItem(this)" title="Remove (only safe from the end of the list)">
                 <i class="fa-solid fa-xmark"></i>
             </button>
@@ -1991,7 +1941,7 @@ async function loadDbStats(btn) {
             `<div class="stat-box"><div class="v">${escapeHtml(String(s[k] ?? '—'))}</div><div class="l">${label}</div></div>`
         ).join('');
     } catch (e) {
-        grid.innerHTML = `<div class="hint" style="grid-column:1/-1;color:#ef4444">Failed to load stats.</div>`;
+        grid.innerHTML = `<div class="hint" style="grid-column:1/-1;color:var(--danger)">Failed to load stats.</div>`;
     } finally {
         spinIcon(btn, false);
     }
