@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Telegram Stremio</title>
+<meta name="description" content="Self-hosted server that turns your Telegram channels into a multi-user Stremio and Nuvio addon, with a web panel, catalogs, tokens and subscriptions.">
+<meta property="og:title" content="Telegram Stremio">
+<meta property="og:description" content="Your Telegram channels as a streaming server for everyone you share it with.">
+<meta property="og:image" content="shots/ink-home.webp">
+<meta name="theme-color" content="#121212">
+<link rel="icon" href="assets/mark.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@500;600&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const p = localStorage.getItem("palette"); if (p) document.documentElement.dataset.palette = p; } catch {}</script>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="./" aria-label="Telegram Stremio home">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="var(--accent)"/><path d="M11 9.5v13l11-6.5z" fill="var(--on-accent)"/></svg>
+      Telegram Stremio
+    </a>
+    <nav class="nav" aria-label="Main">
+      <a href="#how">How it works</a>
+      <a href="#features">Features</a>
+      <a href="#screens">Screens</a>
+      <a href="#deploy">Deploy</a>
+      <a href="setup.html">Setup guide</a>
+      <a href="#faq">FAQ</a>
+      <a class="gh" href="https://github.com/weebzone/Telegram-Stremio"><i class="fa-brands fa-github"></i> GitHub</a>
+    </nav>
+    <div class="palette" role="group" aria-label="Theme">
+      <button type="button" data-p="ink" aria-label="Ink theme" title="Ink"><span style="background:#121212"></span></button>
+      <button type="button" data-p="paper" aria-label="Paper theme" title="Paper"><span style="background:#f3f0e8"></span></button>
+      <button type="button" data-p="night" aria-label="Night theme" title="Night"><span style="background:#000"></span></button>
+    </div>
+    <button class="menu-btn" type="button" aria-label="Menu" aria-expanded="false">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+    </button>
+  </div>
+</header>
+
+<main>
+  <section class="hero">
+    <div class="wrap">
+      <div>
+        <a class="release-pill rise" href="https://github.com/weebzone/Telegram-Stremio/commits/master"><b>v5.3.3</b> New web panel, built on the TeleStremio design <span class="arr" aria-hidden="true">→</span></a>
+        <h1 class="rise d1">Your Telegram channels, <em>streaming</em> for everyone you share with.</h1>
+        <p class="lede rise d2">A self-hosted server that indexes the movies and series in your Telegram channels and serves them as a Stremio and Nuvio addon. Give each person their own link, set limits, sell plans, and manage it all from a web panel.</p>
+        <ul class="stats rise d3" aria-label="Telegram Stremio in numbers">
+          <li><b class="stat-n" data-stat="stars">—</b><span class="stat-label"><i class="live-dot" aria-hidden="true"></i>GitHub stars</span></li>
+          <li><b class="stat-n" data-stat="contributors">—</b><span class="stat-label">contributors</span></li>
+          <li><b class="stat-n">6</b><span class="stat-label">ways to deploy</span></li>
+        </ul>
+        <div class="btn-row rise d3">
+          <a class="btn btn-primary" href="setup.html">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14m-6-6 6 6-6 6"/></svg>
+            <span>Deploy your server</span>
+          </a>
+          <a class="btn btn-ghost" href="https://github.com/weebzone/Telegram-Stremio"><i class="fa-brands fa-github"></i> View on GitHub</a>
+        </div>
+      </div>
+      <div class="devices rise d2">
+        <div class="window">
+          <div class="window-bar"><i></i><i></i><i></i><span>your-domain.com</span></div>
+          <div class="shot"><img data-shot="home" src="shots/ink-home.webp" alt="Telegram Stremio web panel home" width="1280" height="800"></div>
+        </div>
+        <div class="phone"><div class="phone-shot"><img data-shot="phone-media" src="shots/ink-phone-media.webp" alt="Media library on a phone" width="720" height="1558"></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="how">
+    <div class="wrap">
+      <p class="eyebrow">How it works</p>
+      <h2 style="font-size:clamp(30px,4vw,46px);margin-top:12px">From a channel post to the play button.</h2>
+      <p class="lede" style="margin-top:14px">Files stay in Telegram. The server keeps an index in MongoDB and streams straight from Telegram when someone presses play.</p>
+      <div class="path">
+        <svg class="wire" aria-hidden="true" preserveAspectRatio="none" viewBox="0 0 100 2"><line x1="0" y1="1" x2="100" y2="1"/></svg>
+        <div class="stop">
+          <span class="n">01 · Telegram</span>
+          <h3>Forward a file</h3>
+          <p>Post or forward a video to a channel where your bot is an admin. The file name tells the server what it is.</p>
+          <div class="sample">Loki.S02E03.720p.HEVC.mkv</div>
+        </div>
+        <div class="stop">
+          <span class="n">02 · Server</span>
+          <h3>It gets indexed</h3>
+          <p>Title, season, episode and quality are read from the name, then posters and details come from TMDB, TVDB, Cinemeta or Kitsu.</p>
+          <div class="sample">Loki · Season 2 · Episode 3 · 720p</div>
+        </div>
+        <div class="stop">
+          <span class="n">03 · Stremio / Nuvio</span>
+          <h3>Press play</h3>
+          <p>Everyone with an install link sees it in their catalog. Playback seeks instantly and never expires.</p>
+          <div class="sample">/stremio/&lt;token&gt;/manifest.json</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="features">
+    <div class="wrap">
+      <p class="eyebrow">Features</p>
+      <h2 style="font-size:clamp(30px,4vw,46px);margin-top:12px">Everything a shared library needs.</h2>
+      <div class="features">
+        <div class="feature"><i class="fa-solid fa-bolt"></i><h3>Permanent stream links</h3><p>Fast streams straight from Telegram with full seeking. Links never expire.</p></div>
+        <div class="feature"><i class="fa-solid fa-wand-magic-sparkles"></i><h3>Automatic metadata</h3><p>Posters, logos, backdrops, cast and episode details from TMDB, TVDB, Cinemeta and Kitsu.</p></div>
+        <div class="feature"><i class="fa-solid fa-layer-group"></i><h3>Auto and custom catalogs</h3><p>Rows by language, OTT service and smart lists, plus your own curated catalogs in any order.</p></div>
+        <div class="feature"><i class="fa-solid fa-lock"></i><h3>Private and exclusive rows</h3><p>Catalogs for everyone, for chosen tokens, or for you alone. Hide titles from search when you need to.</p></div>
+        <div class="feature"><i class="fa-solid fa-key"></i><h3>One link per person</h3><p>Each token has its own install link, daily and monthly data limits, and an optional expiry date.</p></div>
+        <div class="feature"><i class="fa-solid fa-credit-card"></i><h3>Subscriptions in your bot</h3><p>Users pick a plan and pay in Telegram. Approvers confirm and the bot hands out the link.</p></div>
+        <div class="feature"><i class="fa-solid fa-puzzle-piece"></i><h3>Split files and season packs</h3><p><code>.001</code> parts and split zips play as one file. Combined season files get their own entry.</p></div>
+        <div class="feature"><i class="fa-solid fa-dragon"></i><h3>Anime aware</h3><p>Mark a channel as anime for absolute episode numbers and Kitsu matching.</p></div>
+        <div class="feature"><i class="fa-solid fa-magnifying-glass"></i><h3>Global Search</h3><p>Search extra Telegram channels live from Stremio with your own user session.</p></div>
+        <div class="feature"><i class="fa-solid fa-chart-simple"></i><h3>Viewers and analytics</h3><p>Who is watching, top titles, top viewers, bandwidth per day and bot load.</p></div>
+        <div class="feature"><i class="fa-solid fa-inbox"></i><h3>Public request page</h3><p>Viewers ask for titles. You mark them uploaded, denied or banned.</p></div>
+        <div class="feature"><i class="fa-solid fa-cloud"></i><h3>Cloudflare streaming</h3><p>Send the video bytes through a Cloudflare Worker so a small free host is enough.</p></div>
+        <div class="feature"><i class="fa-solid fa-database"></i><h3>Scales out</h3><p>Add more MongoDB databases and more bot tokens from Settings, no restart needed.</p></div>
+        <div class="feature"><i class="fa-solid fa-bullhorn"></i><h3>Announcements</h3><p>New titles are posted to a channel with buttons that open them in Stremio or Nuvio.</p></div>
+        <div class="feature"><i class="fa-solid fa-keyboard"></i><h3>Fast web panel</h3><p>Three themes, phone layout with a dock, and keyboard shortcuts with a Ctrl+K command palette.</p></div>
+        <div class="feature"><i class="fa-solid fa-box-archive"></i><h3>Backups</h3><p>Export settings, catalogs, plans and tokens to a file, or export your library to the TeleStremio app.</p></div>
+        <div class="feature"><i class="fa-solid fa-truck-medical"></i><h3>Skip channel</h3><p>Files that fail to match are set aside with a note on what to fix.</p></div>
+        <div class="feature"><i class="fa-solid fa-sliders"></i><h3>Per-user addon settings</h3><p>Each person can sort qualities, hide some, and reorder or hide catalogs for their own link.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="screens" class="band">
+    <div class="wrap" style="display:block">
+      <p class="eyebrow">Screens</p>
+      <h2 style="font-size:clamp(30px,4vw,46px);margin-top:12px">The web panel.</h2>
+      <p class="lede" style="margin-top:14px">Shown from a live server. Pick a theme at the top of this page to see it in Ink, Paper or Night. Private details are blurred.</p>
+      <div class="tabs" role="tablist" aria-label="Screens">
+        <button class="tab" role="tab" data-screen="home">Home</button>
+        <button class="tab" role="tab" data-screen="media">Media</button>
+        <button class="tab" role="tab" data-screen="title">Title</button>
+        <button class="tab" role="tab" data-screen="episodes">Episodes</button>
+        <button class="tab" role="tab" data-screen="catalogs">Catalogs</button>
+        <button class="tab" role="tab" data-screen="admin">Admin</button>
+        <button class="tab" role="tab" data-screen="tokens">Tokens</button>
+        <button class="tab" role="tab" data-screen="settings">Settings</button>
+        <button class="tab" role="tab" data-screen="palette">Ctrl+K</button>
+        <button class="tab" role="tab" data-screen="login">Sign in</button>
+      </div>
+      <div class="screens">
+        <div class="window">
+          <div class="window-bar"><i></i><i></i><i></i><span>your-domain.com</span></div>
+          <div class="shot"><img id="screen-img" data-shot="home" src="shots/ink-home.webp" alt="Telegram Stremio home" width="1280" height="800"></div>
+        </div>
+        <div class="phone"><div class="phone-shot"><img id="phone-img" data-shot="phone-home" src="shots/ink-phone-home.webp" alt="Telegram Stremio home on a phone" width="720" height="1558"></div></div>
+        <div class="screen-note"><h3>Home</h3><p></p><ul></ul></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="deploy">
+    <div class="wrap">
+      <p class="eyebrow">Deploy</p>
+      <h2 style="font-size:clamp(30px,4vw,46px);margin-top:12px">Pick where it runs.</h2>
+      <p class="lede" style="margin-top:14px">Every option needs the same few values: a Telegram API ID and hash, a bot token, your user ID and two MongoDB links. The <a href="setup.html#values">setup guide</a> shows where to get each one.</p>
+      <div class="deploys">
+        <a class="deploy" href="setup.html#vps">
+          <header><i class="fa-brands fa-docker"></i><h3>VPS with Docker</h3><span class="tag">Recommended</span></header>
+          <p>Fastest streaming and full control. One <code>docker compose up -d</code> and a domain with HTTPS.</p>
+          <span class="more">Follow the steps →</span>
+        </a>
+        <a class="deploy" href="setup.html#heroku">
+          <header><i class="fa-solid fa-cube"></i><h3>Heroku</h3></header>
+          <p>Deploy from a ready-made Google Colab notebook. Paid dynos keep it awake.</p>
+          <span class="more">Follow the steps →</span>
+        </a>
+        <a class="deploy" href="setup.html#koyeb">
+          <header><i class="fa-solid fa-rocket"></i><h3>Koyeb</h3><span class="tag">Free</span></header>
+          <p>One-click deploy button. Pair it with Cloudflare streaming for smooth playback.</p>
+          <span class="more">Follow the steps →</span>
+        </a>
+        <a class="deploy" href="setup.html#render">
+          <header><i class="fa-solid fa-server"></i><h3>Render</h3><span class="tag">Free</span></header>
+          <p>One-click deploy. The free plan sleeps after 15 idle minutes.</p>
+          <span class="more">Follow the steps →</span>
+        </a>
+        <a class="deploy" href="setup.html#orkestr">
+          <header><i class="fa-solid fa-earth-europe"></i><h3>orkestr</h3><span class="tag">Free</span></header>
+          <p>EU hosting with 100 GB a month on the free plan. Connect your fork.</p>
+          <span class="more">Follow the steps →</span>
+        </a>
+        <a class="deploy" href="https://github.com/weebzone/Telegram-Stremio#-dont-have-a-server-use-the-telestremio-android-app">
+          <header><i class="fa-solid fa-mobile-screen-button"></i><h3>No server at all</h3></header>
+          <p>Just for yourself? The TeleStremio app runs the same idea on your phone or computer.</p>
+          <span class="more">Get TeleStremio →</span>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <section id="contributors" class="band">
+    <div class="wrap" style="display:block">
+      <p class="eyebrow">Contributors</p>
+      <h2 style="font-size:clamp(30px,4vw,46px);margin-top:12px">Built in the open.</h2>
+      <p class="lede" style="margin-top:14px">Everyone who has shipped code to Telegram Stremio, live from GitHub. <a href="https://github.com/weebzone/Telegram-Stremio/graphs/contributors">Join them</a>.</p>
+      <div class="people" id="people">
+        <div class="person skel"></div><div class="person skel"></div><div class="person skel"></div><div class="person skel"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="faq">
+    <div class="wrap">
+      <p class="eyebrow">FAQ</p>
+      <h2 style="font-size:clamp(30px,4vw,46px);margin-top:12px">Questions people ask.</h2>
+      <div class="faq">
+        <details><summary>Do my files get uploaded anywhere?</summary><div class="answer">No. Files stay in your Telegram channels. The server only stores an index (titles, posters and file references) in your MongoDB, and streams from Telegram when someone presses play.</div></details>
+        <details><summary>What does it cost to run?</summary><div class="answer">The software is free. MongoDB Atlas has a free tier, and Koyeb, Render and orkestr have free plans. Free hosts stream slowly and sleep when idle, so a small VPS or Cloudflare streaming gives the best playback.</div></details>
+        <details><summary>Stremio or Nuvio?</summary><div class="answer">Both work with the same manifest link. Nuvio also imports ready-made collections with Netflix, Prime Video, Bollywood, Anime and more rows.</div></details>
+        <details><summary>Why is my file not showing up?</summary><div class="answer">The bot must be an admin in that channel, the channel must be added under Settings → AUTH channels, and the file name needs a title, a year (movies) or SxxEyy (series), and a quality like 1080p. Files that cannot be matched go to the Skip channel with a note.</div></details>
+        <details><summary>Can I limit what each person uses?</summary><div class="answer">Yes. Every token can have a daily and a monthly data limit, an expiry date, and its own catalog and quality preferences.</div></details>
+        <details><summary>I forgot the admin password.</summary><div class="answer">Use the free reset tool at <a href="https://telegram-stremio-reset.vercel.app/">telegram-stremio-reset.vercel.app</a> with your tracking database link, restart the app, and sign in with admin. The setup guide has the details.</div></details>
+        <details><summary>How do I update?</summary><div class="answer">Set the upstream repo and branch in Settings, then press Restart Now. It pulls the latest code and comes back on its own. With Docker you can also run <code>git pull</code> and <code>docker compose up -d --build</code>.</div></details>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>© <span data-year>2026</span> Telegram Stremio · GPL-3.0, made by <a href="https://github.com/weebzone">weebzone</a> and contributors</span>
+    <nav>
+      <a href="setup.html">Setup guide</a>
+      <a href="https://github.com/weebzone/Telegram-Stremio">GitHub</a>
+      <a href="https://donate.weebzonex.workers.dev">Support the project</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="assets/site.js"></script>
+</body>
+</html>

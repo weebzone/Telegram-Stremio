@@ -25,6 +25,7 @@
 ## 🧭 Contents
 
 * [🚀 What is this?](#-what-is-this)
+* [🖥️ The web panel](#️-the-web-panel)
 * [✨ Key Features](#-key-features)
 * [🗂️ Organizing Your Channels](#️-organizing-your-channels-recommended)
 * [📤 Adding Files by Forwarding (filename rules)](#-adding-files-by-forwarding-filename-rules)
@@ -66,6 +67,42 @@
 This is a **self-hosted media server** that streams your **Telegram files** straight into **Stremio** (or **Nuvio**). You forward a movie/episode to your channel, and it instantly becomes a permanent, no-expiry streaming link — with posters, descriptions, seasons and episodes, just like a real streaming app.
 
 Everything is managed from a friendly **web panel** — no coding, and almost no bot commands.
+
+---
+
+# 🖥️ The web panel
+
+Manage everything from a web panel built on the TeleStremio app design: three themes (**Paper**, **Ink**, **Night**), a phone layout with a bottom dock, and keyboard shortcuts (<kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>K</kbd>).
+
+<p align="center">
+  <a href="https://weebzone.github.io/Telegram-Stremio/"><img src="https://img.shields.io/badge/Website-E9A23B?style=for-the-badge&logo=googlechrome&logoColor=white" alt="Website" /></a>
+  <a href="https://weebzone.github.io/Telegram-Stremio/setup.html"><img src="https://img.shields.io/badge/Step--by--step%20setup%20guide-1F2937?style=for-the-badge&logo=readthedocs&logoColor=white" alt="Setup guide" /></a>
+</p>
+
+<p align="center">
+  <img src="docs/shots/ink-home.webp" width="49%" alt="Home" />
+  <img src="docs/shots/paper-media.webp" width="49%" alt="Media library" />
+</p>
+<p align="center">
+  <img src="docs/shots/ink-title.webp" width="49%" alt="Title editor" />
+  <img src="docs/shots/paper-episodes.webp" width="49%" alt="Episodes" />
+</p>
+<p align="center">
+  <img src="docs/shots/night-catalogs.webp" width="49%" alt="Catalogs" />
+  <img src="docs/shots/ink-palette.webp" width="49%" alt="Command palette" />
+</p>
+
+<table>
+  <tr>
+    <td><img src="docs/shots/ink-phone-home.webp" width="150" alt="Home on a phone" /></td>
+    <td><img src="docs/shots/paper-phone-media.webp" width="150" alt="Media on a phone" /></td>
+    <td><img src="docs/shots/ink-phone-title.webp" width="150" alt="Episodes on a phone" /></td>
+    <td><img src="docs/shots/night-phone-movie.webp" width="150" alt="Movie on a phone" /></td>
+    <td><img src="docs/shots/paper-phone-catalogs.webp" width="150" alt="Catalogs on a phone" /></td>
+  </tr>
+</table>
+
+<sub>Screenshots from a live server. Names, IDs, keys and links are blurred.</sub>
 
 ---
 
@@ -791,6 +828,8 @@ Add extra **bot tokens** for faster parallel streaming under heavy load. Create 
 
 # 🚀 Deployment
 
+> 📘 Prefer a guided walkthrough with screenshots? Follow the **[step-by-step setup guide](https://weebzone.github.io/Telegram-Stremio/setup.html)**.
+
 This guide helps you deploy on **Heroku**, a **VPS with Docker**, or a free host: **Koyeb**, **Render** or **orkestr**.
 
 ## ✅ Prerequisites
@@ -975,6 +1014,13 @@ If Telegram-Stremio is useful to you, you can support its development here:
 ---
 
 ## 🏅 Contributors
+
+Everyone who has contributed code, updated automatically:
+
+<a href="https://github.com/weebzone/Telegram-Stremio/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=weebzone/Telegram-Stremio" alt="Contributors" />
+</a>
+
 
 <div align="center">
 

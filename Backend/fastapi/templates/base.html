@@ -888,7 +888,7 @@ document.getElementById('theme-cycle')?.addEventListener('click', () => {
             if (btn) { e.preventDefault(); btn.click(); }
             return;
         }
-        if (e.defaultPrevented || mod || e.altKey || typing(e.target) || document.querySelector('dialog[open], [aria-modal="true"]:not(.hidden):not(#sheet)')) return;
+        if (e.defaultPrevented || mod || e.altKey || typing(e.target) || document.querySelector('dialog[open], [aria-modal="true"]:not(.hidden):not([hidden]):not(#sheet)')) return;
         if (e.key === '?') { e.preventDefault(); openKeys(); return; }
         if (e.key === '/') {
             const f = [...document.querySelectorAll('[data-shortcut-search], main input[type="search"]')].find(x => x.offsetParent !== null);

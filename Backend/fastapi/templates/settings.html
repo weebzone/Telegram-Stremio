@@ -1255,19 +1255,91 @@ document.addEventListener('DOMContentLoaded', sessLoadStatus);
         </p>
     </div>
 
+    <div class="settings-card" id="contributors-card">
+        <div class="flex items-center justify-between flex-wrap gap-2" style="margin-bottom:.35rem">
+            <h2 style="margin-bottom:0"><i class="fa-solid fa-people-group"></i> Contributors</h2>
+            <a href="https://github.com/weebzone/Telegram-Stremio/graphs/contributors" target="_blank" rel="noopener" class="text-sm" style="color:var(--primary)">View on GitHub <i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></a>
+        </div>
+        <p class="hint" style="margin-bottom:1rem">The people who build Telegram Stremio. Updated live from GitHub.</p>
+        <div id="contributors" class="contrib-grid" aria-live="polite">
+            <div class="contrib-skel"></div><div class="contrib-skel"></div><div class="contrib-skel"></div>
+        </div>
+    </div>
+
 </div><!-- /settings-root -->
 
+<style>
+.contrib-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(150px, 100%), 1fr)); gap: .6rem; }
+.contrib { display: flex; align-items: center; gap: .7rem; padding: .6rem .75rem; border-radius: var(--radius-sm); background: var(--bg); border: 1px solid var(--border); color: var(--text); text-decoration: none; min-width: 0; transition: border-color .15s var(--ease), transform .15s var(--ease); }
+.contrib:hover { border-color: color-mix(in srgb, var(--primary) 45%, var(--border)); transform: translateY(-1px); }
+.contrib img { width: 36px; height: 36px; border-radius: 99px; flex-shrink: 0; background: var(--card-high); }
+.contrib b { display: block; font-weight: 500; font-size: .9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.contrib small { color: var(--text-sec); font-size: .78rem; }
+.contrib-skel { height: 58px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: linear-gradient(90deg, var(--bg) 25%, var(--card-high) 37%, var(--bg) 63%); background-size: 400% 100%; animation: contrib-sh 1.4s ease infinite; }
+@keyframes contrib-sh { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
+</style>
+<script>
+document.addEventListener('DOMContentLoaded', async function contributors() {
+    const box = document.getElementById('contributors');
+    if (!box) return;
+    const KEY = 'tgs-contributors', TTL = 6 * 3600 * 1000;
+    const render = list => {
+        box.innerHTML = list.length ? list.map(c => `
+            <a class="contrib" href="${escapeHtml(c.html_url)}" target="_blank" rel="noopener">
+                <img src="${escapeHtml(c.avatar_url)}&s=72" alt="" loading="lazy" width="36" height="36">
+                <span class="min-w-0"><b>${escapeHtml(c.login)}</b><small>${c.contributions} commit${c.contributions === 1 ? '' : 's'}</small></span>
+            </a>`).join('') : '<p class="hint">No contributors to show yet.</p>';
+    };
+    let cached = null;
+    try { cached = JSON.parse(localStorage.getItem(KEY)); } catch (e) {}
+    if (cached?.list) render(cached.list);
+    if (cached && Date.now() - cached.at < TTL) return;
+    try {
+        const res = await fetch('https://api.github.com/repos/weebzone/Telegram-Stremio/contributors?per_page=100', { headers: { Accept: 'application/vnd.github+json' } });
+        if (!res.ok) throw new Error(res.status);
+        const list = (await res.json()).filter(c => c.type !== 'Bot').map(({ login, avatar_url, html_url, contributions }) => ({ login, avatar_url, html_url, contributions }));
+        render(list);
+        try { localStorage.setItem(KEY, JSON.stringify({ at: Date.now(), list })); } catch (e) {}
+    } catch (e) {
+        if (!cached?.list) box.innerHTML = '<p class="hint">GitHub could not be reached right now. <a href="https://github.com/weebzone/Telegram-Stremio/graphs/contributors" target="_blank" rel="noopener" style="color:var(--primary)">See the list on GitHub</a>.</p>';
+    }
+});
+</script>
+
 <!-- ── Restart overlay ──────────────────────────────────────────────────── -->
-<div id="restart-overlay" style="position:fixed;inset:0;z-index:9998;display:none;
-    align-items:center;justify-content:center;background:rgba(0,0,0,0.72);backdrop-filter:blur(8px)">
-    <div style="text-align:center;padding:2rem;max-width:420px">
-        <i class="fa-solid fa-arrows-rotate fa-spin" style="font-size:2.5rem;color:var(--primary)"></i>
-        <h3 style="font-size:1.25rem;font-weight: 600;margin-top:1rem;color:#fff">Restarting…</h3>
-        <p id="restart-overlay-msg" style="margin-top:0.5rem;font-size:0.9rem;color:color-mix(in srgb, var(--text) 75%, transparent)">
-            Applying updates and bringing the server back online. Please wait.
-        </p>
+<div id="restart-overlay" class="rs-overlay" role="alertdialog" aria-modal="true" aria-labelledby="rs-title" aria-describedby="restart-overlay-msg" hidden>
+    <div class="rs-card">
+        <div class="rs-spinner" aria-hidden="true"><i class="fa-solid fa-arrows-rotate"></i></div>
+        <h3 id="rs-title">Restarting the server</h3>
+        <p id="restart-overlay-msg">Pulling the latest code and restarting. This usually takes 10 to 60 seconds.</p>
+        <ol class="rs-steps">
+            <li data-step="0" class="on"><span></span>Restart requested</li>
+            <li data-step="1"><span></span>Server offline</li>
+            <li data-step="2"><span></span>Back online</li>
+        </ol>
+        <p class="rs-note">Keep this page open. It reloads by itself.</p>
     </div>
 </div>
+<style>
+.rs-overlay { position: fixed; inset: 0; z-index: 9998; display: grid; place-items: center; padding: 16px; background: var(--scrim); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); overscroll-behavior: contain; touch-action: none; animation: rs-fade .2s var(--ease); }
+.rs-overlay[hidden] { display: none; }
+.rs-card { width: min(100%, 400px); padding: 1.75rem 1.5rem 1.4rem; border-radius: var(--radius); background: var(--card); border: 1px solid var(--border); box-shadow: var(--shadow-strong); text-align: center; color: var(--text); }
+.rs-spinner { display: grid; place-items: center; width: 56px; height: 56px; margin: 0 auto 1rem; border-radius: 99px; background: color-mix(in srgb, var(--primary) 14%, transparent); color: var(--primary); font-size: 1.35rem; }
+.rs-spinner i { animation: fa-spin 1.1s linear infinite; }
+.rs-overlay.done .rs-spinner { background: color-mix(in srgb, var(--ok) 16%, transparent); color: var(--ok); }
+.rs-overlay.done .rs-spinner i { animation: none; }
+.rs-card h3 { font-size: 1.15rem; font-weight: 600; }
+.rs-card #restart-overlay-msg { margin-top: .4rem; font-size: .9rem; color: var(--text-sec); line-height: 1.5; }
+.rs-steps { list-style: none; margin: 1.25rem 0 0; padding: .9rem 1rem; border-radius: var(--radius-sm); background: var(--bg); border: 1px solid var(--border); display: grid; gap: .55rem; text-align: left; font-size: .88rem; color: var(--text-sec); }
+.rs-steps li { display: flex; align-items: center; gap: .65rem; }
+.rs-steps li span { width: 10px; height: 10px; border-radius: 99px; border: 2px solid var(--border); flex-shrink: 0; transition: all .25s var(--ease); }
+.rs-steps li.on { color: var(--text); }
+.rs-steps li.on span { border-color: var(--primary); background: var(--primary); }
+.rs-steps li.now span { box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 25%, transparent); }
+.rs-note { margin-top: .9rem; font-size: .78rem; color: var(--text-sec); }
+@keyframes rs-fade { from { opacity: 0; } }
+html.rs-lock, html.rs-lock body { overflow: hidden !important; }
+</style>
 
 <!-- Floating save (mobile) -->
 <div class="fixed right-4 md:hidden z-30" style="bottom:calc(84px + env(safe-area-inset-bottom))">
@@ -1990,9 +2062,16 @@ async function restartApp() {
 
     // Web app goes down during restart — poll health until start_time changes, then reload.
     if (logLiveTimer) { clearInterval(logLiveTimer); logLiveTimer = null; }
-    document.getElementById('restart-overlay').style.display = 'flex';
-    document.body.style.overflow = 'hidden';   // lock background scroll while overlay is up
+    const overlay = document.getElementById('restart-overlay');
+    overlay.hidden = false;
+    document.documentElement.classList.add('rs-lock');
+    document.activeElement?.blur();
     const msg = document.getElementById('restart-overlay-msg');
+    const step = n => overlay.querySelectorAll('[data-step]').forEach(li => {
+        li.classList.toggle('on', +li.dataset.step <= n);
+        li.classList.toggle('now', +li.dataset.step === n);
+    });
+    step(0);
     let wasDown = false;
 
     const poll = setInterval(async () => {
@@ -2002,14 +2081,18 @@ async function restartApp() {
             const d = await res.json();
             if (wasDown || (before && d.start_time && d.start_time !== before)) {
                 clearInterval(poll);
-                msg.textContent = 'Back online! Reloading…';
+                msg.textContent = 'The server is back. Reloading the page…';
+                document.getElementById('rs-title').textContent = 'Restart complete';
+                overlay.classList.add('done');
+                step(2);
                 // Persist a flag so the success notice survives the page reload below.
                 sessionStorage.setItem('restartSuccess', '1');
                 setTimeout(() => window.location.reload(), 900);
             }
         } catch (e) {
             wasDown = true;   // server is down — it's restarting
-            msg.textContent = 'Server offline — waiting for it to come back…';
+            msg.textContent = 'The server is offline while it restarts. Waiting for it to come back…';
+            step(1);
         }
     }, 2000);
 }

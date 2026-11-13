@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Setup guide · Telegram Stremio</title>
+<meta name="description" content="Deploy Telegram Stremio step by step: Telegram values, MongoDB, VPS with Docker, Heroku, Koyeb, Render, orkestr, domain, first login, adding files, Stremio and Nuvio.">
+<meta name="theme-color" content="#121212">
+<link rel="icon" href="assets/mark.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@500;600&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+<link rel="stylesheet" href="assets/site.css">
+<script>try { const p = localStorage.getItem("palette"); if (p) document.documentElement.dataset.palette = p; } catch {}</script>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="./" aria-label="Telegram Stremio home">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="var(--accent)"/><path d="M11 9.5v13l11-6.5z" fill="var(--on-accent)"/></svg>
+      Telegram Stremio
+    </a>
+    <nav class="nav" aria-label="Main">
+      <a href="./#features">Features</a>
+      <a href="./#screens">Screens</a>
+      <a href="./#deploy">Deploy</a>
+      <a href="setup.html" aria-current="page">Setup guide</a>
+      <a class="gh" href="https://github.com/weebzone/Telegram-Stremio"><i class="fa-brands fa-github"></i> GitHub</a>
+    </nav>
+    <div class="palette" role="group" aria-label="Theme">
+      <button type="button" data-p="ink" aria-label="Ink theme" title="Ink"><span style="background:#121212"></span></button>
+      <button type="button" data-p="paper" aria-label="Paper theme" title="Paper"><span style="background:#f3f0e8"></span></button>
+      <button type="button" data-p="night" aria-label="Night theme" title="Night"><span style="background:#000"></span></button>
+    </div>
+    <button class="menu-btn" type="button" aria-label="Menu" aria-expanded="false">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+    </button>
+  </div>
+</header>
+
+<main class="wrap guide">
+  <nav class="toc" aria-label="On this page">
+    <a href="#before">Before you start</a>
+    <a href="#values">1. Telegram values</a>
+    <a href="#mongodb">2. MongoDB</a>
+    <a href="#deploy">3. Deploy</a>
+    <a href="#domain">4. Domain and HTTPS</a>
+    <a href="#first-login">5. First login</a>
+    <a href="#channels">6. Channels</a>
+    <a href="#files">7. Add files</a>
+    <a href="#watch">8. Stremio and Nuvio</a>
+    <a href="#users">9. Users and tokens</a>
+    <a href="#catalogs">10. Catalogs</a>
+    <a href="#cloudflare">11. Cloudflare streaming</a>
+    <a href="#maintain">12. Update and logs</a>
+    <a href="#panel">13. Web panel tips</a>
+    <a href="#trouble">Troubleshooting</a>
+  </nav>
+
+  <article class="doc">
+    <p class="eyebrow">Setup guide</p>
+    <h1>From zero to streaming.</h1>
+    <p class="lede">Follow the steps in order. Most people are done in about 20 minutes. You only edit a config file once; everything after that happens in the web panel.</p>
+
+    <h2 id="before">Before you start</h2>
+    <p>You need:</p>
+    <ul>
+      <li>A Telegram account, and a channel (or several) with your movies and series.</li>
+      <li>A free <a href="https://www.mongodb.com/atlas">MongoDB Atlas</a> account.</li>
+      <li>Somewhere to run it: a VPS with Docker (recommended), or a free host such as Koyeb, Render or orkestr.</li>
+      <li>A domain name is recommended for HTTPS, so Stremio can reach you from any network.</li>
+    </ul>
+    <div class="callout"><p>Just for yourself, with no server? The <a href="https://github.com/weebzone/Telegram-Stremio#-dont-have-a-server-use-the-telestremio-android-app">TeleStremio app</a> runs the same idea on your phone or computer.</p></div>
+
+    <h2 id="values">1. Get your Telegram values</h2>
+    <ol class="steps">
+      <li><div><b>API ID and API hash.</b> Open <a href="https://my.telegram.org">my.telegram.org</a>, sign in, choose <em>API development tools</em> and create an app. Copy <code>api_id</code> and <code>api_hash</code>.</div></li>
+      <li><div><b>Bot token.</b> Message <a href="https://t.me/BotFather">@BotFather</a>, send <code>/newbot</code> and follow the prompts. Copy the token it sends.</div></li>
+      <li><div><b>Your user ID.</b> Message <a href="https://t.me/userinfobot">@userinfobot</a>. It replies with your numeric ID. This is the owner of the server.</div></li>
+      <li><div><b>Make the bot an admin</b> in every channel that holds your media. Without admin rights it cannot read or stream the files.</div></li>
+    </ol>
+
+    <h2 id="mongodb">2. Create the databases</h2>
+    <p>The server needs two MongoDB links: one for tracking (settings, tokens, users) and one for storage (your library). One free cluster can hold both.</p>
+    <ol class="steps">
+      <li><div>Create a free cluster on <a href="https://www.mongodb.com/atlas">MongoDB Atlas</a>.</div></li>
+      <li><div>Under <em>Database Access</em>, add a user with a password.</div></li>
+      <li><div>Under <em>Network Access</em>, allow <code>0.0.0.0/0</code> so your server can connect.</div></li>
+      <li><div>Click <em>Connect → Drivers</em> and copy the connection string. Put your password in it.</div></li>
+      <li><div>Make two links from it by adding a database name to each, and join them with a comma:</div></li>
+    </ol>
+    <div class="codeblock"><pre>mongodb+srv://user:pass@cluster0.xxxx.mongodb.net/tracking,mongodb+srv://user:pass@cluster0.xxxx.mongodb.net/storage1</pre><button class="copy" type="button">Copy</button></div>
+    <div class="callout"><p>Running out of space later? Add more storage databases from <b>Settings → Extra Storage Databases</b> without touching the config.</p></div>
+
+    <h2 id="deploy">3. Deploy</h2>
+    <p>Every option uses the same six values:</p>
+    <div class="tbl-wrap"><table class="tbl">
+      <thead><tr><th>Variable</th><th>What it is</th></tr></thead>
+      <tbody>
+        <tr><td><code>API_ID</code></td><td>From my.telegram.org</td></tr>
+        <tr><td><code>API_HASH</code></td><td>From my.telegram.org</td></tr>
+        <tr><td><code>BOT_TOKEN</code></td><td>From @BotFather</td></tr>
+        <tr><td><code>OWNER_ID</code></td><td>Your numeric Telegram user ID</td></tr>
+        <tr><td><code>DATABASE</code></td><td>Two MongoDB links, comma-separated (tracking first)</td></tr>
+        <tr><td><code>PORT</code></td><td><code>8000</code></td></tr>
+      </tbody>
+    </table></div>
+
+    <h3 id="vps">VPS with Docker (recommended)</h3>
+    <p>Any Ubuntu VPS with a public IP works. Install Docker first if it is not there (<code>curl -fsSL https://get.docker.com | sh</code>).</p>
+    <div class="codeblock"><pre>git clone https://github.com/weebzone/Telegram-Stremio
+cd Telegram-Stremio
+cp sample_config.env config.env
+nano config.env</pre><button class="copy" type="button">Copy</button></div>
+    <p>Fill in the six values, save with <span class="kbd">Ctrl</span> + <span class="kbd">O</span>, <span class="kbd">Enter</span>, then <span class="kbd">Ctrl</span> + <span class="kbd">X</span>.</p>
+    <div class="codeblock"><pre>API_ID="1234567"
+API_HASH="abc123def456ghi789jkl012mno345pq"
+BOT_TOKEN="1234567890:AAEabcdEFGhijkLMnOPqrsTUVwxyz12345"
+OWNER_ID="987654321"
+DATABASE="mongodb+srv://user:pass@cluster0.xxxx.mongodb.net/tracking,mongodb+srv://user:pass@cluster0.xxxx.mongodb.net/storage1"
+PORT="8000"</pre><button class="copy" type="button">Copy</button></div>
+    <div class="os-tabs" data-group="docker" role="tablist">
+      <button class="tab os-tab" data-os="compose" aria-selected="true">Docker Compose</button>
+      <button class="tab os-tab" data-os="plain" aria-selected="false">Plain Docker</button>
+    </div>
+    <div class="os-panel" data-group="docker" data-os="compose">
+      <div class="codeblock"><pre>docker compose up -d</pre><button class="copy" type="button">Copy</button></div>
+      <p class="muted">The config file is mounted into the container, so after editing it you only need <code>docker compose restart</code>.</p>
+    </div>
+    <div class="os-panel" data-group="docker" data-os="plain" hidden>
+      <div class="codeblock"><pre>docker build -t telegram-stremio .
+docker run -d --name telegram-stremio --restart unless-stopped -p 8000:8000 telegram-stremio</pre><button class="copy" type="button">Copy</button></div>
+    </div>
+    <p>The panel is now at <code>http://&lt;your-vps-ip&gt;:8000</code>. Add a domain in step 4 for HTTPS.</p>
+
+    <h3 id="heroku">Heroku</h3>
+    <p>Use the ready-made Colab notebook. It asks for the six values and deploys the container for you.</p>
+    <p class="deploy-btns"><a href="https://colab.research.google.com/github/weebzone/Colab-Tools/blob/main/telegram%20stremio.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open in Colab"></a></p>
+    <p>When it finishes, open <code>https://&lt;app&gt;.herokuapp.com/login</code> and set <b>Settings → Base URL</b> to that address.</p>
+
+    <h3 id="koyeb">Koyeb (free)</h3>
+    <p class="deploy-btns"><a href="https://app.koyeb.com/deploy?type=git&amp;repository=github.com/weebzone/Telegram-Stremio&amp;branch=master&amp;name=telegram-stremio&amp;builder=dockerfile&amp;instance_type=free&amp;ports=8000%3Bhttp%3B/&amp;env%5BPORT%5D=8000&amp;env%5BAPI_ID%5D=&amp;env%5BAPI_HASH%5D=&amp;env%5BBOT_TOKEN%5D=&amp;env%5BOWNER_ID%5D=&amp;env%5BDATABASE%5D="><img src="https://www.koyeb.com/static/images/deploy/button.svg" alt="Deploy to Koyeb"></a></p>
+    <ol class="steps">
+      <li><div>Press the button and sign in to Koyeb.</div></li>
+      <li><div>Fill in the empty variables. Leave <code>PORT</code> as <code>8000</code>.</div></li>
+      <li><div>Press <b>Deploy</b>. When it is running, copy the public URL (<code>https://….koyeb.app</code>).</div></li>
+      <li><div>Open <code>&lt;url&gt;/login</code> and set <b>Settings → Base URL</b> to that URL.</div></li>
+    </ol>
+
+    <h3 id="render">Render (free)</h3>
+    <p class="deploy-btns"><a href="https://render.com/deploy?repo=https://github.com/weebzone/Telegram-Stremio"><img src="https://render.com/images/deploy-to-render-button.svg" alt="Deploy to Render"></a></p>
+    <ol class="steps">
+      <li><div>Press the button and sign in to Render.</div></li>
+      <li><div>Fill in the variables it asks for, then press <b>Apply</b>.</div></li>
+      <li><div>Copy the service URL (<code>https://….onrender.com</code>), open <code>&lt;url&gt;/login</code> and set <b>Settings → Base URL</b>.</div></li>
+    </ol>
+    <div class="callout"><p>Render's free plan sleeps after 15 minutes without visitors. The first request after that takes about a minute.</p></div>
+
+    <h3 id="orkestr">orkestr (free)</h3>
+    <ol class="steps">
+      <li><div><b>Fork</b> the repository on GitHub.</div></li>
+      <li><div>Sign up at <a href="https://console.orkestr.eu/register">console.orkestr.eu</a> and create a project from your fork, branch <code>master</code>. It uses the included <code>Dockerfile</code>.</div></li>
+      <li><div>Add the six variables in the project's environment settings.</div></li>
+      <li><div>Deploy, copy the public URL, open <code>&lt;url&gt;/login</code> and set <b>Settings → Base URL</b>.</div></li>
+    </ol>
+    <div class="callout"><p>Free hosts are slow at streaming video. For smooth playback, add <a href="#cloudflare">Cloudflare streaming</a> so the video goes through Cloudflare and the host only serves catalogs.</p></div>
+
+    <h2 id="domain">4. Domain and HTTPS (VPS)</h2>
+    <p>Stremio on phones and TVs needs HTTPS. Point a domain at your VPS and let Caddy handle the certificate.</p>
+    <ol class="steps">
+      <li><div>At your domain registrar, add an <b>A record</b>: name <code>@</code> (or a subdomain), value your VPS IP.</div></li>
+      <li><div>Install Caddy:</div></li>
+    </ol>
+    <div class="codeblock"><pre>sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
+sudo apt update && sudo apt install caddy</pre><button class="copy" type="button">Copy</button></div>
+    <p>Then replace <code>/etc/caddy/Caddyfile</code> with:</p>
+    <div class="codeblock"><pre>your-domain.com {
+    reverse_proxy localhost:8000
+}</pre><button class="copy" type="button">Copy</button></div>
+    <div class="codeblock"><pre>sudo systemctl reload caddy</pre><button class="copy" type="button">Copy</button></div>
+    <p>Your panel is now at <code>https://your-domain.com</code>.</p>
+
+    <h2 id="first-login">5. First login</h2>
+    <ol class="steps">
+      <li><div>Open <code>/login</code> and sign in with <code>admin</code> / <code>admin</code>.</div></li>
+      <li><div>The home page shows a <b>Finish setting up</b> checklist. Open <b>Settings</b>.</div></li>
+      <li><div><b>Admin Authentication:</b> change the username and password first.</div></li>
+      <li><div><b>Media &amp; Content:</b> set <b>Base URL</b> to your public address (for example <code>https://your-domain.com</code>). Stremio uses it to reach your streams, so it must be right.</div></li>
+      <li><div>Add a free <b>TMDB API key</b> (<a href="https://www.themoviedb.org/settings/api">themoviedb.org → Settings → API</a>). A <b>TVDB key</b> improves series matching.</div></li>
+      <li><div>Set <b>Upstream Repo</b> to <code>https://github.com/weebzone/Telegram-Stremio</code> and branch <code>master</code>, so Restart also updates.</div></li>
+      <li><div>Press <b>Save Settings</b> (or <span class="kbd">Ctrl</span> + <span class="kbd">S</span>). Most changes apply right away.</div></li>
+    </ol>
+    <figure class="figure">
+      <div class="window"><div class="window-bar"><i></i><i></i><i></i><span>Settings</span></div><div class="shot"><img data-shot="settings" src="shots/ink-settings.webp" alt="Settings page" width="1280" height="800" loading="lazy"></div></div>
+      <figcaption>The Settings page. Keys and IDs are blurred in this screenshot.</figcaption>
+    </figure>
+
+    <h2 id="channels">6. Channels</h2>
+    <p>In <b>Settings → Admin Authentication → AUTH_CHANNELS</b>, add each media channel by <code>@username</code> or its <code>-100…</code> ID. Tick <b>Anime</b> on anime channels. The bot must be an admin in each one.</p>
+    <p>Keeping content in separate channels makes the library easier to manage. A layout many people use:</p>
+    <div class="tbl-wrap"><table class="tbl">
+      <thead><tr><th>Channel</th><th>What goes in it</th><th>Set as</th></tr></thead>
+      <tbody>
+        <tr><td>Movies</td><td>Single movies</td><td>AUTH</td></tr>
+        <tr><td>TV Shows</td><td>Series episodes</td><td>AUTH</td></tr>
+        <tr><td>Anime</td><td>Anime episodes and movies</td><td>AUTH, tick Anime</td></tr>
+        <tr><td>Split</td><td>Big files split into <code>.001</code>, <code>.002</code> parts</td><td>AUTH</td></tr>
+        <tr><td>Manual</td><td>Personal videos added by hand</td><td>Manual channel</td></tr>
+        <tr><td>Announcements</td><td>Automatic "new title" posts</td><td>Announcement channel</td></tr>
+        <tr><td>Skip</td><td>Files that failed to match, with a note</td><td>Skip channel</td></tr>
+      </tbody>
+    </table></div>
+    <p>Already have files in a channel? Open <b>Tools → Channel Scanner</b>, select the channels and press <b>Start Scan</b> to index everything that is already there.</p>
+
+    <h2 id="files">7. Add files</h2>
+    <p>Forward or post a video to an AUTH channel. The server reads the file name (or caption) and fetches the details. Better names give better matches.</p>
+    <h3>Movies: title, year, quality</h3>
+    <div class="codeblock"><pre>Oppenheimer.2023.1080p.BluRay.x264.mkv
+3 Idiots (2009) 2160p 4K HEVC.mkv</pre><button class="copy" type="button">Copy</button></div>
+    <h3>Series: title, SxxEyy, quality</h3>
+    <div class="codeblock"><pre>Loki.S02E03.720p.HEVC.mkv
+Panchayat S03E05 Hindi 1080p.mkv</pre><button class="copy" type="button">Copy</button></div>
+    <h3>Split files and season packs</h3>
+    <div class="codeblock"><pre>Avatar.2009.2160p.BluRay.mkv.001   ← parts play as one file
+One Piece S01 E01-E13 1080p.mkv    ← Season 1, episodes 1–13
+Friends S03 1080p.mkv              ← whole Season 3</pre><button class="copy" type="button">Copy</button></div>
+    <p>Split zip archives (<code>.zip.001</code>, <code>.zip.002</code>) stream too, as long as they are stored without compression.</p>
+    <h3>Personal videos and odd names</h3>
+    <p>For a family video, lecture series, or anime with no season number, set a <b>Manual channel</b> in Settings, then use <b>Media → Add title</b> for one file or <b>Tools → Manual Upload Session</b> to attach many files to one title. Search accepts a title, an IMDb link or a TMDB link.</p>
+    <h3>Subtitles</h3>
+    <p>Subtitle files named like the video (for example <code>Loki.S02E03.en.srt</code>) are attached automatically. You can also add one from the title's <b>Subtitles</b> tab.</p>
+
+    <h2 id="watch">8. Watch in Stremio and Nuvio</h2>
+    <ol class="steps">
+      <li><div>Send <code>/start</code> to your bot. It replies with your personal install link:<br><code>https://your-domain.com/stremio/&lt;token&gt;/manifest.json</code></div></li>
+      <li><div><b>Stremio:</b> open Add-ons, paste the link in the search box and install.</div></li>
+      <li><div><b>Nuvio:</b> Addons → Add addon → paste the link → Install. Then Settings → Collections → Import from URL with <code>…/stremio/&lt;token&gt;/nuvio-collection.json</code> for Netflix, Prime Video, Bollywood, Anime and more rows.</div></li>
+      <li><div>Each link has a <b>Configure</b> page (<code>/stremio/&lt;token&gt;/configure</code>) where the person can sort qualities, hide some, and reorder or hide catalogs.</div></li>
+    </ol>
+    <div class="callout"><p>Install the addon <b>before</b> importing Nuvio collections, or Nuvio shows empty rows.</p></div>
+
+    <h2 id="users">9. Users, tokens and plans</h2>
+    <h3>Free or private server</h3>
+    <p>Keep <b>Subscription</b> off. Open <b>Tokens → New token</b>, name it (for example "Living Room TV"), optionally set daily or monthly GB limits, and copy the install link to share. Each row has buttons to change limits, set or extend expiry, link a Telegram user, or delete the key.</p>
+    <h3>Selling access</h3>
+    <ol class="steps">
+      <li><div>Turn <b>Subscription</b> on in Settings. Fill in the group ID, payment instructions, an optional QR image and the approver IDs.</div></li>
+      <li><div>Open <b>Plans → Add plan</b> and set days and price, for example 30 days for ₹99.</div></li>
+      <li><div>Users press <code>/start</code> in your bot, pick a plan and send a payment screenshot. An approver taps Approve and the bot sends the user their link and a group invite.</div></li>
+    </ol>
+    <p>You and your approvers always keep access. A key stops working when its plan or expiry ends, or pauses when it hits a data limit; Stremio shows a clear notice instead of the videos.</p>
+
+    <h2 id="catalogs">10. Catalogs</h2>
+    <ul>
+      <li><b>Auto catalogs</b> fill themselves by language (Bollywood, Anime, K-Drama…), OTT service (Netflix, Prime Video, JioHotstar…) and smart lists such as Latest Releases. Toggle them on <b>Catalogs</b> and press <b>Sync</b>.</li>
+      <li><b>Custom catalogs</b> are your own lists. Choose who sees each one: everyone, chosen tokens, or only you. Exclusive titles can be hidden from search.</li>
+      <li>Set the order Stremio shows rows in from <b>Catalogs → Order</b>.</li>
+    </ul>
+
+    <h2 id="cloudflare">11. Cloudflare streaming (optional)</h2>
+    <p>Video traffic is what makes a server expensive. With a Cloudflare streaming Worker the video bytes go through Cloudflare while your server keeps catalogs, tokens and limits, so a small free host is enough.</p>
+    <ol class="steps">
+      <li><div>Get it at <a href="https://proxy.weebzonex.workers.dev">proxy.weebzonex.workers.dev</a>. You receive a Worker URL and a secret on Telegram.</div></li>
+      <li><div>Open <b>Settings → Cloudflare Streaming</b>, paste the Worker URL and the shared secret.</div></li>
+      <li><div>Set <b>Stremio Links</b> to <b>Both</b> while testing, then <b>Cloudflare only</b>. Save.</div></li>
+    </ol>
+
+    <h2 id="maintain">12. Update, restart and logs</h2>
+    <ul>
+      <li><b>Logs:</b> Settings → System &amp; Maintenance shows live logs, with a download button.</li>
+      <li><b>Update:</b> press <b>Restart Now</b>. It pulls the latest code from the upstream repo and the page reloads by itself when the server is back.</li>
+      <li><b>Docker:</b> you can also run <code>git pull &amp;&amp; docker compose up -d --build</code>.</li>
+      <li><b>Backups:</b> Settings → Backup &amp; Restore exports settings, catalogs, plans and tokens. <b>Library for TeleStremio</b> exports your library for the TeleStremio app.</li>
+      <li><b>Scale:</b> add more storage databases and more bot tokens from Settings. Add extra bots as admins in every AUTH channel first.</li>
+    </ul>
+
+    <h2 id="panel">13. Web panel tips</h2>
+    <ul>
+      <li>Three themes: <b>Paper</b>, <b>Ink</b> and <b>Night</b>. Switch from the account menu, or press <span class="kbd">Shift</span> + <span class="kbd">T</span>.</li>
+      <li><span class="kbd">Ctrl</span> + <span class="kbd">K</span> (<span class="kbd">⌘</span> + <span class="kbd">K</span> on Mac) opens a command palette to jump to any page or open any title.</li>
+      <li><span class="kbd">/</span> focuses search, <span class="kbd">G</span> then a letter changes page, <span class="kbd">?</span> lists every shortcut.</li>
+      <li>On phones the panel has a bottom dock; Plans, Tokens, Requests, Tools and Settings are under <b>More</b>.</li>
+      <li>Share <code>/request</code> with your viewers so they can ask for titles. You answer them under <b>Requests</b>.</li>
+    </ul>
+
+    <h2 id="trouble">Troubleshooting</h2>
+    <h3>Files are not indexed</h3>
+    <p>Check that the bot is an admin in the channel, the channel is in AUTH_CHANNELS, and the name has a title, a year or SxxEyy, and a quality. Look in the Skip channel for a note on what failed, or fix the match from the title's <b>Rescan</b> tab.</p>
+    <h3>Streams do not start in Stremio</h3>
+    <p>Make sure <b>Base URL</b> is your public HTTPS address and opens from outside your network. The Admin page's Health &amp; Diagnostics card checks it for you.</p>
+    <h3>"Join Required", "Plan Expired" or "Limit Reached"</h3>
+    <p>The person must join your subscription group (wait two minutes), renew in the bot, or wait for their data limit to reset. You can extend them from Tokens or Plans.</p>
+    <h3>Forgot the admin password</h3>
+    <ol class="steps">
+      <li><div>Open <a href="https://telegram-stremio-reset.vercel.app/">telegram-stremio-reset.vercel.app</a> and paste your <b>tracking</b> database link (the first one in DATABASE).</div></li>
+      <li><div>Press Reset. Restart the app fully (for example <code>docker restart tg_stremio</code>).</div></li>
+      <li><div>Sign in with your username and the password <code>admin</code>, then set a new one in Settings.</div></li>
+    </ol>
+    <h3>Still stuck?</h3>
+    <p>Open an issue on <a href="https://github.com/weebzone/Telegram-Stremio/issues">GitHub</a> with the relevant lines from the logs. Remove tokens and database links before you paste them.</p>
+  </article>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>© <span data-year>2026</span> Telegram Stremio · GPL-3.0, made by <a href="https://github.com/weebzone">weebzone</a> and contributors</span>
+    <nav>
+      <a href="./">Home</a>
+      <a href="https://github.com/weebzone/Telegram-Stremio">GitHub</a>
+      <a href="https://donate.weebzonex.workers.dev">Support the project</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="assets/site.js"></script>
+</body>
+</html>
