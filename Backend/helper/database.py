@@ -180,6 +180,14 @@ class Database:
         doc = await self.dbs["tracking"]["state"].find_one({"_id": "catalog_order"})
         return list((doc or {}).get("order", []))
 
+    async def get_hidden_catalogs(self) -> List[str]:
+        doc = await self.dbs["tracking"]["state"].find_one({"_id": "catalog_hidden"})
+        return list((doc or {}).get("keys", []))
+
+    async def save_hidden_catalogs(self, keys: List[str]) -> None:
+        await self.dbs["tracking"]["state"].update_one(
+            {"_id": "catalog_hidden"}, {"$set": {"keys": [str(x) for x in keys]}}, upsert=True)
+
     async def save_catalog_order(self, order: List[str]) -> bool:
         await self.dbs["tracking"]["state"].update_one(
             {"_id": "catalog_order"},

@@ -1652,6 +1652,8 @@ _DEFAULT_CATALOG_ENTRIES = [
     {"id": "top_movies", "name": "Popular Movies", "group": "Default Movies", "type": "movie"},
     {"id": "latest_series", "name": "Recently Added Series", "group": "Default TV", "type": "series"},
     {"id": "top_series", "name": "Popular Series", "group": "Default TV", "type": "series"},
+    {"id": "trending_movies", "name": "Trending Movies", "group": "Default Movies", "type": "movie"},
+    {"id": "trending_series", "name": "Trending Series", "group": "Default TV", "type": "series"},
 ]
 
 
@@ -1675,6 +1677,9 @@ async def get_catalog_order_api():
         order = await db.get_catalog_order()
         rank = {k: i for i, k in enumerate(order)}
         entries.sort(key=lambda e: rank.get(e["key"], rank.get(e["id"], len(order) + 1)))
+        hidden = set(await db.get_hidden_catalogs())
+        for e in entries:
+            e["hidden"] = e["key"] in hidden
         return {"entries": entries, "order": order}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -1685,6 +1690,8 @@ async def update_catalog_order_api(payload: dict):
     if not isinstance(order, list):
         raise HTTPException(status_code=400, detail="order must be a list.")
     await db.save_catalog_order(order)
+    if isinstance(payload.get("hidden"), list):
+        await db.save_hidden_catalogs(payload["hidden"])
     return {"ok": True, "message": "Catalog order saved."}
 
 

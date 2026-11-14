@@ -771,6 +771,7 @@ async def get_manifest(token: str, token_data: dict = Depends(verify_token)):
 
                 catalogs.sort(key=_crank)
             hidden = set((token_data.get("config") or {}).get("hidden_catalogs") or [])
+            hidden |= set(await db.get_hidden_catalogs())
             if hidden:
                 catalogs = [
                     c for c in catalogs
@@ -1610,6 +1611,9 @@ async def get_catalog(token: str, media_type: str, id: str, extra: Optional[str]
     if media_type not in ["movie", "series"]:
         raise HTTPException(status_code=404, detail="Invalid catalog type")
 
+    if {id, f"{id}::{media_type}"} & set(await db.get_hidden_catalogs()):
+        return {"metas": []}
+
     genre_filter = None
     search_query = None
     stremio_skip = 0
@@ -2384,6 +2388,8 @@ async def _addon_catalogs_for_token(token_data: dict) -> list:
         pass
     for e in entries:
         e["key"] = f"{e['id']}::{e['type']}"
+    admin_hidden = set(await db.get_hidden_catalogs())
+    entries = [e for e in entries if e["key"] not in admin_hidden and e["id"] not in admin_hidden]
     order = await db.get_catalog_order()
     tconf = token_data.get("config") or {}
     effective = tconf.get("catalog_order") or order
