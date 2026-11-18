@@ -7,6 +7,7 @@ from pyrogram.enums import ChatMemberStatus
 
 from Backend import db
 from Backend.config import Telegram
+from Backend.helper.bounded import BoundedDict
 from Backend.helper.cf_stream import sync_worker_soon
 from Backend.helper.settings_manager import SettingsManager
 from Backend.logger import LOGGER
@@ -15,10 +16,12 @@ from Backend.pyrofork.bot import client_dc_map, work_loads
 TOKEN_RE = re.compile(r"^\d{5,}:[\w-]{30,}$")
 MAX_BOTS = 10
 COPY_TTL = timedelta(days=1)
+TOUCH_EVERY = timedelta(hours=1)
 STREAM_VIA = ("bots", "cloudflare", "both")
 
 helpers: list = []
 _pools: dict = {}
+_known = BoundedDict(5000)
 _next_index = 1000
 _copy_lock = asyncio.Lock()
 _pool_lock = asyncio.Lock()
@@ -137,12 +140,20 @@ def _full_chat(chat) -> int:
 async def _copy(token: str, channel: int, chat: int, msg: int) -> int:
     key = f"{token}:{channel}:{chat}:{msg}"
     now = datetime.utcnow()
+    if key in _known:
+        copied, touched = _known[key]
+        if now - touched > TOUCH_EVERY:
+            _known[key] = (copied, now)
+            asyncio.create_task(_copies().update_one({"_id": key}, {"$set": {"last_used": now}}))
+        return copied
     doc = await _copies().find_one_and_update({"_id": key}, {"$set": {"last_used": now}})
     if doc:
+        _known[key] = (doc["msg"], now)
         return doc["msg"]
     async with _copy_lock:
         doc = await _copies().find_one({"_id": key})
         if doc:
+            _known[key] = (doc["msg"], now)
             return doc["msg"]
         error = RuntimeError("No helper bot available")
         for helper in helpers:
@@ -154,6 +165,7 @@ async def _copy(token: str, channel: int, chat: int, msg: int) -> int:
         else:
             raise error
         await _copies().insert_one({"_id": key, "token": token, "channel": channel, "msg": copied.id, "last_used": now})
+        _known[key] = (copied.id, now)
         return copied.id
 
 
@@ -185,6 +197,8 @@ async def _sweep() -> None:
             except Exception as e:
                 LOGGER.warning(f"[OWN BOTS] Could not delete copies in {channel}: {e}")
         await _copies().delete_many({"_id": {"$in": [d["_id"] for d in docs]}})
+        for d in docs:
+            _known.pop(d["_id"], None)
 
 
 async def sweep_copies() -> None:
@@ -195,6 +209,12 @@ async def sweep_copies() -> None:
             await _sweep()
         except Exception as e:
             LOGGER.warning(f"[OWN BOTS] Sweep failed: {e}")
+
+
+async def warm_pools() -> None:
+    async for doc in _tokens().find({"own_bots.bots.0": {"$exists": True}}):
+        if active(doc):
+            await pool_for(doc)
 
 
 def _reason(e: Exception) -> str:

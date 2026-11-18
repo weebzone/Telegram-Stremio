@@ -195,6 +195,33 @@
     </div>
 </div>
 
+<div id="cf-modal" class="fixed inset-0 hidden z-50 modal-backdrop items-center justify-center p-4">
+    <div class="modal-glass">
+        <div class="flex items-start justify-between gap-4 mb-5">
+            <div>
+                <h3 class="text-xl font-semibold section-title">Cloudflare Proxy</h3>
+                <p class="text-sm text-soft mt-1">Worker for this user's own bots. Leave empty to turn it off.</p>
+            </div>
+            <button onclick="closeModal('cf-modal')" class="glass-btn rounded-full w-10 h-10 flex items-center justify-center"><i class="fas fa-xmark"></i></button>
+        </div>
+        <input type="hidden" id="cf-token">
+        <div class="grid grid-cols-1 gap-3">
+            <div class="modal-field">
+                <label>Worker URL</label>
+                <input type="url" id="cf-url" placeholder="https://telestream-user.workers.dev" class="glass-input" spellcheck="false">
+            </div>
+            <div class="modal-field">
+                <label>Shared Secret</label>
+                <input type="text" id="cf-secret" class="glass-input" spellcheck="false">
+            </div>
+        </div>
+        <div class="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-6">
+            <button onclick="closeModal('cf-modal')" class="glass-btn px-4 py-2 text-sm font-semibold">Cancel</button>
+            <button onclick="saveCf()" class="glass-btn glass-btn-primary px-4 py-2 text-sm font-semibold">Save</button>
+        </div>
+    </div>
+</div>
+
 <!-- Edit Limits Modal -->
 <div id="limits-modal" class="fixed inset-0 hidden z-50 modal-backdrop items-center justify-center p-4">
     <div class="modal-glass">
@@ -214,17 +241,6 @@
             <div class="modal-field">
                 <label>Monthly (GB)</label>
                 <input type="number" id="limits-monthly" min="0" step="0.1" class="glass-input">
-            </div>
-        </div>
-        <div id="limits-cf" class="grid grid-cols-1 gap-3 mt-4 hidden">
-            <p class="text-sm text-soft">Cloudflare proxy for this user's own bots. Leave empty to turn it off.</p>
-            <div class="modal-field">
-                <label>Worker URL</label>
-                <input type="url" id="limits-cf-url" placeholder="https://telestream-user.workers.dev" class="glass-input" spellcheck="false">
-            </div>
-            <div class="modal-field">
-                <label>Shared Secret</label>
-                <input type="text" id="limits-cf-secret" class="glass-input" spellcheck="false">
             </div>
         </div>
         <div class="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-6">
@@ -381,6 +397,7 @@
         if (t.has_token) {
             btns += `<button onclick="openLimitsModal('${tokenArg}', ${t.daily_limit_gb || 0}, ${t.monthly_limit_gb || 0})" class="action-chip glass-btn">Limits</button>`;
         }
+        if (t.own_bots) btns += `<button onclick="openCfModal('${tokenArg}')" class="action-chip"><i class="fa-solid fa-cloud"></i> Cloudflare</button>`;
 
         if (subEnabled) {
             if (t.user_id) {
@@ -555,10 +572,6 @@
         document.getElementById('limits-token').value = token;
         document.getElementById('limits-daily').value = daily || 0;
         document.getElementById('limits-monthly').value = monthly || 0;
-        const t = allTokens.find(x => x.token === token) || {};
-        document.getElementById('limits-cf').classList.toggle('hidden', !t.own_bots);
-        document.getElementById('limits-cf-url').value = t.cf_url || '';
-        document.getElementById('limits-cf-secret').value = t.cf_secret || '';
         openModal('limits-modal');
     }
 
@@ -568,14 +581,28 @@
             daily_limit_gb: Number(document.getElementById('limits-daily').value || 0),
             monthly_limit_gb: Number(document.getElementById('limits-monthly').value || 0),
         };
-        if (!document.getElementById('limits-cf').classList.contains('hidden')) {
-            payload.cf_url = document.getElementById('limits-cf-url').value.trim();
-            payload.cf_secret = document.getElementById('limits-cf-secret').value.trim();
-        }
         try {
             const resp = await fetch('/api/tokens/' + encodeURIComponent(token), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
             if (resp.ok) { showToast('Limits updated.', 'success', 'Updated'); closeModal('limits-modal'); loadTokens(); }
-            else { showToast((await resp.json().catch(() => ({}))).detail || 'Failed to update limits.', 'error', 'Failed'); }
+            else { showToast('Failed to update limits.', 'error', 'Failed'); }
+        } catch (err) { showToast('Error: ' + err.message, 'error', 'Network Error'); }
+    }
+
+    function openCfModal(token) {
+        const t = allTokens.find(x => x.token === token) || {};
+        document.getElementById('cf-token').value = token;
+        document.getElementById('cf-url').value = t.cf_url || '';
+        document.getElementById('cf-secret').value = t.cf_secret || '';
+        openModal('cf-modal');
+    }
+
+    async function saveCf() {
+        const token = document.getElementById('cf-token').value;
+        const payload = { cf_url: document.getElementById('cf-url').value.trim(), cf_secret: document.getElementById('cf-secret').value.trim() };
+        try {
+            const resp = await fetch('/api/tokens/' + encodeURIComponent(token) + '/cf', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            if (resp.ok) { showToast('Cloudflare proxy saved.', 'success', 'Updated'); closeModal('cf-modal'); loadTokens(); }
+            else { showToast((await resp.json().catch(() => ({}))).detail || 'Failed to save.', 'error', 'Failed'); }
         } catch (err) { showToast('Error: ' + err.message, 'error', 'Network Error'); }
     }
 
@@ -697,11 +724,11 @@
         catch { prompt('Copy this link:', url); }
     }
 
-    ['create-modal', 'limits-modal', 'assign-modal', 'sub-action-modal'].forEach(id => {
+    ['create-modal', 'limits-modal', 'cf-modal', 'assign-modal', 'sub-action-modal'].forEach(id => {
         document.getElementById(id).addEventListener('click', function (e) { if (e.target === this) closeModal(id); });
     });
     document.addEventListener('keydown', e => {
-        if (e.key === 'Escape') ['create-modal', 'limits-modal', 'assign-modal', 'sub-action-modal'].forEach(closeModal);
+        if (e.key === 'Escape') ['create-modal', 'limits-modal', 'cf-modal', 'assign-modal', 'sub-action-modal'].forEach(closeModal);
     });
 
     loadPlans();

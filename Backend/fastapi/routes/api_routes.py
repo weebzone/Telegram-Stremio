@@ -408,6 +408,13 @@ async def grant_lifetime_api() -> dict:
     count = await db.grant_lifetime_to_unlinked()
     return {"status": "success", "updated": count, "message": f"{count} token(s) marked as lifetime."}
 
+async def update_token_cf_api(token: str, payload: dict):
+    try:
+        await own_bots.set_worker(token, payload.get("cf_url"), payload.get("cf_secret"))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"message": "Cloudflare proxy saved"}
+
 async def update_token_limits_api(token: str, payload: dict):
     try:
         daily_limit = payload.get("daily_limit_gb")
@@ -418,12 +425,8 @@ async def update_token_limits_api(token: str, payload: dict):
             _parse_limit(daily_limit),
             _parse_limit(monthly_limit)
         )
-        if "cf_url" in payload:
-            await own_bots.set_worker(token, payload.get("cf_url"), payload.get("cf_secret"))
         return {"message": "Limits updated successfully"}
 
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
