@@ -205,6 +205,15 @@ if (!navigator.clipboard) Object.defineProperty(navigator, 'clipboard', { value:
         <p class="cfg-hint">Leave all off to show every quality.</p>
     </div>
 
+    <div class="cfg-block" id="cfg-via-block" style="display:none">
+        <div class="cfg-title">Stream with <span class="ob-badge"><i class="fa-solid fa-cloud"></i> Cloudflare proxy enabled</span></div>
+        <div class="seg" id="cfg-via">
+            <button type="button" data-val="bots" class="seg-btn" onclick="setVia('bots')">My bots</button>
+            <button type="button" data-val="cloudflare" class="seg-btn" onclick="setVia('cloudflare')">Cloudflare</button>
+            <button type="button" data-val="both" class="seg-btn" onclick="setVia('both')">Both</button>
+        </div>
+    </div>
+
     <div class="cfg-block">
         <div class="cfg-title">Catalogs</div>
         <div id="cfg-catalogs" class="cfg-catalogs"></div>
@@ -215,6 +224,43 @@ if (!navigator.clipboard) Object.defineProperty(navigator, 'clipboard', { value:
         <i class="fa-solid fa-floppy-disk"></i> Save preferences
     </button>
     <p id="cfg-state" class="cfg-hint" style="text-align:center"></p>
+</div>
+
+<div class="card ob-card" id="ob-card" style="display:none">
+    <h1 style="text-align:center"><i class="fa-solid fa-robot"></i> Your own bots</h1>
+    <p class="sub-title" style="text-align:center">Stream through your own bots. Files are copied to your private channel and removed a day after you last watch them.</p>
+
+    <div class="steps">
+        <b>Setup</b>
+        <ol>
+            <li>Create a private Telegram channel</li>
+            <li>Add your bots to it as admins</li>
+            <li>Add <b id="ob-helpers"></b> as admin with <b>Post</b> and <b>Delete messages</b> rights</li>
+            <li>Paste the channel ID and your bot tokens below, then verify</li>
+        </ol>
+    </div>
+
+    <div class="cfg-block">
+        <div class="cfg-title">Channel ID</div>
+        <input id="ob-channel" class="ob-input" placeholder="-100xxxxxxxxxx" spellcheck="false">
+    </div>
+
+    <div class="cfg-block">
+        <div class="cfg-title">Bots</div>
+        <div id="ob-bots" class="cfg-catalogs"></div>
+        <div class="ob-add">
+            <input id="ob-token" class="ob-input" placeholder="Bot token (1234567890:ABC…)" spellcheck="false"
+                onkeydown="if(event.key==='Enter'){event.preventDefault();addBot()}">
+            <button type="button" class="cfg-eye ob-plus" onclick="addBot()" aria-label="Add bot"><i class="fa-solid fa-plus"></i></button>
+        </div>
+        <p class="cfg-hint">Changes apply after you verify.</p>
+    </div>
+
+    <button onclick="saveBots()" class="btn-install" id="ob-save" style="margin-top:8px">
+        <i class="fa-solid fa-circle-check"></i> Save &amp; verify
+    </button>
+    <button onclick="disableBots()" class="btn-copy" id="ob-off" style="display:none">Turn off own bots</button>
+    <div id="ob-checks" class="cfg-catalogs" style="margin-top:12px"></div>
 </div>
 </div>
 </div>
@@ -235,12 +281,102 @@ if (!navigator.clipboard) Object.defineProperty(navigator, 'clipboard', { value:
 .cfg-cat .nm { flex: 1; min-width: 0; font-weight: 600; font-size: .85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cfg-eye, .cfg-arr { width: 30px; height: 26px; border-radius: .5rem; border: 1px solid var(--hairline); background: var(--bg); color: var(--text); cursor: pointer; font-size: .72rem; }
 .cfg-arr:disabled { opacity: .35; cursor: not-allowed; }
+.ob-card { text-align: left; grid-column: 1 / -1; }
+.ob-input { width: 100%; padding: 10px 12px; border-radius: .7rem; border: 1px solid var(--hairline); background: var(--surface); color: var(--text); font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: .8rem; }
+.ob-input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--ring); }
+.ob-add { display: flex; gap: 8px; margin-top: 8px; }
+.ob-plus { width: 42px; height: auto; flex-shrink: 0; }
+.ob-badge { margin-left: 6px; padding: 2px 8px; border-radius: 9999px; font-size: .68rem; text-transform: none; letter-spacing: 0; color: var(--ok); background: color-mix(in srgb, var(--ok) 14%, transparent); }
+.ob-check small { display: block; font-weight: 500; color: var(--text-sec); white-space: normal; }
 </style>
 
 <script>
 const QUALITIES = ['480p', '720p', '1080p', '4K'];
-let cfg = { quality_sort: 'desc', quality_filter: [], hidden_catalogs: [], catalog_order: [] };
+let cfg = { quality_sort: 'desc', quality_filter: [], hidden_catalogs: [], catalog_order: [], stream_via: 'bots' };
 let cfgCatalogs = [];
+let ob = { bots: [] };
+let obAdd = [];
+const TOKEN_RE = /^\d{5,}:[\w-]{30,}$/;
+
+function setVia(v) {
+    cfg.stream_via = v;
+    document.querySelectorAll('#cfg-via .seg-btn').forEach(b => b.classList.toggle('active', b.dataset.val === v));
+}
+
+function renderBots() {
+    const rows = ob.bots.map((b, i) => `<div class="cfg-cat">
+            <span class="nm">@${escapeCfg(b.username || b.id)}</span>
+            <button class="cfg-eye" onclick="removeBot(${i})" aria-label="Remove"><i class="fa-solid fa-xmark"></i></button>
+        </div>`).concat(obAdd.map((t, i) => `<div class="cfg-cat">
+            <span class="nm">${escapeCfg(t.split(':')[0])} <small style="opacity:.6">· new</small></span>
+            <button class="cfg-eye" onclick="removeNew(${i})" aria-label="Remove"><i class="fa-solid fa-xmark"></i></button>
+        </div>`));
+    document.getElementById('ob-bots').innerHTML = rows.join('') || '<p class="cfg-hint">No bots added yet.</p>';
+}
+
+function renderOwnBots(v) {
+    ob = Object.assign({ bots: [] }, v);
+    obAdd = [];
+    document.getElementById('ob-card').style.display = ob.available ? '' : 'none';
+    document.getElementById('ob-helpers').textContent = (ob.helpers || []).map(h => '@' + h).join(', ');
+    document.getElementById('ob-channel').value = ob.channel || '';
+    document.getElementById('ob-off').style.display = ob.enabled ? '' : 'none';
+    document.getElementById('cfg-via-block').style.display = ob.enabled && ob.cloudflare ? '' : 'none';
+    renderBots();
+}
+
+function renderChecks(checks, ok) {
+    document.getElementById('ob-checks').innerHTML = checks.map(c => `<div class="cfg-cat ob-check">
+            <i class="fa-solid ${c.ok ? 'fa-circle-check' : 'fa-circle-xmark'}" style="color:var(${c.ok ? '--ok' : '--danger'})"></i>
+            <span class="nm">${escapeCfg(c.label)}${c.detail ? `<small>${escapeCfg(c.detail)}</small>` : ''}</span>
+        </div>`).join('') + `<p class="cfg-hint">${ok ? 'All checks passed. Your bots are on.' : 'Fix the failed checks and verify again.'}</p>`;
+}
+
+function addBot() {
+    const input = document.getElementById('ob-token');
+    const t = input.value.trim();
+    if (!TOKEN_RE.test(t)) { document.getElementById('ob-checks').innerHTML = '<p class="cfg-hint">That does not look like a bot token.</p>'; return; }
+    const id = Number(t.split(':')[0]);
+    if (!obAdd.includes(t) && !ob.bots.some(b => b.id === id)) obAdd.push(t);
+    input.value = '';
+    renderBots();
+}
+
+function removeBot(i) { ob.bots.splice(i, 1); renderBots(); }
+function removeNew(i) { obAdd.splice(i, 1); renderBots(); }
+
+async function saveBots() {
+    const btn = document.getElementById('ob-save');
+    const out = document.getElementById('ob-checks');
+    btn.disabled = true;
+    out.innerHTML = '<p class="cfg-hint">Verifying…</p>';
+    try {
+        const res = await fetch('own-bots', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ channel: document.getElementById('ob-channel').value.trim(), keep: ob.bots.map(b => b.id), add: obAdd })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Could not verify.');
+        renderChecks(data.checks, data.ok);
+        if (data.ok) await loadConfig();
+    } catch (e) {
+        out.innerHTML = `<p class="cfg-hint">${escapeCfg(e.message || 'Could not verify.')}</p>`;
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+async function disableBots() {
+    if (!confirm('Turn off your own bots?')) return;
+    try {
+        const res = await fetch('own-bots', { method: 'DELETE' });
+        if (!res.ok) throw new Error();
+        document.getElementById('ob-checks').innerHTML = '';
+        await loadConfig();
+    } catch (e) {
+        document.getElementById('ob-checks').innerHTML = '<p class="cfg-hint">Could not turn off. Please try again.</p>';
+    }
+}
 
 function setSort(v) {
     cfg.quality_sort = v;
@@ -302,8 +438,10 @@ async function loadConfig() {
         if (!Array.isArray(cfg.quality_filter)) cfg.quality_filter = [];
         if (!Array.isArray(cfg.hidden_catalogs)) cfg.hidden_catalogs = [];
         setSort(cfg.quality_sort || 'desc');
+        setVia(cfg.stream_via || 'bots');
         renderQuality();
         renderCatalogs();
+        renderOwnBots(data.own_bots || {});
     } catch (e) {}
 }
 

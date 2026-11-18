@@ -4,11 +4,12 @@ import mimetypes
 import secrets
 import time
 from collections import deque
+from contextvars import ContextVar
 from typing import Dict
 from urllib.parse import quote, unquote
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.responses import Response as PlainResponse
 from fastapi.responses import StreamingResponse
 
@@ -16,8 +17,10 @@ from Backend import db
 from Backend.fastapi.security.tokens import verify_token
 from Backend.helper.bounded import BoundedDict
 from Backend.helper.analytics import client_ip_from, record_stream_start
+from Backend.helper import own_bots
+from Backend.helper.cf_stream import cf_stream_url
 from Backend.helper.custom_dl import ACTIVE_STREAMS, RECENT_STREAMS, ByteStreamer
-from Backend.helper.encrypt import decode_string
+from Backend.helper.encrypt import decode_string, encode_string
 from Backend.helper.pyro import get_thumb_download_target
 from Backend.helper.settings_manager import SettingsManager
 from Backend.helper.utils import track_usage
@@ -37,6 +40,7 @@ router = APIRouter(tags=["Streaming"])
 
 _streamer_by_client: Dict = {}
 _rr_counter: int = 0
+_pool: ContextVar = ContextVar("pool", default=None)
 
 _title_cache = BoundedDict(2000)
 _TITLE_CACHE_TTL = 300
@@ -85,25 +89,30 @@ def parse_range_header(range_header: str, file_size: int):
     return start, end
 
 
+def _clients() -> dict:
+    return _pool.get() or multi_clients
+
+
 #----- Pick the least-loaded client, preferring the target DC, round-robin on ties
 def select_best_client(target_dc: int) -> int:
     global _rr_counter
+    clients = _clients()
 
     def _score(idx: int) -> int:
         return work_loads.get(idx, 0) + 3 * client_failures.get(idx, 0)
 
     if target_dc > 0:
-        matching = [idx for idx, dc in client_dc_map.items() if dc == target_dc and idx in multi_clients]
+        matching = [idx for idx, dc in client_dc_map.items() if dc == target_dc and idx in clients]
     else:
         matching = []
     if not matching:
-        matching = list(multi_clients.keys())
+        matching = list(clients.keys())
     if not matching:
         return 0
     min_score = min(_score(i) for i in matching)
     tied = sorted(i for i in matching if _score(i) == min_score)
     selected = tied[_rr_counter % len(tied)]
-    _rr_counter = (_rr_counter + 1) % max(len(multi_clients), 1)
+    _rr_counter = (_rr_counter + 1) % max(len(clients), 1)
     return selected
 
 
@@ -135,18 +144,18 @@ def warm_streamers() -> None:
 
 
 def _prefetch_for(index: int) -> tuple[int, int]:
-    return (1, 1) if index == USERBOT_CLIENT_INDEX else get_parallel_prefetch(len(multi_clients) - 1)
+    return (1, 1) if index == USERBOT_CLIENT_INDEX else get_parallel_prefetch(len(_clients()) - 1)
 
 
 #----- Run fetch(streamer) on the Userbot when it is the default streamer, else (or on failure) on the bot pool
 async def _db_client(fetch):
-    if SettingsManager.current().default_streaming == "userbot" and (ub := _get_userbot_streamer()):
+    if not _pool.get() and SettingsManager.current().default_streaming == "userbot" and (ub := _get_userbot_streamer()):
         try:
             return USERBOT_CLIENT_INDEX, ub, await fetch(ub)
         except Exception as e:
             LOGGER.warning(f"[USERBOT] Falling back to bots: {e}")
     index = select_best_client(0)
-    streamer = _get_streamer(multi_clients[index], index)
+    streamer = _get_streamer(_clients()[index], index)
     return index, streamer, await fetch(streamer)
 
 
@@ -281,6 +290,21 @@ async def subtitle_handler(token: str, id: str, name: str, token_data: dict = De
 @router.get("/dl/{token}/{id}/{name}")
 @router.head("/dl/{token}/{id}/{name}")
 async def stream_handler(request: Request, token: str, id: str, name: str, token_data: dict = Depends(verify_token)):
+    decoded = await decode_string(id)
+
+    if not decoded.get("global") and own_bots.active(token_data):
+        try:
+            moved = await own_bots.remap(token_data, decoded)
+            cf = own_bots.worker(token_data)
+            if cf and request.query_params.get("via") == "cf":
+                return RedirectResponse(cf_stream_url(token, await encode_string(moved), quote(name), cf["url"], cf["secret"]), status_code=302)
+            pool = await own_bots.pool_for(token_data)
+            if pool:
+                decoded = moved
+                _pool.set(pool)
+        except Exception as e:
+            LOGGER.warning(f"[OWN BOTS] Falling back to owner bots: {e}")
+
     if request.method != "HEAD":
         asyncio.create_task(record_stream_start(
             token,
@@ -288,7 +312,6 @@ async def stream_handler(request: Request, token: str, id: str, name: str, token
             client_ip_from(request),
             request.headers.get("user-agent", ""),
         ))
-    decoded = await decode_string(id)
 
     if decoded.get("global"):
         if decoded.get("zip"):
@@ -354,11 +377,12 @@ async def media_streamer(request: Request, chat_id: int, msg_id: int, token: str
 
     parallelism, prefetch_count = _prefetch_for(index)
     extra_clients_for_stream = []
-    if parallelism > 1 and len(multi_clients) > 1:
-        other_indices = sorted((i for i in multi_clients if i != index), key=lambda i: work_loads.get(i, 0))
+    clients = _clients()
+    if parallelism > 1 and len(clients) > 1:
+        other_indices = sorted((i for i in clients if i != index), key=lambda i: work_loads.get(i, 0))
 
         async def _get_extra_file_id(ec_idx: int):
-            ec_client = multi_clients[ec_idx]
+            ec_client = clients[ec_idx]
             ec_streamer = _get_streamer(ec_client, ec_idx)
             try:
                 ec_fid = await ec_streamer.get_file_properties(chat_id=chat_id, message_id=msg_id)

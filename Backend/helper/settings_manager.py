@@ -37,6 +37,7 @@ _DEFAULTS: Dict[str, Any] = {
     "webdav_user": "",
     "webdav_password": "",
     "multi_tokens": [],
+    "helper_tokens": [],
     "extra_databases": [],
     "global_search": False,
     "default_streaming": "bots",
@@ -318,6 +319,10 @@ class Settings:
         return list(self._d.get("multi_tokens") or [])
 
     @property
+    def helper_tokens(self) -> List[str]:
+        return list(self._d.get("helper_tokens") or [])
+
+    @property
     def extra_databases(self) -> List[str]:
         return list(self._d.get("extra_databases") or [])
 
@@ -466,6 +471,10 @@ class SettingsManager:
             except Exception as exc:
                 LOGGER.error(f"SettingsManager reinit multi_tokens: {exc}")
                 results["multi_tokens"] = f"error: {exc}"
+
+        if (old.get("helper_tokens") or []) != (new.get("helper_tokens") or []):
+            from Backend.helper.own_bots import reload_helpers
+            results["helper_tokens"] = f"{await reload_helpers()} helper bot(s) active"
 
         #----- Auth channels changed
         old_channels = old.get("auth_channels") or []

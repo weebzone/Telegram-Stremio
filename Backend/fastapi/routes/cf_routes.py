@@ -7,6 +7,7 @@ from Backend.config import Telegram
 from Backend.helper.analytics import record_stream_start
 from Backend.helper.cf_live import apply_report
 from Backend.helper.cf_stream import verify_worker_request
+from Backend.helper.own_bots import worker_tokens
 from Backend.helper.session_auth import get_active_session_string
 from Backend.helper.settings_manager import SettingsManager
 from Backend.logger import LOGGER
@@ -15,20 +16,24 @@ router = APIRouter(tags=["Cloudflare"])
 
 
 #----- Only the Cloudflare Worker (holding the shared secret) may call these routes
-async def _verified_body(request: Request) -> bytes:
+async def _verified_body(request: Request) -> tuple:
     body = await request.body()
-    if not verify_worker_request(
-        request.method, request.url.path, body,
-        request.headers.get("x-cf-time", ""), request.headers.get("x-cf-sig", ""),
-    ):
-        raise HTTPException(status_code=401, detail="Bad signature")
-    return body
+    signed = (request.method, request.url.path, body, request.headers.get("x-cf-time", ""), request.headers.get("x-cf-sig", ""))
+    if verify_worker_request(*signed):
+        return body, None
+    for doc in await worker_tokens():
+        if verify_worker_request(*signed, doc["cf"]["secret"]):
+            return body, doc
+    raise HTTPException(status_code=401, detail="Bad signature")
 
 
 #----- Telegram credentials the Worker needs to stream: API app, bot pool, optional userbot
 @router.get("/api/cf/config")
 async def cf_config(request: Request):
-    await _verified_body(request)
+    _, owner = await _verified_body(request)
+    if owner:
+        bots = [b["token"] for b in (owner.get("own_bots") or {}).get("bots") or []]
+        return {"api_id": Telegram.API_ID, "api_hash": Telegram.API_HASH, "bots": bots, "user_session": ""}
     tokens = [Telegram.BOT_TOKEN, *SettingsManager.current().multi_tokens]
     try:
         user_session = await get_active_session_string() or ""
@@ -46,7 +51,8 @@ async def cf_config(request: Request):
 #----- Bytes streamed per token (for daily/monthly limits) and stream-start analytics
 @router.post("/api/cf/usage")
 async def cf_usage(request: Request):
-    data = json.loads(await _verified_body(request) or b"{}")
+    body, _ = await _verified_body(request)
+    data = json.loads(body or b"{}")
     for token, delta in (data.get("usage") or {}).items():
         if isinstance(delta, int) and delta > 0:
             try:

@@ -216,6 +216,17 @@
                 <input type="number" id="limits-monthly" min="0" step="0.1" class="glass-input">
             </div>
         </div>
+        <div id="limits-cf" class="grid grid-cols-1 gap-3 mt-4 hidden">
+            <p class="text-sm text-soft">Cloudflare proxy for this user's own bots. Leave empty to turn it off.</p>
+            <div class="modal-field">
+                <label>Worker URL</label>
+                <input type="url" id="limits-cf-url" placeholder="https://telestream-user.workers.dev" class="glass-input" spellcheck="false">
+            </div>
+            <div class="modal-field">
+                <label>Shared Secret</label>
+                <input type="text" id="limits-cf-secret" class="glass-input" spellcheck="false">
+            </div>
+        </div>
         <div class="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-6">
             <button onclick="closeModal('limits-modal')" class="glass-btn px-4 py-2 text-sm font-semibold">Cancel</button>
             <button onclick="saveLimits()" class="glass-btn glass-btn-primary px-4 py-2 text-sm font-semibold">Save</button>
@@ -336,6 +347,16 @@
             : `<div class="addon-box text-soft text-xs">—</div>`;
     }
 
+    function ownBotsHtml(t) {
+        if (!t.own_bots) return '';
+        const names = t.own_bots.bots.map(b => '@' + (b.username || b.id)).join(', ');
+        return `<div class="flex flex-wrap gap-1.5 mt-2">
+                <span class="status-badge status-active" title="Channel ${escHtml(t.own_bots.channel)}"><i class="fa-solid fa-robot text-[10px]"></i> ${t.own_bots.bots.length} own bot${t.own_bots.bots.length === 1 ? '' : 's'}</span>
+                ${t.cf_url ? `<span class="status-badge status-gold"><i class="fa-solid fa-cloud text-[10px]"></i> Cloudflare</span>` : ''}
+            </div>
+            <div class="text-xs text-soft mt-1 break-all">${escHtml(names)}</div>`;
+    }
+
     function usageHtml(t) {
         const dl = t.daily_limit_gb ? t.daily_limit_gb + ' GB' : '∞';
         const ml = t.monthly_limit_gb ? t.monthly_limit_gb + ' GB' : '∞';
@@ -391,7 +412,7 @@
             return `
                 <tr class="${t.is_expired ? 'row-expired' : ''}">
                     <td class="px-4 py-4">${statusBadge(t)}</td>
-                    <td class="px-4 py-4"><div class="font-semibold section-title">${escHtml(displayName)}</div>${idHtml}</td>
+                    <td class="px-4 py-4"><div class="font-semibold section-title">${escHtml(displayName)}</div>${idHtml}${ownBotsHtml(t)}</td>
                     <td class="px-4 py-4">${addonHtml(t)}</td>
                     <td class="px-4 py-4">${usageHtml(t)}</td>
                     <td class="px-4 py-4 text-xs">${expiryHtml(t)}</td>
@@ -411,7 +432,7 @@
                     <div class="flex items-start justify-between gap-3 mb-3">
                         <div class="min-w-0">
                             <div class="font-semibold section-title break-words">${escHtml(displayName)}</div>
-                            <div class="text-xs text-soft mt-1 break-all">${t.user_id ? 'ID: ' + t.user_id : 'No linked user'}</div>
+                            <div class="text-xs text-soft mt-1 break-all">${t.user_id ? 'ID: ' + t.user_id : 'No linked user'}</div>${ownBotsHtml(t)}
                         </div>
                         <div class="shrink-0">${statusBadge(t)}</div>
                     </div>
@@ -534,6 +555,10 @@
         document.getElementById('limits-token').value = token;
         document.getElementById('limits-daily').value = daily || 0;
         document.getElementById('limits-monthly').value = monthly || 0;
+        const t = allTokens.find(x => x.token === token) || {};
+        document.getElementById('limits-cf').classList.toggle('hidden', !t.own_bots);
+        document.getElementById('limits-cf-url').value = t.cf_url || '';
+        document.getElementById('limits-cf-secret').value = t.cf_secret || '';
         openModal('limits-modal');
     }
 
@@ -543,10 +568,14 @@
             daily_limit_gb: Number(document.getElementById('limits-daily').value || 0),
             monthly_limit_gb: Number(document.getElementById('limits-monthly').value || 0),
         };
+        if (!document.getElementById('limits-cf').classList.contains('hidden')) {
+            payload.cf_url = document.getElementById('limits-cf-url').value.trim();
+            payload.cf_secret = document.getElementById('limits-cf-secret').value.trim();
+        }
         try {
             const resp = await fetch('/api/tokens/' + encodeURIComponent(token), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
             if (resp.ok) { showToast('Limits updated.', 'success', 'Updated'); closeModal('limits-modal'); loadTokens(); }
-            else { showToast('Failed to update limits.', 'error', 'Failed'); }
+            else { showToast((await resp.json().catch(() => ({}))).detail || 'Failed to update limits.', 'error', 'Failed'); }
         } catch (err) { showToast('Error: ' + err.message, 'error', 'Network Error'); }
     }
 

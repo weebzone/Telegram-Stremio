@@ -20,6 +20,7 @@ from Backend.helper.bounded import BoundedDict
 from Backend.config import Telegram
 from Backend.helper.analytics import client_ip_from, record_client
 from Backend.fastapi.security.tokens import verify_token
+from Backend.helper import own_bots
 from Backend.helper.cf_stream import cf_enabled, cf_stream_url
 from Backend.fastapi.themes import get_theme, theme_key
 from Backend.helper.fanart import fanart_artwork
@@ -2187,6 +2188,7 @@ async def get_streams(
             "title": media_details.get("title"), "year": media_details.get("release_year"),
             "season": season_num, "episode": episode_num,
         }
+        via = own_bots.stream_via(token_data)
         for quality in media_details.get("telegram", []):
             if quality.get("id"):
                 filename = quality.get("name", "")
@@ -2205,8 +2207,12 @@ async def get_streams(
                 sort_name = stream_name
                 original_url = f"{SettingsManager.current().base_url}/dl/{token}/{quality.get('id')}/video.mkv"
                 proxy_url = build_proxy_url(original_url)
-                cf_url = cf_stream_url(token, quality.get('id'), "video.mkv") if cf_enabled() else None
-                cf_only = cf_url and SettingsManager.current().cf_stream_mode == "cloudflare"
+                if via:
+                    cf_url = f"{original_url}?via=cf" if via != "bots" else None
+                    cf_only = via == "cloudflare"
+                else:
+                    cf_url = cf_stream_url(token, quality.get('id'), "video.mkv") if cf_enabled() else None
+                    cf_only = cf_url and SettingsManager.current().cf_stream_mode == "cloudflare"
 
                 def add(suffix, url, proxied=False):
                     name, title = stream_name, stream_title
@@ -2405,7 +2411,7 @@ async def get_addon_config(token: str):
     doc = await db.get_api_token(token)
     if not doc:
         raise HTTPException(status_code=404, detail="Invalid token")
-    return {"config": doc.get("config") or {}, "catalogs": await _addon_catalogs_for_token(doc)}
+    return {"config": doc.get("config") or {}, "catalogs": await _addon_catalogs_for_token(doc), "own_bots": own_bots.addon_view(doc)}
 
 
 #----- Persist this token's addon config (public, used by configure page)
@@ -2420,6 +2426,27 @@ async def save_addon_config(token: str, payload: dict):
         "quality_filter": [q for q in (payload.get("quality_filter") or []) if q in valid_q],
         "hidden_catalogs": [str(x) for x in (payload.get("hidden_catalogs") or [])],
         "catalog_order": [str(x) for x in (payload.get("catalog_order") or [])],
+        "stream_via": payload.get("stream_via") if payload.get("stream_via") in own_bots.STREAM_VIA else "bots",
     }
     await db.set_token_config(token, config)
     return {"ok": True, "config": config}
+
+
+@router.post("/{token}/own-bots")
+async def save_own_bots(token: str, payload: dict):
+    doc = await db.get_api_token(token)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Invalid token")
+    try:
+        return await own_bots.verify(doc, payload.get("channel"), payload.get("keep") or [], payload.get("add") or [])
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.delete("/{token}/own-bots")
+async def delete_own_bots(token: str):
+    doc = await db.get_api_token(token)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Invalid token")
+    await own_bots.disable(doc)
+    return {"ok": True}

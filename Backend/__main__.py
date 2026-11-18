@@ -11,6 +11,7 @@ from Backend.fastapi import server
 from Backend.fastapi.main import app
 from Backend.helper import subscription_task_manager
 from Backend.helper.link_checker import DeadLinkChecker
+from Backend.helper.own_bots import reload_helpers, sweep_copies
 from Backend.helper.pinger import ping
 from Backend.helper.pyro import restart_notification, setup_bot_commands
 from Backend.helper.scan_manager import dbcheck_manager, duplicate_manager, scan_manager
@@ -68,6 +69,8 @@ async def start_services():
         await initialize_clients()
         from Backend.fastapi.routes.stream_routes import warm_streamers
         warm_streamers()
+        LOGGER.info(f"Helper bots: {await reload_helpers()} active")
+        loop.create_task(sweep_copies())
         await asyncio.sleep(2)
 
         await setup_bot_commands(StreamBot)
