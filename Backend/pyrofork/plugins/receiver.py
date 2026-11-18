@@ -11,6 +11,7 @@ from Backend import db
 from Backend.helper.announcer import announce_new_media
 from Backend.helper.auto_catalog import start_single_media_catalog_sync
 from Backend.helper.encrypt import encode_string
+from Backend.helper.failed_imports import record as record_failed_import
 from Backend.helper.manual_add import resolve_telegram_message, stamp_caption_with_id
 from Backend.helper.requests_manager import auto_fulfill
 from Backend.helper.metadata import caption_with_links, extract_default_id, has_raw_ref, metadata
@@ -244,7 +245,21 @@ async def file_receive_handler(client: Client, message: Message):
         metadata_info = await metadata(clean_filename(title), int(channel), msg_id, override_id=override_id or extract_default_id(caption_with_links(message)), season_hint=season_hint)
         if metadata_info is None:
             LOGGER.warning(f"Metadata failed for file: {title} (ID: {msg_id})")
-            await route_to_skip_channel(client, message)
+            copied = await route_to_skip_channel(client, message)
+            await record_failed_import(
+                chat_id=int(channel),
+                msg_id=int(msg_id),
+                file_name=(
+                    (message.document.file_name if message.document else "")
+                    or (message.video.file_name if message.video else "")
+                    or title
+                ),
+                caption=message.caption or "",
+                reason="metadata_failed",
+                size_bytes=raw_size,
+                size_label=size,
+                skip_msg_id=getattr(copied, "id", None),
+            )
             return
 
         title = _finalize_title(title, metadata_info)

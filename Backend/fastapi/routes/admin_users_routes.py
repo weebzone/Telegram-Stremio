@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import secrets
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -39,9 +39,9 @@ class AdminTargetOnlyBody(BaseModel):
 
 #----- Owner: generate a one-time invite code -------------------------------
 @router.post("/invite/generate")
-async def invite_generate(request: Request, _: bool = Depends(require_owner)):
+async def invite_generate(request: Request, role: str = Query("admin"), _: bool = Depends(require_owner)):
     username = get_current_user(request) or "owner"
-    code = await admin_users.create_invite(username, role="admin")
+    code = await admin_users.create_invite(username, role=role)
     return {"ok": True, "code": code,
             "note": "One-time use. Expires in 7 days."}
 

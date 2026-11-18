@@ -26,8 +26,11 @@ templates.env.globals["cover_url"] = resolve_cover_url
 def _base_context(request: Request) -> dict:
     theme_name = request.session.get("theme", DEFAULT_THEME)
     style_name = request.session.get("style", DEFAULT_STYLE)
+    state = getattr(request, "state", None)
     return {
         "request": request,
+        "current_role": getattr(state, "role", None),
+        "permissions": getattr(state, "permissions", None) or set(),
         "theme": get_theme(theme_name, style_name),
         "themes": get_all_themes(),
         "styles": get_all_styles(),
@@ -280,3 +283,10 @@ async def settings_page(request: Request, _: bool = Depends(require_auth)):
         "formatter_presets": PRESETS,
     })
     return templates.TemplateResponse("settings.html", ctx)
+
+
+#----- Failed imports review page (uploader + admins)
+async def imports_page(request: Request, _: bool = Depends(require_auth)):
+    ctx = _base_context(request)
+    ctx["current_user"] = get_current_user(request)
+    return templates.TemplateResponse("imports.html", ctx)

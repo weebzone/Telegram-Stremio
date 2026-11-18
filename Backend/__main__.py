@@ -7,6 +7,8 @@ from pyrogram import idle
 from starlette.middleware.sessions import SessionMiddleware
 
 from Backend import __version__, db
+from Backend.fastapi.security.middleware import AuthorizationMiddleware
+from Backend.helper import failed_imports
 from Backend.fastapi import server
 from Backend.fastapi.main import app
 from Backend.helper import subscription_task_manager
@@ -34,7 +36,11 @@ async def start_services():
         await asyncio.sleep(1.2)
 
         await SettingsManager.initialize(db)
+
+        #----- Authorization first (inner), sessions second (outer): last added runs first
+        app.add_middleware(AuthorizationMiddleware)
         app.add_middleware(SessionMiddleware, secret_key=SettingsManager.current().session_secret or secrets.token_hex(32))
+        await failed_imports.ensure_indexes()
         await asyncio.sleep(0.5)
 
         await scan_manager.load(db)

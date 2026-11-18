@@ -521,14 +521,15 @@ if (!navigator.clipboard) Object.defineProperty(navigator, 'clipboard', { value:
     <div id="nav-container" class="hidden md:flex relative isolate min-w-0 justify-self-center items-center gap-1 p-1 bg-black/10 rounded-full border border-hairline">
         <div id="active-pill" class="pointer-events-none"></div>
         <a href="/" class="nav-link">Home</a>
-        <a href="/media/manage" class="nav-link">Media</a>
-        <a href="/catalogs" class="nav-link">Catalogs</a>
-        <a href="/admin/dashboard" class="nav-link">Admin</a>
-        <a href="/admin/subscriptions" class="nav-link">Plans</a>
-        <a href="/admin/access" class="nav-link">Tokens</a>
-        <a href="/admin/requests" class="nav-link">Requests</a>
-        <a href="/admin/tools" class="nav-link">Tools</a>
-        <a href="/admin/settings" class="nav-link">Settings</a>
+        {% if 'media.read' in permissions %}<a href="/media/manage" class="nav-link">Media</a>{% endif %}
+        {% if 'catalog.read' in permissions %}<a href="/catalogs" class="nav-link">Catalogs</a>{% endif %}
+        {% if 'imports.read' in permissions %}<a href="/admin/imports" class="nav-link">Imports</a>{% endif %}
+        {% if 'staff' in permissions %}<a href="/admin/dashboard" class="nav-link">Admin</a>{% endif %}
+        {% if 'sub.write' in permissions %}<a href="/admin/subscriptions" class="nav-link">Plans</a>{% endif %}
+        {% if 'token.write' in permissions %}<a href="/admin/access" class="nav-link">Tokens</a>{% endif %}
+        {% if 'request.write' in permissions %}<a href="/admin/requests" class="nav-link">Requests</a>{% endif %}
+        {% if 'tools.read' in permissions %}<a href="/admin/tools" class="nav-link">Tools</a>{% endif %}
+        {% if 'settings.read' in permissions %}<a href="/admin/settings" class="nav-link">Settings</a>{% endif %}
     </div>
     {% endif %}
 
@@ -546,6 +547,7 @@ if (!navigator.clipboard) Object.defineProperty(navigator, 'clipboard', { value:
                 <div id="user-dropdown" class="absolute right-0 top-14 w-72 glass-panel rounded-2xl p-4 opacity-0 scale-95 pointer-events-none transition-all duration-200 origin-top-right z-50">
                     <div class="mb-3 border-b border-hairline pb-3">
                         <p class="text-sm font-bold text-text">{{ current_user }}</p>
+                        <p class="text-[10px] text-text-secondary font-bold uppercase tracking-wider">{{ current_role or 'member' }}</p>
                         <p class="text-[10px] text-green-400 font-bold uppercase tracking-wider flex items-center gap-1">
                             <span class="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span> Online
                         </p>
@@ -587,11 +589,21 @@ if (!navigator.clipboard) Object.defineProperty(navigator, 'clipboard', { value:
                         </form>
                     </div>
 
+                    {% if 'settings.read' in permissions %}
                     <a href="/admin/settings"
                        class="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold mb-2 transition-all"
                        style="background:color-mix(in srgb,var(--primary) 12%,transparent);color:var(--primary)">
                         <i class="fa-solid fa-gear"></i> Settings
                     </a>
+                    {% endif %}
+
+                    {% if current_role and current_role != 'owner' %}
+                    <button type="button" onclick="changeMyPassword()"
+                       class="w-full text-left flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold mb-2 transition-all"
+                       style="background:var(--surface);color:var(--text)">
+                        <i class="fa-solid fa-key"></i> Change password
+                    </button>
+                    {% endif %}
 
                     <a href="/logout" class="block text-center bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white px-4 py-2.5 rounded-xl text-sm font-bold transition-all">
                         Logout
@@ -610,14 +622,15 @@ if (!navigator.clipboard) Object.defineProperty(navigator, 'clipboard', { value:
     <div id="mobile-menu" class="absolute top-[calc(100%+12px)] left-0 w-full overflow-hidden max-h-0 opacity-0 transition-all duration-300 ease-in-out md:hidden z-40">
         <div class="glass-panel mx-2 rounded-3xl p-4 flex flex-col gap-2">
             <a href="/" class="px-4 py-3 rounded-xl hover:bg-primary hover:text-background transition flex items-center gap-3 font-semibold"><i class="fa-solid fa-house"></i> Home</a>
-            <a href="/media/manage" class="px-4 py-3 rounded-xl hover:bg-primary hover:text-background transition flex items-center gap-3 font-semibold"><i class="fa-solid fa-clapperboard"></i> Media</a>
-            <a href="/catalogs" class="px-4 py-3 rounded-xl hover:bg-primary hover:text-background transition flex items-center gap-3 font-semibold"><i class="fa-solid fa-layer-group"></i> Catalogs</a>
-            <a href="/admin/dashboard" class="px-4 py-3 rounded-xl hover:bg-primary hover:text-background transition flex items-center gap-3 font-semibold"><i class="fa-solid fa-chart-line"></i> Admin</a>
-            <a href="/admin/subscriptions" class="px-4 py-3 rounded-xl hover:bg-primary hover:text-background transition flex items-center gap-3 font-semibold"><i class="fa-solid fa-credit-card"></i> Plans</a>
-            <a href="/admin/access" class="px-4 py-3 rounded-xl hover:bg-primary hover:text-background transition flex items-center gap-3 font-semibold"><i class="fa-solid fa-shield"></i> Tokens</a>
-            <a href="/admin/requests" class="px-4 py-3 rounded-xl hover:bg-primary hover:text-background transition flex items-center gap-3 font-semibold"><i class="fa-solid fa-inbox"></i> Requests</a>
-            <a href="/admin/tools" class="px-4 py-3 rounded-xl hover:bg-primary hover:text-background transition flex items-center gap-3 font-semibold"><i class="fa-solid fa-screwdriver-wrench"></i> Tools</a>
-            <a href="/admin/settings" class="px-4 py-3 rounded-xl hover:bg-primary hover:text-background transition flex items-center gap-3 font-semibold"><i class="fa-solid fa-gear"></i> Settings</a>
+            {% if 'media.read' in permissions %}<a href="/media/manage" class="px-4 py-3 rounded-xl hover:bg-primary hover:text-background transition flex items-center gap-3 font-semibold"><i class="fa-solid fa-clapperboard"></i> Media</a>{% endif %}
+            {% if 'catalog.read' in permissions %}<a href="/catalogs" class="px-4 py-3 rounded-xl hover:bg-primary hover:text-background transition flex items-center gap-3 font-semibold"><i class="fa-solid fa-layer-group"></i> Catalogs</a>{% endif %}
+            {% if 'imports.read' in permissions %}<a href="/admin/imports" class="px-4 py-3 rounded-xl hover:bg-primary hover:text-background transition flex items-center gap-3 font-semibold"><i class="fa-solid fa-triangle-exclamation"></i> Imports</a>{% endif %}
+            {% if 'staff' in permissions %}<a href="/admin/dashboard" class="px-4 py-3 rounded-xl hover:bg-primary hover:text-background transition flex items-center gap-3 font-semibold"><i class="fa-solid fa-chart-line"></i> Admin</a>{% endif %}
+            {% if 'sub.write' in permissions %}<a href="/admin/subscriptions" class="px-4 py-3 rounded-xl hover:bg-primary hover:text-background transition flex items-center gap-3 font-semibold"><i class="fa-solid fa-credit-card"></i> Plans</a>{% endif %}
+            {% if 'token.write' in permissions %}<a href="/admin/access" class="px-4 py-3 rounded-xl hover:bg-primary hover:text-background transition flex items-center gap-3 font-semibold"><i class="fa-solid fa-shield"></i> Tokens</a>{% endif %}
+            {% if 'request.write' in permissions %}<a href="/admin/requests" class="px-4 py-3 rounded-xl hover:bg-primary hover:text-background transition flex items-center gap-3 font-semibold"><i class="fa-solid fa-inbox"></i> Requests</a>{% endif %}
+            {% if 'tools.read' in permissions %}<a href="/admin/tools" class="px-4 py-3 rounded-xl hover:bg-primary hover:text-background transition flex items-center gap-3 font-semibold"><i class="fa-solid fa-screwdriver-wrench"></i> Tools</a>{% endif %}
+            {% if 'settings.read' in permissions %}<a href="/admin/settings" class="px-4 py-3 rounded-xl hover:bg-primary hover:text-background transition flex items-center gap-3 font-semibold"><i class="fa-solid fa-gear"></i> Settings</a>{% endif %}
             <a href="https://donate.weebzonex.workers.dev" target="_blank" rel="noopener" class="px-4 py-3 rounded-xl hover:bg-primary hover:text-background transition flex items-center gap-3 font-semibold"><i class="fa-solid fa-heart text-red-500"></i> Donate</a>
         </div>
     </div>
@@ -752,6 +765,23 @@ function selectStyle(key) {
     const c = document.getElementById('theme-input');
     if (c) c.value = '';
     form.submit();
+}
+
+async function changeMyPassword() {
+    const pw = prompt('New password');
+    if (!pw) return;
+    try {
+        const res = await fetch('/api/admin/me/password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ new_password: pw })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) { alert(data.detail || 'Could not update password'); return; }
+        alert('Password updated');
+    } catch (e) {
+        alert('Request failed');
+    }
 }
 
 if(btn) btn.onclick = toggleMenu;

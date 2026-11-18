@@ -30,6 +30,9 @@ from Backend.logger import LOGGER
 
 INVITE_TTL_SECONDS = 7 * 24 * 3600  # 7 days
 
+# Roles that can be handed out through an invite code (never "owner").
+VALID_INVITE_ROLES = ("admin", "uploader", "viewer")
+
 _COLL = "admin_users"
 _INVITE_COLL = "invite_codes"
 
@@ -103,7 +106,7 @@ async def create_invite(created_by: str, role: str = "admin") -> str:
     now = time.time()
     await _invite_coll().insert_one({
         "code": code,
-        "role": role if role in ("admin", "owner") else "admin",
+        "role": role if role in VALID_INVITE_ROLES else "admin",
         "created_by": created_by,
         "created_at": now,
         "expires_at": now + INVITE_TTL_SECONDS,
