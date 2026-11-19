@@ -406,7 +406,9 @@
         <button type="button" class="edit-tab active" data-tab="details" onclick="switchEditTab('details')">📝 <span>Details</span></button>
         <button type="button" class="edit-tab" data-tab="content" onclick="switchEditTab('content')">🎬 <span>Content</span></button>
         <button type="button" class="edit-tab" data-tab="subtitles" onclick="switchEditTab('subtitles')">💬 <span>Subtitles</span></button>
+        {% if 'catalog.read' in permissions %}
         <button type="button" class="edit-tab" data-tab="catalog" onclick="switchEditTab('catalog')">📚 <span>Catalog</span></button>
+        {% endif %}
         <button type="button" class="edit-tab" data-tab="rescan" onclick="switchEditTab('rescan')">🔄 <span>Rescan</span></button>
     </div>
     {% endif %}
@@ -464,7 +466,7 @@
     {% endif %}
 
 
-    {% if media_details %}
+    {% if media_details and 'catalog.read' in permissions %}
     <div class="glass-card edit-panel hidden rounded-3xl p-5 sm:p-6 lg:p-8 mb-6 sm:mb-8" data-panel="catalog">
         <div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-3 mb-5 sm:mb-6">
             <div>
@@ -624,9 +626,11 @@
                         <button onclick="runSpeedTest('{{ quality.id }}', 'movie', '{{ quality.quality }}')" class="btn-ui btn-info w-full">
                             🚀 Speed Test
                         </button>
+                        {% if 'media.delete' in permissions %}
                         <button onclick="deleteQuality('{{ quality.id }}', this)" class="btn-ui btn-danger w-full">
                             Delete
                         </button>
+                        {% endif %}
                     </div>
                 </div>
             </div>
@@ -648,10 +652,12 @@
                         </div>
 
                         <div class="flex items-center gap-2 flex-shrink-0">
+                            {% if 'media.delete' in permissions %}
                             <button type="button" onclick="deleteTVSeason({{ season.season_number }}, this)" class="btn-ui btn-danger px-3 py-2 text-xs sm:text-sm" title="Delete entire Season {{ season.season_number }}">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                                 <span class="hidden sm:inline">Delete Season</span>
                             </button>
+                            {% endif %}
                             <button type="button" onclick="toggleSeason({{ loop.index0 }})" class="btn-ui btn-ghost px-3 py-2">
                                 <svg id="season-arrow-{{ loop.index0 }}" class="w-4 h-4 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
@@ -673,9 +679,11 @@
                                 <div class="flex-1 min-w-0">
                                     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
                                         <h5 class="text-sm sm:text-base font-semibold text-white text-center sm:text-left">{{ episode.title }}</h5>
+                                        {% if 'media.delete' in permissions %}
                                         <button onclick="deleteTVEpisode({{ season.season_number }}, {{ episode.episode_number }}, this)" class="btn-ui btn-danger px-3 py-2 text-xs sm:text-sm w-full sm:w-auto">
                                             Delete Episode
                                         </button>
+                                        {% endif %}
                                     </div>
 
                                     <div class="space-y-2" data-ep-qualities>
@@ -699,9 +707,11 @@
                                                     <button onclick="runSpeedTest('{{ quality.id }}', 'tv', '{{ quality.quality }}')" class="btn-ui btn-info w-full text-xs sm:text-sm">
                                                         🚀 Speed Test
                                                     </button>
+                                                    {% if 'media.delete' in permissions %}
                                                     <button onclick="deleteTVQuality({{ season.season_number }}, {{ episode.episode_number }}, '{{ quality.id }}', this)" class="btn-ui btn-danger w-full text-xs sm:text-sm">
                                                         Delete
                                                     </button>
+                                                    {% endif %}
                                                 </div>
                                             </div>
                                         </div>
@@ -1324,6 +1334,8 @@
     const CURRENT_TMDB_ID = Number("{{ tmdb_id }}");
     const CURRENT_DB_INDEX = Number("{{ db_index }}");
     const CURRENT_MEDIA_TYPE = "{{ media_type }}";
+    const CAN_DELETE = {{ 'true' if 'media.delete' in permissions else 'false' }};
+    const CAN_USE_CATALOGS = {{ 'true' if 'catalog.read' in permissions else 'false' }};
 
     let meSubscriptionOn = false;
     let meTokens = [];
@@ -1595,8 +1607,10 @@
     document.addEventListener('DOMContentLoaded', () => {
         const select = document.getElementById('custom-catalog-select');
         if (select) select.addEventListener('change', updateCatalogDropdownStatus);
-        loadMediaCatalogDropdown();
-        loadMediaVisibilityDeps();
+        if (CAN_USE_CATALOGS) {
+            loadMediaCatalogDropdown();
+            loadMediaVisibilityDeps();
+        }
         document.querySelectorAll('.season-content').forEach((content, index) => {
             if (index > 0) {
                 content.classList.add('season-collapsed');
@@ -2010,7 +2024,7 @@
                         </div>
                         <p class="muted mt-2 text-sm break-all">${s.name || ''}</p>
                     </div>
-                    <button onclick="removeSubtitle(${s.chat_id}, ${s.msg_id}, this)" class="btn-ui btn-danger w-full sm:w-auto">Delete</button>
+                    ${CAN_DELETE ? `<button onclick="removeSubtitle(${s.chat_id}, ${s.msg_id}, this)" class="btn-ui btn-danger w-full sm:w-auto">Delete</button>` : ''}
                 </div>`;
             }).join('');
         } catch (e) {

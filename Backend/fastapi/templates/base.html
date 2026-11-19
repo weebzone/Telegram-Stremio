@@ -520,7 +520,7 @@ if (!navigator.clipboard) Object.defineProperty(navigator, 'clipboard', { value:
     {% if current_user %}
     <div id="nav-container" class="hidden md:flex relative isolate min-w-0 justify-self-center items-center gap-1 p-1 bg-black/10 rounded-full border border-hairline">
         <div id="active-pill" class="pointer-events-none"></div>
-        <a href="/" class="nav-link">Home</a>
+        {% if 'staff' in permissions %}<a href="/" class="nav-link">Home</a>{% endif %}
         {% if 'media.read' in permissions %}<a href="/media/manage" class="nav-link">Media</a>{% endif %}
         {% if 'catalog.read' in permissions %}<a href="/catalogs" class="nav-link">Catalogs</a>{% endif %}
         {% if 'imports.read' in permissions %}<a href="/admin/imports" class="nav-link">Imports</a>{% endif %}
@@ -621,7 +621,7 @@ if (!navigator.clipboard) Object.defineProperty(navigator, 'clipboard', { value:
 
     <div id="mobile-menu" class="absolute top-[calc(100%+12px)] left-0 w-full overflow-hidden max-h-0 opacity-0 transition-all duration-300 ease-in-out md:hidden z-40">
         <div class="glass-panel mx-2 rounded-3xl p-4 flex flex-col gap-2">
-            <a href="/" class="px-4 py-3 rounded-xl hover:bg-primary hover:text-background transition flex items-center gap-3 font-semibold"><i class="fa-solid fa-house"></i> Home</a>
+            {% if 'staff' in permissions %}<a href="/" class="px-4 py-3 rounded-xl hover:bg-primary hover:text-background transition flex items-center gap-3 font-semibold"><i class="fa-solid fa-house"></i> Home</a>{% endif %}
             {% if 'media.read' in permissions %}<a href="/media/manage" class="px-4 py-3 rounded-xl hover:bg-primary hover:text-background transition flex items-center gap-3 font-semibold"><i class="fa-solid fa-clapperboard"></i> Media</a>{% endif %}
             {% if 'catalog.read' in permissions %}<a href="/catalogs" class="px-4 py-3 rounded-xl hover:bg-primary hover:text-background transition flex items-center gap-3 font-semibold"><i class="fa-solid fa-layer-group"></i> Catalogs</a>{% endif %}
             {% if 'imports.read' in permissions %}<a href="/admin/imports" class="px-4 py-3 rounded-xl hover:bg-primary hover:text-background transition flex items-center gap-3 font-semibold"><i class="fa-solid fa-triangle-exclamation"></i> Imports</a>{% endif %}

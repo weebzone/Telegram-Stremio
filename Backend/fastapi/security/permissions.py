@@ -20,6 +20,7 @@ ROLE_PERMISSIONS: dict[str, Set[str]] = {
         "staff",
         "media.read",
         "media.write",
+        "media.delete",
         "catalog.read",
         "catalog.write",
         "token.write",
@@ -36,10 +37,8 @@ ROLE_PERMISSIONS: dict[str, Set[str]] = {
     "uploader": {
         "media.read",
         "media.write",
-        "catalog.read",
         "imports.read",
         "imports.map",
-        "analytics.read",
     },
     "viewer": {"media.read", "catalog.read", "analytics.read"},
 }
@@ -168,6 +167,8 @@ def required_permission(method: str, path: str) -> Optional[str]:
         return "imports.read" if read else "imports.map"
 
     #----- Analytics / system telemetry
+    if p.startswith("/api/system/speedtest"):
+        return "media.read"
     if (
         p.startswith("/api/admin/stream-analytics")
         or p.startswith("/api/admin/user-activity")
@@ -180,6 +181,8 @@ def required_permission(method: str, path: str) -> Optional[str]:
         return "analytics.read"
 
     #----- Content
+    if p.startswith("/api/media/delete") or p.startswith("/api/media/subtitles/remove"):
+        return "media.delete"
     if p.startswith("/api/media") or p.startswith("/media/"):
         return "media.read" if read else "media.write"
     if p.startswith("/api/custom-catalogs") or p == "/catalogs":

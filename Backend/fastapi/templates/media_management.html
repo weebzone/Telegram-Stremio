@@ -329,6 +329,7 @@
                        class="flex-1 min-w-[80px] inline-flex items-center justify-center gap-2 px-3 py-2 rounded-2xl bg-primary hover:bg-primary/90 text-white text-xs font-bold transition shadow-lg shadow-primary/20">
                         <i class="fa-solid fa-pen-to-square"></i> Edit
                     </a>
+                    {% if 'media.delete' in permissions %}
                     <button onclick="deleteMedia(this)"
                             data-tmdb-id="${item.tmdb_id}" 
                             data-db-index="${item.db_index ?? ''}" 
@@ -336,6 +337,7 @@
                             class="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-2xl glass-panel hover:bg-red-500/10 text-red-300 text-xs font-bold transition border border-hairline">
                         <i class="fa-solid fa-trash"></i>
                     </button>
+                    {% endif %}
                     ${mediaType === 'tv' ? `
                     <button onclick="openCoverage('${item.tmdb_id}', '${item.db_index ?? ''}')"
                             title="Episode coverage"

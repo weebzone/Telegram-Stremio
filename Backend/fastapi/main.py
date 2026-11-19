@@ -303,8 +303,11 @@ async def open_in_app(app_name: str, media_type: str, content_id: str):
 
 
 #----- Protected routes (authentication required)
-@app.get("/", response_class=HTMLResponse)
+@app.get("/")
 async def root(request: Request, _: bool = Depends(require_auth)):
+    #----- Uploaders have no dashboard: land them straight on Media
+    if getattr(request.state, "role", None) == "uploader":
+        return RedirectResponse(url="/media/manage", status_code=302)
     return await dashboard_page(request, _)
 
 @app.get("/admin/dashboard", response_class=HTMLResponse)

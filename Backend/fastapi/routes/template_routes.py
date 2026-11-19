@@ -7,6 +7,8 @@ from fastapi.templating import Jinja2Templates
 from Backend import StartTime, __version__, db
 from Backend.config import Telegram
 from Backend.fastapi.security.credentials import get_current_user, is_authenticated, require_auth, verify_credentials
+from Backend.fastapi.security.middleware import AuthorizationMiddleware
+from Backend.fastapi.security.permissions import permissions_for
 from Backend.fastapi.themes import DEFAULT_THEME, DEFAULT_STYLE, get_all_themes, get_all_styles, get_theme
 from Backend.helper.analytics import get_activity_overview
 from Backend.helper.custom_dl import ACTIVE_STREAMS, RECENT_STREAMS
@@ -53,15 +55,35 @@ async def login_page(request: Request):
     return templates.TemplateResponse("login.html", _base_context(request))
 
 
+#----- Landing route per role: uploaders work from Media, everyone else from Home
+_ROLE_LANDING = {"uploader": "/media/manage"}
+
+
+async def _landing_url(request: Request) -> str:
+    state = getattr(request, "state", None)
+    return _ROLE_LANDING.get(getattr(state, "role", None), "/")
+
+
 #----- Handle login submission
 async def login_post(request: Request, username: str = Form(...), password: str = Form(...)):
     if verify_credentials(username, password):
         request.session["authenticated"] = True
         request.session["username"] = username
-        return RedirectResponse(url="/", status_code=302)
+        await _apply_role_to_state(request, username)
+        return RedirectResponse(url=await _landing_url(request), status_code=302)
     ctx = _base_context(request)
     ctx["error"] = "Invalid credentials"
     return templates.TemplateResponse("login.html", ctx)
+
+
+#----- Resolve the role before the next request runs (login bypasses middleware)
+async def _apply_role_to_state(request: Request, username: str) -> None:
+    try:
+        role = await AuthorizationMiddleware._resolve_role(username)
+    except Exception:
+        role = None
+    request.state.role = role
+    request.state.permissions = permissions_for(role)
 
 
 #----- Clear the session and return to login
@@ -87,7 +109,6 @@ async def dashboard_page(request: Request, _: bool = Depends(require_auth)):
     try:
         db_stats = await db.get_database_stats()
         total_movies, total_tv_shows = db.content_totals(db_stats)
-
         now = time.time()
         PRUNE_SECONDS = 3
         for sid, info in list(ACTIVE_STREAMS.items()):
