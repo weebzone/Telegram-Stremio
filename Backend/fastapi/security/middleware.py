@@ -38,7 +38,8 @@ class AuthorizationMiddleware(BaseHTTPMiddleware):
         request.state.permissions = permissions_for(role)
 
         # Account deleted or disabled after the session was issued.
-        if role is None:
+        # /logout and /login must stay reachable or the redirect below loops.
+        if role is None and path not in ("/logout", "/login"):
             if path.startswith("/api/"):
                 return JSONResponse({"detail": "Forbidden"}, status_code=403)
             return RedirectResponse("/logout", status_code=302)
