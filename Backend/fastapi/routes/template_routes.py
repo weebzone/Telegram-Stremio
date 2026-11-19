@@ -306,6 +306,13 @@ async def settings_page(request: Request, _: bool = Depends(require_auth)):
     return templates.TemplateResponse("settings.html", ctx)
 
 
+#----- Incomplete series (missing seasons/episodes)
+async def incomplete_page(request: Request, _: bool = Depends(require_auth)):
+    ctx = _base_context(request)
+    ctx["current_user"] = get_current_user(request)
+    return templates.TemplateResponse("incomplete.html", ctx)
+
+
 #----- Failed imports review page (uploader + admins)
 async def imports_page(request: Request, _: bool = Depends(require_auth)):
     ctx = _base_context(request)

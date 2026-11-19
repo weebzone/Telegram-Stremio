@@ -123,6 +123,7 @@ from Backend.fastapi.routes.stremio_routes import router as stremio_router
 from Backend.fastapi.routes.webdav_routes import router as webdav_router
 from Backend.fastapi.routes.admin_users_routes import router as admin_users_router
 from Backend.fastapi.routes.imports_routes import router as imports_router
+from Backend.fastapi.routes.incomplete_routes import router as incomplete_router
 from Backend.fastapi.routes.template_routes import (
     admin_access_page,
     admin_dashboard_page,
@@ -133,6 +134,7 @@ from Backend.fastapi.routes.template_routes import (
     dashboard_page,
     edit_media_page,
     imports_page,
+    incomplete_page,
     login_page,
     login_post,
     logout,
@@ -190,6 +192,7 @@ app.include_router(stremio_router)
 app.include_router(webdav_router)
 app.include_router(admin_users_router)
 app.include_router(imports_router)
+app.include_router(incomplete_router)
 
 
 #----- Public routes (no authentication)
@@ -815,6 +818,11 @@ async def admin_restart(_: bool = Depends(require_auth)):
 @app.get("/admin/imports", response_class=HTMLResponse)
 async def admin_imports(request: Request, _: bool = Depends(require_auth)):
     return await imports_page(request, _)
+
+
+@app.get("/media/incomplete", response_class=HTMLResponse)
+async def media_incomplete(request: Request, _: bool = Depends(require_auth)):
+    return await incomplete_page(request, _)
 
 
 #----- Tools (WebUI replacement for /scan, /rescan, /dbcheck bot commands)

@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+{% block title %}Incomplete Series · Telegram Stremio{% endblock %}
+
+{% block content %}
+<section class="space-y-5">
+  <div class="glass-panel rounded-3xl p-5 sm:p-6">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <h1 class="text-xl sm:text-2xl font-extrabold flex items-center gap-2">
+          <i class="fa-solid fa-layer-group text-amber-400"></i>
+          Incomplete Series
+        </h1>
+        <p class="text-sm text-text-secondary mt-1">
+          Shows with missing seasons or episodes, compared against the full Cinemeta listing.
+        </p>
+      </div>
+      <div class="flex items-center gap-2">
+        <input id="search-input" class="field px-3 py-2 text-sm w-48 sm:w-64" placeholder="Search a show">
+        <button class="btn-ghost px-4 py-2 text-sm" onclick="loadIncomplete()">
+          <i class="fa-solid fa-rotate"></i> Refresh
+        </button>
+        <button class="btn-ghost px-4 py-2 text-sm" onclick="loadIncomplete(true)" title="Recheck coverage against Cinemeta">
+          <i class="fa-solid fa-arrows-rotate"></i> Recheck
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="incomplete-list" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"></div>
+  <div class="flex items-center justify-between px-1">
+    <button id="prev-btn" class="btn-ghost px-4 py-2 text-sm" onclick="changePage(-1)">Previous</button>
+    <span id="page-label" class="text-xs text-text-secondary"></span>
+    <button id="next-btn" class="btn-ghost px-4 py-2 text-sm" onclick="changePage(1)">Next</button>
+  </div>
+</section>
+
+<div id="missing-modal" class="fixed inset-0 z-[80] hidden items-center justify-center p-4" style="background:rgba(0,0,0,.55)">
+  <div class="glass-panel rounded-3xl p-5 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+    <div class="flex items-start justify-between gap-3">
+      <div class="min-w-0">
+        <h2 id="missing-title" class="text-lg font-extrabold break-words"></h2>
+        <p id="missing-subtitle" class="text-xs text-text-secondary mt-1"></p>
+      </div>
+      <button class="btn-ghost w-9 h-9" onclick="closeMissing()" title="Close"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div id="missing-body" class="mt-4 space-y-3"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  let page = 1;
+  let pageSize = 24;
+  let total = 0;
+
+  function esc(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+  }
+
+  function episodesLabel(episodes) {
+    const eps = [...new Set((episodes || []).map(Number))].filter(n => n > 0).sort((a, b) => a - b);
+    const out = [];
+    let start = null, prev = null;
+    for (const e of eps) {
+      if (start === null) { start = prev = e; continue; }
+      if (e === prev + 1) { prev = e; continue; }
+      out.push(start === prev ? `E${start}` : `E${start}-E${prev}`);
+      start = prev = e;
+    }
+    if (start !== null) out.push(start === prev ? `E${start}` : `E${start}-E${prev}`);
+    return out.join(', ');
+  }
+
+  function covClass(pct) {
+    if (pct >= 90) return 'text-amber-300';
+    if (pct >= 60) return 'text-orange-300';
+    return 'text-red-300';
+  }
+
+  window.loadIncomplete = async function (refresh) {
+    const box = document.getElementById('incomplete-list');
+    const search = document.getElementById('search-input').value.trim();
+    box.innerHTML = '<div class="glass-panel rounded-2xl p-6 text-sm text-text-secondary">Loading…</div>';
+    try {
+      const url = `/api/media/incomplete?page=${page}&page_size=${pageSize}`
+        + `&search=${encodeURIComponent(search)}&refresh=${refresh ? 'true' : 'false'}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Request failed');
+      total = data.total || 0;
+      render(data.items || []);
+    } catch (e) {
+      box.innerHTML = `<div class="glass-panel rounded-2xl p-6 text-sm text-red-400">${esc(e.message || e)}</div>`;
+    }
+  };
+
+  function render(items) {
+    const box = document.getElementById('incomplete-list');
+    if (!items.length) {
+      box.innerHTML = '<div class="glass-panel rounded-2xl p-6 text-sm text-text-secondary sm:col-span-2 lg:col-span-3 xl:col-span-4">No incomplete series found.</div>';
+    } else {
+      box.innerHTML = items.map(function (item) {
+        const summary = (item.missing || []).map(function (m) {
+          return `S${esc(m.season)}: ${esc(episodesLabel(m.episodes))}`;
+        }).join(' · ');
+        return `<div class="glass-panel rounded-2xl overflow-hidden flex flex-col">
+          ${item.poster ? `<img src="${esc(item.poster)}" alt="" style="width:100%;aspect-ratio:2/3;object-fit:cover">` : ''}
+          <div class="p-4 flex-1 flex flex-col">
+            <h3 class="font-bold text-sm text-text line-clamp-2" title="${esc(item.title)}">${esc(item.title)}</h3>
+            <div class="mt-2 flex items-center justify-between text-xs">
+              <span class="${covClass(item.coverage_pct)} font-bold">${esc(item.coverage_pct)}% complete</span>
+              <span class="text-text-secondary">${esc(item.total_have)}/${esc(item.total_expected)}</span>
+            </div>
+            <p class="mt-2 text-xs text-text-secondary break-words">${summary}</p>
+            <div class="mt-3 flex flex-wrap gap-2">
+              <button class="btn-ghost px-3 py-2 text-xs" data-title="${esc(item.title)}" data-summary="${esc(summary)}" data-body='${esc(JSON.stringify(item.missing || []))}' onclick="showMissing(this)">
+                <i class="fa-solid fa-list-check"></i> Missing episodes
+              </button>
+              <a class="btn-primary px-3 py-2 text-xs"
+                 href="/media/edit?tmdb_id=${encodeURIComponent(item.tmdb_id)}&db_index=${encodeURIComponent(item.db_index ?? 1)}&media_type=tv">
+                <i class="fa-solid fa-pen-to-square"></i> Edit
+              </a>
+            </div>
+          </div>
+        </div>`;
+      }).join('');
+    }
+    const pages = Math.max(1, Math.ceil(total / pageSize));
+    document.getElementById('page-label').textContent = `Page ${page} of ${pages} · ${total} show(s)`;
+    document.getElementById('prev-btn').disabled = page <= 1;
+    document.getElementById('next-btn').disabled = page >= pages;
+  }
+
+  window.changePage = function (delta) {
+    const pages = Math.max(1, Math.ceil(total / pageSize));
+    const next = Math.min(pages, Math.max(1, page + delta));
+    if (next === page) return;
+    page = next;
+    loadIncomplete();
+  };
+
+  window.showMissing = function (btn) {
+    const title = btn.dataset.title || '';
+    let missing = [];
+    try { missing = JSON.parse(btn.dataset.body || '[]'); } catch (e) { missing = []; }
+    document.getElementById('missing-title').textContent = title;
+    document.getElementById('missing-subtitle').textContent =
+      `${missing.reduce((n, m) => n + (m.episodes || []).length, 0)} missing episode(s)`;
+    document.getElementById('missing-body').innerHTML = missing.length
+      ? missing.map(function (m) {
+          const chips = (m.episodes || []).map(function (e) {
+            return `<span class="badge" style="margin:0 .25rem .25rem 0">E${esc(e)}</span>`;
+          }).join('');
+          return `<div class="surface-card rounded-2xl p-3">
+            <p class="text-xs text-text-secondary font-bold mb-2">Season ${esc(m.season)}</p>
+            <div class="flex flex-wrap">${chips}</div>
+          </div>`;
+        }).join('')
+      : '<p class="text-sm text-text-secondary">Nothing missing.</p>';
+    const modal = document.getElementById('missing-modal');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+  };
+
+  window.closeMissing = function () {
+    const modal = document.getElementById('missing-modal');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+  };
+
+  document.getElementById('search-input').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { page = 1; loadIncomplete(); }
+  });
+  document.getElementById('missing-modal').addEventListener('click', function (e) {
+    if (e.target === this) closeMissing();
+  });
+
+  loadIncomplete();
+})();
+</script>
+{% endblock %}

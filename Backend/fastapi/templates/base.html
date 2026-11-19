@@ -522,6 +522,7 @@ if (!navigator.clipboard) Object.defineProperty(navigator, 'clipboard', { value:
         <div id="active-pill" class="pointer-events-none"></div>
         {% if 'staff' in permissions %}<a href="/" class="nav-link">Home</a>{% endif %}
         {% if 'media.read' in permissions %}<a href="/media/manage" class="nav-link">Media</a>{% endif %}
+        {% if 'media.read' in permissions %}<a href="/media/incomplete" class="nav-link">Incomplete</a>{% endif %}
         {% if 'catalog.read' in permissions %}<a href="/catalogs" class="nav-link">Catalogs</a>{% endif %}
         {% if 'imports.read' in permissions %}<a href="/admin/imports" class="nav-link">Imports</a>{% endif %}
         {% if 'staff' in permissions %}<a href="/admin/dashboard" class="nav-link">Admin</a>{% endif %}
@@ -623,6 +624,7 @@ if (!navigator.clipboard) Object.defineProperty(navigator, 'clipboard', { value:
         <div class="glass-panel mx-2 rounded-3xl p-4 flex flex-col gap-2">
             {% if 'staff' in permissions %}<a href="/" class="px-4 py-3 rounded-xl hover:bg-primary hover:text-background transition flex items-center gap-3 font-semibold"><i class="fa-solid fa-house"></i> Home</a>{% endif %}
             {% if 'media.read' in permissions %}<a href="/media/manage" class="px-4 py-3 rounded-xl hover:bg-primary hover:text-background transition flex items-center gap-3 font-semibold"><i class="fa-solid fa-clapperboard"></i> Media</a>{% endif %}
+            {% if 'media.read' in permissions %}<a href="/media/incomplete" class="px-4 py-3 rounded-xl hover:bg-primary hover:text-background transition flex items-center gap-3 font-semibold"><i class="fa-solid fa-layer-group"></i> Incomplete</a>{% endif %}
             {% if 'catalog.read' in permissions %}<a href="/catalogs" class="px-4 py-3 rounded-xl hover:bg-primary hover:text-background transition flex items-center gap-3 font-semibold"><i class="fa-solid fa-layer-group"></i> Catalogs</a>{% endif %}
             {% if 'imports.read' in permissions %}<a href="/admin/imports" class="px-4 py-3 rounded-xl hover:bg-primary hover:text-background transition flex items-center gap-3 font-semibold"><i class="fa-solid fa-triangle-exclamation"></i> Imports</a>{% endif %}
             {% if 'staff' in permissions %}<a href="/admin/dashboard" class="px-4 py-3 rounded-xl hover:bg-primary hover:text-background transition flex items-center gap-3 font-semibold"><i class="fa-solid fa-chart-line"></i> Admin</a>{% endif %}
