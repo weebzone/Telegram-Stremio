@@ -64,11 +64,53 @@
       <input id="map-episode" type="number" min="0" class="field px-3 py-2 text-sm" placeholder="Episode (optional)">
     </div>
 
+    <div class="mt-3">
+      <input id="map-quality" class="field px-3 py-2 text-sm w-full"
+             placeholder="Quality if the file has none (e.g. 1080p)"
+             oninput="mapQuality = this.value">
+    </div>
+
     <div id="map-results" class="mt-4 space-y-2"></div>
 
     <div class="flex justify-end gap-2 mt-4">
       <button class="btn-ghost px-4 py-2 text-sm" onclick="closeMap()">Cancel</button>
       <button id="map-confirm" class="btn-primary px-4 py-2 text-sm" disabled onclick="confirmMap()">Map this file</button>
+    </div>
+  </div>
+</div>
+
+<div id="quality-modal" class="fixed inset-0 z-[80] hidden items-center justify-center p-4" style="background:rgba(0,0,0,.55)">
+  <div class="glass-panel rounded-3xl p-5 w-full max-w-lg">
+    <div class="flex items-start justify-between gap-3">
+      <div class="min-w-0">
+        <h2 class="text-lg font-extrabold">Add quality</h2>
+        <p id="quality-file" class="text-xs text-text-secondary mt-1 break-all"></p>
+      </div>
+      <button class="btn-ghost w-9 h-9" onclick="closeQuality()" title="Close"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+
+    <div class="mt-4">
+      <label class="text-[10px] uppercase text-text-secondary font-bold mb-2 block">Quality</label>
+      <div class="flex flex-wrap gap-2 mb-3">
+        <button type="button" class="btn-ghost px-3 py-1.5 text-xs" onclick="pickQuality('480p')">480p</button>
+        <button type="button" class="btn-ghost px-3 py-1.5 text-xs" onclick="pickQuality('720p')">720p</button>
+        <button type="button" class="btn-ghost px-3 py-1.5 text-xs" onclick="pickQuality('1080p')">1080p</button>
+        <button type="button" class="btn-ghost px-3 py-1.5 text-xs" onclick="pickQuality('2160p')">2160p</button>
+      </div>
+      <input id="quality-input" class="field px-3 py-2 text-sm w-full" placeholder="e.g. 1080p"
+             onkeydown="if(event.key==='Enter'){event.preventDefault();confirmQuality()}">
+    </div>
+
+    <label class="flex items-start gap-2 mt-4 text-xs text-text-secondary">
+      <input id="quality-edit-caption" type="checkbox" checked class="mt-0.5">
+      <span>Add the quality to the Telegram caption (before the extension), so future scans detect it.</span>
+    </label>
+
+    <p id="quality-hint" class="text-xs text-text-secondary mt-3"></p>
+
+    <div class="flex justify-end gap-2 mt-4">
+      <button class="btn-ghost px-4 py-2 text-sm" onclick="closeQuality()">Cancel</button>
+      <button id="quality-confirm" class="btn-primary px-4 py-2 text-sm" onclick="confirmQuality()">Save quality</button>
     </div>
   </div>
 </div>
@@ -80,6 +122,8 @@
   let total = 0;
   let currentId = null;
   let selectedId = null;
+  let qualityItemId = null;
+  let mapQuality = '';
 
   function esc(value) {
     return String(value == null ? '' : value)
@@ -93,8 +137,17 @@
   }
 
   function reasonLabel(reason) {
-    if (reason === 'metadata_failed') return 'Metadata not found';
-    return reason || 'Unknown';
+    const labels = {
+      no_quality: 'No quality detected',
+      no_title: 'No title detected',
+      not_found: 'Title not found',
+      invalid_episode: 'Invalid season/episode',
+      combined: 'Combined release',
+      multipart: 'Multipart video',
+      error: 'Parser error',
+      metadata_failed: 'Metadata failed'
+    };
+    return labels[reason] || reason || 'Unknown';
   }
 
   window.loadImports = async function () {
@@ -134,6 +187,7 @@
               <p class="text-xs text-text-secondary mt-1 break-all">${esc(it.caption || '')}</p>
               <div class="flex flex-wrap items-center gap-3 mt-2 text-[11px] text-text-secondary">
                 <span class="badge">${esc(reasonLabel(it.reason))}</span>
+                ${it.quality ? `<span class="badge" style="background:color-mix(in srgb,var(--primary) 18%,transparent)">${esc(it.quality)}</span>` : ''}
                 <span>${esc(it.size_label || '')}</span>
                 <span>attempts: ${esc(it.attempts || 0)}</span>
                 <span>${esc(fmtDate(it.created_at))}</span>
@@ -142,8 +196,11 @@
               </div>
             </div>
             <div class="flex items-center gap-2">
-              ${canMap ? `<button class="btn-primary px-3 py-2 text-xs" data-id="${esc(it.id)}" data-label="${esc(label)}" onclick="openMap(this)">
+              ${canMap ? `<button class="btn-primary px-3 py-2 text-xs" data-id="${esc(it.id)}" data-label="${esc(label)}" data-quality="${esc(it.quality || '')}" onclick="openMap(this)">
                 <i class="fa-solid fa-wand-magic-sparkles"></i> Map
+              </button>` : ''}
+              ${canMap ? `<button class="btn-ghost px-3 py-2 text-xs" data-id="${esc(it.id)}" data-label="${esc(label)}" data-quality="${esc(it.quality || '')}" onclick="openQuality(this)">
+                <i class="fa-solid fa-gauge-high"></i> ${it.quality ? 'Change quality' : 'Add quality'}
               </button>` : ''}
               ${canMap ? `<button class="btn-ghost px-3 py-2 text-xs" data-id="${esc(it.id)}" onclick="ignoreImport(this)">Ignore</button>` : ''}
             </div>
@@ -170,6 +227,8 @@
     const label = btn.dataset.label || '';
     currentId = id;
     selectedId = null;
+    mapQuality = btn.dataset.quality || '';
+    document.getElementById('map-quality').value = mapQuality;
     document.getElementById('map-file').textContent = label;
     document.getElementById('map-query').value = label || '';
     document.getElementById('map-results').innerHTML = '';
@@ -251,7 +310,8 @@
         selected_id: selectedId,
         media_type: document.getElementById('map-type').value,
         season: seasonRaw === '' ? null : Number(seasonRaw),
-        episode: episodeRaw === '' ? null : Number(episodeRaw)
+        episode: episodeRaw === '' ? null : Number(episodeRaw),
+        quality: (mapQuality || '').trim() || null
       };
       const res = await fetch(`/api/admin/imports/${encodeURIComponent(currentId)}/map`, {
         method: 'POST',
@@ -284,12 +344,72 @@
     }
   };
 
+  window.openQuality = function (btn) {
+    qualityItemId = btn.dataset.id;
+    document.getElementById('quality-file').textContent = btn.dataset.label || '';
+    document.getElementById('quality-input').value = btn.dataset.quality || '';
+    document.getElementById('quality-edit-caption').checked = true;
+    document.getElementById('quality-hint').textContent =
+      'After saving we retry the automatic match with this quality.';
+    const modal = document.getElementById('quality-modal');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    document.getElementById('quality-input').focus();
+  };
+
+  window.closeQuality = function () {
+    const modal = document.getElementById('quality-modal');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+    qualityItemId = null;
+  };
+
+  window.pickQuality = function (value) {
+    document.getElementById('quality-input').value = value;
+  };
+
+  window.confirmQuality = async function () {
+    const quality = document.getElementById('quality-input').value.trim();
+    if (!qualityItemId || !quality) return;
+    const btn = document.getElementById('quality-confirm');
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
+    try {
+      const res = await fetch(`/api/admin/imports/${encodeURIComponent(qualityItemId)}/quality`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          quality: quality,
+          edit_caption: document.getElementById('quality-edit-caption').checked,
+          retry: true
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Could not save the quality');
+      closeQuality();
+      loadImports();
+      if (data.mapped) {
+        alert(`Mapped automatically to ${data.media_type} #${data.tmdb_id}.`);
+      } else {
+        alert('Quality saved. The title still needs manual mapping — use Map.');
+      }
+    } catch (e) {
+      alert(e.message || String(e));
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Save quality';
+    }
+  };
+
   document.getElementById('status-filter').addEventListener('change', function () { page = 1; loadImports(); });
   document.getElementById('search-input').addEventListener('keydown', function (e) {
     if (e.key === 'Enter') { page = 1; loadImports(); }
   });
   document.getElementById('map-modal').addEventListener('click', function (e) {
     if (e.target === this) closeMap();
+  });
+  document.getElementById('quality-modal').addEventListener('click', function (e) {
+    if (e.target === this) closeQuality();
   });
 
   loadImports();

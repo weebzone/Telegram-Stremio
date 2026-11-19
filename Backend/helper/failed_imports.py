@@ -47,6 +47,7 @@ async def record(
     size_bytes: int = 0,
     size_label: str = "",
     skip_msg_id=None,
+    quality: str = "",
 ) -> None:
     now = time.time()
     set_fields = {
@@ -59,6 +60,8 @@ async def record(
     }
     if skip_msg_id is not None:
         set_fields["skip_msg_id"] = skip_msg_id
+    if quality:
+        set_fields["quality"] = quality
 
     try:
         await _coll().update_one(
@@ -117,6 +120,18 @@ async def get_item(item_id: str) -> Optional[Dict[str, Any]]:
         return None
     doc = await _coll().find_one({"_id": oid})
     return _serialize(doc) if doc else None
+
+
+async def set_quality(item_id: str, quality: str) -> bool:
+    try:
+        oid = ObjectId(item_id)
+    except Exception:
+        return False
+    res = await _coll().update_one(
+        {"_id": oid},
+        {"$set": {"quality": quality, "updated_at": time.time()}},
+    )
+    return res.matched_count > 0
 
 
 async def set_status(

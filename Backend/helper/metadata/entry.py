@@ -66,10 +66,17 @@ async def metadata(
     msg_id,
     override_id: str = None,
     season_hint: int = None,
+    quality_override: str = None,
+    diag: dict = None,
 ) -> dict | None:
+    def _fail(reason: str):
+        if diag is not None:
+            diag["reason"] = reason
+        return None
+
     if is_multipart_video(filename):
         LOGGER.info(f"Skipping {filename}: split video file not meant to be combined in Stremio")
-        return None
+        return _fail("multipart")
 
     split_info = parse_split_info(filename)
     part_number = split_info[1] if split_info else None
@@ -86,13 +93,15 @@ async def metadata(
     excess = parsed.get("excess")
     if not combined and excess and any("combined" in item.lower() for item in excess):
         LOGGER.info(f"Skipping {filename}: contains 'combined'")
-        return None
+        return _fail("combined")
 
     title = parsed.get("title")
     season = parsed.get("season")
     episode = parsed.get("episode")
     year = parsed.get("year")
-    quality = parsed.get("quality")
+    # A manually supplied quality wins over a missing one; an explicit one in
+    # the filename still takes precedence so rescans stay deterministic.
+    quality = parsed.get("quality") or quality_override
 
     if season_hint is not None and episode and not season and not isinstance(episode, list):
         season = season_hint
@@ -108,7 +117,7 @@ async def metadata(
         season, episode = combined["season"], combined["start"] or 1
     elif isinstance(season, list) or isinstance(episode, list):
         LOGGER.warning(f"Invalid season/episode format for {filename}: {parsed}")
-        return None
+        return _fail("invalid_episode")
     elif season and not episode:
         combined = {"season": season, "start": None, "end": None}
         episode = 1
@@ -144,10 +153,10 @@ async def metadata(
 
     if not quality:
         LOGGER.warning(f"Skipping {filename}: No resolution (parsed={parsed})")
-        return None
+        return _fail("no_quality")
     if not title:
         LOGGER.info(f"No title parsed from: {filename} (parsed={parsed})")
-        return None
+        return _fail("no_title")
 
     # Strip absolute episode / release-group noise from the search title so
     # "One Piece - 1172" does not match "One Piece Egghead Arc Recap".
@@ -222,10 +231,12 @@ async def metadata(
             result["part_number"] = part_number
         if result:
             ensure_media_ids(result, seed=str(result.get("title") or ""))
+        elif diag is not None:
+            diag["reason"] = "not_found"
         return result
     except Exception as e:
         LOGGER.error(f"Error while fetching metadata for {filename}: {e}\n{traceback.format_exc()}")
-        return None
+        return _fail("error")
 
 
 # ── /set candidate search ─────────────────────────────────────────────────────

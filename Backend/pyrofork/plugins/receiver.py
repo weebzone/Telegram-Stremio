@@ -242,9 +242,10 @@ async def file_receive_handler(client: Client, message: Message):
 
         _, title, msg_id, raw_size, size, channel = _extract_fields(message)
 
-        metadata_info = await metadata(clean_filename(title), int(channel), msg_id, override_id=override_id or extract_default_id(caption_with_links(message)), season_hint=season_hint)
+        diag: dict = {}
+        metadata_info = await metadata(clean_filename(title), int(channel), msg_id, override_id=override_id or extract_default_id(caption_with_links(message)), season_hint=season_hint, diag=diag)
         if metadata_info is None:
-            LOGGER.warning(f"Metadata failed for file: {title} (ID: {msg_id})")
+            LOGGER.warning(f"Metadata failed for file: {title} (ID: {msg_id}, reason: {diag.get('reason')})")
             copied = await route_to_skip_channel(client, message)
             await record_failed_import(
                 chat_id=int(channel),
@@ -255,7 +256,7 @@ async def file_receive_handler(client: Client, message: Message):
                     or title
                 ),
                 caption=message.caption or "",
-                reason="metadata_failed",
+                reason=diag.get("reason") or "metadata_failed",
                 size_bytes=raw_size,
                 size_label=size,
                 skip_msg_id=getattr(copied, "id", None),
