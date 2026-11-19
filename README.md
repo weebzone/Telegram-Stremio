@@ -57,6 +57,7 @@
   * [🐳 VPS (recommended)](#-vps-guide-recommended)
   * [🆓 Koyeb / Render / orkestr (free)](#-free-hosting-koyeb-render-orkestr)
   * [☁️ Cloudflare streaming (optional)](#️-cloudflare-streaming-optional)
+  * [🤖 Users' own bots & per-user Cloudflare](#-users-own-bots--per-user-cloudflare)
 * [📺 Watch in Nuvio / Stremio](#-watch-in-nuvio--stremio)
 * [🏅 Contributors](#-contributors)
 
@@ -827,6 +828,11 @@ Your first two databases (from `config.env`) are **locked** as *Tracking* and *S
 ### 📨 Multi-Token Clients
 Add extra **bot tokens** for faster parallel streaming under heavy load. Create more bots with [@BotFather](https://t.me/BotFather), add them as **admins** in all your AUTH channels, then paste their tokens here. Applies immediately.
 
+### 🤖 Helper Bots
+Bots that copy files into users' own channels when they stream with **their own bots**. Add them as
+**admins** in all your AUTH channels, then paste their tokens here. Users can add their own bots only
+while at least one helper bot is set. See [Users' own bots](#-users-own-bots--per-user-cloudflare).
+
 > ✅ Click **Save Settings** when done — you're live!
 
 ---
@@ -989,6 +995,42 @@ secret on Telegram. Then open **Settings → Cloudflare Streaming**:
 Save. Your bots must be in your channels, as they already are. The Worker loads your bot tokens
 from the app, so you don't enter them twice. Usage per token is reported back every 30 seconds,
 so daily and monthly limits keep working.
+
+## 🤖 Users' own bots & per-user Cloudflare
+
+A user can stream through **their own bots** instead of yours. Telegram's limits then fall on their
+bots, not on your pool. You can also give that user **their own Cloudflare Worker**.
+
+**1. Owner: turn it on.** Create 1–3 helper bots with [@BotFather](https://t.me/BotFather), add them as
+**admins** in all your AUTH channels, and paste their tokens in **Settings → Helper Bots**. Save.
+
+**2. User: add their bots.** The user opens their install link's **Configure page**
+(`/stremio/{token}/configure`). The **Your own bots** card appears only while helper bots are set.
+
+1. Create a **private channel** in Telegram.
+2. Add their own bots (up to 10) to it as **admins**.
+3. Add every helper bot shown on the card as an **admin** with **Post messages** and
+   **Delete messages** rights.
+4. Paste the **channel ID** (`-100…`) and their **bot tokens**, then tap **Save & verify**.
+
+Verify checks each bot token, every admin right, and posts a test message that each bot must read.
+The bots are saved only when every check passes. Each failed check shows why. Bots can be added or
+removed later the same way, and **Turn off own bots** stops using them.
+
+When the user plays something, a helper bot copies the file into their channel, and their bots
+stream it. The copy is deleted a day after it was last watched. If their bots fail, the stream falls
+back to your bots.
+
+**3. Owner: see who uses it.** In **Access**, users with their own bots show an **own bots** badge and
+the bot usernames.
+
+**4. Owner (optional): per-user Cloudflare Worker.** Deploy one more copy of the streaming Worker for
+that user, with its `ORIGIN_URL` set to **your** app. In **Access**, tap the user's **☁ Cloudflare**
+button (shown only for users with their own bots) and enter the Worker URL and its secret. That
+Worker streams only with that user's bots. Leave both fields empty to turn it off.
+
+**5. User: pick the route.** Once a Worker is set, the Configure page shows **Cloudflare proxy
+enabled** with **My bots / Cloudflare / Both**. The user picks one, saves and re-installs the addon.
 
 ---
 
