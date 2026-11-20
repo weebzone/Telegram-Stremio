@@ -1023,15 +1023,15 @@
 </script>
 
 <!-- Episode coverage modal -->
-<div id="coverage-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onclick="if(event.target===this)closeCoverage()">
-    <div class="glass-panel rounded-3xl border border-hairline w-full max-w-lg max-h-[85vh] overflow-y-auto">
+<div id="coverage-modal" class="hidden fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/70 backdrop-blur-sm" onclick="if(event.target===this)closeCoverage()">
+    <div class="glass-panel rounded-t-3xl sm:rounded-3xl border border-hairline w-full max-w-lg flex flex-col overflow-hidden" style="max-height:92dvh">
         <div class="flex items-center justify-between px-5 py-4 border-b border-hairline sticky top-0 glass-panel rounded-t-3xl">
             <h3 id="coverage-title" class="font-extrabold text-lg text-text">Episode Coverage</h3>
             <button onclick="closeCoverage()" class="w-9 h-9 inline-flex items-center justify-center rounded-xl text-text-secondary hover:bg-surface-2 transition">
                 <i class="fa-solid fa-xmark"></i>
             </button>
         </div>
-        <div id="coverage-body" class="p-5 grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
+        <div id="coverage-body" class="p-5 grid grid-cols-1 sm:grid-cols-2 gap-3 overflow-y-auto flex-1 min-h-0" style="overscroll-behavior:contain"></div>
     </div>
 </div>
 <style>

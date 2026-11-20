@@ -446,6 +446,24 @@ kbd.k { display: inline-grid; place-items: center; min-width: 1.4rem; height: 1.
     #rail, #account-pop { display: none; }
     #toast-container { top: calc(64px + env(safe-area-inset-top)); left: 16px; right: 16px; align-items: stretch; }
     .toast { width: auto; }
+
+    /* iOS Safari zooms the whole page when focusing a field under 16px, which
+       made the app look oversized and clipped. Keep every field at 16px. */
+    input, select, textarea, .field { font-size: 16px !important; }
+
+    /* Never let a wide element push the layout past the phone width. */
+    html, body { max-width: 100%; overflow-x: hidden; }
+    .shell, .shell > main { max-width: 100%; min-width: 0; }
+
+    /* Comfortable touch targets. */
+    .btn-primary, .btn-ghost, .btn-danger, .dock-item, .sheet-link { min-height: 44px; }
+    .icon-btn { min-width: 40px; min-height: 40px; }
+
+    /* Command palette / shortcuts fill the screen instead of floating. */
+    #cmdk, #keys { width: calc(100% - 24px); max-height: 82dvh; margin: 0 auto; }
+
+    /* Long titles and file names wrap instead of stretching the page. */
+    h1, h2, h3, .page-title { overflow-wrap: anywhere; }
 }
 
 @media (prefers-reduced-motion: reduce) {
