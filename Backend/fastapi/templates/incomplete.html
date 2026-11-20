@@ -14,19 +14,19 @@
           Shows with missing seasons or episodes, compared against the full Cinemeta listing.
         </p>
       </div>
-      <div class="flex items-center gap-2">
-        <input id="search-input" class="field px-3 py-2 text-sm w-48 sm:w-64" placeholder="Search a show">
-        <button class="btn-ghost px-4 py-2 text-sm" onclick="loadIncomplete()">
-          <i class="fa-solid fa-rotate"></i> Refresh
+      <div class="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+        <input id="search-input" class="field px-3 py-2 text-sm flex-1 min-w-[9rem] sm:flex-none sm:w-64" placeholder="Search a show">
+        <button class="btn-ghost px-3 sm:px-4 py-2 text-sm" onclick="loadIncomplete()" title="Refresh">
+          <i class="fa-solid fa-rotate"></i><span class="hidden sm:inline"> Refresh</span>
         </button>
-        <button class="btn-ghost px-4 py-2 text-sm" onclick="loadIncomplete(true)" title="Recheck coverage against Cinemeta">
-          <i class="fa-solid fa-arrows-rotate"></i> Recheck
+        <button class="btn-ghost px-3 sm:px-4 py-2 text-sm" onclick="loadIncomplete(true)" title="Recheck coverage against Cinemeta">
+          <i class="fa-solid fa-arrows-rotate"></i><span class="hidden sm:inline"> Recheck</span>
         </button>
       </div>
     </div>
   </div>
 
-  <div id="incomplete-list" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"></div>
+  <div id="incomplete-list" class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4"></div>
   <div class="flex items-center justify-between px-1">
     <button id="prev-btn" class="btn-ghost px-4 py-2 text-sm" onclick="changePage(-1)">Previous</button>
     <span id="page-label" class="text-xs text-text-secondary"></span>
@@ -85,7 +85,7 @@
   function render(items) {
     const box = document.getElementById('incomplete-list');
     if (!items.length) {
-      box.innerHTML = '<div class="glass-panel rounded-2xl p-6 text-sm text-text-secondary sm:col-span-2 lg:col-span-3 xl:col-span-4">No incomplete series found.</div>';
+      box.innerHTML = '<div class="glass-panel rounded-2xl p-6 text-sm text-text-secondary col-span-2 lg:col-span-3 xl:col-span-4">No incomplete series found.</div>';
     } else {
       box.innerHTML = items.map(function (item) {
         return `<div class="glass-panel rounded-2xl overflow-hidden flex flex-col">
