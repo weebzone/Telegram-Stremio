@@ -114,7 +114,21 @@
     const mediaType = '{{ media_type }}';
     const isCustom = {{ 'true' if custom else 'false' }};
 
-    const PAGE_SIZE = 30;
+    const ROWS_PER_PAGE = 5;
+    let PAGE_SIZE = 30;  // recalculated from the real column count on every load
+
+    // Page size follows the live grid so the last row is never half empty.
+    function gridColumns() {
+        const grid = document.getElementById('media-grid');
+        if (!grid) return 0;
+        const tpl = getComputedStyle(grid).gridTemplateColumns;
+        if (!tpl || tpl === 'none') return 0;
+        return tpl.split(' ').filter(Boolean).length;
+    }
+    function currentPageSize() {
+        const cols = gridColumns();
+        return cols ? cols * ROWS_PER_PAGE : PAGE_SIZE;
+    }
 
     function showLoading() {
         isLoading = true;
@@ -155,6 +169,7 @@
     async function loadMedia(page = 1, search = '') {
         if (isLoading) return;
 
+        PAGE_SIZE = currentPageSize();
         showLoading();
         currentPage = page;
         currentSearch = search;
@@ -440,6 +455,20 @@
         const searchInput = document.getElementById('search-input');
         if (startSearch) searchInput.value = startSearch;
         loadMedia(startPage, startSearch);
+
+        // Keep page size in sync with the real column count (no half-empty rows).
+        let lastCols = gridColumns();
+        let resizeTimer;
+        window.addEventListener('resize', () => {
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(() => {
+                const cols = gridColumns();
+                if (cols && cols !== lastCols) {
+                    lastCols = cols;
+                    loadMedia(1, currentSearch);
+                }
+            }, 350);
+        });
 
         searchInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {

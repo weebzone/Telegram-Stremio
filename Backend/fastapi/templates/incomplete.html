@@ -52,6 +52,20 @@
   let page = 1;
   let pageSize = 24;
   let total = 0;
+  const ROWS_PER_PAGE = 5;
+
+  // Page size follows the live grid so the last row is never half empty.
+  function gridColumns() {
+    const grid = document.getElementById('incomplete-list');
+    if (!grid) return 0;
+    const tpl = getComputedStyle(grid).gridTemplateColumns;
+    if (!tpl || tpl === 'none') return 0;
+    return tpl.split(' ').filter(Boolean).length;
+  }
+  function currentPageSize() {
+    const cols = gridColumns();
+    return cols ? cols * ROWS_PER_PAGE : pageSize;
+  }
 
   function esc(value) {
     return String(value == null ? '' : value)
@@ -69,6 +83,7 @@
 
   window.loadIncomplete = async function (refresh) {
     const box = document.getElementById('incomplete-list');
+    pageSize = currentPageSize();
     const search = document.getElementById('search-input').value.trim();
     box.innerHTML = '<div class="glass-panel rounded-2xl p-6 text-sm text-text-secondary">Loading…</div>';
     try {
@@ -165,6 +180,20 @@
   });
   document.getElementById('missing-modal').addEventListener('click', function (e) {
     if (e.target === this) closeMissing();
+  });
+
+  let lastCols = gridColumns();
+  let resizeTimer;
+  window.addEventListener('resize', function () {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function () {
+      const cols = gridColumns();
+      if (cols && cols !== lastCols) {
+        lastCols = cols;
+        page = 1;
+        loadIncomplete(false);
+      }
+    }, 350);
   });
 
   loadIncomplete();
