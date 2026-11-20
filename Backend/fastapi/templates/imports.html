@@ -244,7 +244,7 @@
                 ${link}
               </div>
             </div>
-            <div class="flex items-center gap-2">
+            <div class="flex flex-wrap items-center justify-end gap-2">
               ${canMap ? `<button class="btn-primary px-3 py-2 text-xs" data-id="${esc(lead.id)}" data-label="${esc(label)}" data-quality="${esc(lead.quality || '')}" onclick="openMap(this)">
                 <i class="fa-solid fa-wand-magic-sparkles"></i> ${g.items.length > 1 ? 'Map file' : 'Map'}
               </button>` : ''}

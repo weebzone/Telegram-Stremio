@@ -272,15 +272,18 @@ kbd.k { display: inline-grid; place-items: center; min-width: 1.4rem; height: 1.
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: .25rem;
+    gap: .35rem;
     padding: 1rem 0 .9rem;
     background: var(--bg);
     border-right: 1px solid var(--border);
+    overflow-y: auto;
+    scrollbar-width: none;
 }
+#rail::-webkit-scrollbar { display: none; }
 .rail-logo { display: grid; place-items: center; width: 44px; height: 44px; margin-bottom: .9rem; border-radius: 14px; background: var(--primary); color: var(--on-primary); transition: transform .2s var(--spring); }
 .rail-logo:hover { transform: scale(1.06) rotate(-4deg); }
-.rail-nav { display: flex; flex-direction: column; align-items: center; gap: .15rem; overflow-y: auto; scrollbar-width: none; flex: 1; min-height: 0; width: 100%; padding: 0 .5rem; }
-.rail-nav::-webkit-scrollbar { display: none; }
+.rail-nav { display: flex; flex-direction: column; align-items: center; gap: .15rem; flex: 0 0 auto; width: 100%; padding: 0 .5rem; }
+.rail-search { margin-top: auto; }
 .rail-item {
     display: flex;
     flex-direction: column;
