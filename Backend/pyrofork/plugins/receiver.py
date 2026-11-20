@@ -18,7 +18,7 @@ from Backend.helper.metadata import caption_with_links, extract_default_id, has_
 from Backend.helper.pyro import apply_video_thumb_to_metadata, clean_filename, finalize_media_name, get_readable_file_size, resolve_video_thumb_url
 from Backend.helper.settings_manager import SettingsManager
 from Backend.helper.skip_channel import is_skip_channel, route_to_skip_channel
-from Backend.helper.split_files import parse_split_info
+from Backend.helper.split_files import parse_split_info, part_info
 from Backend.helper.subtitles import ingest_subtitle, is_subtitle_file, remove_subtitle
 from Backend.helper.task_manager import delete_message
 from Backend.logger import LOGGER
@@ -240,10 +240,16 @@ async def file_receive_handler(client: Client, message: Message):
             await message.reply_text("> Not supported")
             return
 
-        _, title, msg_id, raw_size, size, channel = _extract_fields(message)
+        file, title, msg_id, raw_size, size, channel = _extract_fields(message)
+        file_name = (
+            (message.document.file_name if message.document else "")
+            or (message.video.file_name if message.video else "")
+            or ""
+        )
+        part = part_info(file_name) if file_name else None
 
         diag: dict = {}
-        metadata_info = await metadata(clean_filename(title), int(channel), msg_id, override_id=override_id or extract_default_id(caption_with_links(message)), season_hint=season_hint, diag=diag)
+        metadata_info = await metadata(clean_filename(title), int(channel), msg_id, override_id=override_id or extract_default_id(caption_with_links(message)), season_hint=season_hint, diag=diag, file_name=file_name or None)
         if metadata_info is None:
             LOGGER.warning(f"Metadata failed for file: {title} (ID: {msg_id}, reason: {diag.get('reason')})")
             copied = await route_to_skip_channel(client, message)
@@ -260,6 +266,8 @@ async def file_receive_handler(client: Client, message: Message):
                 size_bytes=raw_size,
                 size_label=size,
                 skip_msg_id=getattr(copied, "id", None),
+                part_base=part[0] if part else "",
+                part_number=part[1] if part else None,
             )
             return
 

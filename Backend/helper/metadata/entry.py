@@ -35,7 +35,12 @@ from Backend.helper.metadata.resolvers import (
     resolve_series,
 )
 from Backend.helper.settings_manager import SettingsManager
-from Backend.helper.split_files import parse_combined_episodes, parse_split_info, strip_part_suffix
+from Backend.helper.split_files import (
+    part_info,
+    parse_combined_episodes,
+    parse_split_info,
+    strip_part_suffix,
+)
 from Backend.logger import LOGGER
 
 
@@ -68,6 +73,7 @@ async def metadata(
     season_hint: int = None,
     quality_override: str = None,
     diag: dict = None,
+    file_name: str = None,
 ) -> dict | None:
     def _fail(reason: str):
         if diag is not None:
@@ -78,9 +84,15 @@ async def metadata(
         LOGGER.info(f"Skipping {filename}: split video file not meant to be combined in Stremio")
         return _fail("multipart")
 
-    split_info = parse_split_info(filename)
-    part_number = split_info[1] if split_info else None
-    parse_target = strip_part_suffix(filename) if split_info else filename
+    # Split-part identity must come from the Telegram file name: captions differ
+    # between parts (missing quality, repeated/missing part number, empty).
+    identity_name = (file_name or "").strip() or filename
+    part = part_info(identity_name)
+    if part is None and not file_name:
+        part = parse_split_info(filename)
+    part_number = part[1] if part else None
+    split_base = part[0] if part else None
+    parse_target = strip_part_suffix(identity_name) if part else filename
 
     try:
         parsed = parse_media_name(parse_target)
@@ -102,6 +114,26 @@ async def metadata(
     # A manually supplied quality wins over a missing one; an explicit one in
     # the filename still takes precedence so rescans stay deterministic.
     quality = parsed.get("quality") or quality_override
+
+    # Captions of later parts often drop the quality (and sometimes season/year).
+    # The file name still has it, so use it to fill whatever the caption missed.
+    if file_name:
+        fb_target = strip_part_suffix(file_name.strip())
+        if fb_target and fb_target != parse_target:
+            try:
+                fallback = parse_media_name(fb_target)
+            except Exception:
+                fallback = {}
+            if not quality:
+                quality = fallback.get("quality")
+            if season is None:
+                season = fallback.get("season")
+            if episode is None:
+                episode = fallback.get("episode")
+            if year is None:
+                year = fallback.get("year")
+            if not title:
+                title = fallback.get("title")
 
     if season_hint is not None and episode and not season and not isinstance(episode, list):
         season = season_hint
@@ -172,13 +204,15 @@ async def metadata(
     except Exception:
         encoded_string = None
 
-    group_key = f"{channel}:{quality}:{split_info[0]}" if split_info else None
+    # Group every part of one upload together. Quality is deliberately NOT part
+    # of the key: each part may parse a different (or no) quality from its caption.
+    group_key = f"{channel}:{split_base}" if split_base else None
     # Single (non-split) .zip archives
     if group_key is None and filename and filename.lower().rstrip().endswith(".zip"):
         from Backend.helper.split_files import _normalize
 
         base = filename.rsplit(".", 1)[0]
-        group_key = f"{channel}:{quality}:{_normalize(base)}.zip"
+        group_key = f"{channel}:{_normalize(base)}.zip"
         part_number = 1
 
     anime_channel = _is_anime_channel(channel)

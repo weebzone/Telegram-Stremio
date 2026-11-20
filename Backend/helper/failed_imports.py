@@ -11,6 +11,7 @@ from typing import Any, Dict, Optional
 
 from bson import ObjectId
 
+from Backend.helper.split_files import part_info
 from Backend.logger import LOGGER
 
 COLLECTION = "failed_imports"
@@ -26,6 +27,7 @@ async def ensure_indexes() -> None:
     try:
         coll = _coll()
         await coll.create_index([("status", 1), ("created_at", -1)])
+        await coll.create_index([("chat_id", 1), ("part_base", 1)])
         await coll.create_index([("chat_id", 1), ("msg_id", 1)], unique=True)
     except Exception as e:
         LOGGER.error(f"[imports] index creation failed: {e}")
@@ -35,6 +37,18 @@ def _serialize(doc: Dict[str, Any]) -> Dict[str, Any]:
     out = dict(doc)
     out["id"] = str(out.pop("_id"))
     return out
+
+
+def _ensure_part_identity(doc: Dict[str, Any]) -> Dict[str, Any]:
+    """Fill part_base/part_number for rows recorded before this change."""
+    if doc.get("part_base"):
+        return doc
+    info = part_info(doc.get("file_name") or "")
+    if info:
+        doc["part_base"] = info[0]
+        if doc.get("part_number") is None:
+            doc["part_number"] = info[1]
+    return doc
 
 
 async def record(
@@ -48,6 +62,8 @@ async def record(
     size_label: str = "",
     skip_msg_id=None,
     quality: str = "",
+    part_base: str = "",
+    part_number: int | None = None,
 ) -> None:
     now = time.time()
     set_fields = {
@@ -62,6 +78,10 @@ async def record(
         set_fields["skip_msg_id"] = skip_msg_id
     if quality:
         set_fields["quality"] = quality
+    if part_base:
+        set_fields["part_base"] = part_base
+    if part_number is not None:
+        set_fields["part_number"] = int(part_number)
 
     try:
         await _coll().update_one(
@@ -104,7 +124,7 @@ async def list_items(
     coll = _coll()
     total = await coll.count_documents(query)
     items = [
-        _serialize(doc)
+        _ensure_part_identity(_serialize(doc))
         async for doc in coll.find(query)
         .sort("created_at", -1)
         .skip((page - 1) * page_size)
@@ -119,7 +139,37 @@ async def get_item(item_id: str) -> Optional[Dict[str, Any]]:
     except Exception:
         return None
     doc = await _coll().find_one({"_id": oid})
-    return _serialize(doc) if doc else None
+    return _ensure_part_identity(_serialize(doc)) if doc else None
+
+
+async def list_siblings(chat_id, part_base: str) -> list[Dict[str, Any]]:
+    """Every failed-import row that belongs to the same split file.
+
+    Rows recorded before part identity existed have no `part_base` stored, so a
+    derive-and-match pass runs when the exact query comes back empty.
+    """
+    if not part_base:
+        return []
+    try:
+        chat_id = int(chat_id)
+    except (TypeError, ValueError):
+        return []
+
+    coll = _coll()
+    exact = [
+        _serialize(doc)
+        async for doc in coll.find({"chat_id": chat_id, "part_base": part_base}).sort("part_number", 1)
+    ]
+    if exact:
+        return exact
+
+    out: list[Dict[str, Any]] = []
+    async for doc in coll.find({"chat_id": chat_id}):
+        doc = _ensure_part_identity(_serialize(doc))
+        if doc.get("part_base") == part_base:
+            out.append(doc)
+    out.sort(key=lambda d: d.get("part_number") or 0)
+    return out
 
 
 async def set_quality(item_id: str, quality: str) -> bool:
