@@ -229,8 +229,8 @@
         return `<div class="glass-panel rounded-2xl p-4">
           <div class="flex flex-wrap items-start justify-between gap-3">
             <div class="min-w-0">
-              <p class="font-bold text-sm break-all">${esc(lead.file_name || '(no filename)')}</p>
-              <p class="text-xs text-text-secondary mt-1 break-all">${esc(lead.caption || '')}</p>
+              <p class="font-bold text-sm break-all"><span class="text-[10px] uppercase text-text-secondary mr-1">file</span>${esc(lead.file_name || '(no filename)')}</p>
+              <p class="text-xs text-text-secondary mt-1 break-all"><span class="text-[10px] uppercase mr-1">caption</span>${esc(lead.caption || '—')}</p>
               <div class="flex flex-wrap items-center gap-3 mt-2 text-[11px] text-text-secondary">
                 <span class="badge">${esc(reasonLabel(lead.reason))}</span>
                 ${g.items.length > 1 ? `<span class="badge">${g.items.length} partes</span>` : ''}
