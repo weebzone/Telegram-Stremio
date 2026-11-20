@@ -7,7 +7,9 @@ from typing import Any, Dict, List, Optional
 from pyrogram.errors import FloodWait, ChannelPrivate, ChatAdminRequired
 
 from Backend.logger import LOGGER
+from Backend.helper.announcer import announce_new_media
 from Backend.helper.encrypt import encode_string, decode_string
+from Backend.helper.failed_imports import record as record_failed_import
 from Backend.helper.manual_add import stamp_caption_with_id
 from Backend.helper.metadata import caption_with_links, extract_default_id, has_raw_ref, metadata
 from Backend.helper.pyro import apply_video_thumb_to_metadata, clean_filename, finalize_media_name, get_readable_file_size
@@ -477,18 +479,35 @@ class ScanManager:
             LOGGER.warning(f"[ScanManager] Dup-check error msg {msg_id}: {e}")
 
         try:
+            diag: dict = {}
             metadata_info = await metadata(
                 clean_filename(title), channel_int, msg_id,
                 override_id=extract_default_id(caption_with_links(message)),
+                diag=diag,
             )
         except Exception as e:
             LOGGER.warning(f"[ScanManager] Metadata exception for msg {msg_id}: {e}")
+            diag = {"reason": "error"}
             metadata_info = None
 
         if metadata_info is None:
             s["counters"]["skipped_meta"] += 1
             try:
-                await route_to_skip_channel(client, message)
+                copied = await route_to_skip_channel(client, message)
+                await record_failed_import(
+                    chat_id=int(channel_int),
+                    msg_id=int(msg_id),
+                    file_name=(
+                        (message.document.file_name if message.document else "")
+                        or (message.video.file_name if message.video else "")
+                        or (message.caption or "")
+                    ),
+                    caption=message.caption or "",
+                    reason=diag.get("reason") or "metadata_failed",
+                    size_bytes=getattr(message.video or message.document, "file_size", 0) or 0,
+                    size_label="",
+                    skip_msg_id=getattr(copied, "id", None),
+                )
             except Exception as e:
                 LOGGER.warning(f"[ScanManager] Skip-channel route failed for msg {msg_id}: {e}")
             return
@@ -516,6 +535,7 @@ class ScanManager:
                     s["counters"]["indexed"] += 1
                     if has_raw_ref(message.caption):
                         await stamp_caption_with_id(message, metadata_info)
+                    announce_new_media(metadata_info)
             else:
                 s["counters"]["skipped_meta"] += 1
         except Exception as e:

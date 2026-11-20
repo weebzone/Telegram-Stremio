@@ -35,7 +35,12 @@ from Backend.helper.metadata.resolvers import (
     resolve_series,
 )
 from Backend.helper.settings_manager import SettingsManager
-from Backend.helper.split_files import parse_combined_episodes, parse_split_info, strip_part_suffix
+from Backend.helper.split_files import (
+    parse_combined_episodes,
+    parse_split_info,
+    resolve_part_identity,
+    strip_part_suffix,
+)
 from Backend.logger import LOGGER
 
 
@@ -48,11 +53,11 @@ def _is_anime_channel(channel) -> bool:
 
 
 def _resolve_default_id(override_id, filename) -> str | None:
-    for source in (override_id, getattr(Backend, "USE_DEFAULT_ID", None), filename):
+    for source in (override_id, filename, getattr(Backend, "USE_DEFAULT_ID", None)):
         if not source:
             continue
         try:
-            found = extract_default_id(source) or (override_id if source is override_id else None)
+            found = extract_default_id(source)
         except Exception:
             found = None
         if found:
@@ -66,14 +71,26 @@ async def metadata(
     msg_id,
     override_id: str = None,
     season_hint: int = None,
+    quality_override: str = None,
+    diag: dict = None,
+    file_name: str = None,
 ) -> dict | None:
-    if is_multipart_video(filename):
-        LOGGER.info(f"Skipping {filename}: split video file not meant to be combined in Stremio")
+    def _fail(reason: str):
+        if diag is not None:
+            diag["reason"] = reason
         return None
 
-    split_info = parse_split_info(filename)
-    part_number = split_info[1] if split_info else None
-    parse_target = strip_part_suffix(filename) if split_info else filename
+    if is_multipart_video(filename):
+        LOGGER.info(f"Skipping {filename}: split video file not meant to be combined in Stremio")
+        return _fail("multipart")
+
+    # Split-part identity must come from the Telegram file name: captions differ
+    # between parts (missing quality, repeated/missing part number, empty).
+    identity_name = (file_name or "").strip() or filename
+    part = resolve_part_identity(file_name or "", filename or "") if file_name else parse_split_info(filename)
+    part_number = part[1] if part else None
+    split_base = part[0] if part else None
+    parse_target = strip_part_suffix(identity_name) if part else filename
 
     try:
         parsed = parse_media_name(parse_target)
@@ -86,13 +103,35 @@ async def metadata(
     excess = parsed.get("excess")
     if not combined and excess and any("combined" in item.lower() for item in excess):
         LOGGER.info(f"Skipping {filename}: contains 'combined'")
-        return None
+        return _fail("combined")
 
     title = parsed.get("title")
     season = parsed.get("season")
     episode = parsed.get("episode")
     year = parsed.get("year")
-    quality = parsed.get("quality")
+    # A manually supplied quality wins over a missing one; an explicit one in
+    # the filename still takes precedence so rescans stay deterministic.
+    quality = parsed.get("quality") or quality_override
+
+    # Captions of later parts often drop the quality (and sometimes season/year).
+    # The file name still has it, so use it to fill whatever the caption missed.
+    if file_name:
+        fb_target = strip_part_suffix(file_name.strip())
+        if fb_target and fb_target != parse_target:
+            try:
+                fallback = parse_media_name(fb_target)
+            except Exception:
+                fallback = {}
+            if not quality:
+                quality = fallback.get("quality")
+            if season is None:
+                season = fallback.get("season")
+            if episode is None:
+                episode = fallback.get("episode")
+            if year is None:
+                year = fallback.get("year")
+            if not title:
+                title = fallback.get("title")
 
     if season_hint is not None and episode and not season and not isinstance(episode, list):
         season = season_hint
@@ -108,7 +147,7 @@ async def metadata(
         season, episode = combined["season"], combined["start"] or 1
     elif isinstance(season, list) or isinstance(episode, list):
         LOGGER.warning(f"Invalid season/episode format for {filename}: {parsed}")
-        return None
+        return _fail("invalid_episode")
     elif season and not episode:
         combined = {"season": season, "start": None, "end": None}
         episode = 1
@@ -144,10 +183,10 @@ async def metadata(
 
     if not quality:
         LOGGER.warning(f"Skipping {filename}: No resolution (parsed={parsed})")
-        return None
+        return _fail("no_quality")
     if not title:
         LOGGER.info(f"No title parsed from: {filename} (parsed={parsed})")
-        return None
+        return _fail("no_title")
 
     # Strip absolute episode / release-group noise from the search title so
     # "One Piece - 1172" does not match "One Piece Egghead Arc Recap".
@@ -163,13 +202,15 @@ async def metadata(
     except Exception:
         encoded_string = None
 
-    group_key = f"{channel}:{quality}:{split_info[0]}" if split_info else None
+    # Group every part of one upload together. Quality is deliberately NOT part
+    # of the key: each part may parse a different (or no) quality from its caption.
+    group_key = f"{channel}:{split_base}" if split_base else None
     # Single (non-split) .zip archives
     if group_key is None and filename and filename.lower().rstrip().endswith(".zip"):
         from Backend.helper.split_files import _normalize
 
         base = filename.rsplit(".", 1)[0]
-        group_key = f"{channel}:{quality}:{_normalize(base)}.zip"
+        group_key = f"{channel}:{_normalize(base)}.zip"
         part_number = 1
 
     anime_channel = _is_anime_channel(channel)
@@ -222,10 +263,12 @@ async def metadata(
             result["part_number"] = part_number
         if result:
             ensure_media_ids(result, seed=str(result.get("title") or ""))
+        elif diag is not None:
+            diag["reason"] = "not_found"
         return result
     except Exception as e:
         LOGGER.error(f"Error while fetching metadata for {filename}: {e}\n{traceback.format_exc()}")
-        return None
+        return _fail("error")
 
 
 # ── /set candidate search ─────────────────────────────────────────────────────
@@ -303,22 +346,6 @@ async def _search_candidates(query: str, media_type: str, year: int | None = Non
     seen: set[tuple[str, str]] = set()
 
     try:
-        imdb_hits = await cinemeta.search_title_multi(query=query, type=imdb_type, limit=limit)
-        for hit in imdb_hits:
-            hid = hit.get("id")
-            if not hid or ("imdb", hid) in seen:
-                continue
-            seen.add(("imdb", hid))
-            images = format_imdb_images(hid)
-            results.append(_candidate_entry(
-                "imdb", hit.get("title", ""), hit.get("year", ""),
-                hid, None, hit.get("poster") or images["poster"], images["backdrop"],
-                "IMDb / Cinemeta", media_type,
-            ))
-    except Exception as e:
-        LOGGER.warning(f"IMDb {media_type} candidate search failed for '{query}': {e}")
-
-    try:
         tmdb_results = await tmdb.raw_search(query, media_type, year if media_type == "movie" else None)
         for item in (tmdb_results or [])[:limit]:
             tid = getattr(item, "id", None)
@@ -335,6 +362,22 @@ async def _search_candidates(query: str, media_type: str, year: int | None = Non
             ))
     except Exception as e:
         LOGGER.warning(f"TMDb {media_type} candidate search failed for '{query}': {e}")
+
+    try:
+        imdb_hits = await cinemeta.search_title_multi(query=query, type=imdb_type, limit=limit)
+        for hit in imdb_hits:
+            hid = hit.get("id")
+            if not hid or ("imdb", hid) in seen:
+                continue
+            seen.add(("imdb", hid))
+            images = format_imdb_images(hid)
+            results.append(_candidate_entry(
+                "imdb", hit.get("title", ""), hit.get("year", ""),
+                hid, None, hit.get("poster") or images["poster"], images["backdrop"],
+                "IMDb / Cinemeta", media_type,
+            ))
+    except Exception as e:
+        LOGGER.warning(f"IMDb {media_type} candidate search failed for '{query}': {e}")
 
     return results[:limit]
 

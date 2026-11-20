@@ -195,7 +195,7 @@
     <div><p id="stat-items" class="text-xl font-semibold tabular">0</p><p class="muted text-sm">Titles</p></div>
   </div>
 
-  <details class="fold glass-card rounded-3xl p-5">
+  <details class="fold glass-card rounded-3xl p-5" open>
     <summary>
       <span class="flex flex-wrap items-center gap-2 min-w-0">
         <h2 class="section-title text-lg">Auto catalogs</h2>
@@ -204,7 +204,10 @@
     </summary>
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
       <p class="muted text-sm">Toggles save instantly. Sync rebuilds them across your library.</p>
-      <button id="auto-sync-btn" onclick="runAutoSync()" class="btn-ui btn-primary sm:w-auto"><i class="fa-solid fa-bolt"></i> Sync</button>
+      <div class="flex flex-col sm:flex-row gap-2">
+        <button id="auto-sync-btn" onclick="runAutoSync(false)" class="btn-ui btn-primary sm:w-auto"><i class="fa-solid fa-bolt"></i> Sync</button>
+        <button id="auto-force-sync-btn" onclick="runAutoSync(true)" class="btn-ui btn-ghost sm:w-auto"><i class="fa-solid fa-rotate"></i> Force Re-classify</button>
+      </div>
     </div>
     <div id="auto-settings-list" class="mt-5 pt-5 border-t border-border grid grid-cols-1 lg:grid-cols-3 gap-4">
       <div class="skeleton"></div>
@@ -911,6 +914,8 @@ async function loadAutoSyncStatus() {
     if (status.running) {
       pill.textContent = `Sync running: ${status.scanned || 0} scanned · ${status.classified || 0} checked`;
       if (syncBtn) syncBtn.disabled = true;
+      const forceBtn = document.getElementById('auto-force-sync-btn');
+      if (forceBtn) forceBtn.disabled = true;
       if (!autoSyncPollTimer) {
         autoSyncPollTimer = setInterval(loadAutoSyncStatus, 3000);
       }
@@ -923,6 +928,8 @@ async function loadAutoSyncStatus() {
         pill.textContent = 'Sync runs on boot';
       }
       if (syncBtn) syncBtn.disabled = false;
+      const forceBtn = document.getElementById('auto-force-sync-btn');
+      if (forceBtn) forceBtn.disabled = false;
       if (autoSyncPollTimer) {
         clearInterval(autoSyncPollTimer);
         autoSyncPollTimer = null;
@@ -934,13 +941,23 @@ async function loadAutoSyncStatus() {
   }
 }
 
-async function runAutoSync() {
+async function runAutoSync(forceRefresh = false) {
+  if (forceRefresh && !confirm(
+    'Re-clasificar TODA la biblioteca desde cero.\n\n' +
+    'Vuelve a pedir los detalles a TMDB para cada titulo (generos + keywords), ' +
+    'asi que los catalogos nuevos como Cartoons y Novelas si se llenan.\n\n' +
+    '¿Continuar?'
+  )) return;
+
   const btn = document.getElementById('auto-sync-btn');
+  const forceBtn = document.getElementById('auto-force-sync-btn');
   const old = btn.textContent;
+  const oldForce = forceBtn ? forceBtn.textContent : '';
   btn.disabled = true;
-  btn.textContent = '⏳ Syncing...';
+  if (forceBtn) forceBtn.disabled = true;
+  btn.textContent = forceRefresh ? '⏳ Re-classifying...' : '⏳ Syncing...';
   try {
-    const res = await fetch('/api/custom-catalogs/auto-sync', { method: 'POST' });
+    const res = await fetch(`/api/custom-catalogs/auto-sync?force_refresh=${forceRefresh ? 'true' : 'false'}`, { method: 'POST' });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.detail || 'Sync failed');
     const result = data.result || {};
@@ -950,6 +967,7 @@ async function runAutoSync() {
     showToast(error.message || 'Sync failed', 'error', 'Error');
   } finally {
     btn.textContent = old;
+    if (forceBtn) forceBtn.textContent = oldForce;
     await loadAutoSyncStatus();
   }
 }

@@ -19,26 +19,27 @@ def is_skip_channel(message: Message) -> bool:
     return bool(username) and ref.lstrip("@").lower() == username
 
 
-async def route_to_skip_channel(client: Client, message: Message) -> None:
+async def route_to_skip_channel(client: Client, message: Message):
     settings = SettingsManager.current()
     skip = settings.skip_channel
     if not skip:
-        return
+        return None
 
     skip_chat = int(skip) if str(skip).lstrip("-").replace("-100", "").isdigit() else skip
 
+    copied = None
     try:
-        await message.copy(skip_chat)
+        copied = await message.copy(skip_chat)
     except FloodWait as e:
         await asleep(e.value)
         try:
-            await message.copy(skip_chat)
+            copied = await message.copy(skip_chat)
         except Exception as e2:
             LOGGER.error(f"[SkipChannel] Copy failed for message {message.id}: {e2}")
-            return
+            return None
     except Exception as e:
         LOGGER.error(f"[SkipChannel] Could not copy message {message.id} to skip channel: {e}")
-        return
+        return None
 
     if settings.delete_on_metadata_fail:
         try:
@@ -46,3 +47,5 @@ async def route_to_skip_channel(client: Client, message: Message) -> None:
             await delete_message(message.chat.id, message.id)
         except Exception as e:
             LOGGER.warning(f"[SkipChannel] Could not delete original message {message.id}: {e}")
+
+    return copied

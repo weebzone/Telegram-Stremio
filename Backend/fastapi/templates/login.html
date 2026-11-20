@@ -14,7 +14,7 @@
         </div>
 
         <div class="glass-panel p-6 sm:p-7">
-            <h1 class="text-xl font-semibold">Sign in</h1>
+            <h1 id="form-title" class="text-xl font-semibold">Sign in</h1>
             <p class="text-sm text-text-secondary mt-1 mb-6">Use the admin account set in Settings.</p>
 
             {% if error %}
@@ -24,7 +24,7 @@
             </div>
             {% endif %}
 
-            <form method="post" class="space-y-4">
+            <form method="post" class="space-y-4" id="login-form">
                 <label class="block">
                     <span class="label-caps block mb-1.5">Username</span>
                     <input type="text" name="username" required autocomplete="username" autocapitalize="none" spellcheck="false"
@@ -45,6 +45,36 @@
                     Sign in <i class="fa-solid fa-arrow-right text-sm"></i>
                 </button>
             </form>
+
+            <!-- Register form (hidden by default) -->
+            <form id="register-form" class="space-y-4 hidden">
+                <label class="block">
+                    <span class="label-caps block mb-1.5">New Username</span>
+                    <input type="text" id="reg_username" required autocomplete="username" autocapitalize="none" spellcheck="false"
+                        class="field px-4 py-3 text-[15px]" placeholder="Choose a username">
+                </label>
+                <label class="block">
+                    <span class="label-caps block mb-1.5">Password</span>
+                    <input type="password" id="reg_password" required autocomplete="new-password"
+                        class="field px-4 py-3 text-[15px]" placeholder="Choose a password">
+                </label>
+                <label class="block">
+                    <span class="label-caps block mb-1.5">Invite Code</span>
+                    <input type="text" id="reg_code" required
+                        class="field px-4 py-3 text-[15px]" placeholder="One-time invite code">
+                </label>
+                <button type="button" onclick="doRegister()" class="btn-primary w-full py-3 mt-2 text-[15px]">
+                    <i class="fa-solid fa-user-plus text-sm"></i> Create Account
+                </button>
+                <p id="reg-msg" class="text-xs text-center text-danger hidden"></p>
+            </form>
+
+            <div class="text-center mt-4">
+                <button type="button" id="toggle-mode" onclick="toggleMode()"
+                    class="text-xs text-text-secondary hover:text-primary transition-colors">
+                    Don't have an account? Register
+                </button>
+            </div>
         </div>
     </div>
 </div>
@@ -57,6 +87,44 @@ function togglePassword() {
     input.type = show ? 'text' : 'password';
     icon.classList.toggle('fa-eye', !show);
     icon.classList.toggle('fa-eye-slash', show);
+}
+
+function toggleMode() {
+    const login = document.getElementById("login-form");
+    const reg = document.getElementById("register-form");
+    const btn = document.getElementById("toggle-mode");
+    const title = document.getElementById("form-title");
+    if (reg.classList.contains("hidden")) {
+        login.classList.add("hidden"); reg.classList.remove("hidden");
+        btn.textContent = "Already have an account? Sign In";
+        title.textContent = "Create Admin Account";
+    } else {
+        reg.classList.add("hidden"); login.classList.remove("hidden");
+        btn.textContent = "Don't have an account? Register";
+        title.textContent = "Sign in";
+    }
+}
+
+async function doRegister() {
+    const msg = document.getElementById("reg-msg");
+    msg.classList.add("hidden");
+    const body = {
+        username: document.getElementById("reg_username").value,
+        password: document.getElementById("reg_password").value,
+        invite_code: document.getElementById("reg_code").value,
+    };
+    try {
+        const res = await fetch("/api/admin/register", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+        });
+        const d = await res.json();
+        if (!res.ok) { msg.textContent = d.detail || "Registration failed"; msg.classList.remove("hidden"); return; }
+        window.location.href = "/login?registered=1";
+    } catch (e) {
+        msg.textContent = "Request failed"; msg.classList.remove("hidden");
+    }
 }
 </script>
 {% endblock %}

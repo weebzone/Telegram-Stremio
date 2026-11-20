@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+import unicodedata
 from difflib import SequenceMatcher
 from typing import Any, Dict, Optional
 from urllib.parse import quote
@@ -14,11 +15,19 @@ from Backend.logger import LOGGER
 
 # Match thresholds
 CINEMETA_THRESHOLD = 0.60
-TMDB_THRESHOLD = 0.55
+# Lowered from 0.55 -> 0.50 so Spanish/MX titles that already clear the hard
+# 0.50 cut in score_candidate() are no longer discarded by a stricter threshold.
+TMDB_THRESHOLD = 0.50
 TVDB_THRESHOLD = 0.55
 KITSU_THRESHOLD = 0.55
 STRONG_MATCH = 0.92
 ALT_TITLE_LOOKUPS = 5
+
+# ── Latino / Spanish multilingual matching ────────────────────────────────────
+# Preferred display + search languages for the Latin community. The TMDB client
+# requests es-MX so search results return the Spanish title as the primary
+# `title`, and alternative-title lookups keep es-MX / es-ES / en aliases.
+PREFERRED_LANG_CODES = ("es-MX", "es-ES", "es", "en-US", "en")
 
 # Combined-file constants (Specials season)
 COMBINED_SEASON = 0
@@ -42,6 +51,16 @@ _INFLIGHT: Dict[tuple, asyncio.Future] = {}
 _APOSTROPHE_RE = re.compile(r"['\u2018\u2019`\u00B4]")
 _SYMBOL_STRIP_RE = re.compile(r"[&.\-:]+")
 _HTML_RE = re.compile(r"<[^>]+>")
+
+# Spanish / Latin diacritics + ¿¡ — used to detect an ES-language title so the
+# matcher can give a small boost when query and candidate share the language
+# (e.g. "El Señor de los Anillos" vs the Spanish TMDB title).
+_ES_DIACRITIC_RE = re.compile(r"[\u00E1\u00E9\u00ED\u00F3\u00FA\u00F1\u00FC\u00C1\u00C9\u00CD\u00D3\u00DA\u00D1\u00DC¿¡]")
+
+
+def looks_spanish(text: str) -> bool:
+    """Heuristic: True when the string carries Spanish diacritics / marks."""
+    return bool(_ES_DIACRITIC_RE.search(text or ""))
 
 
 async def cached_call(store: dict, key, ns: str, producer):
@@ -77,7 +96,10 @@ def strip_html(text: str) -> str:
 def normalize_title(title: str) -> str:
     if not title:
         return ""
-    t = title.lower().strip()
+    # NFC so composed accents (e.g. 'más') compare identically to any
+    # decomposed/accented forms coming from TMDB or the filename.
+    t = unicodedata.normalize("NFC", title)
+    t = t.lower().strip()
     t = re.sub(r"^\b(the|a|an)\b\s+", "", t)
     t = re.sub(r"[^\w\s]", " ", t)
     return re.sub(r"\s+", " ", t).strip()
@@ -95,7 +117,13 @@ def fuzzy_ratio(a: str, b: str) -> float:
             if a_tokens and b_tokens
             else 0.0
         )
-        return max(sort_ratio, set_ratio * coverage)
+        score = max(sort_ratio, set_ratio * coverage)
+        # Language boost: when both sides look Spanish (diacritics / ¿¡) the
+        # fuzzy tokens can still diverge on word order, so nudge the score so a
+        # genuine ES<->ES match clears the threshold instead of being dropped.
+        if looks_spanish(a) and looks_spanish(b) and score >= 0.40:
+            score = min(1.0, score + 0.10)
+        return score
     except Exception:
         return SequenceMatcher(None, a, b).ratio()
 
@@ -299,6 +327,9 @@ def extract_default_id(text: str) -> str | None:
     tmdb_url = re.search(r"/(?:movie|tv)/(\d+)", text)
     if tmdb_url:
         return tmdb_url.group(1)
+    m = re.search(r"\b(tv|mv)(\d{1,10})\b", text, re.IGNORECASE)
+    if m:
+        return m.group(1).lower() + m.group(2)
     return None
 
 
@@ -307,8 +338,13 @@ def split_default_id(default_id) -> tuple:
     if not default_id:
         return None, None, False, False
     value = str(default_id).strip()
-    if value.startswith("tt"):
+    vl = value.lower()
+    if vl.startswith("tt"):
         return value, None, True, False
+    if vl.startswith("tv") and vl[2:].isdigit():
+        return None, int(vl[2:]), False, True
+    if vl.startswith("mv") and vl[2:].isdigit():
+        return None, int(vl[2:]), False, True
     if value.isdigit():
         return None, int(value), False, True
     return None, None, False, False

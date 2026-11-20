@@ -199,6 +199,11 @@
             updatePagination(data.current_page || page, data.total_pages || 1);
             updateMediaInfo(data);
 
+            //----- Lazy-load episode coverage badges for TV cards
+            if (mediaType === 'tv') {
+                mediaItems.forEach(item => refreshCovBadge(item.tmdb_id, item.db_index));
+            }
+
         } catch (error) {
             console.error('Error loading media:', error);
             hideLoading();
@@ -260,7 +265,7 @@
         const qs = collectQualities(item);
         const size = bytesToSize(qs.reduce((sum, q) => sum + sizeToBytes(q.size), 0));
         const href = `/media/edit?tmdb_id=${encodeURIComponent(item.tmdb_id)}&db_index=${encodeURIComponent(item.db_index)}&media_type=${encodeURIComponent(mediaType)}&page=${currentPage}${currentSearch ? `&search=${encodeURIComponent(currentSearch)}` : ''}`;
-        const meta = [year, size].filter(Boolean).join(' · ');
+        const meta = [year, allQualityLabels(qs).join('/'), size].filter(Boolean).join(' · ');
         return `
         <article class="m-card">
             <a href="${href}" class="m-poster" aria-label="Edit ${title}">
@@ -269,11 +274,18 @@
                 ${item.rating ? `<span class="m-rating">★ ${parseFloat(item.rating).toFixed(1)}</span>` : ''}
                 ${Number(item.tmdb_id) < 0 ? '<span class="m-custom"><i class="fa-solid fa-star"></i> Custom</span>' : ''}
                 ${mediaBadges(item)}
+                ${mediaType === 'tv' ? `
+                <span id="cov-${item.tmdb_id}-${item.db_index}" class="m-cov-pct" title="Episode coverage"
+                      onclick="event.preventDefault(); event.stopPropagation(); openCoverage('${item.tmdb_id}', '${item.db_index ?? ''}')">
+                    <i class="fa-solid fa-layer-group"></i> <span class="cov-pct">…</span>
+                </span>` : ''}
             </a>
+            {% if permissions is not defined or 'media.delete' in permissions %}
             <button onclick="deleteMedia(this)" data-tmdb-id="${escapeHtml(item.tmdb_id)}" data-db-index="${escapeHtml(item.db_index ?? '')}" data-title="${title}"
                     class="m-del" aria-label="Delete ${title}" title="Delete">
                 <i class="fa-solid fa-trash-can"></i>
             </button>
+            {% endif %}
             <a href="${href}" class="block mt-2 min-w-0">
                 <h3 class="text-sm font-medium leading-snug truncate" title="${title}">${title}</h3>
                 <p class="text-xs text-text-secondary truncate">${meta}</p>
@@ -943,7 +955,85 @@
         });
     });
     if (new URLSearchParams(location.search).get('add') === '1') document.addEventListener('DOMContentLoaded', () => { history.replaceState(null, '', location.pathname + '?media_type=' + mediaType); openManualAdd(); });
+
+    //----- Episode coverage (uploaded vs Cinemeta full season list)
+    function covColor(pct) {
+        if (pct >= 100) return 'text-emerald-300';
+        if (pct >= 60) return 'text-amber-300';
+        return 'text-red-300';
+    }
+
+    async function refreshCovBadge(tmdbId, dbIndex) {
+        const el = document.querySelector(`#cov-${tmdbId}-${dbIndex} .cov-pct`);
+        if (!el) return;
+        try {
+            const res = await fetch(`/api/media/coverage/${encodeURIComponent(tmdbId)}?db_index=${encodeURIComponent(dbIndex ?? 1)}`);
+            const d = await res.json();
+            el.textContent = `${d.coverage_pct}%`;
+            el.className = `cov-pct ${covColor(d.coverage_pct)}`;
+        } catch (e) {
+            el.textContent = '—';
+        }
+    }
+
+    async function openCoverage(tmdbId, dbIndex) {
+        const modal = document.getElementById('coverage-modal');
+        const body = document.getElementById('coverage-body');
+        const titleEl = document.getElementById('coverage-title');
+        modal.classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+        body.innerHTML = '<div class="text-center py-10 text-text-secondary"><i class="fa-solid fa-spinner fa-spin mr-2"></i>Loading coverage…</div>';
+        try {
+            const res = await fetch(`/api/media/coverage/${encodeURIComponent(tmdbId)}?db_index=${encodeURIComponent(dbIndex ?? 1)}`);
+            const d = await res.json();
+            titleEl.textContent = `Episode Coverage · ${d.coverage_pct}%`;
+            if (!d.seasons || !d.seasons.length) {
+                body.innerHTML = '<div class="py-10 text-center text-text-secondary">No season data available (Cinemeta lookup failed or no IMDb id).</div>';
+                return;
+            }
+            let html = '';
+            for (const s of d.seasons) {
+                const complete = s.have >= s.total;
+                const chipCls = complete ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40' : 'bg-red-500/10 text-red-300 border-red-500/40';
+                let missingHtml = '';
+                if (!complete) {
+                    const shown = s.missing.slice(0, 60).map(e => `E${e}`).join(', ');
+                    const extra = s.missing.length > 60 ? ', …' : '';
+                    missingHtml = `<div class="mt-1 text-xs text-red-300/90">Missing: ${shown}${extra}</div>`;
+                }
+                html += `
+                    <div class="rounded-2xl border ${chipCls} px-4 py-3">
+                        <div class="flex items-center justify-between">
+                            <span class="font-bold">Season ${s.n}</span>
+                            <span class="text-sm font-bold">${s.have}/${s.total}</span>
+                        </div>
+                        ${missingHtml}
+                    </div>`;
+            }
+            body.innerHTML = html;
+        } catch (e) {
+            body.innerHTML = '<div class="py-10 text-center text-red-300">Failed to load coverage.</div>';
+        }
+    }
+
+    function closeCoverage() {
+        document.getElementById('coverage-modal').classList.add('hidden');
+        document.body.style.overflow = '';
+    }
 </script>
+
+<!-- Episode coverage modal -->
+<div id="coverage-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onclick="if(event.target===this)closeCoverage()">
+    <div class="glass-panel rounded-3xl border border-hairline w-full max-w-lg max-h-[85vh] overflow-y-auto">
+        <div class="flex items-center justify-between px-5 py-4 border-b border-hairline sticky top-0 glass-panel rounded-t-3xl">
+            <h3 id="coverage-title" class="font-extrabold text-lg text-text">Episode Coverage</h3>
+            <button onclick="closeCoverage()" class="w-9 h-9 inline-flex items-center justify-center rounded-xl text-text-secondary hover:bg-surface-2 transition">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+        <div id="coverage-body" class="p-5 grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
+    </div>
+</div>
 <style>
     .m-card { position: relative; min-width: 0; contain: layout paint style; }
     #media-grid { transition: opacity .2s var(--ease); }
@@ -967,5 +1057,7 @@
     .m-custom { bottom: 6px; right: 6px; background: var(--primary); color: var(--on-primary); }
     .q-chip { position: static; font-size: .62rem; padding: 1px 6px; }
     .m-poster > div { z-index: 2; }
+    .m-cov-pct { position: absolute; z-index: 2; bottom: 6px; right: 6px; display: inline-flex; align-items: center; gap: .25rem; padding: 1px 6px; border-radius: 99px; font-size: .62rem; line-height: 1.4; color: #fff; background: rgba(0,0,0,.72); cursor: pointer; }
+    .m-cov-pct:hover { background: var(--primary); }
 </style>
 {% endblock %}

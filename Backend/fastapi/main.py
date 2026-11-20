@@ -7,6 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from Backend import __version__
+from Backend.fastapi.security.permissions import OWNER_ONLY_SETTINGS
 from Backend.fastapi.themes import get_theme, theme_key
 from Backend.fastapi.routes.api_routes import (
     add_custom_catalog_item_api,
@@ -121,6 +122,9 @@ from Backend.fastapi.routes.stream_routes import router as stream_router
 from Backend.fastapi.routes.cf_routes import router as cf_router
 from Backend.fastapi.routes.stremio_routes import router as stremio_router
 from Backend.fastapi.routes.webdav_routes import router as webdav_router
+from Backend.fastapi.routes.admin_users_routes import router as admin_users_router
+from Backend.fastapi.routes.imports_routes import router as imports_router
+from Backend.fastapi.routes.incomplete_routes import router as incomplete_router
 from Backend.fastapi.routes.template_routes import (
     admin_access_page,
     admin_dashboard_page,
@@ -130,10 +134,14 @@ from Backend.fastapi.routes.template_routes import (
     custom_catalogs_page,
     dashboard_page,
     edit_media_page,
+    imports_page,
+    incomplete_page,
     login_page,
     login_post,
     logout,
     media_management_page,
+    media_coverage_api,
+    media_coverage_refresh_api,
     settings_page,
     set_theme,
     tools_page,
@@ -167,8 +175,25 @@ except Exception:
 @app.on_event("startup")
 async def _startup():
     asyncio.create_task(decay_client_failures())
+    #----- Ensure the settings-based owner exists as an admin (never locks out).
+    try:
+        from Backend.helper import admin_users
+        asyncio.create_task(admin_users.ensure_owner())
+    except Exception as e:
+        print(f"[STARTUP] ensure_owner skipped: {e}")
+
     from Backend.helper.version_check import version_check_loop
     asyncio.create_task(version_check_loop())
+
+    #----- Make sure enabled auto catalogs have documents (they drive the UI lists)
+    async def _ensure_auto_catalogs():
+        try:
+            from Backend.helper.auto_catalog import ensure_auto_catalog_docs
+            await ensure_auto_catalog_docs(db)
+        except Exception as e:
+            print(f"[STARTUP] ensure_auto_catalog_docs skipped: {e}")
+
+    asyncio.create_task(_ensure_auto_catalogs())
 
 
 #----- Streaming and Stremio routers
@@ -176,6 +201,9 @@ app.include_router(stream_router)
 app.include_router(cf_router)
 app.include_router(stremio_router)
 app.include_router(webdav_router)
+app.include_router(admin_users_router)
+app.include_router(imports_router)
+app.include_router(incomplete_router)
 
 
 #----- Public routes (no authentication)
@@ -285,8 +313,11 @@ async def open_in_app(app_name: str, media_type: str, content_id: str):
 
 
 #----- Protected routes (authentication required)
-@app.get("/", response_class=HTMLResponse)
+@app.get("/")
 async def root(request: Request, _: bool = Depends(require_auth)):
+    #----- Uploaders have no dashboard: land them straight on Media
+    if getattr(request.state, "role", None) == "uploader":
+        return RedirectResponse(url="/media/manage", status_code=302)
     return await dashboard_page(request, _)
 
 @app.get("/admin/dashboard", response_class=HTMLResponse)
@@ -304,6 +335,15 @@ async def custom_catalogs(request: Request, _: bool = Depends(require_auth)):
 @app.get("/media/edit", response_class=HTMLResponse)
 async def edit_media(request: Request, tmdb_id: int, db_index: int, media_type: str, _: bool = Depends(require_auth)):
     return await edit_media_page(request, tmdb_id, db_index, media_type, _)
+
+@app.get("/api/media/coverage/{tmdb_id}")
+async def api_media_coverage(request: Request, tmdb_id: int, db_index: int = Query(1), refresh: bool = Query(False), _: bool = Depends(require_auth)):
+    return await media_coverage_api(request, tmdb_id, db_index, refresh, _)
+
+@app.post("/api/media/coverage/{tmdb_id}/refresh")
+async def api_media_coverage_refresh(request: Request, tmdb_id: int, db_index: int = Query(1), _: bool = Depends(require_auth)):
+    return await media_coverage_refresh_api(request, tmdb_id, db_index, _)
+
 
 @app.get("/api/media/list")
 async def list_media(
@@ -693,7 +733,10 @@ async def get_settings(_: bool = Depends(require_auth)):
     return await get_settings_api()
 
 @app.put("/api/admin/settings")
-async def update_settings(payload: dict, _: bool = Depends(require_auth)):
+async def update_settings(payload: dict, request: Request, _: bool = Depends(require_auth)):
+    if getattr(request.state, "role", None) != "owner":
+        for key in OWNER_ONLY_SETTINGS:
+            payload.pop(key, None)
     return await update_settings_api(payload)
 
 
@@ -790,6 +833,16 @@ async def admin_logs_download(_: bool = Depends(require_auth)):
 @app.post("/api/admin/restart")
 async def admin_restart(_: bool = Depends(require_auth)):
     return await restart_app_api()
+
+
+@app.get("/admin/imports", response_class=HTMLResponse)
+async def admin_imports(request: Request, _: bool = Depends(require_auth)):
+    return await imports_page(request, _)
+
+
+@app.get("/media/incomplete", response_class=HTMLResponse)
+async def media_incomplete(request: Request, _: bool = Depends(require_auth)):
+    return await incomplete_page(request, _)
 
 
 #----- Tools (WebUI replacement for /scan, /rescan, /dbcheck bot commands)

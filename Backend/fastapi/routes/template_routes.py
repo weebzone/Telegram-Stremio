@@ -8,6 +8,8 @@ from fastapi.templating import Jinja2Templates
 from Backend import StartTime, __version__, db
 from Backend.config import Telegram
 from Backend.fastapi.security.credentials import get_current_user, is_authenticated, require_auth, revoke_session, verify_credentials
+from Backend.fastapi.security.middleware import AuthorizationMiddleware
+from Backend.fastapi.security.permissions import permissions_for
 from Backend.fastapi.themes import get_all_themes, get_theme, theme_key
 from Backend.helper.analytics import client_ip_from, get_activity_overview
 from Backend.helper.bounded import BoundedDict
@@ -15,6 +17,7 @@ from Backend.helper.custom_dl import ACTIVE_STREAMS, RECENT_STREAMS
 from Backend.helper.metadata import resolve_cover_url
 from Backend.helper.pyro import get_readable_time
 from Backend.helper.settings_manager import SettingsManager
+from Backend.helper.tv_coverage import compute_coverage
 from Backend.helper.stream_formatter import PRESETS
 import Backend.pyrofork.bot as botmod
 from Backend.pyrofork.bot import StreamBot, multi_clients, work_loads_summary
@@ -26,8 +29,11 @@ templates.env.globals["cover_url"] = resolve_cover_url
 #----- Shared template context (request, theme metadata) for every page
 def _base_context(request: Request) -> dict:
     theme_name = theme_key(request)
+    state = getattr(request, "state", None)
     return {
         "request": request,
+        "current_role": getattr(state, "role", None),
+        "permissions": getattr(state, "permissions", None) or set(),
         "theme": get_theme(theme_name),
         "themes": get_all_themes(),
         "current_theme": theme_name,
@@ -46,6 +52,15 @@ async def login_page(request: Request):
     if is_authenticated(request):
         return RedirectResponse(url="/", status_code=302)
     return templates.TemplateResponse("login.html", _base_context(request))
+
+
+#----- Landing route per role: uploaders work from Media, everyone else from Home
+_ROLE_LANDING = {"uploader": "/media/manage"}
+
+
+async def _landing_url(request: Request) -> str:
+    state = getattr(request, "state", None)
+    return _ROLE_LANDING.get(getattr(state, "role", None), "/")
 
 
 #----- Handle login submission
@@ -67,11 +82,22 @@ async def login_post(request: Request, username: str = Form(...), password: str 
         request.session["authenticated"] = True
         request.session["username"] = username
         request.session["sid"] = secrets.token_urlsafe(16)
-        return RedirectResponse(url="/", status_code=302)
+        await _apply_role_to_state(request, username)
+        return RedirectResponse(url=await _landing_url(request), status_code=302)
     _FAILED_LOGINS[ip] = fails + [now]
     ctx = _base_context(request)
     ctx["error"] = "Invalid credentials"
     return templates.TemplateResponse("login.html", ctx)
+
+
+#----- Resolve the role before the next request runs (login bypasses middleware)
+async def _apply_role_to_state(request: Request, username: str) -> None:
+    try:
+        role = await AuthorizationMiddleware._resolve_role(username)
+    except Exception:
+        role = None
+    request.state.role = role
+    request.state.permissions = permissions_for(role)
 
 
 #----- Clear the session and return to login
@@ -96,7 +122,6 @@ async def dashboard_page(request: Request, _: bool = Depends(require_auth)):
     try:
         db_stats = await db.get_database_stats()
         total_movies, total_tv_shows = db.content_totals(db_stats)
-
         now = time.time()
         PRUNE_SECONDS = 3
         for sid, info in list(ACTIVE_STREAMS.items()):
@@ -181,6 +206,22 @@ async def media_management_page(request: Request, media_type: str = "movie", cus
     return templates.TemplateResponse("media_management.html", ctx)
 
 
+#----- Episode coverage (uploaded vs full season list from Cinemeta)
+async def media_coverage_api(request: Request, tmdb_id: int, db_index: int = 1, refresh: bool = False, _: bool = Depends(require_auth)):
+    doc = await db.get_document("tv", tmdb_id, db_index)
+    if not doc:
+        return {"coverage_pct": 0.0, "total_expected": 0, "total_have": 0, "seasons": []}
+    return await compute_coverage(doc, refresh=refresh)
+
+
+async def media_coverage_refresh_api(request: Request, tmdb_id: int, db_index: int = 1, _: bool = Depends(require_auth)):
+    doc = await db.get_document("tv", tmdb_id, db_index)
+    if not doc:
+        return {"ok": False, "reason": "not_found"}
+    await compute_coverage(doc, refresh=True)
+    return {"ok": True}
+
+
 #----- Media edit page for a single title
 async def edit_media_page(request: Request, tmdb_id: int, db_index: int, media_type: str, _: bool = Depends(require_auth)):
     try:
@@ -228,6 +269,7 @@ async def admin_requests_page(request: Request, _: bool = Depends(require_auth))
 async def public_request_page(request: Request):
     ctx = _base_context(request)
     ctx["is_authenticated"] = is_authenticated(request)
+    ctx["show_login"] = False
     return templates.TemplateResponse("request_public.html", ctx)
 
 
@@ -262,11 +304,30 @@ async def settings_page(request: Request, _: bool = Depends(require_auth)):
         titles = {}
     settings["channel_titles"] = {str(k): str(v) for k, v in titles.items() if k and v}
 
+    #----- Role of the logged-in admin, to show/hide sections in the UI.
+    from Backend.fastapi.security.credentials import get_current_role
+    is_owner = (await get_current_role(request)) == "owner"
+
     ctx = _base_context(request)
     ctx.update({
         "current_user": get_current_user(request),
         "settings": settings,
         "userbot_configured": botmod.Userbot is not None,
+        "is_owner": is_owner,
         "formatter_presets": PRESETS,
     })
     return templates.TemplateResponse("settings.html", ctx)
+
+
+#----- Incomplete series (missing seasons/episodes)
+async def incomplete_page(request: Request, _: bool = Depends(require_auth)):
+    ctx = _base_context(request)
+    ctx["current_user"] = get_current_user(request)
+    return templates.TemplateResponse("incomplete.html", ctx)
+
+
+#----- Failed imports review page (uploader + admins)
+async def imports_page(request: Request, _: bool = Depends(require_auth)):
+    ctx = _base_context(request)
+    ctx["current_user"] = get_current_user(request)
+    return templates.TemplateResponse("imports.html", ctx)

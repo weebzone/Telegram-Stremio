@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% block title %}Incomplete Series · Telegram Stremio{% endblock %}
+
+{% block content %}
+<section class="space-y-5">
+  <div class="glass-panel rounded-3xl p-5 sm:p-6">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <h1 class="text-xl sm:text-2xl font-extrabold flex items-center gap-2">
+          <i class="fa-solid fa-layer-group text-amber-400"></i>
+          Incomplete Series
+        </h1>
+        <p class="text-sm text-text-secondary mt-1">
+          Shows with missing seasons or episodes, compared against the full Cinemeta listing.
+        </p>
+      </div>
+      <div class="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+        <input id="search-input" class="field px-3 py-2 text-sm flex-1 min-w-[9rem] sm:flex-none sm:w-64" placeholder="Search a show">
+        <button class="btn-ghost px-3 sm:px-4 py-2 text-sm" onclick="loadIncomplete()" title="Refresh">
+          <i class="fa-solid fa-rotate"></i><span class="hidden sm:inline"> Refresh</span>
+        </button>
+        <button class="btn-ghost px-3 sm:px-4 py-2 text-sm" onclick="loadIncomplete(true)" title="Recheck coverage against Cinemeta">
+          <i class="fa-solid fa-arrows-rotate"></i><span class="hidden sm:inline"> Recheck</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="incomplete-list" class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-x-3 gap-y-5 mb-8"></div>
+  <div class="flex items-center justify-between px-1">
+    <button id="prev-btn" class="btn-ghost px-4 py-2 text-sm" onclick="changePage(-1)">Previous</button>
+    <span id="page-label" class="text-xs text-text-secondary"></span>
+    <button id="next-btn" class="btn-ghost px-4 py-2 text-sm" onclick="changePage(1)">Next</button>
+  </div>
+</section>
+
+<div id="missing-modal" class="fixed inset-0 z-[80] hidden items-center justify-center p-4" style="background:rgba(0,0,0,.55)">
+  <div class="glass-panel rounded-3xl p-5 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+    <div class="flex items-start justify-between gap-3">
+      <div class="min-w-0">
+        <h2 id="missing-title" class="text-lg font-extrabold break-words"></h2>
+        <p id="missing-subtitle" class="text-xs text-text-secondary mt-1"></p>
+      </div>
+      <button class="btn-ghost w-9 h-9" onclick="closeMissing()" title="Close"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div id="missing-body" class="mt-4 space-y-3"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  let page = 1;
+  let pageSize = 24;
+  let total = 0;
+
+  function esc(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+  }
+
+  function covClass(pct) {
+    if (pct >= 90) return 'text-amber-300';
+    if (pct >= 60) return 'text-orange-300';
+    return 'text-red-300';
+  }
+
+  let warmRetries = 0;
+
+  window.loadIncomplete = async function (refresh) {
+    const box = document.getElementById('incomplete-list');
+    const search = document.getElementById('search-input').value.trim();
+    box.innerHTML = '<div class="glass-panel rounded-2xl p-6 text-sm text-text-secondary">Loading…</div>';
+    try {
+      const url = `/api/media/incomplete?page=${page}&page_size=${pageSize}`
+        + `&search=${encodeURIComponent(search)}&refresh=${refresh ? 'true' : 'false'}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Request failed');
+      total = data.total || 0;
+      render(data.items || []);
+      // Coverage for some shows is still being computed in the background.
+      if (data.warming && warmRetries < 3) {
+        warmRetries++;
+        document.getElementById('page-label').textContent += ' · calculating…';
+        setTimeout(function () { loadIncomplete(false); }, 3500);
+      } else if (!data.warming) {
+        warmRetries = 0;
+      }
+    } catch (e) {
+      box.innerHTML = `<div class="glass-panel rounded-2xl p-6 text-sm text-red-400">${esc(e.message || e)}</div>`;
+    }
+  };
+
+  function render(items) {
+    const box = document.getElementById('incomplete-list');
+    if (!items.length) {
+      box.innerHTML = '<div class="glass-panel rounded-2xl p-6 text-sm text-text-secondary col-span-3 sm:col-span-4 md:col-span-5 lg:col-span-6 xl:col-span-7">No incomplete series found.</div>';
+    } else {
+      box.innerHTML = items.map(function (item) {
+        return `<div class="min-w-0 flex flex-col">
+          <div class="relative rounded-xl overflow-hidden" style="aspect-ratio:2/3;background:var(--card-high)">
+            ${item.poster ? `<img src="${esc(item.poster)}" alt="" loading="lazy" decoding="async" class="w-full h-full object-cover" onerror="this.remove()">` : ''}
+            <span class="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-full bg-black/70 text-white text-[10px] font-bold">${esc(item.coverage_pct)}%</span>
+          </div>
+          <h3 class="mt-2 text-[13px] font-medium leading-snug line-clamp-2" title="${esc(item.title)}">${esc(item.title)}</h3>
+          <p class="text-[11px] text-text-secondary tabular">${esc(item.total_have)}/${esc(item.total_expected)} · <span class="${covClass(item.coverage_pct)} font-semibold">${esc(item.coverage_pct)}%</span></p>
+          <div class="mt-1.5 flex flex-wrap gap-1">
+            <button class="btn-ghost px-2 py-1 text-[11px]" data-title="${esc(item.title)}" data-body='${esc(JSON.stringify(item.missing || []))}' onclick="showMissing(this)" title="Missing episodes">
+              <i class="fa-solid fa-list-check"></i> Missing
+            </button>
+            <a class="btn-primary px-2 py-1 text-[11px]"
+               href="/media/edit?tmdb_id=${encodeURIComponent(item.tmdb_id)}&db_index=${encodeURIComponent(item.db_index ?? 1)}&media_type=tv" title="Edit">
+              <i class="fa-solid fa-pen-to-square"></i> Edit
+            </a>
+          </div>
+        </div>`;
+      }).join('');
+    }
+    const pages = Math.max(1, Math.ceil(total / pageSize));
+    document.getElementById('page-label').textContent = `Page ${page} of ${pages} · ${total} show(s)`;
+    document.getElementById('prev-btn').disabled = page <= 1;
+    document.getElementById('next-btn').disabled = page >= pages;
+  }
+
+  window.changePage = function (delta) {
+    const pages = Math.max(1, Math.ceil(total / pageSize));
+    const next = Math.min(pages, Math.max(1, page + delta));
+    if (next === page) return;
+    page = next;
+    loadIncomplete();
+  };
+
+  window.showMissing = function (btn) {
+    const title = btn.dataset.title || '';
+    let missing = [];
+    try { missing = JSON.parse(btn.dataset.body || '[]'); } catch (e) { missing = []; }
+    document.getElementById('missing-title').textContent = title;
+    document.getElementById('missing-subtitle').textContent =
+      `${missing.reduce((n, m) => n + (m.episodes || []).length, 0)} missing episode(s)`;
+    document.getElementById('missing-body').innerHTML = missing.length
+      ? missing.map(function (m) {
+          const chips = (m.episodes || []).map(function (e) {
+            return `<span class="badge" style="margin:0 .25rem .25rem 0">E${esc(e)}</span>`;
+          }).join('');
+          return `<div class="surface-card rounded-2xl p-3">
+            <p class="text-xs text-text-secondary font-bold mb-2">Season ${esc(m.season)}</p>
+            <div class="flex flex-wrap">${chips}</div>
+          </div>`;
+        }).join('')
+      : '<p class="text-sm text-text-secondary">Nothing missing.</p>';
+    const modal = document.getElementById('missing-modal');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+  };
+
+  window.closeMissing = function () {
+    const modal = document.getElementById('missing-modal');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+  };
+
+  document.getElementById('search-input').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { page = 1; loadIncomplete(); }
+  });
+  document.getElementById('missing-modal').addEventListener('click', function (e) {
+    if (e.target === this) closeMissing();
+  });
+
+  loadIncomplete();
+})();
+</script>
+{% endblock %}

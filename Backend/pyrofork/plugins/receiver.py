@@ -11,13 +11,14 @@ from Backend import db
 from Backend.helper.announcer import announce_new_media
 from Backend.helper.auto_catalog import start_single_media_catalog_sync
 from Backend.helper.encrypt import encode_string
+from Backend.helper.failed_imports import record as record_failed_import
 from Backend.helper.manual_add import resolve_telegram_message, stamp_caption_with_id
 from Backend.helper.requests_manager import auto_fulfill
 from Backend.helper.metadata import caption_with_links, extract_default_id, has_raw_ref, metadata
 from Backend.helper.pyro import apply_video_thumb_to_metadata, clean_filename, finalize_media_name, get_readable_file_size, resolve_video_thumb_url
 from Backend.helper.settings_manager import SettingsManager
 from Backend.helper.skip_channel import is_skip_channel, route_to_skip_channel
-from Backend.helper.split_files import parse_split_info
+from Backend.helper.split_files import parse_split_info, resolve_part_identity
 from Backend.helper.subtitles import ingest_subtitle, is_subtitle_file, remove_subtitle
 from Backend.helper.task_manager import delete_message
 from Backend.logger import LOGGER
@@ -95,6 +96,7 @@ async def process_file():
                 tmdb_id=metadata_info.get("tmdb_id"),
                 imdb_id=metadata_info.get("imdb_id"),
                 media_type=metadata_info.get("media_type"),
+                season_number=metadata_info.get("season_number"),
             ))
         file_queue.task_done()
 
@@ -238,12 +240,35 @@ async def file_receive_handler(client: Client, message: Message):
             await message.reply_text("> Not supported")
             return
 
-        _, title, msg_id, raw_size, size, channel = _extract_fields(message)
+        file, title, msg_id, raw_size, size, channel = _extract_fields(message)
+        file_name = (
+            (message.document.file_name if message.document else "")
+            or (message.video.file_name if message.video else "")
+            or ""
+        )
+        part = resolve_part_identity(file_name, message.caption or "") if file_name else None
 
-        metadata_info = await metadata(clean_filename(title), int(channel), msg_id, override_id=override_id or extract_default_id(caption_with_links(message)), season_hint=season_hint)
+        diag: dict = {}
+        metadata_info = await metadata(clean_filename(title), int(channel), msg_id, override_id=override_id or extract_default_id(caption_with_links(message)), season_hint=season_hint, diag=diag, file_name=file_name or None)
         if metadata_info is None:
-            LOGGER.warning(f"Metadata failed for file: {title} (ID: {msg_id})")
-            await route_to_skip_channel(client, message)
+            LOGGER.warning(f"Metadata failed for file: {title} (ID: {msg_id}, reason: {diag.get('reason')})")
+            copied = await route_to_skip_channel(client, message)
+            await record_failed_import(
+                chat_id=int(channel),
+                msg_id=int(msg_id),
+                file_name=(
+                    (message.document.file_name if message.document else "")
+                    or (message.video.file_name if message.video else "")
+                    or title
+                ),
+                caption=message.caption or "",
+                reason=diag.get("reason") or "metadata_failed",
+                size_bytes=raw_size,
+                size_label=size,
+                skip_msg_id=getattr(copied, "id", None),
+                part_base=part[0] if part else "",
+                part_number=part[1] if part else None,
+            )
             return
 
         title = _finalize_title(title, metadata_info)
