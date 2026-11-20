@@ -5,36 +5,37 @@
 
 <style>
 .tool-card {
-    background: color-mix(in srgb, var(--card) 94%, var(--bg));
+    background: var(--card);
     border: 1px solid var(--border);
-    border-radius: 1.5rem;
-    padding: 1.5rem 1.75rem;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+    border-radius: var(--radius);
+    padding: 1.35rem 1.5rem;
 }
+.tool-card h2 i { color: var(--primary); font-size: .95rem; }
 .tool-card h2 {
-    font-size: 1rem; font-weight: 800;
-    letter-spacing: 0.05em; text-transform: uppercase;
-    color: var(--primary); margin-bottom: 1.25rem;
+    font-size: 1.05rem; font-weight: 600;
+    color: var(--text); margin-bottom: 1rem;
     display: flex; align-items: center; gap: 0.5rem;
 }
 .s-label {
-    display: block; font-size: 0.78rem; font-weight: 700;
+    display: block; font-size: 0.72rem; font-weight: 500;
     color: var(--text-sec); text-transform: uppercase;
-    letter-spacing: 0.04em; margin-bottom: 0.5rem;
+    letter-spacing: 0.1em; margin-bottom: 0.5rem;
 }
 .btn {
     display: inline-flex; align-items: center; gap: 0.5rem;
     padding: 0.6rem 1.25rem; border-radius: 9999px;
-    font-size: 0.85rem; font-weight: 700; cursor: pointer;
+    font-size: 0.88rem; font-weight: 500; cursor: pointer;
     border: 1px solid transparent; transition: all 0.15s; white-space: nowrap;
 }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn-primary { background: var(--primary); color: #fff; box-shadow: 0 0 18px color-mix(in srgb,var(--primary) 40%,transparent); }
-.btn-danger  { background: rgba(239,68,68,0.12); border-color: rgba(239,68,68,0.3); color: #ef4444; }
-.btn-danger:hover:not(:disabled) { background: rgba(239,68,68,0.25); }
-.btn-ghost   { background: color-mix(in srgb,var(--text-sec) 12%,transparent); color: var(--text); }
-.btn-warning { background: rgba(245,158,11,0.14); border-color: rgba(245,158,11,0.35); color: #f59e0b; }
-.btn-warning:hover:not(:disabled) { background: rgba(245,158,11,0.28); }
+.btn-primary { background: var(--primary); color: var(--on-primary); }
+.btn-danger  { background: color-mix(in srgb, var(--danger) 12%, transparent); border-color: color-mix(in srgb, var(--danger) 30%, transparent); color: var(--danger); }
+.btn-danger:hover:not(:disabled) { background: color-mix(in srgb, var(--danger) 25%, transparent); }
+.btn-ghost   { background: transparent; border-color: var(--border); color: var(--text); }
+.btn-ghost:hover:not(:disabled) { background: var(--card-high); }
+.btn:active:not(:disabled) { transform: scale(.97); }
+.btn-warning { background: color-mix(in srgb, var(--warn) 14%, transparent); border-color: color-mix(in srgb, var(--warn) 35%, transparent); color: var(--warn); }
+.btn-warning:hover:not(:disabled) { background: color-mix(in srgb, var(--warn) 28%, transparent); }
 
 /* channel chips */
 .chip-list { display: flex; flex-direction: column; gap: 0.5rem; max-height: 240px; overflow-y: auto; }
@@ -42,19 +43,19 @@
     display: flex; align-items: center; gap: 0.75rem;
     padding: 0.7rem 1rem; border-radius: 0.9rem;
     border: 1px solid var(--border);
-    background: color-mix(in srgb, var(--bg) 60%, transparent);
+    background: var(--bg);
     cursor: pointer; transition: border-color 0.15s, background 0.15s;
 }
 .chip:hover { border-color: var(--primary); }
 .chip.selected { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 12%, transparent); }
 .chip input { width: 1.05rem; height: 1.05rem; accent-color: var(--primary); }
-.chip .c-name { font-weight: 700; font-size: 0.9rem; }
+.chip .c-name { font-weight: 600; font-size: 0.9rem; }
 .chip .c-id { font-size: 0.72rem; color: var(--text-sec); }
 
 /* progress */
 .progress-track {
-    width: 100%; height: 0.65rem; border-radius: 9999px;
-    background: color-mix(in srgb, var(--text-sec) 18%, transparent);
+    width: 100%; height: 0.4rem; border-radius: 9999px;
+    background: var(--card-high);
     overflow: hidden;
 }
 .progress-fill {
@@ -69,44 +70,44 @@
 
 .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px,1fr)); gap: 0.75rem; }
 .stat-box {
-    background: color-mix(in srgb, var(--bg) 55%, transparent);
+    background: var(--bg);
     border: 1px solid var(--border); border-radius: 0.9rem;
     padding: 0.75rem 0.9rem;
 }
-.stat-box .v { font-size: 1.3rem; font-weight: 800; }
-.stat-box .l { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-sec); }
+.stat-box .v { font-size: 1.3rem; font-weight: 600; }
+.stat-box .l { font-size: 0.8rem; color: var(--text-sec); }
 
 .status-pill {
     display: inline-flex; align-items: center; gap: 0.4rem;
     padding: 0.25rem 0.8rem; border-radius: 9999px;
-    font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em;
+    font-size: 0.75rem; font-weight: 500;
 }
 .status-idle      { background: color-mix(in srgb,var(--text-sec) 15%,transparent); color: var(--text-sec); }
-.status-running   { background: rgba(34,197,94,0.15);  color: #22c55e; }
-.status-paused    { background: rgba(245,158,11,0.15); color: #f59e0b; }
-.status-cancelled { background: rgba(245,158,11,0.15); color: #f59e0b; }
-.status-completed { background: rgba(34,197,94,0.15);  color: #22c55e; }
-.status-error     { background: rgba(239,68,68,0.15);  color: #ef4444; }
+.status-running   { background: color-mix(in srgb, var(--ok) 15%, transparent);  color: var(--ok); }
+.status-paused    { background: color-mix(in srgb, var(--warn) 15%, transparent); color: var(--warn); }
+.status-cancelled { background: color-mix(in srgb, var(--warn) 15%, transparent); color: var(--warn); }
+.status-completed { background: color-mix(in srgb, var(--ok) 15%, transparent);  color: var(--ok); }
+.status-error     { background: color-mix(in srgb, var(--danger) 15%, transparent);  color: var(--danger); }
 
 .dead-row {
     display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
     padding: 0.6rem 0.9rem; border-radius: 0.75rem;
     border: 1px solid var(--border);
-    background: color-mix(in srgb, var(--bg) 55%, transparent);
+    background: var(--bg);
 }
 .dead-list { display: flex; flex-direction: column; gap: 0.4rem; max-height: 320px; overflow-y: auto; }
 .divider { border: none; border-top: 1px solid var(--border); margin: 1.25rem 0; }
 .hint { font-size: 0.78rem; color: var(--text-sec); }
 
-.ba-cell { display: inline-flex; align-items: center; gap: 0.3rem; font-weight: 800; font-size: 0.75rem; }
-.ba-ok { color: #22c55e; }
-.ba-no { color: #ef4444; }
-.ba-warn { color: #f59e0b; }
+.ba-cell { display: inline-flex; align-items: center; gap: 0.3rem; font-weight: 600; font-size: 0.75rem; }
+.ba-ok { color: var(--ok); }
+.ba-no { color: var(--danger); }
+.ba-warn { color: var(--warn); }
 .ba-muted { color: var(--text-sec); }
 .ba-locked { opacity: 0.6; }
 .ba-roles { display: inline-flex; gap: 0.25rem; flex-wrap: wrap; }
 .ba-role {
-    font-size: 0.6rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em;
+    font-size: 0.6rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;
     padding: 0.05rem 0.4rem; border-radius: 9999px;
     background: color-mix(in srgb, var(--primary) 14%, transparent); color: var(--primary);
 }
@@ -115,38 +116,40 @@
 .ba-ch-list { display: flex; flex-direction: column; gap: 0.6rem; }
 .ba-ch-card {
     border: 1px solid var(--border); border-radius: 0.9rem;
-    padding: 0.85rem 1rem; background: color-mix(in srgb, var(--bg) 55%, transparent);
+    padding: 0.85rem 1rem; background: var(--bg);
 }
 .ba-ch-card.selected { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 10%, transparent); }
 .ba-ch-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.6rem; flex-wrap: wrap; }
 .ba-ch-sel { display: flex; align-items: flex-start; gap: 0.6rem; cursor: pointer; min-width: 0; flex: 1; }
 .ba-ch-sel input { width: 1.15rem; height: 1.15rem; accent-color: var(--primary); flex-shrink: 0; margin-top: 0.15rem; }
-.ba-ch-name { font-weight: 800; font-size: 0.9rem; word-break: break-word; }
+.ba-ch-name { font-weight: 600; font-size: 0.9rem; word-break: break-word; }
 .ba-ch-id { font-size: 0.7rem; color: var(--text-sec); word-break: break-all; }
 .ba-bot-grid {
     display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
     gap: 0.4rem 0.9rem; margin-top: 0.7rem;
 }
 .ba-bstat { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; font-size: 0.78rem; }
-.ba-bstat .n { font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ba-bstat .n { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ba-res-row {
     display: flex; flex-direction: column; align-items: stretch; gap: 0.4rem;
     padding: 0.6rem 0.9rem; border-radius: 0.75rem;
-    border: 1px solid var(--border); background: color-mix(in srgb, var(--bg) 55%, transparent);
+    border: 1px solid var(--border); background: var(--bg);
 }
 
 @media (max-width: 640px) {
-    .tool-card { padding: 1.1rem 1rem; border-radius: 1.1rem; }
+    .tool-card { padding: 1.1rem 1rem; }
     .ba-bot-grid { grid-template-columns: 1fr; }
     #ba-bots .chip { width: 100%; }
     .ba-actions .btn { width: 100%; justify-content: center; }
 }
 </style>
 
-<div class="mb-6">
-    <h1 class="text-3xl font-extrabold">Tools</h1>
-    <p class="mt-1 text-sm" style="color:var(--text-sec)">Scan, index, and maintain your library.</p>
-</div>
+<header class="page-head">
+    <div>
+        <h1 class="page-title">Tools</h1>
+        <p class="page-sub">Scan, index and maintain your library</p>
+    </div>
+</header>
 
 <div class="space-y-6">
 
@@ -162,15 +165,15 @@
         </p>
 
         <!-- Active session banner -->
-        <div id="ms-active" class="hidden mb-4" style="border:1px solid rgba(34,197,94,0.35);background:rgba(34,197,94,0.10);border-radius:0.9rem;padding:0.9rem 1.1rem">
+        <div id="ms-active" class="hidden mb-4" style="border:1px solid color-mix(in srgb, var(--ok) 35%, transparent);background:color-mix(in srgb, var(--ok) 10%, transparent);border-radius:0.9rem;padding:0.9rem 1.1rem">
             <div class="flex items-center justify-between flex-wrap gap-2">
                 <div class="min-w-0">
-                    <div class="text-sm font-bold" id="ms-active-title">—</div>
+                    <div class="text-sm font-semibold" id="ms-active-title">—</div>
                     <div class="hint" id="ms-active-detail"></div>
                 </div>
                 <button class="btn btn-danger" onclick="endManualSession()"><i class="fa-solid fa-stop"></i> End session</button>
             </div>
-            <p class="hint mt-2" style="color:#22c55e">
+            <p class="hint mt-2" style="color:var(--ok)">
                 <i class="fa-solid fa-circle-check"></i> Session is live — forward the files now, then click <strong>End session</strong> when finished.
             </p>
         </div>
@@ -193,15 +196,15 @@
                 <div class="flex items-center gap-3">
                     <img id="ms-sel-poster" src="" alt="" style="width:2.75rem;height:4rem;object-fit:cover;border-radius:0.4rem;flex-shrink:0;background:var(--card)">
                     <div class="min-w-0 flex-1">
-                        <div class="text-sm font-bold truncate" id="ms-sel-title">—</div>
+                        <div class="text-sm font-semibold truncate" id="ms-sel-title">—</div>
                         <div class="hint" id="ms-sel-sub"></div>
                     </div>
                 </div>
 
                 <!-- Real (TMDB/IMDb) title: metadata read from each file -->
                 <div id="ms-real-note" class="hidden mt-3">
-                    <p class="hint" style="border:1px solid rgba(59,130,246,0.3);background:rgba(59,130,246,0.08);border-radius:0.75rem;padding:0.7rem 0.9rem">
-                        <i class="fa-solid fa-wand-magic-sparkles" style="color:#3b82f6"></i>
+                    <p class="hint" style="border:1px solid color-mix(in srgb, var(--info) 30%, transparent);background:color-mix(in srgb, var(--info) 8%, transparent);border-radius:0.75rem;padding:0.7rem 0.9rem">
+                        <i class="fa-solid fa-wand-magic-sparkles" style="color:var(--info)"></i>
                         Season, episode and quality are read from each file's name/caption automatically.
                         Forward files to your <strong>auth</strong> or <strong>manual</strong> channel.
                     </p>
@@ -221,7 +224,7 @@
                 <div id="ms-personal-fields" class="hidden mt-3">
                     <div id="ms-tv-fields" class="hidden grid grid-cols-2 gap-3">
                         <div>
-                            <label class="s-label">Season <span style="color:#ef4444">*</span></label>
+                            <label class="s-label">Season <span style="color:var(--danger)">*</span></label>
                             <input id="ms-season" type="number" min="0" placeholder="e.g. 1"
                                    style="width:100%;background:color-mix(in srgb,var(--bg) 60%,transparent);border:1px solid var(--border);border-radius:0.9rem;padding:0.6rem 0.9rem;color:var(--text);outline:none">
                         </div>
@@ -277,7 +280,7 @@
 
         <!-- live progress -->
         <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
-            <div class="text-sm font-bold" id="scan-current">No scan running</div>
+            <div class="text-sm font-semibold" id="scan-current">No scan running</div>
             <div class="text-sm" style="color:var(--text-sec)">
                 <i class="fa-regular fa-clock"></i> <span id="scan-elapsed">0s</span>
             </div>
@@ -288,13 +291,13 @@
 
         <div class="stat-grid mb-4">
             <div class="stat-box"><div class="v" id="sc-processed">0</div><div class="l">Processed</div></div>
-            <div class="stat-box"><div class="v" style="color:#22c55e" id="sc-indexed">0</div><div class="l">Indexed</div></div>
+            <div class="stat-box"><div class="v" style="color:var(--ok)" id="sc-indexed">0</div><div class="l">Indexed</div></div>
             <div class="stat-box"><div class="v" id="sc-dup">0</div><div class="l">Skipped (dup)</div></div>
             <div class="stat-box"><div class="v" id="sc-meta">0</div><div class="l">Skipped (meta)</div></div>
             <div class="stat-box"><div class="v" id="sc-nonvid">0</div><div class="l">Non-video</div></div>
-            <div class="stat-box"><div class="v" style="color:#3b82f6" id="sc-sub-added">0</div><div class="l">Subtitles added</div></div>
+            <div class="stat-box"><div class="v" style="color:var(--info)" id="sc-sub-added">0</div><div class="l">Subtitles added</div></div>
             <div class="stat-box"><div class="v" id="sc-sub-skipped">0</div><div class="l">Subtitles skipped</div></div>
-            <div class="stat-box"><div class="v" style="color:#ef4444" id="sc-errors">0</div><div class="l">Errors</div></div>
+            <div class="stat-box"><div class="v" style="color:var(--danger)" id="sc-errors">0</div><div class="l">Errors</div></div>
         </div>
 
         <div class="flex items-center gap-2 flex-wrap">
@@ -308,7 +311,7 @@
                 <i class="fa-solid fa-stop"></i> Stop
             </button>
         </div>
-        <p class="hint mt-3" id="scan-error" style="color:#ef4444;display:none"></p>
+        <p class="hint mt-3" id="scan-error" style="color:var(--danger);display:none"></p>
     </div>
 
     <!-- ══ Bot Admin Manager ════════════════════════════════════════════ -->
@@ -343,15 +346,15 @@
                 <i class="fa-solid fa-arrows-rotate"></i> Scan
             </button>
             <span class="hint" style="display:flex;align-items:center;gap:0.9rem;flex-wrap:wrap">
-                <span><span class="ba-ok">✓</span> Admin</span>
-                <span><span class="ba-no">✗</span> Not in channel</span>
+                <span><i class="fa-solid fa-check ba-ok"></i> Admin</span>
+                <span><i class="fa-solid fa-xmark ba-no"></i> Not in channel</span>
                 <span><span class="ba-warn">●</span> Member (not admin)</span>
                 <span><i class="fa-solid fa-lock ba-muted"></i> Can't manage</span>
             </span>
         </div>
 
         <div id="ba-loading" class="hint" style="display:none"><i class="fa-solid fa-spinner fa-spin"></i> Scanning channels &amp; bots…</div>
-        <div id="ba-error" class="hint" style="color:#ef4444;display:none"></div>
+        <div id="ba-error" class="hint" style="color:var(--danger);display:none"></div>
 
         <div id="ba-body" style="display:none">
             <label class="s-label">Bots to add</label>
@@ -376,7 +379,7 @@
 
             <div id="ba-progress" class="mt-4" style="display:none">
                 <div class="flex items-center justify-between mb-2 text-sm flex-wrap gap-2">
-                    <span class="font-bold"><i class="fa-solid fa-user-shield"></i> Applying…</span>
+                    <span class="font-semibold"><i class="fa-solid fa-user-shield"></i> Applying…</span>
                     <span style="color:var(--text-sec)"><span id="ba-prog-done">0</span>/<span id="ba-prog-total">0</span> channels</span>
                 </div>
                 <div class="progress-track"><div class="progress-fill" id="ba-prog-bar"></div></div>
@@ -405,7 +408,7 @@
         </p>
 
         <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
-            <div class="text-sm font-bold" id="dbc-current">No check running</div>
+            <div class="text-sm font-semibold" id="dbc-current">No check running</div>
             <div class="text-sm" style="color:var(--text-sec)">
                 <i class="fa-solid fa-gauge-high"></i> <span id="dbc-speed">0</span>/s ·
                 <i class="fa-regular fa-clock"></i> <span id="dbc-elapsed">0s</span>
@@ -417,8 +420,8 @@
 
         <div class="stat-grid mb-4">
             <div class="stat-box"><div class="v" id="dbc-checked">0</div><div class="l">Checked</div></div>
-            <div class="stat-box"><div class="v" style="color:#22c55e" id="dbc-alive">0</div><div class="l">Alive</div></div>
-            <div class="stat-box"><div class="v" style="color:#ef4444" id="dbc-dead">0</div><div class="l">Dead</div></div>
+            <div class="stat-box"><div class="v" style="color:var(--ok)" id="dbc-alive">0</div><div class="l">Alive</div></div>
+            <div class="stat-box"><div class="v" style="color:var(--danger)" id="dbc-dead">0</div><div class="l">Dead</div></div>
             <div class="stat-box"><div class="v" id="dbc-errors">0</div><div class="l">Errors</div></div>
             <div class="stat-box"><div class="v" id="dbc-purged">0</div><div class="l">Purged</div></div>
         </div>
@@ -466,7 +469,7 @@
         <div class="stat-grid mb-4">
             <div class="stat-box"><div class="v" id="dup-scanned">0</div><div class="l">Scanned</div></div>
             <div class="stat-box"><div class="v" id="dup-groups">0</div><div class="l">Groups</div></div>
-            <div class="stat-box"><div class="v" style="color:#f59e0b" id="dup-count">0</div><div class="l">Redundant</div></div>
+            <div class="stat-box"><div class="v" style="color:var(--warn)" id="dup-count">0</div><div class="l">Redundant</div></div>
             <div class="stat-box"><div class="v" id="dup-purged">0</div><div class="l">Removed</div></div>
         </div>
 
@@ -482,7 +485,7 @@
 
         <div id="dup-purge-progress" class="hidden mb-2">
             <div class="flex items-center justify-between mb-1 text-sm flex-wrap gap-2">
-                <span class="font-bold" id="dup-purge-label"><i class="fa-solid fa-broom"></i> Removing duplicates…</span>
+                <span class="font-semibold" id="dup-purge-label"><i class="fa-solid fa-broom"></i> Removing duplicates…</span>
                 <span style="color:var(--text-sec)">
                     <span id="dup-purge-done">0</span>/<span id="dup-purge-total">0</span> ·
                     <i class="fa-regular fa-clock"></i> <span id="dup-purge-elapsed">0s</span> ·
@@ -545,7 +548,7 @@ async function searchManualSession() {
                 : `<span class="c-id">${escapeHtml(String(r.year || '—'))} · New · ${escapeHtml(String(r.source || '').toUpperCase())} · ${escapeHtml(String(r.selected_id || ''))}</span>`;
             return `
             <label class="chip" onclick="pickManualResult(${i})">
-                <img src="${escapeHtmlAttr(r.poster) || '/static/placeholder.jpg'}" onerror="this.src='/static/placeholder.jpg'"
+                <img src="${escapeHtmlAttr(r.poster) || '/static/placeholder.svg'}" onerror="this.src='/static/placeholder.svg'"
                      style="width:2.25rem;height:3.25rem;object-fit:cover;border-radius:0.35rem;flex-shrink:0;background:var(--card)">
                 <span class="min-w-0">
                     <span class="c-name block truncate">${escapeHtml(r.title)}
@@ -568,7 +571,7 @@ function pickManualResult(i) {
     const isPersonal = !!r.is_personal;
     const isTv = r.media_type === 'tv';
 
-    document.getElementById('ms-sel-poster').src = r.poster || '/static/placeholder.jpg';
+    document.getElementById('ms-sel-poster').src = r.poster || '/static/placeholder.svg';
     document.getElementById('ms-sel-title').textContent = r.title;
     const locationText = r.in_library ? `TMDB ${r.tmdb_id} · DB #${r.db_index}` : `New · ${String(r.source || '').toUpperCase()} ${r.selected_id || ''}`;
     document.getElementById('ms-sel-sub').textContent =
@@ -727,7 +730,7 @@ async function loadChannels() {
             </label>
         `).join('');
     } catch (e) {
-        list.innerHTML = `<div class="hint" style="color:#ef4444">Failed to load channels.</div>`;
+        list.innerHTML = `<div class="hint" style="color:var(--danger)">Failed to load channels.</div>`;
     }
 }
 
@@ -963,7 +966,7 @@ function renderDeadList(entries) {
     list.innerHTML = entries.map(e => `
         <div class="dead-row">
             <span class="min-w-0 truncate">
-                <i class="fa-solid fa-link-slash" style="color:#ef4444"></i>
+                <i class="fa-solid fa-link-slash" style="color:var(--danger)"></i>
                 ${escapeHtml(e.title || 'Unknown')}
                 ${e.quality ? `<span class="c-id">· ${escapeHtml(e.quality)}</span>` : ''}
             </span>
@@ -1134,8 +1137,8 @@ function renderDupList() {
     }
     list.innerHTML = dupGroups.map(g => `
         <div class="dead-row" style="flex-direction:column;align-items:stretch;gap:0.5rem">
-            <div class="min-w-0 truncate font-bold">
-                <i class="fa-solid fa-clone" style="color:#f59e0b"></i>
+            <div class="min-w-0 truncate font-semibold">
+                <i class="fa-solid fa-clone" style="color:var(--warn)"></i>
                 ${escapeHtml(g.title || 'Unknown')}
                 <span class="c-id">· ${escapeHtml(g.quality || '')} · ${g.entries.length} copies</span>
             </div>
@@ -1282,7 +1285,7 @@ function renderBotAdmin() {
         const session = BA_SESSION[ch.session_status] || BA_SESSION.unknown;
         const disabled = ch.manageable ? '' : 'disabled';
         const reason = (!ch.manageable && ch.reason)
-            ? `<div class="hint" style="color:#f59e0b;margin-top:0.5rem"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(ch.reason)}</div>` : '';
+            ? `<div class="hint" style="color:var(--warn);margin-top:0.5rem"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(ch.reason)}</div>` : '';
         const botStats = bots.map(b => `
             <div class="ba-bstat">
                 <span class="n">${escapeHtml(b.name)}</span>
@@ -1415,11 +1418,11 @@ function renderBotAdminResults(results) {
     box.style.display = '';
     box.innerHTML = results.map(ch => `
         <div class="ba-res-row">
-            <div class="font-bold"><i class="fa-solid fa-hashtag ba-muted"></i> ${escapeHtml(ch.name)}</div>
+            <div class="font-semibold"><i class="fa-solid fa-hashtag ba-muted"></i> ${escapeHtml(ch.name)}</div>
             ${(ch.items || []).map(it => `
                 <div style="display:flex;gap:0.5rem;align-items:flex-start;padding-left:1rem">
                     ${icon[it.status] || ''}
-                    <span class="min-w-0"><span class="font-bold">${escapeHtml(it.bot)}</span>
+                    <span class="min-w-0"><span class="font-semibold">${escapeHtml(it.bot)}</span>
                         <span class="c-id">— ${escapeHtml(it.message || it.status)}</span></span>
                 </div>
             `).join('')}

@@ -180,6 +180,9 @@ def parse_media_name(name: str) -> dict:
                 if _ep_int is not None and _ep_int > 0:
                     parsed["episode"] = _ep_int
 
+    if not parsed["quality"] and (m := _RES_GLUED_RE.search(name)):
+        parsed["quality"] = m.group(0).lower()
+
     # Normalize season 0 → None (specials folder only, not a real season for routing)
     try:
         if parsed.get("season") is not None and int(parsed["season"]) == 0:
@@ -210,6 +213,7 @@ def is_multipart_video(filename: str) -> bool:
 _SEASON_EP_RE = _EXPLICIT_SXXEXX_RE
 # Resolution with an explicit trailing 'p' (unambiguous quality marker)
 _RES_WITH_P_RE = re.compile(r"(?i)(?<![\w])(?:240|360|480|576|720|1080|1440|2160|4320)p(?![\w])")
+_RES_GLUED_RE = re.compile(r"(?i)(?<!\d)(?:240|360|480|576|720|1080|1440|2160|4320)p(?!\d)")
 # Bare resolution value with NO trailing 'p' (e.g. "One Piece 1223 720.mkv") is
 # ambiguous with an absolute episode number that happens to equal a common
 # resolution (episode 240, 480, 720...). Only treat it as quality when it's the

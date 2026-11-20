@@ -1,3 +1,4 @@
+import secrets
 import time
 
 from fastapi import Depends, Form, HTTPException, Request
@@ -6,9 +7,10 @@ from fastapi.templating import Jinja2Templates
 
 from Backend import StartTime, __version__, db
 from Backend.config import Telegram
-from Backend.fastapi.security.credentials import get_current_user, is_authenticated, require_auth, verify_credentials
-from Backend.fastapi.themes import DEFAULT_THEME, DEFAULT_STYLE, get_all_themes, get_all_styles, get_theme
-from Backend.helper.analytics import get_activity_overview
+from Backend.fastapi.security.credentials import get_current_user, is_authenticated, require_auth, revoke_session, verify_credentials
+from Backend.fastapi.themes import get_all_themes, get_theme, theme_key
+from Backend.helper.analytics import client_ip_from, get_activity_overview
+from Backend.helper.bounded import BoundedDict
 from Backend.helper.custom_dl import ACTIVE_STREAMS, RECENT_STREAMS
 from Backend.helper.metadata import resolve_cover_url
 from Backend.helper.pyro import get_readable_time
@@ -24,15 +26,12 @@ templates.env.globals["cover_url"] = resolve_cover_url
 
 #----- Shared template context (request, theme metadata) for every page
 def _base_context(request: Request) -> dict:
-    theme_name = request.session.get("theme", DEFAULT_THEME)
-    style_name = request.session.get("style", DEFAULT_STYLE)
+    theme_name = theme_key(request)
     return {
         "request": request,
-        "theme": get_theme(theme_name, style_name),
+        "theme": get_theme(theme_name),
         "themes": get_all_themes(),
-        "styles": get_all_styles(),
         "current_theme": theme_name,
-        "current_style": style_name,
     }
 
 
@@ -51,11 +50,26 @@ async def login_page(request: Request):
 
 
 #----- Handle login submission
+_FAILED_LOGINS = BoundedDict(1000)
+_LOGIN_MAX_FAILS = 5
+_LOGIN_WINDOW = 15 * 60
+
+
 async def login_post(request: Request, username: str = Form(...), password: str = Form(...)):
+    ip = client_ip_from(request)
+    now = time.time()
+    fails = [t for t in _FAILED_LOGINS.get(ip, []) if now - t < _LOGIN_WINDOW]
+    if len(fails) >= _LOGIN_MAX_FAILS:
+        ctx = _base_context(request)
+        ctx["error"] = "Too many failed attempts. Try again in 15 minutes."
+        return templates.TemplateResponse("login.html", ctx, status_code=429)
     if verify_credentials(username, password):
+        _FAILED_LOGINS.pop(ip, None)
         request.session["authenticated"] = True
         request.session["username"] = username
+        request.session["sid"] = secrets.token_urlsafe(16)
         return RedirectResponse(url="/", status_code=302)
+    _FAILED_LOGINS[ip] = fails + [now]
     ctx = _base_context(request)
     ctx["error"] = "Invalid credentials"
     return templates.TemplateResponse("login.html", ctx)
@@ -63,17 +77,16 @@ async def login_post(request: Request, username: str = Form(...), password: str 
 
 #----- Clear the session and return to login
 async def logout(request: Request):
-    request.session.clear()
+    revoke_session(request)
     return RedirectResponse(url="/login", status_code=302)
 
 
 #----- Persist the chosen theme and return to the referring page
-async def set_theme(request: Request, theme: str = Form(None), style: str = Form(None)):
+async def set_theme(request: Request, theme: str = Form(None)):
+    response = RedirectResponse(url=request.headers.get("referer", "/"), status_code=302)
     if theme and theme in get_all_themes():
-        request.session["theme"] = theme
-    if style and style in get_all_styles():
-        request.session["style"] = style
-    return RedirectResponse(url=request.headers.get("referer", "/"), status_code=302)
+        response.set_cookie("theme", theme, max_age=31536000, samesite="lax")
+    return response
 
 
 #----- Main dashboard: aggregate DB stats and live/recent stream telemetry

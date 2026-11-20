@@ -1,6 +1,33 @@
+import asyncio
+
 from pyrogram import Client
+from pyrogram.session import Session
 
 from Backend.config import Telegram
+from Backend.logger import LOGGER
+
+
+async def _restart(self) -> None:
+    lock = self.__dict__.setdefault("_restart_lock", asyncio.Lock())
+    if lock.locked():
+        return
+    async with lock:
+        delay = 5
+        while True:
+            try:
+                await self.stop()
+            except Exception:
+                pass
+            try:
+                await self.start()
+                return
+            except Exception as e:
+                LOGGER.warning(f"Telegram session restart failed, retrying in {delay}s: {e}")
+                await asyncio.sleep(delay)
+                delay = min(delay * 2, 60)
+
+
+Session.restart = _restart
 
 #----- Primary bot client (loads plugins)
 StreamBot = Client(

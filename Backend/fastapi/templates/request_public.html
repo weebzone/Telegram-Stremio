@@ -3,48 +3,46 @@
 
 {% block content %}
 <style>
-  .rp-shell { max-width: 1100px; margin: 0 auto; }
-  .rp-hero { text-align: center; padding: 1rem 0 1.75rem; }
-  .rp-hero h1 { font-size: clamp(1.8rem, 4vw, 2.8rem); font-weight: 900; letter-spacing: -0.02em;
-                background: linear-gradient(120deg, var(--primary), var(--accent, var(--primary)));
-                -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
-  .rp-hero p { color: var(--text-sec); margin-top: 0.5rem; font-size: 0.98rem; }
-  .rp-search { display: flex; gap: 0.6rem; max-width: 640px; margin: 1.25rem auto 0; }
-  .rp-search input { flex: 1; background: var(--surface, rgba(255,255,255,0.05)); border: 1px solid var(--hairline, rgba(255,255,255,0.12));
-                     color: var(--text); border-radius: 9999px; padding: 0.85rem 1.25rem; font-size: 1rem; outline: none; }
-  .rp-search input:focus { border-color: var(--primary); }
-  .rp-search button { background: var(--primary); color: var(--bg); border: none; border-radius: 9999px;
-                      padding: 0 1.5rem; font-weight: 800; cursor: pointer; font-size: 1rem; }
-  .rp-hint { text-align: center; color: var(--text-sec); font-size: 0.8rem; margin-top: 0.6rem; }
-  .rp-section-title { font-size: 1.15rem; font-weight: 800; margin: 2rem 0 1rem; display: flex; align-items: center; gap: 0.5rem; }
-  .rp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 1rem; }
-  .rp-card { background: var(--surface, rgba(255,255,255,0.03)); border: 1px solid var(--hairline, rgba(255,255,255,0.08));
-             border-radius: 1rem; overflow: hidden; display: flex; flex-direction: column; transition: transform .15s, border-color .15s; }
-  .rp-card:hover { transform: translateY(-3px); border-color: var(--primary); }
-  .rp-poster { position: relative; aspect-ratio: 2/3; background: linear-gradient(135deg, #1f2937, #111827); }
-  .rp-poster img { width: 100%; height: 100%; object-fit: cover; display: block; }
-  .rp-poster .noimg { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 2rem; color: var(--text-sec); }
-  .rp-type { position: absolute; top: 0.5rem; left: 0.5rem; background: rgba(0,0,0,0.65); color: #fff;
-             padding: 0.15rem 0.55rem; border-radius: 9999px; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; }
-  .rp-count { position: absolute; top: 0.5rem; right: 0.5rem; background: var(--primary); color: var(--bg);
-              padding: 0.15rem 0.55rem; border-radius: 9999px; font-size: 0.72rem; font-weight: 800; }
-  .rp-body { padding: 0.65rem 0.75rem; display: flex; flex-direction: column; gap: 0.5rem; flex: 1; }
-  .rp-title { font-weight: 700; font-size: 0.9rem; line-height: 1.25; }
-  .rp-btn { margin-top: auto; border: none; border-radius: 0.6rem; padding: 0.5rem; font-weight: 800; font-size: 0.82rem;
-            cursor: pointer; background: color-mix(in srgb, var(--primary) 18%, transparent); color: var(--primary); }
-  .rp-btn:hover { background: var(--primary); color: var(--bg); }
-  .rp-btn.is-available { background: rgba(34,197,94,0.18); color: #22c55e; cursor: default; }
+  .rp-shell { max-width: 1040px; margin: 0 auto; }
+  .rp-brand { display: flex; align-items: center; gap: .6rem; font-weight: 600; margin-bottom: 2.5rem; }
+  .rp-hero { padding: .5rem 0 1rem; }
+  .rp-hero h1 { font-size: clamp(1.75rem, 4.5vw, 2.5rem); font-weight: 600; letter-spacing: -0.025em; line-height: 1.1; }
+  .rp-hero p { color: var(--text-sec); margin-top: .6rem; font-size: .98rem; max-width: 34rem; }
+  .rp-search { position: relative; display: flex; max-width: 640px; margin-top: 1.5rem; }
+  .rp-search input { flex: 1; min-width: 0; background: var(--card); border: 1px solid var(--border); color: var(--text); border-radius: 9999px; padding: .9rem 4rem .9rem 1.25rem; font-size: 1rem; outline: none; transition: border-color .18s var(--ease), box-shadow .18s var(--ease); }
+  .rp-search input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--ring); }
+  .rp-search button { position: absolute; right: 5px; top: 5px; bottom: 5px; aspect-ratio: 1; background: var(--primary); color: var(--on-primary); border: 0; border-radius: 9999px; cursor: pointer; transition: transform .12s var(--ease); }
+  .rp-search button:active { transform: scale(.94); }
+  .rp-hint { color: var(--text-sec); font-size: .82rem; margin-top: .7rem; }
+  .rp-hint b { color: var(--text); font-weight: 500; }
+  .rp-section-title { font-size: .72rem; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; color: var(--text-sec); margin: 2.5rem .25rem .75rem; display: flex; align-items: center; gap: .5rem; }
+  .rp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 1.25rem 1rem; }
+  .rp-card { min-width: 0; display: flex; flex-direction: column; }
+  .rp-poster { position: relative; aspect-ratio: 2/3; border-radius: 14px; overflow: hidden; background: var(--card-high); }
+  .rp-poster img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .4s var(--ease); }
+  .rp-card:hover .rp-poster img { transform: scale(1.04); }
+  .rp-poster .noimg { position: absolute; inset: 0; display: grid; place-items: center; font-size: 1.5rem; color: var(--text-sec); }
+  .rp-type, .rp-count { position: absolute; top: 6px; padding: 2px 8px; border-radius: 9999px; font-size: .72rem; line-height: 1.4; background: rgba(0,0,0,.72); color: #fff; }
+  .rp-type { left: 6px; }
+  .rp-count { right: 6px; }
+  .rp-body { padding: .6rem .1rem 0; display: flex; flex-direction: column; gap: .6rem; flex: 1; }
+  .rp-title { font-weight: 500; font-size: .92rem; line-height: 1.3; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .rp-btn { margin-top: auto; border: 1px solid var(--border); border-radius: 9999px; padding: .45rem; font-size: .84rem; cursor: pointer; background: transparent; color: var(--text); transition: background-color .15s var(--ease), color .15s var(--ease), border-color .15s var(--ease), transform .12s var(--ease); }
+  .rp-btn:hover { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
+  .rp-btn:active { transform: scale(.96); }
+  .rp-btn:disabled { opacity: .5; cursor: default; }
+  .rp-btn.is-available { background: rgba(34,197,94,0.18); color: #22c55e; border-color: rgba(34,197,94,0.4); cursor: default; }
   .rp-btn.is-available:hover { background: rgba(34,197,94,0.18); color: #22c55e; }
-  .rp-empty { text-align: center; color: var(--text-sec); padding: 2rem 1rem; }
-  .rp-spinner { text-align: center; color: var(--text-sec); padding: 2rem; }
+  .rp-empty { color: var(--text-sec); padding: 2rem .25rem; }
+  .rp-spinner { color: var(--text-sec); padding: 2rem .25rem; }
   .rp-badge { display: inline-block; font-size: 0.68rem; font-weight: 800; border-radius: 9999px; padding: 0.15rem 0.55rem; }
   .rp-badge.missing { background: rgba(239,68,68,0.18); color: #ef4444; }
   .rp-badge.partial { background: rgba(245,158,11,0.18); color: #f59e0b; }
   .rp-badge.complete { background: rgba(34,197,94,0.18); color: #22c55e; }
   .rp-seasons { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.25rem; }
   .rp-season-chip { font-size: 0.74rem; font-weight: 700; border-radius: 0.5rem; padding: 0.25rem 0.5rem;
-                     border: 1px solid var(--hairline, rgba(255,255,255,0.15)); background: transparent; color: var(--text-sec); cursor: pointer; }
-  .rp-season-chip.on { background: var(--primary); color: var(--bg); border-color: var(--primary); }
+                     border: 1px solid var(--border); background: transparent; color: var(--text-sec); cursor: pointer; }
+  .rp-season-chip.on { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
   .rp-season-chip.have { opacity: 0.85; border-color: rgba(34,197,94,0.6); color: #22c55e; }
   .rp-season-actions { display: flex; gap: 0.4rem; margin-top: 0.5rem; }
   .rp-season-actions .rp-btn { flex: 1; }
@@ -53,23 +51,24 @@
 </style>
 
 <div class="rp-shell">
+  <div class="rp-brand"><span class="brand-mark"><i class="fa-solid fa-play"></i></span>TG Stremio</div>
   <div class="rp-hero">
     <h1>Solicita una película o serie</h1>
-    <p>¿No encuentras algo? Búsquelo abajo y envía una solicitud — intentaremos agregarlo.</p>
+    <p>¿No encuentras algo? Búscalo abajo y envía una solicitud — intentaremos agregarlo.</p>
     <form class="rp-search" onsubmit="doSearch(event)">
-      <input id="rp-q" type="text" placeholder="Buscar por nombre, IMDb ID (tt…) o TMDB ID" autocomplete="off">
-      <button type="submit"><i class="fa-solid fa-magnifying-glass"></i></button>
+      <input id="rp-q" type="search" enterkeyhint="search" placeholder="Buscar por nombre, IMDb ID (tt…) o TMDB ID" autocomplete="off">
+      <button type="submit" aria-label="Search"><i class="fa-solid fa-magnifying-glass"></i></button>
     </form>
     <p class="rp-hint">Ejemplos: <b>Inception</b> · <b>tt1375666</b> · <b>27205</b></p>
   </div>
 
   <div id="rp-results-wrap" style="display:none">
-    <div class="rp-section-title"><i class="fa-solid fa-list"></i> Resultados de búsqueda</div>
+    <div class="rp-section-title">Resultados de búsqueda</div>
     <div id="rp-results" class="rp-grid"></div>
   </div>
 
   <div id="rp-popular-wrap">
-    <div class="rp-section-title"><i class="fa-solid fa-fire" style="color:#f59e0b"></i> Más solicitados</div>
+    <div class="rp-section-title">Más solicitados</div>
     <div id="rp-popular" class="rp-grid"></div>
   </div>
 </div>
@@ -137,7 +136,7 @@ function resultCard(r, idx) {
 
 function popularCard(r) {
   const yr = r.year ? ` (${esc(r.year)})` : '';
-  const count = `<span class="rp-count">👥 ${esc(r.request_count || 0)}</span>`;
+  const count = `<span class="rp-count"><i class="fa-solid fa-user-group"></i> ${esc(r.request_count || 0)}</span>`;
   return `<div class="rp-card">
     ${posterHtml(r, count)}
     <div class="rp-body"><div class="rp-title">${esc(r.title)}${yr}</div></div>

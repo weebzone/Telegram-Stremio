@@ -180,6 +180,14 @@ class Database:
         doc = await self.dbs["tracking"]["state"].find_one({"_id": "catalog_order"})
         return list((doc or {}).get("order", []))
 
+    async def get_hidden_catalogs(self) -> List[str]:
+        doc = await self.dbs["tracking"]["state"].find_one({"_id": "catalog_hidden"})
+        return list((doc or {}).get("keys", []))
+
+    async def save_hidden_catalogs(self, keys: List[str]) -> None:
+        await self.dbs["tracking"]["state"].update_one(
+            {"_id": "catalog_hidden"}, {"$set": {"keys": [str(x) for x in keys]}}, upsert=True)
+
     async def save_catalog_order(self, order: List[str]) -> bool:
         await self.dbs["tracking"]["state"].update_one(
             {"_id": "catalog_order"},
@@ -588,10 +596,24 @@ class Database:
         })
         return str(result.inserted_id)
 
-    async def get_custom_catalogs(self, visible_only: bool = False) -> List[dict]:
-        query = {"visible": True} if visible_only else {}
-        cursor = self.dbs["tracking"]["custom_catalogs"].find(query).sort("updated_at", DESCENDING)
-        catalogs = await cursor.to_list(None)
+    #----- slim=True keeps only distinct (media_type, visibility, allowed_tokens) per item
+    async def get_custom_catalogs(self, visible_only: bool = False, slim: bool = False, item_fields: Optional[tuple] = None) -> List[dict]:
+        pipeline = [{"$match": {"visible": True} if visible_only else {}}, {"$sort": {"updated_at": DESCENDING}}]
+        if slim:
+            pipeline.append({"$addFields": {"items": {"$setUnion": [{"$map": {
+                "input": {"$ifNull": ["$items", []]},
+                "in": {"media_type": "$$this.media_type", "visibility": "$$this.visibility", "allowed_tokens": "$$this.allowed_tokens"},
+            }}]}}})
+        if item_fields is not None:
+            pipeline.append({"$addFields": {"item_count": {"$size": {"$ifNull": ["$items", []]}}}})
+            if item_fields:
+                pipeline.append({"$addFields": {"items": {"$map": {
+                    "input": {"$ifNull": ["$items", []]},
+                    "in": {f: f"$$this.{f}" for f in item_fields},
+                }}}})
+            else:
+                pipeline.append({"$project": {"items": 0}})
+        catalogs = await self.dbs["tracking"]["custom_catalogs"].aggregate(pipeline).to_list(None)
         return [self._normalize_catalog(convert_objectid_to_str(catalog)) for catalog in catalogs]
 
     async def get_custom_catalog(self, catalog_id: str) -> Optional[dict]:
@@ -1012,6 +1034,7 @@ class Database:
         raw_items = catalog.get("items", []) or []
         if db_media_type:
             raw_items = [item for item in raw_items if item.get("media_type") == db_media_type]
+        raw_items = sorted(raw_items, key=lambda i: str(i.get("release_date") or ""), reverse=True)
 
         total_count = len(raw_items)
         skip = (page - 1) * page_size
@@ -1848,6 +1871,8 @@ class Database:
         episode_number: Optional[int] = None,
         kitsu_id: Optional[int] = None,
         absolute_episode: Optional[int] = None,
+        tmdb_id: Optional[int] = None,
+        media_type: Optional[str] = None,
         projection: Optional[dict] = None,
     ) -> Optional[dict]:
 
@@ -1856,12 +1881,14 @@ class Database:
                 return col.find_one({"imdb_id": imdb_id}, projection)
             if kitsu_id is not None:
                 return col.find_one({"kitsu_id": int(kitsu_id)}, projection)
+            if tmdb_id is not None:
+                return col.find_one({"tmdb_id": int(tmdb_id)}, projection)
             return None
 
         for db_idx in range(self.current_db_index, 0, -1):
             db_key = f"storage_{db_idx}"
 
-            if absolute_episode is not None and (kitsu_id is not None or imdb_id):
+            if absolute_episode is not None and (kitsu_id is not None or imdb_id or tmdb_id is not None):
                 tv_show = await _find_doc(self.dbs[db_key]["tv"])
                 if tv_show:
                     for season in tv_show.get("seasons", []):
@@ -1938,6 +1965,24 @@ class Database:
                             return details
             
             else:
+                if tmdb_id is not None and media_type == "movie":
+                    movie_doc = await _find_doc(self.dbs[db_key]["movie"])
+                    if movie_doc:
+                        movie_doc = convert_objectid_to_str(movie_doc)
+                        movie_doc["type"] = "movie"
+                        movie_doc["db_index"] = db_idx
+                        return movie_doc
+                    continue
+
+                if tmdb_id is not None and media_type in ("series", "tv"):
+                    tv_doc = await _find_doc(self.dbs[db_key]["tv"])
+                    if tv_doc:
+                        tv_doc = convert_objectid_to_str(tv_doc)
+                        tv_doc["type"] = "tv"
+                        tv_doc["db_index"] = db_idx
+                        return tv_doc
+                    continue
+
                 tv_doc = await _find_doc(self.dbs[db_key]["tv"])
                 if tv_doc:
                     tv_doc = convert_objectid_to_str(tv_doc)
@@ -2468,7 +2513,7 @@ class Database:
             #----- Direct update in the telegram array for movies
             result = await self.dbs[db_key]["movie"].update_one(
                 {"tmdb_id": tmdb_id, "telegram.id": quality_id},
-                {"$set": {"telegram.$.is_dead": True, "updated_on": datetime.utcnow()}}
+                {"$set": {"telegram.$.is_dead": True}}
             )
             return result.modified_count > 0
             
@@ -2491,7 +2536,6 @@ class Database:
                 if found: break
                 
             if found:
-                tv["updated_on"] = datetime.utcnow()
                 result = await self.dbs[db_key]["tv"].replace_one({"tmdb_id": tmdb_id}, tv)
                 return result.modified_count > 0
                 

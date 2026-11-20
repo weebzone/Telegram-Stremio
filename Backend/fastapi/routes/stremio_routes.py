@@ -17,15 +17,18 @@ import httpx
 from Backend import __version__, db
 from Backend.helper.auto_catalog import provider_bucket
 from Backend.helper.database import META_PROJECTION
+from Backend.helper.auto_catalog import catalog_sort_key
+from Backend.helper.bounded import BoundedDict
 from Backend.config import Telegram
 from Backend.helper.analytics import client_ip_from, record_client
 from Backend.fastapi.security.tokens import verify_token
+from Backend.helper import own_bots
 from Backend.helper.cf_stream import cf_enabled, cf_stream_url
-from Backend.fastapi.themes import DEFAULT_THEME, get_theme
+from Backend.fastapi.themes import get_theme, theme_key
 from Backend.helper.fanart import fanart_artwork
 from Backend.helper.global_search import global_search, is_global_search_enabled
 from Backend.helper.metadata.providers.cinemeta import get_detail, get_season
-from Backend.helper.metadata import resolve_cover_url, COMBINED_SEASON, COMBINED_EPISODE_BASE, tmdb_api_key
+from Backend.helper.metadata import resolve_cover_url, COMBINED_SEASON, COMBINED_EPISODE_BASE, tmdb_api_key, get_tmdb_client, format_tmdb_image
 from Backend.helper.database import convert_objectid_to_str
 from Backend.helper.split_files import parse_combined_episodes, combined_name_key
 from Backend.helper.settings_manager import SettingsManager
@@ -48,6 +51,140 @@ templates = Jinja2Templates(directory="Backend/fastapi/templates")
 ADDON_NAME = "Telegram"
 ADDON_VERSION = __version__
 PAGE_SIZE = 15
+
+
+async def _external_meta_for_id(id: str, parsed: dict, media_type: str) -> Optional[dict]:
+    """Resolve basic metadata from TMDB or Cinemeta when an item is not in the database.
+    This prevents Stremio/Nuvio from crashing with 'Could not load details' on un-cached items."""
+    try:
+        tmdb_id = parsed.get("tmdb_id")
+        if tmdb_id is not None and tmdb_api_key():
+            client = get_tmdb_client()
+            is_movie = media_type == "movie" or parsed.get("tmdb_media_type") == "movie"
+            target = client.movie(tmdb_id) if is_movie else client.tv(tmdb_id)
+            item = await target.details(append_to_response="images,credits,external_ids")
+            if not item:
+                return None
+
+            name = getattr(item, "title", None) if is_movie else getattr(item, "name", None)
+            name = name or getattr(item, "original_title", None) or getattr(item, "original_name", None) or ""
+
+            rel_date = getattr(item, "release_date", None) if is_movie else getattr(item, "first_air_date", None)
+            year_str = str(rel_date.year) if (rel_date and getattr(rel_date, "year", None)) else ""
+
+            ext_ids = getattr(item, "external_ids", None)
+            external_imdb = getattr(ext_ids, "imdb_id", None) if ext_ids else None
+
+            images = getattr(item, "images", None)
+            logo_url = ""
+            if images and getattr(images, "logos", None):
+                for l in images.logos:
+                    if getattr(l, "iso_639_1", None) == "en" and getattr(l, "file_path", None):
+                        logo_url = format_tmdb_image(l.file_path, "w300")
+                        break
+                if not logo_url and images.logos and getattr(images.logos[0], "file_path", None):
+                    logo_url = format_tmdb_image(images.logos[0].file_path, "w300")
+
+            genres = [getattr(g, "name", "") for g in (getattr(item, "genres", None) or []) if getattr(g, "name", None)]
+            runtime = getattr(item, "runtime", "") if is_movie else ""
+            if not runtime and not is_movie:
+                r_list = getattr(item, "episode_run_time", None) or []
+                runtime = str(r_list[0]) if r_list else ""
+
+            credits_data = getattr(item, "credits", None)
+            cast_list = []
+            if credits_data and getattr(credits_data, "cast", None):
+                cast_list = [getattr(c, "name", "") for c in credits_data.cast[:10] if getattr(c, "name", None)]
+
+            meta_id = id
+            videos = []
+            if not is_movie:
+                seasons = getattr(item, "seasons", None) or []
+                last = getattr(item, "last_episode_to_air", None)
+                last_aired = (
+                    (getattr(last, "season_number", 0) or 0, getattr(last, "episode_number", 0) or 0)
+                    if last else None
+                )
+                for s in seasons:
+                    s_num = getattr(s, "season_number", 0)
+                    if s_num == 0:
+                        continue
+                    air = getattr(s, "air_date", None)
+                    released = f"{str(air)[:10]}T00:00:00.000Z" if air else None
+                    ep_count = getattr(s, "episode_count", 0) or 0
+                    for ep in range(1, ep_count + 1):
+                        if last_aired and (s_num, ep) > last_aired:
+                            break
+                        video = {
+                            "id": f"{meta_id}:{s_num}:{ep}",
+                            "title": f"Episode {ep}",
+                            "season": s_num,
+                            "episode": ep,
+                        }
+                        if released:
+                            video["released"] = released
+                        videos.append(video)
+
+            return {
+                "id": meta_id,
+                "type": "movie" if is_movie else "series",
+                "name": name,
+                "description": getattr(item, "overview", "") or "",
+                "year": year_str,
+                "releaseInfo": year_str,
+                "poster": format_tmdb_image(getattr(item, "poster_path", None), "w500"),
+                "background": format_tmdb_image(getattr(item, "backdrop_path", None), "original"),
+                "logo": logo_url,
+                "genres": genres,
+                "imdbRating": str(round(getattr(item, "vote_average", 0), 1)) if getattr(item, "vote_average", None) else "",
+                "imdb_id": external_imdb or "",
+                "moviedb_id": tmdb_id,
+                "cast": cast_list,
+                "runtime": str(runtime) if runtime else "",
+                "videos": videos,
+            }
+
+        imdb_id = parsed.get("imdb_id")
+        if imdb_id and imdb_id.startswith("tt"):
+            external = await get_detail(imdb_id, "movie" if media_type == "movie" else "series")
+            if external and external.get("title"):
+                release = external.get("releaseDetailed") or {}
+                year = release.get("year") or ""
+                return {
+                    "id": imdb_id,
+                    "type": "movie" if media_type == "movie" else "series",
+                    "name": external.get("title") or "",
+                    "description": external.get("plot") or "",
+                    "year": str(year) if year else "",
+                    "releaseInfo": str(year) if year else "",
+                    "poster": external.get("poster") or "",
+                    "background": external.get("background") or "",
+                    "logo": external.get("logo") or "",
+                    "genres": external.get("genre") or [],
+                    "imdbRating": str((external.get("rating") or {}).get("star") or ""),
+                    "imdb_id": imdb_id,
+                    "moviedb_id": external.get("moviedb_id") or "",
+                    "cast": external.get("cast") or [],
+                    "runtime": external.get("runtime") or "",
+                    "videos": external.get("videos") or [],
+                }
+    except Exception as exc:
+        LOGGER.warning(f"[EXTERNAL META] Failed to resolve fallback meta for {id}: {exc}")
+    return None
+
+_EXTERNAL_META_CACHE = BoundedDict(500)
+_EXTERNAL_META_TTL = 6 * 3600
+
+
+async def _cached_external_meta(id: str, parsed: dict, media_type: str) -> Optional[dict]:
+    key = (id, media_type)
+    hit = _EXTERNAL_META_CACHE.get(key)
+    if hit and time.time() - hit[0] < _EXTERNAL_META_TTL:
+        return hit[1]
+    meta = await _external_meta_for_id(id, parsed, media_type)
+    if meta:
+        _EXTERNAL_META_CACHE[key] = (time.time(), meta)
+    return meta
 
 
 #----- Wrap a direct stream URL with the configured proxy (plain prepend or MediaFlow)
@@ -500,10 +637,7 @@ async def _stored_catalog_items(
         if it.get("media_type") == db_media_type
         and _token_can_view(*_effective_visibility(catalog, it), token_data)
     ]
-    visible_items.sort(
-        key=lambda it: it.get("updated_on") or it.get("added_at") or datetime.min,
-        reverse=True,
-    )
+    visible_items.sort(key=catalog_sort_key, reverse=True)
     if search_query:
         ids = [int(it["tmdb_id"]) for it in visible_items if it.get("tmdb_id") is not None]
         found = await db.search_documents(
@@ -548,9 +682,13 @@ async def _local_sorted_items(
 
 def _parse_stremio_id(id: str):
     parts = id.split(":")
-    is_kitsu = parts and parts[0].lower() == "kitsu"
+    prefix = parts[0].lower() if parts else ""
+    is_kitsu = prefix == "kitsu"
+    is_tmdb = prefix == "tmdb"
     imdb_id = None
     kitsu_id = None
+    tmdb_id = None
+    tmdb_media_type = None
     season_num = None
     episode_num = None
     absolute_episode = None
@@ -577,6 +715,31 @@ def _parse_stremio_id(id: str):
                 episode_num = None
             if season_num is None and episode_num is not None:
                 absolute_episode = episode_num
+    elif is_tmdb:
+        # Supports tmdb:movie:<id>, tmdb:tv:<id>, tmdb:<id>, and tmdb:<id>:<season>:<ep>
+        id_index = 1
+        if len(parts) > 2 and parts[1].lower() in ("movie", "tv", "series"):
+            tmdb_media_type = "movie" if parts[1].lower() == "movie" else "tv"
+            id_index = 2
+        try:
+            tmdb_id = int(parts[id_index]) if len(parts) > id_index else None
+        except (TypeError, ValueError):
+            tmdb_id = None
+        trailing = parts[id_index + 1:]
+        if len(trailing) >= 2:
+            try:
+                season_num = int(trailing[0]) if trailing[0] not in ("", "null", "None") else None
+            except (TypeError, ValueError):
+                season_num = None
+            try:
+                episode_num = int(trailing[1]) if trailing[1] not in ("", "null", "None") else None
+            except (TypeError, ValueError):
+                episode_num = None
+        elif len(trailing) == 1:
+            try:
+                episode_num = int(trailing[0])
+            except (TypeError, ValueError):
+                episode_num = None
     else:
         imdb_id = parts[0] if parts else id
         try:
@@ -591,15 +754,18 @@ def _parse_stremio_id(id: str):
     return {
         "imdb_id": imdb_id,
         "kitsu_id": kitsu_id,
+        "tmdb_id": tmdb_id,
+        "tmdb_media_type": tmdb_media_type,
         "season_num": season_num,
         "episode_num": episode_num,
         "absolute_episode": absolute_episode,
         "is_kitsu": is_kitsu,
+        "is_tmdb": is_tmdb,
     }
 
 
-async def _title_allowed(imdb_id: str = None, token_data: dict = None, kitsu_id: int = None) -> bool:
-    doc = await db.get_media_details(imdb_id=imdb_id, kitsu_id=kitsu_id, projection={"visibility": 1, "allowed_tokens": 1})
+async def _title_allowed(imdb_id: str = None, token_data: dict = None, kitsu_id: int = None, tmdb_id: int = None, media_type: str = None) -> bool:
+    doc = await db.get_media_details(imdb_id=imdb_id, kitsu_id=kitsu_id, tmdb_id=tmdb_id, media_type=media_type, projection={"visibility": 1, "allowed_tokens": 1})
     if not doc:
         return True
     return _token_can_view(doc.get("visibility") or "public", doc.get("allowed_tokens") or [], token_data)
@@ -866,7 +1032,7 @@ async def get_manifest(token: str, token_data: dict = Depends(verify_token)):
             {
                 "type": "movie",
                 "id": "latest_movies",
-                "name": "Latest",
+                "name": "Recently Added",
                 "extra": [
                     {"name": "genre", "isRequired": False, "options": GENRES},
                     {"name": "skip"}
@@ -887,7 +1053,7 @@ async def get_manifest(token: str, token_data: dict = Depends(verify_token)):
             {
                 "type": "series",
                 "id": "latest_series",
-                "name": "Latest",
+                "name": "Recently Added",
                 "extra": [
                     {"name": "genre", "isRequired": False, "options": GENRES},
                     {"name": "skip"}
@@ -928,7 +1094,7 @@ async def get_manifest(token: str, token_data: dict = Depends(verify_token)):
         ]
 
         try:
-            custom_catalogs = await db.get_custom_catalogs()
+            custom_catalogs = await db.get_custom_catalogs(slim=True)
             for catalog in custom_catalogs:
                 visible_items = [
                     i for i in (catalog.get("items") or [])
@@ -984,6 +1150,7 @@ async def get_manifest(token: str, token_data: dict = Depends(verify_token)):
 
                 catalogs.sort(key=_crank)
             hidden = set((token_data.get("config") or {}).get("hidden_catalogs") or [])
+            hidden |= set(await db.get_hidden_catalogs())
             if hidden:
                 catalogs = [
                     c for c in catalogs
@@ -1027,7 +1194,7 @@ async def get_manifest(token: str, token_data: dict = Depends(verify_token)):
         "types": ["movie", "series"],
         "resources": resources,
         "catalogs": catalogs,
-        "idPrefixes": ["tt", "tg", "kitsu"],
+        "idPrefixes": ["tt", "tg", "kitsu"] + (["tmdb"] if tmdb_api_key() else []),
         "behaviorHints": {
             "configurable": True,
             "configurationRequired": False
@@ -1059,7 +1226,7 @@ async def build_nuvio_collection_data(token: str, collection_type: str = "full",
     auto_key_series_map = {}
 
     try:
-        custom_catalogs = await db.get_custom_catalogs()
+        custom_catalogs = await db.get_custom_catalogs(slim=True)
         for catalog in custom_catalogs:
             # Check visibility and items
             raw_items = catalog.get("items") or []
@@ -1117,33 +1284,185 @@ async def build_nuvio_collection_data(token: str, collection_type: str = "full",
     zee5_series = get_cat_id("zee", "auto_zee5", "series", strict=True)
     crunchyroll_movie = get_cat_id("crunchyroll", "auto_crunchyroll", "movie", strict=True)
     crunchyroll_series = get_cat_id("crunchyroll", "auto_crunchyroll", "series", strict=True)
-    bollywood_movie = get_cat_id("bollywood", "auto_bollywood", "movie", fallback="latest_movies", strict=False)
-    bollywood_series = get_cat_id("bollywood", "auto_bollywood", "series", fallback="latest_series", strict=False)
+    bollywood_movie = get_cat_id("bollywood", "auto_bollywood", "movie", strict=True)
+    bollywood_series = get_cat_id("bollywood", "auto_bollywood", "series", strict=True)
+    south_indian_movie = get_cat_id("south indian", "auto_south_indian", "movie", strict=True)
+    south_indian_series = get_cat_id("south indian", "auto_south_indian", "series", strict=True)
+    kdrama_movie = get_cat_id("korean", "auto_korean", "movie", strict=True)
+    kdrama_series = get_cat_id("k-drama", "auto_kdrama", "series", strict=True) or get_cat_id("korean", "auto_korean", "series", strict=True)
+    anime_movie = get_cat_id("anime", "auto_anime", "movie", strict=True)
+    anime_series = get_cat_id("anime", "auto_anime", "series", strict=True)
+    latest_releases_movie = get_cat_id("latest releases", "auto_latest_releases", "movie", strict=True)
+    latest_releases_series = get_cat_id("latest releases", "auto_latest_releases", "series", strict=True)
 
+    # =========================================================================
+    # 01 ✦ DISCOVER COLLECTION (TMDB Global Trends + Local Addon Fallback)
+    # =========================================================================
+    K_IMG = "https://raw.githubusercontent.com/Kaoxt/The-Kollection/main/images"
+    NUVIO_CDN = "https://cdn.jsdelivr.net/gh/weebzone/Telegram-Stremio@master/assets/nuvio"
+
+    # =========================================================================
+    # 01 ✦ DISCOVER COLLECTION (TMDB Global Trends + Local Addon Fallback)
+    # =========================================================================
+    discover_collection = {
+        "id": "collection-discover-main",
+        "title": "Discover",
+        "folders": [
+            {
+                "id": "folder-discover-trending",
+                "title": "Trending Now",
+                "sources": [
+                    {"type": "movie", "addonId": addon_id, "provider": "addon", "catalogId": "trending_movies"},
+                    {"type": "series", "addonId": addon_id, "provider": "addon", "catalogId": "trending_series"},
+                    {"title": "Trending Movies", "sortBy": "popularity.desc", "provider": "tmdb", "mediaType": "MOVIE", "tmdbSourceType": "DISCOVER"},
+                    {"title": "Trending TV Series", "sortBy": "popularity.desc", "provider": "tmdb", "mediaType": "TV", "tmdbSourceType": "DISCOVER"}
+                ],
+                "hideTitle": False,
+                "tileShape": "landscape",
+                "focusGifUrl": "",
+                "titleLogoUrl": f"{K_IMG}/Discover/Trending/logo.webp",
+                "coverImageUrl": f"{K_IMG}/Discover/Trending/cover.webp",
+                "heroBackdropUrl": f"{K_IMG}/Discover/Trending/backdrop.webp",
+                "catalogSources": [
+                    {"type": "movie", "addonId": addon_id, "catalogId": "trending_movies"},
+                    {"type": "series", "addonId": addon_id, "catalogId": "trending_series"}
+                ],
+                "focusGifEnabled": False
+            },
+            {
+                "id": "folder-discover-latest-releases",
+                "title": "Latest Releases",
+                "sources": [
+                    {"type": "movie", "addonId": addon_id, "provider": "addon", "catalogId": latest_releases_movie},
+                    {"type": "series", "addonId": addon_id, "provider": "addon", "catalogId": latest_releases_series}
+                ],
+                "hideTitle": False,
+                "tileShape": "landscape",
+                "focusGifUrl": "",
+                "titleLogoUrl": f"{K_IMG}/Discover/Premieres/logo.webp",
+                "coverImageUrl": f"{K_IMG}/Discover/Premieres/cover.webp",
+                "heroBackdropUrl": f"{K_IMG}/Discover/Premieres/backdrop.webp",
+                "catalogSources": [
+                    {"type": "movie", "addonId": addon_id, "catalogId": latest_releases_movie},
+                    {"type": "series", "addonId": addon_id, "catalogId": latest_releases_series}
+                ],
+                "focusGifEnabled": False
+            },
+            {
+                "id": "folder-discover-popular",
+                "title": "Popular Hits",
+                "sources": [
+                    {"type": "movie", "addonId": addon_id, "provider": "addon", "catalogId": "top_movies"},
+                    {"type": "series", "addonId": addon_id, "provider": "addon", "catalogId": "top_series"},
+                    {"title": "Popular Movies", "sortBy": "popularity.desc", "provider": "tmdb", "mediaType": "MOVIE", "tmdbSourceType": "DISCOVER"},
+                    {"title": "Popular Series", "sortBy": "popularity.desc", "provider": "tmdb", "mediaType": "TV", "tmdbSourceType": "DISCOVER"}
+                ],
+                "hideTitle": False,
+                "tileShape": "landscape",
+                "focusGifUrl": "",
+                "titleLogoUrl": f"{K_IMG}/Discover/Popular/logo.webp",
+                "coverImageUrl": f"{K_IMG}/Discover/Popular/cover.webp",
+                "heroBackdropUrl": f"{K_IMG}/Discover/Popular/backdrop.webp",
+                "catalogSources": [
+                    {"type": "movie", "addonId": addon_id, "catalogId": "top_movies"},
+                    {"type": "series", "addonId": addon_id, "catalogId": "top_series"}
+                ],
+                "focusGifEnabled": False
+            },
+            {
+                "id": "folder-discover-latest",
+                "title": "Recently Added",
+                "sources": [
+                    {"type": "movie", "addonId": addon_id, "provider": "addon", "catalogId": "latest_movies"},
+                    {"type": "series", "addonId": addon_id, "provider": "addon", "catalogId": "latest_series"},
+                    {
+                        "title": "Latest Released Movies",
+                        "sortBy": "primary_release_date.desc",
+                        "filters": {
+                            "voteCountGte": 15,
+                            "releaseDateGte": (datetime.now(timezone.utc) - timedelta(days=90)).strftime("%Y-%m-%d"),
+                            "releaseDateLte": datetime.now(timezone.utc).strftime("%Y-%m-%d")
+                        },
+                        "provider": "tmdb",
+                        "mediaType": "MOVIE",
+                        "tmdbSourceType": "DISCOVER"
+                    },
+                    {
+                        "title": "New TV Series Episodes",
+                        "sortBy": "first_air_date.desc",
+                        "filters": {
+                            "voteCountGte": 10,
+                            "releaseDateGte": (datetime.now(timezone.utc) - timedelta(days=90)).strftime("%Y-%m-%d"),
+                            "releaseDateLte": datetime.now(timezone.utc).strftime("%Y-%m-%d")
+                        },
+                        "provider": "tmdb",
+                        "mediaType": "TV",
+                        "tmdbSourceType": "DISCOVER"
+                    }
+                ],
+                "hideTitle": False,
+                "tileShape": "landscape",
+                "focusGifUrl": "",
+                "titleLogoUrl": f"{NUVIO_CDN}/RecentlyAdded_logo.webp",
+                "coverImageUrl": f"{NUVIO_CDN}/RecentlyAdded_cover.webp",
+                "heroBackdropUrl": f"{NUVIO_CDN}/RecentlyAdded_backdrop.webp",
+                "catalogSources": [
+                    {"type": "movie", "addonId": addon_id, "catalogId": "latest_movies"},
+                    {"type": "series", "addonId": addon_id, "catalogId": "latest_series"}
+                ],
+                "focusGifEnabled": False
+            }
+        ],
+        "pinToTop": True,
+        "viewMode": "TABBED_GRID",
+        "showAllTab": True,
+        "focusGlowEnabled": True
+    }
+
+    # =========================================================================
+    # 02 ✦ STREAMING PLATFORMS (OTT Hubs)
+    # =========================================================================
     ott_collection = {
         "id": "collection-erfs5gwk-community",
-        "title": "Streaming Services",
+        "title": "Streaming Platforms",
         "folders": [
           {
-            "id": "68ba6673-3480-4601-980e-4f69862777c3",
-            "title": "Trending Now",
+            "id": "folder-WFGY1XPD",
+            "title": "Netflix",
             "sources": [
-              {"type": "movie", "addonId": addon_id, "provider": "addon", "catalogId": "trending_movies"},
-              {"type": "series", "addonId": addon_id, "provider": "addon", "catalogId": "trending_series"},
-              {"type": "movie", "addonId": addon_id, "provider": "addon", "catalogId": "latest_movies"},
-              {"type": "series", "addonId": addon_id, "provider": "addon", "catalogId": "latest_series"}
+              {"type": "movie", "addonId": addon_id, "provider": "addon", "catalogId": netflix_movie},
+              {"type": "series", "addonId": addon_id, "provider": "addon", "catalogId": netflix_series}
             ],
             "hideTitle": False,
             "tileShape": "landscape",
-            "focusGifUrl": "https://cdn.jsdelivr.net/gh/weebzone/Telegram-Stremio@master/assets/nuvio/2774e91b86.webp",
-            "coverImageUrl": "https://cdn.jsdelivr.net/gh/weebzone/Telegram-Stremio@master/assets/nuvio/2774e91b86.webp",
+            "focusGifUrl": "",
+            "titleLogoUrl": f"{K_IMG}/Streaming%20Platforms/Netflix/logo.webp",
+            "coverImageUrl": f"{NUVIO_CDN}/Netflix.webp",
+            "heroBackdropUrl": f"{NUVIO_CDN}/Netflix.webp",
             "catalogSources": [
-              {"type": "movie", "addonId": addon_id, "catalogId": "trending_movies"},
-              {"type": "series", "addonId": addon_id, "catalogId": "trending_series"},
-              {"type": "movie", "addonId": addon_id, "catalogId": "latest_movies"},
-              {"type": "series", "addonId": addon_id, "catalogId": "latest_series"}
+              {"type": "movie", "addonId": addon_id, "catalogId": netflix_movie},
+              {"type": "series", "addonId": addon_id, "catalogId": netflix_series}
             ],
-            "focusGifEnabled": True
+            "focusGifEnabled": False
+          },
+          {
+            "id": "folder-AT8KYHZO",
+            "title": "Prime Video",
+            "sources": [
+              {"type": "movie", "addonId": addon_id, "provider": "addon", "catalogId": prime_movie},
+              {"type": "series", "addonId": addon_id, "provider": "addon", "catalogId": prime_series}
+            ],
+            "hideTitle": False,
+            "tileShape": "landscape",
+            "focusGifUrl": "",
+            "titleLogoUrl": f"{K_IMG}/Streaming%20Platforms/Prime/logo.webp",
+            "coverImageUrl": f"{NUVIO_CDN}/PrimeVideo.webp",
+            "heroBackdropUrl": f"{NUVIO_CDN}/PrimeVideo.webp",
+            "catalogSources": [
+              {"type": "movie", "addonId": addon_id, "catalogId": prime_movie},
+              {"type": "series", "addonId": addon_id, "catalogId": prime_series}
+            ],
+            "focusGifEnabled": False
           },
           {
             "id": "folder-8ZBZOMW9",
@@ -1154,53 +1473,15 @@ async def build_nuvio_collection_data(token: str, collection_type: str = "full",
             ],
             "hideTitle": False,
             "tileShape": "landscape",
-            "focusGifUrl": "https://cdn.jsdelivr.net/gh/luckynumb3rs/stremio-perfect-setup/collections/streaming/focused/disney-plus.webp",
-            "titleLogoUrl": "https://cdn.jsdelivr.net/gh/luckynumb3rs/stremio-perfect-setup/collections/streaming/title/disney-plus.webp",
-            "coverImageUrl": "https://cdn.jsdelivr.net/gh/weebzone/Telegram-Stremio@master/assets/nuvio/04d275e49b.webp",
+            "focusGifUrl": "",
+            "titleLogoUrl": f"{K_IMG}/Streaming%20Platforms/Disney+/logo.webp",
+            "coverImageUrl": f"{NUVIO_CDN}/JioHotstar.webp",
+            "heroBackdropUrl": f"{NUVIO_CDN}/JioHotstar.webp",
             "catalogSources": [
               {"type": "movie", "addonId": addon_id, "catalogId": hotstar_movie},
               {"type": "series", "addonId": addon_id, "catalogId": hotstar_series}
             ],
-            "focusGifEnabled": True,
-            "heroBackdropUrl": "https://cdn.jsdelivr.net/gh/luckynumb3rs/stremio-perfect-setup/collections/streaming/backdrop/disney-plus.webp"
-          },
-          {
-            "id": "folder-WFGY1XPD",
-            "title": "Netflix",
-            "sources": [
-              {"type": "movie", "addonId": addon_id, "provider": "addon", "catalogId": netflix_movie},
-              {"type": "series", "addonId": addon_id, "provider": "addon", "catalogId": netflix_series}
-            ],
-            "hideTitle": False,
-            "tileShape": "landscape",
-            "focusGifUrl": "https://cdn.jsdelivr.net/gh/weebzone/Telegram-Stremio@master/assets/nuvio/59916efcd2.webp",
-            "titleLogoUrl": "https://cdn.jsdelivr.net/gh/luckynumb3rs/stremio-perfect-setup/collections/streaming/title/netflix.webp",
-            "coverImageUrl": "https://cdn.jsdelivr.net/gh/weebzone/Telegram-Stremio@master/assets/nuvio/73a7509d9f.webp",
-            "catalogSources": [
-              {"type": "movie", "addonId": addon_id, "catalogId": netflix_movie},
-              {"type": "series", "addonId": addon_id, "catalogId": netflix_series}
-            ],
-            "focusGifEnabled": True,
-            "heroBackdropUrl": "https://cdn.jsdelivr.net/gh/luckynumb3rs/stremio-perfect-setup/collections/streaming/backdrop/netflix.webp"
-          },
-          {
-            "id": "folder-AT8KYHZO",
-            "title": "Amazon Prime Video",
-            "sources": [
-              {"type": "movie", "addonId": addon_id, "provider": "addon", "catalogId": prime_movie},
-              {"type": "series", "addonId": addon_id, "provider": "addon", "catalogId": prime_series}
-            ],
-            "hideTitle": False,
-            "tileShape": "landscape",
-            "focusGifUrl": "https://cdn.jsdelivr.net/gh/luckynumb3rs/stremio-perfect-setup/collections/streaming/focused/prime-video.webp",
-            "titleLogoUrl": "https://cdn.jsdelivr.net/gh/luckynumb3rs/stremio-perfect-setup/collections/streaming/title/prime-video.webp",
-            "coverImageUrl": "https://cdn.jsdelivr.net/gh/luckynumb3rs/stremio-perfect-setup/collections/streaming/cover/prime-video.webp",
-            "catalogSources": [
-              {"type": "movie", "addonId": addon_id, "catalogId": prime_movie},
-              {"type": "series", "addonId": addon_id, "catalogId": prime_series}
-            ],
-            "focusGifEnabled": True,
-            "heroBackdropUrl": "https://cdn.jsdelivr.net/gh/luckynumb3rs/stremio-perfect-setup/collections/streaming/backdrop/prime-video.webp"
+            "focusGifEnabled": False
           },
           {
             "id": "folder-IQTF27K8",
@@ -1211,15 +1492,15 @@ async def build_nuvio_collection_data(token: str, collection_type: str = "full",
             ],
             "hideTitle": False,
             "tileShape": "landscape",
-            "focusGifUrl": "https://cdn.jsdelivr.net/gh/weebzone/Telegram-Stremio@master/assets/nuvio/291311c88b.webp",
-            "titleLogoUrl": "https://cdn.jsdelivr.net/gh/luckynumb3rs/stremio-perfect-setup/collections/streaming/title/apple-tv.webp",
-            "coverImageUrl": "https://imkaptain.github.io/nuvio-assets/assets/images/4d8f0a8f.webp",
+            "focusGifUrl": "",
+            "titleLogoUrl": f"{K_IMG}/Streaming%20Platforms/Apple%20TV/logo.webp",
+            "coverImageUrl": f"{NUVIO_CDN}/AppleTV.webp",
+            "heroBackdropUrl": f"{NUVIO_CDN}/AppleTV.webp",
             "catalogSources": [
               {"type": "movie", "addonId": addon_id, "catalogId": apple_movie},
               {"type": "series", "addonId": addon_id, "catalogId": apple_series}
             ],
-            "focusGifEnabled": True,
-            "heroBackdropUrl": "https://cdn.jsdelivr.net/gh/luckynumb3rs/stremio-perfect-setup/collections/streaming/backdrop/apple-tv.webp"
+            "focusGifEnabled": False
           },
           {
             "id": "folder-OA4T8NYO",
@@ -1230,15 +1511,15 @@ async def build_nuvio_collection_data(token: str, collection_type: str = "full",
             ],
             "hideTitle": False,
             "tileShape": "landscape",
-            "focusGifUrl": "https://cdn.jsdelivr.net/gh/weebzone/Telegram-Stremio@master/assets/nuvio/6b439cb84a.webp",
-            "titleLogoUrl": "https://imkaptain.github.io/nuvio-assets/assets/images/6e4c10d3.webp",
-            "coverImageUrl": "https://imkaptain.github.io/nuvio-assets/assets/images/b59babf1.webp",
+            "focusGifUrl": "",
+            "titleLogoUrl": f"{K_IMG}/Streaming%20Platforms/HBO%20Max/logo.webp",
+            "coverImageUrl": f"{NUVIO_CDN}/HBOMax.webp",
+            "heroBackdropUrl": f"{NUVIO_CDN}/HBOMax.webp",
             "catalogSources": [
               {"type": "movie", "addonId": addon_id, "catalogId": hbo_movie},
               {"type": "series", "addonId": addon_id, "catalogId": hbo_series}
             ],
-            "focusGifEnabled": True,
-            "heroBackdropUrl": "https://raw.githubusercontent.com/bramst0ne/prism-wallpapers/main/collections/providers/1899-hbo-max/backdrops/t2_flat_1080p.jpg"
+            "focusGifEnabled": False
           },
           {
             "id": "folder-LN9SPMQN",
@@ -1249,69 +1530,56 @@ async def build_nuvio_collection_data(token: str, collection_type: str = "full",
             ],
             "hideTitle": False,
             "tileShape": "landscape",
-            "focusGifUrl": "https://cdn.jsdelivr.net/gh/luckynumb3rs/stremio-perfect-setup/collections/streaming/focused/hulu.webp",
-            "titleLogoUrl": "https://cdn.jsdelivr.net/gh/luckynumb3rs/stremio-perfect-setup/collections/streaming/title/hulu.webp",
-            "coverImageUrl": "https://cdn.jsdelivr.net/gh/luckynumb3rs/stremio-perfect-setup/collections/streaming/cover/hulu.webp",
+            "focusGifUrl": "",
+            "titleLogoUrl": f"{K_IMG}/Streaming%20Platforms/Hulu/logo.webp",
+            "coverImageUrl": f"{NUVIO_CDN}/hulu.webp",
+            "heroBackdropUrl": f"{NUVIO_CDN}/hulu.webp",
             "catalogSources": [
               {"type": "movie", "addonId": addon_id, "catalogId": hulu_movie},
               {"type": "series", "addonId": addon_id, "catalogId": hulu_series}
             ],
-            "focusGifEnabled": True,
-            "heroBackdropUrl": "https://cdn.jsdelivr.net/gh/luckynumb3rs/stremio-perfect-setup/collections/streaming/backdrop/hulu.webp"
+            "focusGifEnabled": False
           },
           {
-            "id": "85a10640-79f2-435f-9d63-348e921e37f4",
-            "title": "MX Player",
-            "sources": [
-              {"type": "movie", "addonId": addon_id, "provider": "addon", "catalogId": mx_movie},
-              {"type": "series", "addonId": addon_id, "provider": "addon", "catalogId": mx_series}
-            ],
-            "hideTitle": False,
-            "tileShape": "landscape",
-            "focusGifUrl": "https://cdn.jsdelivr.net/gh/weebzone/Telegram-Stremio@master/assets/nuvio/739cc2d16c.webp",
-            "coverImageUrl": "https://cdn.jsdelivr.net/gh/weebzone/Telegram-Stremio@master/assets/nuvio/9cfdcd25ba.webp",
-            "catalogSources": [
-              {"type": "movie", "addonId": addon_id, "catalogId": mx_movie},
-              {"type": "series", "addonId": addon_id, "catalogId": mx_series}
-            ],
-            "focusGifEnabled": True
-          },
-          {
-            "id": "f6409d11-7630-4fa4-b6e6-48774e4df89e",
-            "title": "Sony LIV",
-            "sources": [
-              {"type": "movie", "addonId": addon_id, "provider": "addon", "catalogId": sony_movie},
-              {"type": "series", "addonId": addon_id, "provider": "addon", "catalogId": sony_series}
-            ],
-            "hideTitle": False,
-            "tileShape": "landscape",
-            "focusGifUrl": "https://cdn.jsdelivr.net/gh/weebzone/Telegram-Stremio@master/assets/nuvio/6b309267fc.webp",
-            "coverImageUrl": "https://cdn.jsdelivr.net/gh/weebzone/Telegram-Stremio@master/assets/nuvio/cf8b51931f.webp",
-            "catalogSources": [
-              {"type": "movie", "addonId": addon_id, "catalogId": sony_movie},
-              {"type": "series", "addonId": addon_id, "catalogId": sony_series}
-            ],
-            "focusGifEnabled": True
-          },
-          {
-            "id": "008c0c7c-cfe1-43f4-9630-8afd72b7cb5f",
-            "title": "Zee5",
+            "id": "folder-ZEE5-OTT",
+            "title": "ZEE5",
             "sources": [
               {"type": "movie", "addonId": addon_id, "provider": "addon", "catalogId": zee5_movie},
               {"type": "series", "addonId": addon_id, "provider": "addon", "catalogId": zee5_series}
             ],
             "hideTitle": False,
             "tileShape": "landscape",
-            "focusGifUrl": "https://cdn.jsdelivr.net/gh/weebzone/Telegram-Stremio@master/assets/nuvio/364ce2abf4.webp",
-            "coverImageUrl": "https://cdn.jsdelivr.net/gh/weebzone/Telegram-Stremio@master/assets/nuvio/364ce2abf4.webp",
+            "focusGifUrl": "",
+            "titleLogoUrl": "https://cdn.jsdelivr.net/gh/luckynumb3rs/stremio-perfect-setup/collections/streaming/title/zee5.webp",
+            "coverImageUrl": f"{NUVIO_CDN}/Zee5.webp",
+            "heroBackdropUrl": f"{NUVIO_CDN}/Zee5.webp",
             "catalogSources": [
               {"type": "movie", "addonId": addon_id, "catalogId": zee5_movie},
               {"type": "series", "addonId": addon_id, "catalogId": zee5_series}
             ],
-            "focusGifEnabled": True
+            "focusGifEnabled": False
           },
           {
-            "id": "cf7a3d79-0cc9-42c5-b460-d2e3b838ecfc",
+            "id": "folder-SONY-OTT",
+            "title": "SonyLIV",
+            "sources": [
+              {"type": "movie", "addonId": addon_id, "provider": "addon", "catalogId": sony_movie},
+              {"type": "series", "addonId": addon_id, "provider": "addon", "catalogId": sony_series}
+            ],
+            "hideTitle": False,
+            "tileShape": "landscape",
+            "focusGifUrl": "",
+            "titleLogoUrl": f"{K_IMG}/Studios/Sony%20Pictures/logo.webp",
+            "coverImageUrl": f"{NUVIO_CDN}/SonyLiv.webp",
+            "heroBackdropUrl": f"{NUVIO_CDN}/SonyLiv.webp",
+            "catalogSources": [
+              {"type": "movie", "addonId": addon_id, "catalogId": sony_movie},
+              {"type": "series", "addonId": addon_id, "catalogId": sony_series}
+            ],
+            "focusGifEnabled": False
+          },
+          {
+            "id": "85a10640-79f2-435f-9d63-348e921e37f4",
             "title": "Crunchyroll",
             "sources": [
               {"type": "series", "addonId": addon_id, "provider": "addon", "catalogId": crunchyroll_series},
@@ -1319,15 +1587,15 @@ async def build_nuvio_collection_data(token: str, collection_type: str = "full",
             ],
             "hideTitle": False,
             "tileShape": "landscape",
-            "focusGifUrl": "https://cdn.jsdelivr.net/gh/weebzone/Telegram-Stremio@master/assets/nuvio/faff458914.webp",
-            "titleLogoUrl": "https://cdn.jsdelivr.net/gh/luckynumb3rs/stremio-perfect-setup/collections/streaming/title/crunchyroll.webp",
-            "coverImageUrl": "https://cdn.jsdelivr.net/gh/weebzone/Telegram-Stremio@master/assets/nuvio/f6456696da.webp",
+            "focusGifUrl": "",
+            "titleLogoUrl": f"{K_IMG}/Streaming%20Platforms/Crunchyroll/logo.webp",
+            "coverImageUrl": f"{NUVIO_CDN}/Crunchyroll.webp",
+            "heroBackdropUrl": f"{NUVIO_CDN}/Crunchyroll.webp",
             "catalogSources": [
               {"type": "series", "addonId": addon_id, "catalogId": crunchyroll_series},
               {"type": "movie", "addonId": addon_id, "catalogId": crunchyroll_movie}
             ],
-            "focusGifEnabled": True,
-            "heroBackdropUrl": "https://cdn.jsdelivr.net/gh/luckynumb3rs/stremio-perfect-setup/collections/streaming/backdrop/crunchyroll.webp"
+            "focusGifEnabled": False
           }
         ],
         "pinToTop": True,
@@ -1336,338 +1604,151 @@ async def build_nuvio_collection_data(token: str, collection_type: str = "full",
         "focusGlowEnabled": True
     }
 
-    # Auto-hide OTT folders whose catalogs are not enabled/synced in database
-    cleaned_folders = []
+    # Sanitize OTT folders: keep only those with active sources and strip any null catalogIds
+    cleaned_ott_folders = []
     for f in ott_collection.get("folders") or []:
         sources = [s for s in f.get("sources") or [] if s.get("catalogId")]
         catalog_sources = [cs for cs in f.get("catalogSources") or [] if cs.get("catalogId")]
-        if sources or f.get("id") == "68ba6673-3480-4601-980e-4f69862777c3":  # Keep Trending Now
+        if sources:
             folder_copy = dict(f)
-            folder_copy["sources"] = sources or f.get("sources")
-            folder_copy["catalogSources"] = catalog_sources or f.get("catalogSources")
-            cleaned_folders.append(folder_copy)
-    cleaned_folders.sort(key=lambda f: f.get("id") == "68ba6673-3480-4601-980e-4f69862777c3")
-    ott_collection["folders"] = cleaned_folders
+            folder_copy["sources"] = sources
+            folder_copy["catalogSources"] = catalog_sources
+            cleaned_ott_folders.append(folder_copy)
+    ott_collection["folders"] = cleaned_ott_folders
 
-    explore_collection = {
-        "id": "966190a9-3785-4ef0-9f1b-883478bf618c-community",
-        "title": "Explore & Discover🗺️",
+    # =========================================================================
+    # 03 ✦ FRANCHISES & UNIVERSES (Curated Sagas - Kaoxt The-Kollection)
+    # =========================================================================
+    franchises_collection = {
+        "id": "collection-franchises-main",
+        "title": "Franchises & Universes",
         "folders": [
-          {
-            "id": "f2e9b8dc-f50a-4bc7-96d3-30053ce27ad6",
-            "title": "India 🇮🇳",
-            "sources": [
-              {"type": "movie", "addonId": addon_id, "provider": "addon", "catalogId": bollywood_movie},
-              {"type": "series", "addonId": addon_id, "provider": "addon", "catalogId": bollywood_series}
-            ],
-            "hideTitle": False,
-            "tileShape": "landscape",
-            "focusGifUrl": "https://cdn.jsdelivr.net/gh/weebzone/Telegram-Stremio@master/assets/nuvio/8d7391d9c2.webp",
-            "coverImageUrl": "https://cdn.jsdelivr.net/gh/weebzone/Telegram-Stremio@master/assets/nuvio/e0a263395d.webp",
-            "catalogSources": [
-              {"type": "movie", "addonId": addon_id, "catalogId": bollywood_movie},
-              {"type": "series", "addonId": addon_id, "catalogId": bollywood_series}
-            ],
-            "focusGifEnabled": True
-          },
-          {
-            "id": "5069a848-f76f-4c68-ba6b-142d86a24603",
-            "title": "The Ultimate Collection",
-            "sources": [
-              {"title": "The Fast and the Furious", "sortBy": "released", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 75},
-              {"title": "Harry Potter", "sortBy": "released", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 84},
-              {"title": "Top Gun", "sortBy": "released", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 5022174},
-              {"title": "The James Bond (007)", "sortBy": "released", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 1919354},
-              {"title": "Jason Bourne", "sortBy": "released", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 36572888},
-              {"title": "Jurassic Park/World", "sortBy": "released", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 29684902},
-              {"title": "Mission: Impossible", "sortBy": "released", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 131},
-              {"title": "Indiana Jones", "sortBy": "released", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 15},
-              {"title": "Pirates of the Caribbean", "sortBy": "released", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 10},
-              {"title": "Middle-Earth", "sortBy": "released", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 1642688},
-              {"title": "Avatar", "sortBy": "released", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 884},
-              {"title": "John Wick", "sortBy": "released", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 2435487},
-              {"title": "Transformer", "sortBy": "released", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 176},
-              {"title": "The Matrix", "sortBy": "released", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 81},
-              {"title": "Planet of the Apes", "sortBy": "released", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 11214053},
-              {"title": "The MonsterVerse", "sortBy": "released", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 25439284},
-              {"title": "The Conjuring", "sortBy": "released", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 3877179},
-              {"title": "The Godfather", "sortBy": "released", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 38},
-              {"title": "The Rocky", "sortBy": "released", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 11723321},
-              {"title": "Alien & Predator", "sortBy": "released", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 34030187},
-              {"title": "Evil Dead", "sortBy": "released", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 35297070},
-              {"title": "The Terminator", "sortBy": "released", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 36},
-              {"title": "Die Hard", "sortBy": "released", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 68},
-              {"title": "Ip Man", "sortBy": "released", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 11338691},
-              {"title": "National Treasure", "sortBy": "released", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 190},
-              {"title": "Jaws", "sortBy": "released", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 73},
-              {"title": "Rambo", "sortBy": "released", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 151},
-              {"title": "Men in Black", "sortBy": "released", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 10870886},
-              {"title": "The Exorcist", "sortBy": "released", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 416},
-              {"title": "28 Days Later", "sortBy": "released", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 36431272},
-              {"title": "Bad Boys", "sortBy": "released", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 11364118},
-              {"title": "Ocean's", "sortBy": "released", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 2702670},
-              {"title": "The Hangover", "sortBy": "released", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 854},
-              {"title": "Home Alone", "sortBy": "released", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 20735298},
-              {"title": "Rush Hour", "sortBy": "released", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 197}
-            ],
-            "hideTitle": False,
-            "tileShape": "landscape",
-            "focusGifUrl": "https://cdn.jsdelivr.net/gh/weebzone/Telegram-Stremio@master/assets/nuvio/98803eb245.webp",
-            "coverImageUrl": "https://cdn.jsdelivr.net/gh/weebzone/Telegram-Stremio@master/assets/nuvio/9c2a71d1f7.webp",
-            "catalogSources": [],
-            "focusGifEnabled": True
-          },
-          {
-            "id": "74f27ef0-5e73-40e2-a189-63d951dbf792",
-            "title": "Top Rated",
-            "sources": [
-              {"title": "IMDB: Top Rated Movies Movies", "sortBy": "rank", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 2142753},
-              {"title": "IMDB: Top Rated TV Shows Series", "sortBy": "rank", "sortHow": "asc", "provider": "trakt", "mediaType": "TV", "traktListId": 2143363}
-            ],
-            "hideTitle": False,
-            "tileShape": "landscape",
-            "focusGifUrl": "https://cdn.jsdelivr.net/gh/weebzone/Telegram-Stremio@master/assets/nuvio/7da625bb85.webp",
-            "coverImageUrl": "https://cdn.jsdelivr.net/gh/weebzone/Telegram-Stremio@master/assets/nuvio/7da625bb85.webp",
-            "catalogSources": [],
-            "focusGifEnabled": True
-          },
-          {
-            "id": "folder-516b0b3d",
-            "title": "It's Aliens",
-            "sources": [
-              {"title": "It's Aliens", "sortBy": "released", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 33753562}
-            ],
-            "hideTitle": False,
-            "tileShape": "landscape",
-            "focusGifUrl": "https://cdn.jsdelivr.net/gh/weebzone/Telegram-Stremio@master/assets/nuvio/7098025963.webp",
-            "coverImageUrl": "https://cdn.jsdelivr.net/gh/weebzone/Telegram-Stremio@master/assets/nuvio/9caca95ded.webp",
-            "catalogSources": [],
-            "focusGifEnabled": False
-          },
-          {
-            "id": "cd74f767-b492-4a4c-a3a4-7296925e15a3",
-            "title": "Marvel Cinematic Universe",
-            "sources": [
-              {"title": "Marvel Studios Movies", "sortBy": "primary_release_date.desc", "tmdbId": 420, "provider": "tmdb", "mediaType": "MOVIE", "tmdbSourceType": "COMPANY"},
-              {"title": "Marvel Studios Series", "sortBy": "primary_release_date.desc", "tmdbId": 420, "provider": "tmdb", "mediaType": "TV", "tmdbSourceType": "COMPANY"},
-              {"title": "Marvel Animation Movies", "sortBy": "primary_release_date.desc", "tmdbId": 13252, "provider": "tmdb", "mediaType": "MOVIE", "tmdbSourceType": "COMPANY"},
-              {"title": "Marvel Animation Series", "sortBy": "primary_release_date.desc", "tmdbId": 13252, "provider": "tmdb", "mediaType": "TV", "tmdbSourceType": "COMPANY"},
-              {"title": "X-Men (film series)", "sortBy": "original", "tmdbId": 27741, "provider": "tmdb", "mediaType": "MOVIE", "tmdbSourceType": "LIST"},
-              {"title": "Spider Man Movies", "sortBy": "rank", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 36436842}
-            ],
-            "hideTitle": False,
-            "tileShape": "landscape",
-            "focusGifUrl": "https://cdn.jsdelivr.net/gh/weebzone/Telegram-Stremio@master/assets/nuvio/5a9a039075.webp",
-            "titleLogoUrl": "https://cdn.jsdelivr.net/gh/weebzone/Telegram-Stremio@master/assets/nuvio/3b0c581d42.webp",
-            "coverImageUrl": "https://cdn.jsdelivr.net/gh/weebzone/Telegram-Stremio@master/assets/nuvio/3a16c993c3.webp",
-            "catalogSources": [],
-            "focusGifEnabled": False,
-            "heroBackdropUrl": "https://cdn.jsdelivr.net/gh/weebzone/Telegram-Stremio@master/assets/nuvio/b1c930066e.webp"
-          },
-          {
-            "id": "4975c018-a714-45d2-8079-49125d6a174b",
-            "title": "DC Cinematic Universe",
-            "sources": [
-              {"title": "DC Extended Universe", "sortBy": "original", "tmdbId": 85568, "provider": "tmdb", "mediaType": "MOVIE", "tmdbSourceType": "LIST"},
-              {"title": "DC Universe Animated Original Movies", "sortBy": "original", "tmdbId": 3255, "provider": "tmdb", "mediaType": "MOVIE", "tmdbSourceType": "LIST"},
-              {"title": "Justice League Collection", "sortBy": "original", "tmdbId": 876125, "provider": "tmdb", "mediaType": "MOVIE", "tmdbSourceType": "COLLECTION"},
-              {"title": "Superman Collection", "sortBy": "original", "tmdbId": 1540907, "provider": "tmdb", "mediaType": "MOVIE", "tmdbSourceType": "COLLECTION"}
-            ],
-            "hideTitle": False,
-            "tileShape": "landscape",
-            "focusGifUrl": "https://cdn.jsdelivr.net/gh/weebzone/Telegram-Stremio@master/assets/nuvio/761930c268.webp",
-            "titleLogoUrl": "https://cdn.jsdelivr.net/gh/weebzone/Telegram-Stremio@master/assets/nuvio/ce59bd8728.webp",
-            "coverImageUrl": "https://cdn.jsdelivr.net/gh/weebzone/Telegram-Stremio@master/assets/nuvio/07e339efe0.webp",
-            "catalogSources": [],
-            "focusGifEnabled": True,
-            "heroBackdropUrl": "https://cdn.jsdelivr.net/gh/weebzone/Telegram-Stremio@master/assets/nuvio/07e339efe0.webp"
-          },
-          {
-            "id": "72394705-9eaf-4d7d-8533-6b004f5287fe",
-            "title": "Star Wars Universe",
-            "sources": [
-              {"title": "Star Wars Movies", "sortBy": "released", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 22202556},
-              {"title": "Star Wars: Shows & Series", "sortBy": "released", "sortHow": "asc", "provider": "trakt", "mediaType": "TV", "traktListId": 22757470}
-            ],
-            "hideTitle": False,
-            "tileShape": "landscape",
-            "focusGifUrl": "https://cdn.jsdelivr.net/gh/weebzone/Telegram-Stremio@master/assets/nuvio/7630f2e4da.webp",
-            "titleLogoUrl": "https://cdn.jsdelivr.net/gh/weebzone/Telegram-Stremio@master/assets/nuvio/ea85e73a82.webp",
-            "coverImageUrl": "https://cdn.jsdelivr.net/gh/weebzone/Telegram-Stremio@master/assets/nuvio/db9c50b0bb.webp",
-            "catalogSources": [],
-            "focusGifEnabled": False,
-            "heroBackdropUrl": "https://cdn.jsdelivr.net/gh/weebzone/Telegram-Stremio@master/assets/nuvio/d2e20320bf.webp"
-          },
-          {
-            "id": "65388509-423e-40f9-97cf-6a645474e35b",
-            "title": "Walt Disney Pictures",
-            "sources": [
-              {"title": "Walt Disney Pictures", "sortBy": "popularity.desc", "tmdbId": 2, "provider": "tmdb", "mediaType": "MOVIE", "tmdbSourceType": "COMPANY"}
-            ],
-            "hideTitle": False,
-            "tileShape": "landscape",
-            "focusGifUrl": "https://cdn.jsdelivr.net/gh/weebzone/Telegram-Stremio@master/assets/nuvio/19d8cf3288.webp",
-            "coverImageUrl": "https://cdn.jsdelivr.net/gh/weebzone/Telegram-Stremio@master/assets/nuvio/12d0a0fff2.webp",
-            "catalogSources": [],
-            "focusGifEnabled": True
-          },
-          {
-            "id": "3b979d6d-2a1b-4cea-b7c7-a83d39ceb2ea",
-            "title": "Pixar Studio",
-            "sources": [
-              {"title": "Pixar Feature Films", "sortBy": "released", "sortHow": "desc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 801240},
-              {"title": "Pixar Short Films", "sortBy": "released", "sortHow": "desc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 2749609}
-            ],
-            "hideTitle": False,
-            "tileShape": "landscape",
-            "focusGifUrl": "https://cdn.jsdelivr.net/gh/weebzone/Telegram-Stremio@master/assets/nuvio/cc4d00d1ac.webp",
-            "titleLogoUrl": "https://cdn.jsdelivr.net/gh/weebzone/Telegram-Stremio@master/assets/nuvio/a74590c7b2.webp",
-            "coverImageUrl": "https://cdn.jsdelivr.net/gh/weebzone/Telegram-Stremio@master/assets/nuvio/0ee9b1188e.webp",
-            "catalogSources": [],
-            "focusGifEnabled": False,
-            "heroBackdropUrl": "https://cdn.jsdelivr.net/gh/weebzone/Telegram-Stremio@master/assets/nuvio/9b2710bf03.webp"
-          },
-          {
-            "id": "5b8452e4-50c1-4097-8848-08057442438e",
-            "title": "Dreamworks Studio",
-            "sources": [
-              {"title": "Dreamworks Feature Films", "sortBy": "released", "sortHow": "desc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 801242}
-            ],
-            "hideTitle": False,
-            "tileShape": "landscape",
-            "focusGifUrl": "https://cdn.jsdelivr.net/gh/weebzone/Telegram-Stremio@master/assets/nuvio/02f99db3e1.webp",
-            "titleLogoUrl": "https://cdn.jsdelivr.net/gh/weebzone/Telegram-Stremio@master/assets/nuvio/fd29838f20.webp",
-            "coverImageUrl": "https://i.postimg.cc/JnVNH8M5/882cf7a8-9aa6-4673-81c1-d3ed7a859e95.jpg",
-            "catalogSources": [],
-            "focusGifEnabled": True,
-            "heroBackdropUrl": "https://cdn.jsdelivr.net/gh/weebzone/Telegram-Stremio@master/assets/nuvio/1d4d792e5f.webp"
-          },
-          {
-            "id": "c2206436-c704-4fca-a026-f4d426c40992",
-            "title": "Warner Bros. Pictures",
-            "sources": [
-              {"title": "Warner Bros.", "sortBy": "popularity.desc", "tmdbId": 174, "provider": "tmdb", "mediaType": "MOVIE", "tmdbSourceType": "COMPANY"}
-            ],
-            "hideTitle": False,
-            "tileShape": "landscape",
-            "focusGifUrl": "https://cdn.jsdelivr.net/gh/weebzone/Telegram-Stremio@master/assets/nuvio/d14037ad4b.webp",
-            "coverImageUrl": "https://cdn.jsdelivr.net/gh/weebzone/Telegram-Stremio@master/assets/nuvio/63987b738d.webp",
-            "catalogSources": [],
-            "focusGifEnabled": True
-          },
-          {
-            "id": "folder-08ic2wbn",
-            "title": "Anime",
-            "sources": [
-              {
-                "id": "src-60QLR3CH",
-                "name": "Trending Anime Series",
-                "genre": "Trending Anime Series",
-                "title": "Trending Anime Series",
-                "sortBy": "popularity.desc",
-                "filters": {
-                  "withGenres": "16",
-                  "voteCountGte": 60,
-                  "withoutKeywords": "198385|378816|155477|256466|329280|570|1817|15078|13059|195669|325693|360629|284535|356759|337946",
-                  "withOriginalLanguage": "ja"
-                },
-                "provider": "tmdb",
-                "mediaType": "TV",
-                "tmdbSourceType": "DISCOVER"
-              },
-              {
-                "id": "src-3OBFNGID",
-                "name": "Top Rated Anime Series",
-                "genre": "Top Rated Anime Series",
-                "title": "Top Rated Anime Series",
-                "sortBy": "vote_average.desc",
-                "filters": {
-                  "withGenres": "16",
-                  "voteCountGte": 400,
-                  "withoutKeywords": "198385|378816|155477|256466|329280|570|1817|15078|13059|195669|325693|360629|284535|356759|337946",
-                  "withOriginalLanguage": "ja"
-                },
-                "provider": "tmdb",
-                "mediaType": "TV",
-                "tmdbSourceType": "DISCOVER"
-              },
-              {
-                "id": "src-28C4UZ10",
-                "name": "Trending Anime Films",
-                "genre": "Trending Anime Films",
-                "title": "Trending Anime Films",
-                "sortBy": "popularity.desc",
-                "filters": {
-                  "withGenres": "16",
-                  "voteCountGte": 120,
-                  "withoutKeywords": "198385|378816|155477|256466|329280|570|1817|15078|13059|195669|325693|360629|284535|356759|337946",
-                  "withOriginalLanguage": "ja"
-                },
-                "provider": "tmdb",
-                "mediaType": "MOVIE",
-                "tmdbSourceType": "DISCOVER"
-              },
-              {
-                "id": "src-BK4KJJNV",
-                "name": "Top Rated Anime Films",
-                "genre": "Top Rated Anime Films",
-                "title": "Top Rated Anime Films",
-                "sortBy": "vote_average.desc",
-                "filters": {
-                  "withGenres": "16",
-                  "voteCountGte": 400,
-                  "withoutKeywords": "198385|378816|155477|256466|329280|570|1817|15078|13059|195669|325693|360629|284535|356759|337946",
-                  "withOriginalLanguage": "ja"
-                },
-                "provider": "tmdb",
-                "mediaType": "MOVIE",
-                "tmdbSourceType": "DISCOVER"
-              },
-              {
-                "id": "src-ABWAIOIK",
-                "name": "New This Season",
-                "genre": "New This Season",
-                "title": "New This Season",
-                "sortBy": "first_air_date.desc",
-                "filters": {
-                  "withGenres": "16",
-                  "voteCountGte": 5,
-                  "releaseDateGte": (datetime.utcnow() - timedelta(days=120)).strftime("%Y-%m-%d"),
-                  "withoutKeywords": "198385|378816|155477|256466|329280|570|1817|15078|13059|195669|325693|360629|284535|356759|337946",
-                  "withOriginalLanguage": "ja"
-                },
-                "provider": "tmdb",
-                "mediaType": "TV",
-                "tmdbSourceType": "DISCOVER"
-              },
-              {
-                "id": "src-MODCLS10",
-                "name": "Modern Classics of the 2010s",
-                "genre": "Modern Classics of the 2010s",
-                "title": "Modern Classics of the 2010s",
-                "sortBy": "vote_average.desc",
-                "filters": {
-                  "withGenres": "16",
-                  "voteCountGte": 200,
-                  "releaseDateGte": "2010-01-01",
-                  "releaseDateLte": "2019-12-31",
-                  "withoutKeywords": "198385|378816|155477|256466|329280|570|1817|15078|13059|195669|325693|360629|284535|356759|337946",
-                  "withOriginalLanguage": "ja"
-                },
-                "provider": "tmdb",
-                "mediaType": "TV",
-                "tmdbSourceType": "DISCOVER"
-              }
-            ],
-            "hideTitle": False,
-            "tileShape": "landscape",
-            "focusGifUrl": "https://cdn.jsdelivr.net/gh/weebzone/Telegram-Stremio@master/assets/nuvio/82cc501318.webp",
-            "titleLogoUrl": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/anime/discover-anime/discover-anime-logo.png",
-            "coverImageUrl": "https://cdn.jsdelivr.net/gh/weebzone/Telegram-Stremio@master/assets/nuvio/19a76f435c.webp",
-            "catalogSources": [],
-            "focusGifEnabled": True,
-            "heroBackdropUrl": "https://raw.githubusercontent.com/ImKaptain/nuvio-art/main/art/anime/discover-anime/discover-anime-backdrop.jpg"
-          }
+            {
+                "id": "folder-mcu-universe",
+                "title": "Marvel Cinematic Universe",
+                "sources": [
+                    {"title": "Marvel Studios Movies", "sortBy": "primary_release_date.desc", "tmdbId": 420, "provider": "tmdb", "mediaType": "MOVIE", "tmdbSourceType": "COMPANY"},
+                    {"title": "Marvel Studios Series", "sortBy": "primary_release_date.desc", "tmdbId": 420, "provider": "tmdb", "mediaType": "TV", "tmdbSourceType": "COMPANY"},
+                    {"title": "Spider-Man Films", "sortBy": "rank", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 36436842},
+                    {"title": "X-Men Universe", "sortBy": "original", "tmdbId": 27741, "provider": "tmdb", "mediaType": "MOVIE", "tmdbSourceType": "LIST"}
+                ],
+                "hideTitle": False,
+                "tileShape": "landscape",
+                "focusGifUrl": "",
+                "titleLogoUrl": f"{K_IMG}/Studios/Marvel/logo.webp",
+                "coverImageUrl": f"{K_IMG}/Studios/Marvel/cover.webp",
+                "heroBackdropUrl": f"{K_IMG}/Studios/Marvel/backdrop.webp",
+                "catalogSources": [],
+                "focusGifEnabled": False
+            },
+            {
+                "id": "folder-dcu-universe",
+                "title": "DC Universe & Batman",
+                "sources": [
+                    {"title": "DC Extended Universe", "sortBy": "original", "tmdbId": 85568, "provider": "tmdb", "mediaType": "MOVIE", "tmdbSourceType": "LIST"},
+                    {"title": "Batman Collection", "sortBy": "original", "tmdbId": 263, "provider": "tmdb", "mediaType": "MOVIE", "tmdbSourceType": "COLLECTION"},
+                    {"title": "DC Animated Originals", "sortBy": "original", "tmdbId": 3255, "provider": "tmdb", "mediaType": "MOVIE", "tmdbSourceType": "LIST"}
+                ],
+                "hideTitle": False,
+                "tileShape": "landscape",
+                "focusGifUrl": "",
+                "titleLogoUrl": f"{K_IMG}/Studios/DC/logo.webp",
+                "coverImageUrl": f"{K_IMG}/Studios/DC/cover.webp",
+                "heroBackdropUrl": f"{K_IMG}/Studios/DC/backdrop.webp",
+                "catalogSources": [],
+                "focusGifEnabled": False
+            },
+            {
+                "id": "folder-starwars-universe",
+                "title": "Star Wars Universe",
+                "sources": [
+                    {"title": "Star Wars Movies", "sortBy": "released", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 22202556},
+                    {"title": "Star Wars: Shows & Series", "sortBy": "released", "sortHow": "asc", "provider": "trakt", "mediaType": "TV", "traktListId": 22757470}
+                ],
+                "hideTitle": False,
+                "tileShape": "landscape",
+                "focusGifUrl": "",
+                "titleLogoUrl": f"{K_IMG}/Franchises/Star%20Wars/logo.webp",
+                "coverImageUrl": f"{K_IMG}/Franchises/Star%20Wars/cover.webp",
+                "heroBackdropUrl": f"{K_IMG}/Franchises/Star%20Wars/backdrop.webp",
+                "catalogSources": [],
+                "focusGifEnabled": False
+            },
+            {
+                "id": "folder-james-bond-007",
+                "title": "James Bond (007)",
+                "sources": [
+                    {"title": "The James Bond (007) Collection", "sortBy": "released", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 1919354}
+                ],
+                "hideTitle": False,
+                "tileShape": "landscape",
+                "focusGifUrl": "",
+                "titleLogoUrl": f"{K_IMG}/Franchises/007/logo.webp",
+                "coverImageUrl": f"{K_IMG}/Franchises/007/cover.webp",
+                "heroBackdropUrl": f"{K_IMG}/Franchises/007/backdrop.webp",
+                "catalogSources": [],
+                "focusGifEnabled": False
+            },
+            {
+                "id": "folder-lotr-middleearth",
+                "title": "Middle-Earth (LOTR & The Hobbit)",
+                "sources": [
+                    {"title": "The Lord of the Rings Collection", "sortBy": "original", "tmdbId": 119, "provider": "tmdb", "mediaType": "MOVIE", "tmdbSourceType": "COLLECTION"},
+                    {"title": "The Hobbit Collection", "sortBy": "original", "tmdbId": 121938, "provider": "tmdb", "mediaType": "MOVIE", "tmdbSourceType": "COLLECTION"},
+                    {"title": "Middle-Earth Saga", "sortBy": "released", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 1642688}
+                ],
+                "hideTitle": False,
+                "tileShape": "landscape",
+                "focusGifUrl": "",
+                "titleLogoUrl": f"{K_IMG}/Franchises/The%20Lord%20of%20the%20Rings/logo.webp",
+                "coverImageUrl": f"{K_IMG}/Franchises/The%20Lord%20of%20the%20Rings/cover.webp",
+                "heroBackdropUrl": f"{K_IMG}/Franchises/The%20Lord%20of%20the%20Rings/backdrop.webp",
+                "catalogSources": [],
+                "focusGifEnabled": False
+            },
+            {
+                "id": "folder-harry-potter",
+                "title": "Harry Potter & Wizarding World",
+                "sources": [
+                    {"title": "Harry Potter Collection", "sortBy": "original", "tmdbId": 1241, "provider": "tmdb", "mediaType": "MOVIE", "tmdbSourceType": "COLLECTION"},
+                    {"title": "Fantastic Beasts Collection", "sortBy": "original", "tmdbId": 435259, "provider": "tmdb", "mediaType": "MOVIE", "tmdbSourceType": "COLLECTION"},
+                    {"title": "Wizarding World", "sortBy": "released", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 84}
+                ],
+                "hideTitle": False,
+                "tileShape": "landscape",
+                "focusGifUrl": "",
+                "titleLogoUrl": f"{K_IMG}/Franchises/Harry%20Potter/logo.webp",
+                "coverImageUrl": f"{K_IMG}/Franchises/Harry%20Potter/cover.webp",
+                "heroBackdropUrl": f"{K_IMG}/Franchises/Harry%20Potter/backdrop.webp",
+                "catalogSources": [],
+                "focusGifEnabled": False
+            },
+            {
+                "id": "folder-ultimate-sagas",
+                "title": "The Ultimate Sagas & Marathons",
+                "sources": [
+                    {"title": "Dune Collection", "sortBy": "original", "tmdbId": 726871, "provider": "tmdb", "mediaType": "MOVIE", "tmdbSourceType": "COLLECTION"},
+                    {"title": "The Fast and the Furious", "sortBy": "released", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 75},
+                    {"title": "John Wick", "sortBy": "released", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 2435487},
+                    {"title": "The MonsterVerse", "sortBy": "released", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 25439284},
+                    {"title": "Mission: Impossible", "sortBy": "released", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 131},
+                    {"title": "Jurassic Park/World", "sortBy": "released", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 29684902},
+                    {"title": "Transformers", "sortBy": "released", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 176},
+                    {"title": "The Matrix", "sortBy": "released", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 81},
+                    {"title": "Avatar", "sortBy": "released", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 884},
+                    {"title": "Pirates of the Caribbean", "sortBy": "released", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 10},
+                    {"title": "Jason Bourne", "sortBy": "released", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 36572888},
+                    {"title": "Top Gun", "sortBy": "released", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 5022174}
+                ],
+                "hideTitle": False,
+                "tileShape": "landscape",
+                "focusGifUrl": "",
+                "titleLogoUrl": f"{NUVIO_CDN}/Sagas_logo.webp",
+                "coverImageUrl": f"{NUVIO_CDN}/Sagas_cover.webp",
+                "heroBackdropUrl": f"{NUVIO_CDN}/Sagas_backdrop.webp",
+                "catalogSources": [],
+                "focusGifEnabled": False
+            }
         ],
         "pinToTop": True,
         "viewMode": "TABBED_GRID",
@@ -1675,11 +1756,201 @@ async def build_nuvio_collection_data(token: str, collection_type: str = "full",
         "focusGlowEnabled": True
     }
 
-    if collection_type == "ott":
-        return [ott_collection]
-    elif collection_type == "explore":
-        return [explore_collection]
-    return [ott_collection, explore_collection]
+    # =========================================================================
+    # 04 ✦ REGIONAL & SPOTLIGHT (Languages + Seasonal)
+    # =========================================================================
+    spotlight_collection = {
+        "id": "collection-spotlight-regional",
+        "title": "Regional & Spotlight",
+        "folders": [
+            {
+                "id": "folder-bollywood-hindi",
+                "title": "Bollywood 🇮🇳",
+                "sources": [
+                    {"type": "movie", "addonId": addon_id, "provider": "addon", "catalogId": bollywood_movie},
+                    {"type": "series", "addonId": addon_id, "provider": "addon", "catalogId": bollywood_series},
+                    {
+                        "title": "Top Bollywood Hits",
+                        "sortBy": "popularity.desc",
+                        "filters": {"withOriginalLanguage": "hi"},
+                        "provider": "tmdb",
+                        "mediaType": "MOVIE",
+                        "tmdbSourceType": "DISCOVER"
+                    }
+                ],
+                "hideTitle": False,
+                "tileShape": "landscape",
+                "focusGifUrl": "",
+                "titleLogoUrl": f"{NUVIO_CDN}/Bollywood_logo.webp",
+                "coverImageUrl": f"{NUVIO_CDN}/Bollywood_cover.webp",
+                "heroBackdropUrl": f"{NUVIO_CDN}/Bollywood_backdrop.webp",
+                "catalogSources": [
+                    {"type": "movie", "addonId": addon_id, "catalogId": bollywood_movie},
+                    {"type": "series", "addonId": addon_id, "catalogId": bollywood_series}
+                ],
+                "focusGifEnabled": False
+            },
+            {
+                "id": "folder-south-indian",
+                "title": "South Indian Cinema",
+                "sources": [
+                    {"type": "movie", "addonId": addon_id, "provider": "addon", "catalogId": south_indian_movie},
+                    {"type": "series", "addonId": addon_id, "provider": "addon", "catalogId": south_indian_series},
+                    {
+                        "title": "South Indian Blockbusters",
+                        "sortBy": "popularity.desc",
+                        "filters": {"withOriginalLanguage": "te|ta|ml|kn"},
+                        "provider": "tmdb",
+                        "mediaType": "MOVIE",
+                        "tmdbSourceType": "DISCOVER"
+                    }
+                ],
+                "hideTitle": False,
+                "tileShape": "landscape",
+                "focusGifUrl": "",
+                "titleLogoUrl": f"{NUVIO_CDN}/SouthIndian_logo.webp",
+                "coverImageUrl": f"{NUVIO_CDN}/SouthIndian_cover.webp",
+                "heroBackdropUrl": f"{NUVIO_CDN}/SouthIndian_backdrop.webp",
+                "catalogSources": [
+                    {"type": "movie", "addonId": addon_id, "catalogId": south_indian_movie},
+                    {"type": "series", "addonId": addon_id, "catalogId": south_indian_series}
+                ],
+                "focusGifEnabled": False
+            },
+            {
+                "id": "folder-anime-spotlight",
+                "title": "Anime Spotlight 🇯🇵",
+                "sources": [
+                    {"type": "series", "addonId": addon_id, "provider": "addon", "catalogId": anime_series},
+                    {"type": "movie", "addonId": addon_id, "provider": "addon", "catalogId": anime_movie},
+                    {
+                        "title": "Trending Anime Series",
+                        "sortBy": "popularity.desc",
+                        "filters": {
+                            "withGenres": "16",
+                            "voteCountGte": 60,
+                            "withoutKeywords": "198385|378816|155477|256466|329280|570|1817|15078|13059|195669|325693|360629|284535|356759|337946",
+                            "withOriginalLanguage": "ja"
+                        },
+                        "provider": "tmdb",
+                        "mediaType": "TV",
+                        "tmdbSourceType": "DISCOVER"
+                    },
+                    {
+                        "title": "Trending Anime Films",
+                        "sortBy": "popularity.desc",
+                        "filters": {
+                            "withGenres": "16",
+                            "voteCountGte": 120,
+                            "withoutKeywords": "198385|378816|155477|256466|329280|570|1817|15078|13059|195669|325693|360629|284535|356759|337946",
+                            "withOriginalLanguage": "ja"
+                        },
+                        "provider": "tmdb",
+                        "mediaType": "MOVIE",
+                        "tmdbSourceType": "DISCOVER"
+                    }
+                ],
+                "hideTitle": False,
+                "tileShape": "landscape",
+                "focusGifUrl": "",
+                "titleLogoUrl": f"{K_IMG}/Anime/Popular/logo.webp",
+                "coverImageUrl": f"{K_IMG}/Anime/Popular/cover.webp",
+                "heroBackdropUrl": f"{K_IMG}/Anime/Popular/backdrop.webp",
+                "catalogSources": [
+                    {"type": "series", "addonId": addon_id, "catalogId": anime_series},
+                    {"type": "movie", "addonId": addon_id, "catalogId": anime_movie}
+                ],
+                "focusGifEnabled": False
+            },
+            {
+                "id": "folder-kdrama-korean",
+                "title": "K-Drama & Korean Waves 🇰🇷",
+                "sources": [
+                    {"type": "series", "addonId": addon_id, "provider": "addon", "catalogId": kdrama_series},
+                    {"type": "movie", "addonId": addon_id, "provider": "addon", "catalogId": kdrama_movie},
+                    {
+                        "title": "Trending K-Dramas",
+                        "sortBy": "popularity.desc",
+                        "filters": {"withOriginalLanguage": "ko"},
+                        "provider": "tmdb",
+                        "mediaType": "TV",
+                        "tmdbSourceType": "DISCOVER"
+                    },
+                    {
+                        "title": "Top Korean Cinema",
+                        "sortBy": "vote_average.desc",
+                        "filters": {"withOriginalLanguage": "ko", "voteCountGte": 200},
+                        "provider": "tmdb",
+                        "mediaType": "MOVIE",
+                        "tmdbSourceType": "DISCOVER"
+                    }
+                ],
+                "hideTitle": False,
+                "tileShape": "landscape",
+                "focusGifUrl": "",
+                "titleLogoUrl": f"{NUVIO_CDN}/KDrama_logo.webp",
+                "coverImageUrl": f"{NUVIO_CDN}/KDrama_cover.webp",
+                "heroBackdropUrl": f"{NUVIO_CDN}/KDrama_backdrop.webp",
+                "catalogSources": [
+                    {"type": "series", "addonId": addon_id, "catalogId": kdrama_series},
+                    {"type": "movie", "addonId": addon_id, "catalogId": kdrama_movie}
+                ],
+                "focusGifEnabled": False
+            },
+            {
+                "id": "folder-seasonal-holidays",
+                "title": "Seasonal & Holiday Specials 🎃 🎄",
+                "sources": [
+                    {"title": "Christmas Holiday Collection", "sortBy": "rank", "sortHow": "asc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 20735298},
+                    {"title": "Halloween & Spooky Season", "sortBy": "released", "sortHow": "desc", "provider": "trakt", "mediaType": "MOVIE", "traktListId": 3877179},
+                    {"title": "Valentine's Day (Romance & Date Night)", "sortBy": "popularity.desc", "filters": {"withGenres": "10749", "voteCountGte": 150}, "provider": "tmdb", "mediaType": "MOVIE", "tmdbSourceType": "DISCOVER"},
+                    {"title": "Summer Blockbusters & Popcorn Hits", "sortBy": "popularity.desc", "filters": {"withGenres": "28|12", "voteCountGte": 300}, "provider": "tmdb", "mediaType": "MOVIE", "tmdbSourceType": "DISCOVER"}
+                ],
+                "hideTitle": False,
+                "tileShape": "landscape",
+                "focusGifUrl": "",
+                "titleLogoUrl": f"{NUVIO_CDN}/Seasonal_logo.webp",
+                "coverImageUrl": f"{NUVIO_CDN}/Seasonal_cover.webp",
+                "heroBackdropUrl": f"{NUVIO_CDN}/Seasonal_backdrop.webp",
+                "catalogSources": [],
+                "focusGifEnabled": False
+            }
+        ],
+        "pinToTop": True,
+        "viewMode": "TABBED_GRID",
+        "showAllTab": True,
+        "focusGlowEnabled": True
+    }
+
+    # Sanitize all collections to guarantee Nuvio never encounters a null catalogId:
+    def _sanitize_collection(coll: dict) -> dict:
+        cleaned_folders = []
+        for f in coll.get("folders") or []:
+            sources = [
+                s for s in (f.get("sources") or [])
+                if s.get("provider") == "addon" and s.get("catalogId")
+            ]
+            if not sources:
+                continue
+            folder_copy = dict(f)
+            folder_copy["sources"] = sources
+            folder_copy["catalogSources"] = [
+                cs for cs in (f.get("catalogSources") or [])
+                if cs.get("catalogId")
+            ]
+            cleaned_folders.append(folder_copy)
+        coll_copy = dict(coll)
+        coll_copy["folders"] = cleaned_folders
+        return coll_copy
+
+    by_type = {
+        "discover": [discover_collection],
+        "ott": [ott_collection],
+        "franchises": [franchises_collection],
+        "spotlight": [spotlight_collection],
+    }
+    collections = by_type.get(collection_type, [discover_collection, ott_collection, franchises_collection, spotlight_collection])
+    return [c for c in map(_sanitize_collection, collections) if c["folders"]]
 
 
 #----- Dynamic Nuvio Collection JSON for this token
@@ -1688,14 +1959,25 @@ async def get_nuvio_collection(token: str, token_data: dict = Depends(verify_tok
     return await build_nuvio_collection_data(token, "full", token_data)
 
 
+@router.get("/{token}/nuvio-discover-collection.json")
+async def get_nuvio_discover_collection(token: str, token_data: dict = Depends(verify_token)):
+    return await build_nuvio_collection_data(token, "discover", token_data)
+
+
 @router.get("/{token}/nuvio-ott-collection.json")
 async def get_nuvio_ott_collection(token: str, token_data: dict = Depends(verify_token)):
     return await build_nuvio_collection_data(token, "ott", token_data)
 
 
 @router.get("/{token}/nuvio-explore-collection.json")
-async def get_nuvio_explore_collection(token: str, token_data: dict = Depends(verify_token)):
-    return await build_nuvio_collection_data(token, "explore", token_data)
+@router.get("/{token}/nuvio-franchises-collection.json")
+async def get_nuvio_franchises_collection(token: str, token_data: dict = Depends(verify_token)):
+    return await build_nuvio_collection_data(token, "franchises", token_data)
+
+
+@router.get("/{token}/nuvio-spotlight-collection.json")
+async def get_nuvio_spotlight_collection(token: str, token_data: dict = Depends(verify_token)):
+    return await build_nuvio_collection_data(token, "spotlight", token_data)
 
 
 #----- Catalog listing (latest/popular/custom, with genre/search/skip)
@@ -1707,6 +1989,9 @@ async def get_catalog(token: str, media_type: str, id: str, extra: Optional[str]
 
     if media_type not in ["movie", "series"]:
         raise HTTPException(status_code=404, detail="Invalid catalog type")
+
+    if {id, f"{id}::{media_type}"} & set(await db.get_hidden_catalogs()):
+        return {"metas": []}
 
     genre_filter = None
     search_query = None
@@ -1853,14 +2138,20 @@ async def get_meta(token: str, media_type: str, id: str, token_data: dict = Depe
         raise HTTPException(status_code=404, detail="Catalog disabled")
 
     parsed = _parse_stremio_id(id)
-    imdb_id = parsed["imdb_id"] if not parsed["is_kitsu"] else None
+    imdb_id = parsed["imdb_id"] if not parsed["is_kitsu"] and not parsed["is_tmdb"] else None
     kitsu_id = parsed["kitsu_id"]
+    tmdb_id = parsed["tmdb_id"]
 
     media = await db.get_media_details(
-        imdb_id=imdb_id, kitsu_id=kitsu_id, projection={"telegram": 0, "seasons.episodes.telegram": 0}
+        imdb_id=imdb_id,
+        kitsu_id=kitsu_id,
+        tmdb_id=tmdb_id,
+        media_type=media_type,
+        projection={"telegram": 0, "seasons.episodes.telegram": 0}
     )
     if not media:
-        return {"meta": {}}
+        fallback_meta = await _cached_external_meta(id, parsed, media_type)
+        return {"meta": fallback_meta or {}}
 
     if not _token_can_view(media.get("visibility") or "public", media.get("allowed_tokens") or [], token_data):
         return {"meta": {}}
@@ -1868,6 +2159,8 @@ async def get_meta(token: str, media_type: str, id: str, token_data: dict = Depe
     meta_id = id
     if parsed["is_kitsu"] and kitsu_id is not None:
         meta_id = f"kitsu:{kitsu_id}"
+    elif parsed.get("is_tmdb") and tmdb_id is not None:
+        meta_id = f"tmdb:{'movie' if (parsed.get('tmdb_media_type') or ('movie' if media_type == 'movie' else 'tv')) == 'movie' else 'tv'}:{tmdb_id}"
     elif media.get("imdb_id"):
         meta_id = media.get("imdb_id")
 
@@ -1882,7 +2175,7 @@ async def get_meta(token: str, media_type: str, id: str, token_data: dict = Depe
         "poster": _poster_url(media.get("imdb_id") or imdb_id, media.get("poster"), "series" if media.get("media_type") == "tv" else "movie"),
         "logo": media.get("logo") or "",
         "background": _abs_media_url(media.get("backdrop")),
-        "imdb_id": media.get("imdb_id") or (id if not parsed["is_kitsu"] else ""),
+        "imdb_id": media.get("imdb_id") or (id if not parsed["is_kitsu"] and not parsed.get("is_tmdb") else ""),
         "releaseInfo": _year_label(media) or "",
         "moviedb_id": _safe_moviedb_id(media),
         "cast": media.get("cast") or [],
@@ -1947,7 +2240,7 @@ async def get_meta(token: str, media_type: str, id: str, token_data: dict = Depe
                     "thumbnail": _abs_media_url(
                         episode.get("episode_backdrop") or episode.get("thumbnail")
                     ) or "https://raw.githubusercontent.com/weebzone/Colab-Tools/refs/heads/main/no_episode_backdrop.png",
-                    "imdb_id": episode.get("imdb_id") or media.get("imdb_id") or (id if not parsed["is_kitsu"] else ""),
+                    "imdb_id": episode.get("imdb_id") or media.get("imdb_id") or ("" if parsed.get("is_tmdb") or parsed["is_kitsu"] else id),
                 })
         meta_obj["videos"] = videos
         if not videos:
@@ -2221,7 +2514,7 @@ async def get_streams(
             "streams": [
                 {
                     "name": "🚫 Plan Expired",
-                    "title": "Your plan is expired.\nRenew it from the bot to continue watching.",
+                    "title": "Your plan has expired.\nRenew it from the bot to continue watching.\n\n📖 Need help? Check the README / Setup Guide or contact your admin.",
                     "url": get_streambot_url()
                 }
             ]
@@ -2239,7 +2532,7 @@ async def get_streams(
                 "streams": [
                     {
                         "name": "📢 Join Required",
-                        "title": "First join the channel to stream it.\nThen wait for 2 min for verification",
+                        "title": "First join the channel to stream it.\nThen wait 2 min for verification.\n\n📖 Read the README or contact your bot admin for setup instructions.",
                         "url": get_streambot_url()
                     }
                 ]
@@ -2249,9 +2542,9 @@ async def get_streams(
         limit_type = token_data["limit_exceeded"]
 
         title = (
-            "🚫 Daily Limit Reached – Upgrade Required"
+            "🚫 Daily Limit Reached – Upgrade Required\n\n📖 Read the README or contact your bot admin to upgrade."
             if limit_type == "daily"
-            else "🚫 Monthly Limit Reached – Upgrade Required"
+            else "🚫 Monthly Limit Reached – Upgrade Required\n\n📖 Read the README or contact your bot admin to upgrade."
         )
 
         return {
@@ -2272,13 +2565,20 @@ async def get_streams(
         episode_num = parsed["episode_num"]
         absolute_episode = parsed["absolute_episode"]
         is_kitsu = parsed["is_kitsu"]
+        tmdb_id = parsed.get("tmdb_id")
     except (ValueError, IndexError):
         raise HTTPException(status_code=400, detail="Invalid Stremio ID format")
 
     if is_kitsu and kitsu_id is None:
         raise HTTPException(status_code=400, detail="Invalid Kitsu ID format")
 
-    if not await _title_allowed(imdb_id=imdb_id, token_data=token_data, kitsu_id=kitsu_id):
+    if not await _title_allowed(
+        imdb_id=imdb_id,
+        token_data=token_data,
+        kitsu_id=kitsu_id,
+        tmdb_id=tmdb_id,
+        media_type=media_type,
+    ):
         return {"streams": []}
 
     media_details = await db.get_media_details(
@@ -2286,6 +2586,8 @@ async def get_streams(
         season_number=season_num,
         episode_number=episode_num,
         kitsu_id=kitsu_id,
+        tmdb_id=tmdb_id,
+        media_type=media_type,
         absolute_episode=absolute_episode,
     )
 
@@ -2299,6 +2601,7 @@ async def get_streams(
             "title": media_details.get("title"), "year": media_details.get("release_year"),
             "season": season_num, "episode": episode_num,
         }
+        via = own_bots.stream_via(token_data)
         for quality in media_details.get("telegram", []):
             if quality.get("id"):
                 filename = quality.get("name", "")
@@ -2317,8 +2620,12 @@ async def get_streams(
                 sort_name = stream_name
                 original_url = f"{SettingsManager.current().base_url}/dl/{token}/{quality.get('id')}/video.mkv"
                 proxy_url = build_proxy_url(original_url)
-                cf_url = cf_stream_url(token, quality.get('id'), "video.mkv") if cf_enabled() else None
-                cf_only = cf_url and SettingsManager.current().cf_stream_mode == "cloudflare"
+                if via:
+                    cf_url = f"{original_url}?via=cf" if via != "bots" else None
+                    cf_only = via == "cloudflare"
+                else:
+                    cf_url = cf_stream_url(token, quality.get('id'), "video.mkv") if cf_enabled() else None
+                    cf_only = cf_url and SettingsManager.current().cf_stream_mode == "cloudflare"
 
                 def add(suffix, url, proxied=False):
                     name, title = stream_name, stream_title
@@ -2556,7 +2863,7 @@ async def configure_addon(token: str, request: Request):
 
     return templates.TemplateResponse("stremio_configure.html", {
         "request": request,
-        "theme": get_theme(request.session.get("theme", DEFAULT_THEME)),
+        "theme": get_theme(theme_key(request)),
         "manifest_url": manifest_url,
         "web_install_url": web_install_url,
         "user_name": user_name,
@@ -2569,15 +2876,15 @@ async def configure_addon(token: str, request: Request):
 #----- Catalogs this token can see, in effective (token or global) order
 async def _addon_catalogs_for_token(token_data: dict) -> list:
     entries = [
-        {"id": "latest_movies", "name": "Latest Movies", "type": "movie"},
+        {"id": "latest_movies", "name": "Recently Added Movies", "type": "movie"},
         {"id": "top_movies", "name": "Popular Movies", "type": "movie"},
-        {"id": "latest_series", "name": "Latest Series", "type": "series"},
+        {"id": "latest_series", "name": "Recently Added Series", "type": "series"},
         {"id": "top_series", "name": "Popular Series", "type": "series"},
         {"id": "trending_movies", "name": "Trending Movies", "type": "movie"},
         {"id": "trending_series", "name": "Trending Series", "type": "series"},
     ]
     try:
-        for c in await db.get_custom_catalogs():
+        for c in await db.get_custom_catalogs(slim=True):
             items = [i for i in (c.get("items") or []) if _token_can_view(*_effective_visibility(c, i), token_data)]
             if not items:
                 continue
@@ -2590,6 +2897,8 @@ async def _addon_catalogs_for_token(token_data: dict) -> list:
         pass
     for e in entries:
         e["key"] = f"{e['id']}::{e['type']}"
+    admin_hidden = set(await db.get_hidden_catalogs())
+    entries = [e for e in entries if e["key"] not in admin_hidden and e["id"] not in admin_hidden]
     order = await db.get_catalog_order()
     tconf = token_data.get("config") or {}
     effective = tconf.get("catalog_order") or order
@@ -2605,7 +2914,7 @@ async def get_addon_config(token: str):
     doc = await db.get_api_token(token)
     if not doc:
         raise HTTPException(status_code=404, detail="Invalid token")
-    return {"config": doc.get("config") or {}, "catalogs": await _addon_catalogs_for_token(doc)}
+    return {"config": doc.get("config") or {}, "catalogs": await _addon_catalogs_for_token(doc), "own_bots": own_bots.addon_view(doc)}
 
 
 #----- Persist this token's addon config (public, used by configure page)
@@ -2620,6 +2929,27 @@ async def save_addon_config(token: str, payload: dict):
         "quality_filter": [q for q in (payload.get("quality_filter") or []) if q in valid_q],
         "hidden_catalogs": [str(x) for x in (payload.get("hidden_catalogs") or [])],
         "catalog_order": [str(x) for x in (payload.get("catalog_order") or [])],
+        "stream_via": payload.get("stream_via") if payload.get("stream_via") in own_bots.STREAM_VIA else "bots",
     }
     await db.set_token_config(token, config)
     return {"ok": True, "config": config}
+
+
+@router.post("/{token}/own-bots")
+async def save_own_bots(token: str, payload: dict):
+    doc = await db.get_api_token(token)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Invalid token")
+    try:
+        return await own_bots.verify(doc, payload.get("channel"), payload.get("keep") or [], payload.get("add") or [])
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.delete("/{token}/own-bots")
+async def delete_own_bots(token: str):
+    doc = await db.get_api_token(token)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Invalid token")
+    await own_bots.disable(doc)
+    return {"ok": True}
