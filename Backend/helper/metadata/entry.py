@@ -36,9 +36,9 @@ from Backend.helper.metadata.resolvers import (
 )
 from Backend.helper.settings_manager import SettingsManager
 from Backend.helper.split_files import (
-    part_info,
     parse_combined_episodes,
     parse_split_info,
+    resolve_part_identity,
     strip_part_suffix,
 )
 from Backend.logger import LOGGER
@@ -87,9 +87,7 @@ async def metadata(
     # Split-part identity must come from the Telegram file name: captions differ
     # between parts (missing quality, repeated/missing part number, empty).
     identity_name = (file_name or "").strip() or filename
-    part = part_info(identity_name)
-    if part is None and not file_name:
-        part = parse_split_info(filename)
+    part = resolve_part_identity(file_name or "", filename or "") if file_name else parse_split_info(filename)
     part_number = part[1] if part else None
     split_base = part[0] if part else None
     parse_target = strip_part_suffix(identity_name) if part else filename

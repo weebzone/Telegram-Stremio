@@ -11,7 +11,7 @@ from typing import Any, Dict, Optional
 
 from bson import ObjectId
 
-from Backend.helper.split_files import part_info
+from Backend.helper.split_files import resolve_part_identity
 from Backend.logger import LOGGER
 
 COLLECTION = "failed_imports"
@@ -43,7 +43,7 @@ def _ensure_part_identity(doc: Dict[str, Any]) -> Dict[str, Any]:
     """Fill part_base/part_number for rows recorded before this change."""
     if doc.get("part_base"):
         return doc
-    info = part_info(doc.get("file_name") or "")
+    info = resolve_part_identity(doc.get("file_name") or "", doc.get("caption") or "")
     if info:
         doc["part_base"] = info[0]
         if doc.get("part_number") is None:

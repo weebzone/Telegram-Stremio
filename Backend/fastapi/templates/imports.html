@@ -167,6 +167,15 @@
     }
   };
 
+  function fmtBytes(bytes) {
+    const n = Number(bytes) || 0;
+    if (!n) return '';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    let i = 0, v = n;
+    while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+    return `${v.toFixed(v >= 100 || i === 0 ? 0 : 1)} ${units[i]}`;
+  }
+
   function render(items) {
     const box = document.getElementById('imports-list');
     if (!items.length) {
@@ -209,6 +218,8 @@
         const missingNote = missing.length
           ? `<span class="badge" style="background:color-mix(in srgb,#ef4444 18%,transparent)">Faltan partes: ${missing.join(', ')}</span>`
           : '';
+        const totalBytes = g.items.reduce(function (a, i) { return a + (i.size_bytes || 0); }, 0);
+        const sizeText = g.items.length > 1 ? fmtBytes(totalBytes) : (lead.size_label || '');
         const link = lead.chat_id && lead.msg_id
           ? `<a class="text-xs" style="color:var(--primary)" target="_blank" rel="noopener"
                 href="https://t.me/c/${encodeURIComponent(String(lead.chat_id).replace('-100', ''))}/${lead.msg_id}">
@@ -226,7 +237,7 @@
                 ${chips}
                 ${missingNote}
                 ${lead.quality ? `<span class="badge" style="background:color-mix(in srgb,var(--primary) 18%,transparent)">${esc(lead.quality)}</span>` : ''}
-                <span>${esc(lead.size_label || '')}</span>
+                <span>${esc(sizeText)}</span>
                 <span>attempts: ${esc(lead.attempts || 0)}</span>
                 <span>${esc(fmtDate(lead.created_at))}</span>
                 ${lead.fixed_by ? `<span>by ${esc(lead.fixed_by)}</span>` : ''}

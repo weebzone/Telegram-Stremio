@@ -18,7 +18,7 @@ from Backend.helper.metadata import caption_with_links, extract_default_id, has_
 from Backend.helper.pyro import apply_video_thumb_to_metadata, clean_filename, finalize_media_name, get_readable_file_size, resolve_video_thumb_url
 from Backend.helper.settings_manager import SettingsManager
 from Backend.helper.skip_channel import is_skip_channel, route_to_skip_channel
-from Backend.helper.split_files import parse_split_info, part_info
+from Backend.helper.split_files import parse_split_info, resolve_part_identity
 from Backend.helper.subtitles import ingest_subtitle, is_subtitle_file, remove_subtitle
 from Backend.helper.task_manager import delete_message
 from Backend.logger import LOGGER
@@ -246,7 +246,7 @@ async def file_receive_handler(client: Client, message: Message):
             or (message.video.file_name if message.video else "")
             or ""
         )
-        part = part_info(file_name) if file_name else None
+        part = resolve_part_identity(file_name, message.caption or "") if file_name else None
 
         diag: dict = {}
         metadata_info = await metadata(clean_filename(title), int(channel), msg_id, override_id=override_id or extract_default_id(caption_with_links(message)), season_hint=season_hint, diag=diag, file_name=file_name or None)

@@ -16,7 +16,7 @@ from Backend.helper import failed_imports
 from Backend.helper.auto_catalog import start_single_media_catalog_sync
 from Backend.helper.metadata import metadata
 from Backend.helper.pyro import clean_filename, finalize_media_name
-from Backend.helper.split_files import part_info
+from Backend.helper.split_files import resolve_part_identity
 from Backend.helper.task_manager import edit_message
 from Backend.logger import LOGGER
 
@@ -86,7 +86,7 @@ def _item_part_base(item: dict) -> str:
     base = (item.get("part_base") or "").strip()
     if base:
         return base
-    info = part_info(item.get("file_name") or "")
+    info = resolve_part_identity(item.get("file_name") or "", item.get("caption") or "")
     return info[0] if info else ""
 
 

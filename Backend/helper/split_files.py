@@ -77,6 +77,39 @@ def split_group_key(channel, file_name: str) -> Optional[str]:
     return f"{channel}:{info[0]}"
 
 
+#----- Trailing ".NNN" at the very end of a name (no media extension required)
+_TRAILING_PART_NUM_RE = re.compile(r"\.(\d{2,3})\s*$")
+
+
+def resolve_part_identity(file_name: str, caption: str = "") -> Optional[Tuple[str, int]]:
+    """Part identity for real-world uploads.
+
+    Telegram's file name often drops the media extension (``...vip.003``) while
+    the caption still has it (``...vip.mkv.003``). Only ``<video ext>.<NNN>`` is
+    accepted as the part marker, so:
+
+    1. full form in the file name wins;
+    2. otherwise the part number comes from the file name's trailing ``.NNN``
+       (the trustworthy source) and the base from the caption.
+    """
+    fn = (file_name or "").strip()
+    cap = (caption or "").strip()
+
+    info = part_info(fn)
+    if info:
+        return info
+
+    number_match = _TRAILING_PART_NUM_RE.search(fn)
+    if not number_match:
+        return None
+
+    caption_info = part_info(cap)
+    if caption_info:
+        return caption_info[0], int(number_match.group(1))
+
+    return None
+
+
 _COMBINED_EPISODES_RE = re.compile(
     r"E(?:P|PISODE)?[\s._-]*0*(\d{1,4})[\s._-]*(?:-|–|~|\+|&|,|to)+[\s._-]*(?:E(?:P|PISODE)?[\s._-]*)?0*(\d{1,4})(?=\D|$)",
     re.IGNORECASE,
