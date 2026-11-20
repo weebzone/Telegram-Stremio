@@ -312,8 +312,10 @@ kbd.k { display: inline-grid; place-items: center; min-width: 1.4rem; height: 1.
     align-items: center;
     justify-content: space-between;
     gap: .75rem;
-    height: calc(56px + env(safe-area-inset-top));
-    padding: env(safe-area-inset-top) 16px 0;
+    height: 56px;
+    height: calc(56px + env(safe-area-inset-top, 0px));
+    padding: 0 16px;
+    padding: env(safe-area-inset-top, 0px) 16px 0;
     background: var(--bg);
     border-bottom: 1px solid transparent;
     transition: border-color .2s var(--ease);
@@ -328,7 +330,8 @@ kbd.k { display: inline-grid; place-items: center; min-width: 1.4rem; height: 1.
 #dock {
     position: fixed;
     left: 50%;
-    bottom: calc(12px + env(safe-area-inset-bottom));
+    bottom: 12px;
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
     z-index: 40;
     width: min(calc(100% - 32px), 480px);
     transform: translateX(-50%);
@@ -359,7 +362,8 @@ kbd.k { display: inline-grid; place-items: center; min-width: 1.4rem; height: 1.
     max-height: 86dvh;
     overflow-y: auto;
     overscroll-behavior: contain;
-    padding: 10px 16px calc(20px + env(safe-area-inset-bottom));
+    padding: 10px 16px 20px;
+    padding: 10px 16px calc(20px + env(safe-area-inset-bottom, 0px));
     background: var(--card);
     border-top: 1px solid var(--border);
     border-radius: 24px 24px 0 0;
@@ -444,15 +448,17 @@ kbd.k { display: inline-grid; place-items: center; min-width: 1.4rem; height: 1.
 }
 @media (max-width: 767.98px) {
     #rail, #account-pop { display: none; }
-    #toast-container { top: calc(64px + env(safe-area-inset-top)); left: 16px; right: 16px; align-items: stretch; }
+    #toast-container { top: 64px; top: calc(64px + env(safe-area-inset-top, 0px)); left: 16px; right: 16px; align-items: stretch; }
     .toast { width: auto; }
 
     /* iOS Safari zooms the whole page when focusing a field under 16px, which
        made the app look oversized and clipped. Keep every field at 16px. */
     input, select, textarea, .field { font-size: 16px !important; }
 
-    /* Never let a wide element push the layout past the phone width. */
-    html, body { max-width: 100%; overflow-x: hidden; }
+    /* Never let a wide element push the layout past the phone width.
+       `clip` avoids turning the body into a scroll container (which breaks
+       position:fixed on iOS). */
+    body { max-width: 100%; overflow-x: clip; }
     .shell, .shell > main { max-width: 100%; min-width: 0; }
 
     /* Comfortable touch targets. */
@@ -776,6 +782,25 @@ document.getElementById('theme-cycle')?.addEventListener('click', () => {
         ticking = true;
         requestAnimationFrame(() => { topbar.classList.toggle('scrolled', window.scrollY > 4); ticking = false; });
     }, { passive: true });
+
+    // iOS Safari: a fixed bottom element can sit behind the browser toolbar.
+    // Lift the dock by the toolbar gap only (ignore the keyboard case).
+    const dockEl = document.getElementById('dock');
+    if (dockEl && window.visualViewport) {
+        const placeDock = () => {
+            const vv = window.visualViewport;
+            const gap = Math.round(window.innerHeight - vv.height - vv.offsetTop);
+            if (gap > 0 && gap < 160) {
+                dockEl.style.bottom = `calc(${12 + gap}px + env(safe-area-inset-bottom, 0px))`;
+            } else {
+                dockEl.style.bottom = '';
+            }
+        };
+        window.visualViewport.addEventListener('resize', placeDock);
+        window.visualViewport.addEventListener('scroll', placeDock);
+        window.addEventListener('orientationchange', () => setTimeout(placeDock, 250));
+        placeDock();
+    }
 })();
 
 {% if current_user %}
