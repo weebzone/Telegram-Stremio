@@ -37,78 +37,82 @@
   </div>
 </section>
 
-<div id="map-modal" class="fixed inset-0 z-[80] hidden items-center justify-center p-4" style="background:rgba(0,0,0,.55)">
-  <div class="glass-panel rounded-3xl p-5 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-    <div class="flex items-start justify-between gap-3">
+<div id="map-modal" class="fixed inset-0 z-[80] hidden items-end sm:items-center justify-center p-0 sm:p-4" style="background:rgba(0,0,0,.55)">
+  <div class="glass-panel rounded-t-3xl sm:rounded-3xl w-full max-w-2xl flex flex-col overflow-hidden" style="max-height:92dvh">
+    <div class="flex items-start justify-between gap-3 px-4 sm:px-5 pt-4 sm:pt-5 pb-2 shrink-0">
       <div class="min-w-0">
         <h2 class="text-lg font-extrabold">Map to a title</h2>
         <p id="map-file" class="text-xs text-text-secondary mt-1 break-all"></p>
       </div>
-      <button class="btn-ghost w-9 h-9" onclick="closeMap()" title="Close"><i class="fa-solid fa-xmark"></i></button>
+      <button class="btn-ghost w-9 h-9 shrink-0" onclick="closeMap()" title="Close"><i class="fa-solid fa-xmark"></i></button>
     </div>
 
-    <div class="grid sm:grid-cols-[140px_minmax(0,1fr)] gap-3 mt-4">
-      <select id="map-type" class="field px-3 py-2 text-sm" onchange="runSearch()">
-        <option value="movie">Movie</option>
-        <option value="tv">TV Show</option>
-      </select>
-      <div class="flex gap-2">
-        <input id="map-query" class="field px-3 py-2 text-sm flex-1" placeholder="Title, IMDb id/link or TMDB id/link"
-               onkeydown="if(event.key==='Enter'){event.preventDefault();runSearch()}">
-        <button class="btn-primary px-4 py-2 text-sm" onclick="runSearch()">Search</button>
+    <div class="px-4 sm:px-5 overflow-y-auto flex-1 min-h-0" style="overscroll-behavior:contain">
+      <div class="grid sm:grid-cols-[140px_minmax(0,1fr)] gap-3 mt-2">
+        <select id="map-type" class="field px-3 py-2 text-sm" onchange="runSearch()">
+          <option value="movie">Movie</option>
+          <option value="tv">TV Show</option>
+        </select>
+        <div class="flex gap-2">
+          <input id="map-query" class="field px-3 py-2 text-sm flex-1 min-w-0" placeholder="Title, IMDb id/link or TMDB id/link"
+                 onkeydown="if(event.key==='Enter'){event.preventDefault();runSearch()}">
+          <button class="btn-primary px-4 py-2 text-sm shrink-0" onclick="runSearch()">Search</button>
+        </div>
       </div>
+
+      <div class="grid sm:grid-cols-2 gap-3 mt-3" id="episode-fields" style="display:none">
+        <input id="map-season" type="number" min="0" class="field px-3 py-2 text-sm" placeholder="Season (optional)">
+        <input id="map-episode" type="number" min="0" class="field px-3 py-2 text-sm" placeholder="Episode (optional)">
+      </div>
+
+      <div class="mt-3">
+        <input id="map-quality" class="field px-3 py-2 text-sm w-full"
+               placeholder="Quality if the file has none (e.g. 1080p)"
+               oninput="mapQuality = this.value">
+      </div>
+
+      <div id="map-results" class="mt-4 space-y-2 pb-2"></div>
     </div>
 
-    <div class="grid sm:grid-cols-2 gap-3 mt-3" id="episode-fields" style="display:none">
-      <input id="map-season" type="number" min="0" class="field px-3 py-2 text-sm" placeholder="Season (optional)">
-      <input id="map-episode" type="number" min="0" class="field px-3 py-2 text-sm" placeholder="Episode (optional)">
-    </div>
-
-    <div class="mt-3">
-      <input id="map-quality" class="field px-3 py-2 text-sm w-full"
-             placeholder="Quality if the file has none (e.g. 1080p)"
-             oninput="mapQuality = this.value">
-    </div>
-
-    <div id="map-results" class="mt-4 space-y-2"></div>
-
-    <div class="flex justify-end gap-2 mt-4">
+    <div class="flex justify-end gap-2 px-4 sm:px-5 py-3 border-t border-border shrink-0" style="background:var(--card)">
       <button class="btn-ghost px-4 py-2 text-sm" onclick="closeMap()">Cancel</button>
       <button id="map-confirm" class="btn-primary px-4 py-2 text-sm" disabled onclick="confirmMap()">Map this file</button>
     </div>
   </div>
 </div>
 
-<div id="quality-modal" class="fixed inset-0 z-[80] hidden items-center justify-center p-4" style="background:rgba(0,0,0,.55)">
-  <div class="glass-panel rounded-3xl p-5 w-full max-w-lg">
-    <div class="flex items-start justify-between gap-3">
+<div id="quality-modal" class="fixed inset-0 z-[80] hidden items-end sm:items-center justify-center p-0 sm:p-4" style="background:rgba(0,0,0,.55)">
+  <div class="glass-panel rounded-t-3xl sm:rounded-3xl w-full max-w-lg flex flex-col overflow-hidden" style="max-height:92dvh">
+    <div class="flex items-start justify-between gap-3 px-4 sm:px-5 pt-4 sm:pt-5 pb-2 shrink-0">
       <div class="min-w-0">
         <h2 class="text-lg font-extrabold">Add quality</h2>
         <p id="quality-file" class="text-xs text-text-secondary mt-1 break-all"></p>
       </div>
-      <button class="btn-ghost w-9 h-9" onclick="closeQuality()" title="Close"><i class="fa-solid fa-xmark"></i></button>
+      <button class="btn-ghost w-9 h-9 shrink-0" onclick="closeQuality()" title="Close"><i class="fa-solid fa-xmark"></i></button>
     </div>
 
-    <div class="mt-4">
-      <label class="text-[10px] uppercase text-text-secondary font-bold mb-2 block">Quality</label>
-      <div class="flex flex-wrap gap-2 mb-3">
-        <button type="button" class="btn-ghost px-3 py-1.5 text-xs" onclick="pickQuality('480p')">480p</button>
-        <button type="button" class="btn-ghost px-3 py-1.5 text-xs" onclick="pickQuality('720p')">720p</button>
-        <button type="button" class="btn-ghost px-3 py-1.5 text-xs" onclick="pickQuality('1080p')">1080p</button>
-        <button type="button" class="btn-ghost px-3 py-1.5 text-xs" onclick="pickQuality('2160p')">2160p</button>
+    <div class="px-4 sm:px-5 overflow-y-auto flex-1 min-h-0" style="overscroll-behavior:contain">
+      <div class="mt-2">
+        <label class="text-[10px] uppercase text-text-secondary font-bold mb-2 block">Quality</label>
+        <div class="flex flex-wrap gap-2 mb-3">
+          <button type="button" class="btn-ghost px-3 py-1.5 text-xs" onclick="pickQuality('480p')">480p</button>
+          <button type="button" class="btn-ghost px-3 py-1.5 text-xs" onclick="pickQuality('720p')">720p</button>
+          <button type="button" class="btn-ghost px-3 py-1.5 text-xs" onclick="pickQuality('1080p')">1080p</button>
+          <button type="button" class="btn-ghost px-3 py-1.5 text-xs" onclick="pickQuality('2160p')">2160p</button>
+        </div>
+        <input id="quality-input" class="field px-3 py-2 text-sm w-full" placeholder="e.g. 1080p"
+               onkeydown="if(event.key==='Enter'){event.preventDefault();confirmQuality()}">
       </div>
-      <input id="quality-input" class="field px-3 py-2 text-sm w-full" placeholder="e.g. 1080p"
-             onkeydown="if(event.key==='Enter'){event.preventDefault();confirmQuality()}">
+
+      <label class="flex items-start gap-2 mt-4 text-xs text-text-secondary">
+        <input id="quality-edit-caption" type="checkbox" checked class="mt-0.5">
+        <span>Add the quality to the Telegram caption (before the extension), so future scans detect it.</span>
+      </label>
+
+      <p id="quality-hint" class="text-xs text-text-secondary mt-3 pb-2"></p>
     </div>
 
-    <label class="flex items-start gap-2 mt-4 text-xs text-text-secondary">
-      <input id="quality-edit-caption" type="checkbox" checked class="mt-0.5">
-      <span>Add the quality to the Telegram caption (before the extension), so future scans detect it.</span>
-    </label>
-
-    <p id="quality-hint" class="text-xs text-text-secondary mt-3"></p>
-
-    <div class="flex justify-end gap-2 mt-4">
+    <div class="flex justify-end gap-2 px-4 sm:px-5 py-3 border-t border-border shrink-0" style="background:var(--card)">
       <button class="btn-ghost px-4 py-2 text-sm" onclick="closeQuality()">Cancel</button>
       <button id="quality-confirm" class="btn-primary px-4 py-2 text-sm" onclick="confirmQuality()">Save quality</button>
     </div>
@@ -288,6 +292,7 @@
     const modal = document.getElementById('map-modal');
     modal.classList.remove('hidden');
     modal.classList.add('flex');
+    document.body.style.overflow = 'hidden';
     runSearch();
   };
 
@@ -295,6 +300,7 @@
     const modal = document.getElementById('map-modal');
     modal.classList.add('hidden');
     modal.classList.remove('flex');
+    document.body.style.overflow = '';
     currentId = null;
     selectedId = null;
   };
@@ -403,6 +409,7 @@
     const modal = document.getElementById('quality-modal');
     modal.classList.remove('hidden');
     modal.classList.add('flex');
+    document.body.style.overflow = 'hidden';
     document.getElementById('quality-input').focus();
   };
 
@@ -410,6 +417,7 @@
     const modal = document.getElementById('quality-modal');
     modal.classList.add('hidden');
     modal.classList.remove('flex');
+    document.body.style.overflow = '';
     qualityItemId = null;
   };
 
