@@ -1,0 +1,418 @@
+{% extends "base.html" %}
+{% block title %}Failed Imports · Telegram Stremio{% endblock %}
+
+{% block content %}
+<section class="space-y-5">
+  <div class="glass-panel rounded-3xl p-5 sm:p-6">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <h1 class="text-xl sm:text-2xl font-extrabold flex items-center gap-2">
+          <i class="fa-solid fa-triangle-exclamation text-amber-400"></i>
+          Failed Imports
+        </h1>
+        <p class="text-sm text-text-secondary mt-1">
+          Files that could not be indexed automatically. Search the correct title and map the file to it.
+        </p>
+      </div>
+      <div class="flex items-center gap-2">
+        <select id="status-filter" class="field px-3 py-2 text-sm">
+          <option value="pending">Pending</option>
+          <option value="fixed">Fixed</option>
+          <option value="ignored">Ignored</option>
+          <option value="all">All</option>
+        </select>
+        <input id="search-input" class="field px-3 py-2 text-sm w-48 sm:w-64" placeholder="Filter by name or caption">
+        <button class="btn-ghost px-4 py-2 text-sm" onclick="loadImports()">
+          <i class="fa-solid fa-rotate"></i> Refresh
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="imports-list" class="space-y-3"></div>
+  <div class="flex items-center justify-between px-1">
+    <button id="prev-btn" class="btn-ghost px-4 py-2 text-sm" onclick="changePage(-1)">Previous</button>
+    <span id="page-label" class="text-xs text-text-secondary"></span>
+    <button id="next-btn" class="btn-ghost px-4 py-2 text-sm" onclick="changePage(1)">Next</button>
+  </div>
+</section>
+
+<div id="map-modal" class="fixed inset-0 z-[80] hidden items-center justify-center p-4" style="background:rgba(0,0,0,.55)">
+  <div class="glass-panel rounded-3xl p-5 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+    <div class="flex items-start justify-between gap-3">
+      <div class="min-w-0">
+        <h2 class="text-lg font-extrabold">Map to a title</h2>
+        <p id="map-file" class="text-xs text-text-secondary mt-1 break-all"></p>
+      </div>
+      <button class="btn-ghost w-9 h-9" onclick="closeMap()" title="Close"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+
+    <div class="grid sm:grid-cols-[140px_minmax(0,1fr)] gap-3 mt-4">
+      <select id="map-type" class="field px-3 py-2 text-sm" onchange="runSearch()">
+        <option value="movie">Movie</option>
+        <option value="tv">TV Show</option>
+      </select>
+      <div class="flex gap-2">
+        <input id="map-query" class="field px-3 py-2 text-sm flex-1" placeholder="Title, IMDb id/link or TMDB id/link"
+               onkeydown="if(event.key==='Enter'){event.preventDefault();runSearch()}">
+        <button class="btn-primary px-4 py-2 text-sm" onclick="runSearch()">Search</button>
+      </div>
+    </div>
+
+    <div class="grid sm:grid-cols-2 gap-3 mt-3" id="episode-fields" style="display:none">
+      <input id="map-season" type="number" min="0" class="field px-3 py-2 text-sm" placeholder="Season (optional)">
+      <input id="map-episode" type="number" min="0" class="field px-3 py-2 text-sm" placeholder="Episode (optional)">
+    </div>
+
+    <div class="mt-3">
+      <input id="map-quality" class="field px-3 py-2 text-sm w-full"
+             placeholder="Quality if the file has none (e.g. 1080p)"
+             oninput="mapQuality = this.value">
+    </div>
+
+    <div id="map-results" class="mt-4 space-y-2"></div>
+
+    <div class="flex justify-end gap-2 mt-4">
+      <button class="btn-ghost px-4 py-2 text-sm" onclick="closeMap()">Cancel</button>
+      <button id="map-confirm" class="btn-primary px-4 py-2 text-sm" disabled onclick="confirmMap()">Map this file</button>
+    </div>
+  </div>
+</div>
+
+<div id="quality-modal" class="fixed inset-0 z-[80] hidden items-center justify-center p-4" style="background:rgba(0,0,0,.55)">
+  <div class="glass-panel rounded-3xl p-5 w-full max-w-lg">
+    <div class="flex items-start justify-between gap-3">
+      <div class="min-w-0">
+        <h2 class="text-lg font-extrabold">Add quality</h2>
+        <p id="quality-file" class="text-xs text-text-secondary mt-1 break-all"></p>
+      </div>
+      <button class="btn-ghost w-9 h-9" onclick="closeQuality()" title="Close"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+
+    <div class="mt-4">
+      <label class="text-[10px] uppercase text-text-secondary font-bold mb-2 block">Quality</label>
+      <div class="flex flex-wrap gap-2 mb-3">
+        <button type="button" class="btn-ghost px-3 py-1.5 text-xs" onclick="pickQuality('480p')">480p</button>
+        <button type="button" class="btn-ghost px-3 py-1.5 text-xs" onclick="pickQuality('720p')">720p</button>
+        <button type="button" class="btn-ghost px-3 py-1.5 text-xs" onclick="pickQuality('1080p')">1080p</button>
+        <button type="button" class="btn-ghost px-3 py-1.5 text-xs" onclick="pickQuality('2160p')">2160p</button>
+      </div>
+      <input id="quality-input" class="field px-3 py-2 text-sm w-full" placeholder="e.g. 1080p"
+             onkeydown="if(event.key==='Enter'){event.preventDefault();confirmQuality()}">
+    </div>
+
+    <label class="flex items-start gap-2 mt-4 text-xs text-text-secondary">
+      <input id="quality-edit-caption" type="checkbox" checked class="mt-0.5">
+      <span>Add the quality to the Telegram caption (before the extension), so future scans detect it.</span>
+    </label>
+
+    <p id="quality-hint" class="text-xs text-text-secondary mt-3"></p>
+
+    <div class="flex justify-end gap-2 mt-4">
+      <button class="btn-ghost px-4 py-2 text-sm" onclick="closeQuality()">Cancel</button>
+      <button id="quality-confirm" class="btn-primary px-4 py-2 text-sm" onclick="confirmQuality()">Save quality</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  let page = 1;
+  let pageSize = 25;
+  let total = 0;
+  let currentId = null;
+  let selectedId = null;
+  let qualityItemId = null;
+  let mapQuality = '';
+
+  function esc(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+  }
+
+  function fmtDate(ts) {
+    if (!ts) return '';
+    try { return new Date(ts * 1000).toLocaleString(); } catch (e) { return ''; }
+  }
+
+  function reasonLabel(reason) {
+    const labels = {
+      no_quality: 'No quality detected',
+      no_title: 'No title detected',
+      not_found: 'Title not found',
+      invalid_episode: 'Invalid season/episode',
+      combined: 'Combined release',
+      multipart: 'Multipart video',
+      error: 'Parser error',
+      metadata_failed: 'Metadata failed'
+    };
+    return labels[reason] || reason || 'Unknown';
+  }
+
+  window.loadImports = async function () {
+    const status = document.getElementById('status-filter').value;
+    const search = document.getElementById('search-input').value.trim();
+    const box = document.getElementById('imports-list');
+    box.innerHTML = '<div class="glass-panel rounded-2xl p-6 text-sm text-text-secondary">Loading…</div>';
+    try {
+      const url = `/api/admin/imports?status=${encodeURIComponent(status)}&page=${page}&page_size=${pageSize}&search=${encodeURIComponent(search)}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Request failed');
+      total = data.total || 0;
+      render(data.items || []);
+    } catch (e) {
+      box.innerHTML = `<div class="glass-panel rounded-2xl p-6 text-sm text-red-400">${esc(e.message || e)}</div>`;
+    }
+  };
+
+  function render(items) {
+    const box = document.getElementById('imports-list');
+    if (!items.length) {
+      box.innerHTML = '<div class="glass-panel rounded-2xl p-6 text-sm text-text-secondary">No failed imports here.</div>';
+    } else {
+      box.innerHTML = items.map(function (it) {
+        const canMap = it.status === 'pending';
+        const label = it.file_name || it.caption || '';
+        const link = it.chat_id && it.msg_id
+          ? `<a class="text-xs" style="color:var(--primary)" target="_blank" rel="noopener"
+                href="https://t.me/c/${encodeURIComponent(String(it.chat_id).replace('-100', ''))}/${it.msg_id}">
+                <i class="fa-brands fa-telegram"></i> open in Telegram</a>`
+          : '';
+        return `<div class="glass-panel rounded-2xl p-4">
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <div class="min-w-0">
+              <p class="font-bold text-sm break-all">${esc(it.file_name || '(no filename)')}</p>
+              <p class="text-xs text-text-secondary mt-1 break-all">${esc(it.caption || '')}</p>
+              <div class="flex flex-wrap items-center gap-3 mt-2 text-[11px] text-text-secondary">
+                <span class="badge">${esc(reasonLabel(it.reason))}</span>
+                ${it.quality ? `<span class="badge" style="background:color-mix(in srgb,var(--primary) 18%,transparent)">${esc(it.quality)}</span>` : ''}
+                <span>${esc(it.size_label || '')}</span>
+                <span>attempts: ${esc(it.attempts || 0)}</span>
+                <span>${esc(fmtDate(it.created_at))}</span>
+                ${it.fixed_by ? `<span>by ${esc(it.fixed_by)}</span>` : ''}
+                ${link}
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              ${canMap ? `<button class="btn-primary px-3 py-2 text-xs" data-id="${esc(it.id)}" data-label="${esc(label)}" data-quality="${esc(it.quality || '')}" onclick="openMap(this)">
+                <i class="fa-solid fa-wand-magic-sparkles"></i> Map
+              </button>` : ''}
+              ${canMap ? `<button class="btn-ghost px-3 py-2 text-xs" data-id="${esc(it.id)}" data-label="${esc(label)}" data-quality="${esc(it.quality || '')}" onclick="openQuality(this)">
+                <i class="fa-solid fa-gauge-high"></i> ${it.quality ? 'Change quality' : 'Add quality'}
+              </button>` : ''}
+              ${canMap ? `<button class="btn-ghost px-3 py-2 text-xs" data-id="${esc(it.id)}" onclick="ignoreImport(this)">Ignore</button>` : ''}
+            </div>
+          </div>
+        </div>`;
+      }).join('');
+    }
+    const pages = Math.max(1, Math.ceil(total / pageSize));
+    document.getElementById('page-label').textContent = `Page ${page} of ${pages} · ${total} item(s)`;
+    document.getElementById('prev-btn').disabled = page <= 1;
+    document.getElementById('next-btn').disabled = page >= pages;
+  }
+
+  window.changePage = function (delta) {
+    const pages = Math.max(1, Math.ceil(total / pageSize));
+    const next = Math.min(pages, Math.max(1, page + delta));
+    if (next === page) return;
+    page = next;
+    loadImports();
+  };
+
+  window.openMap = function (btn) {
+    const id = btn.dataset.id;
+    const label = btn.dataset.label || '';
+    currentId = id;
+    selectedId = null;
+    mapQuality = btn.dataset.quality || '';
+    document.getElementById('map-quality').value = mapQuality;
+    document.getElementById('map-file').textContent = label;
+    document.getElementById('map-query').value = label || '';
+    document.getElementById('map-results').innerHTML = '';
+    document.getElementById('map-confirm').disabled = true;
+    document.getElementById('map-season').value = '';
+    document.getElementById('map-episode').value = '';
+    toggleEpisodeFields();
+    const modal = document.getElementById('map-modal');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    runSearch();
+  };
+
+  window.closeMap = function () {
+    const modal = document.getElementById('map-modal');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+    currentId = null;
+    selectedId = null;
+  };
+
+  function toggleEpisodeFields() {
+    const isTv = document.getElementById('map-type').value === 'tv';
+    document.getElementById('episode-fields').style.display = isTv ? '' : 'none';
+  }
+
+  window.runSearch = async function () {
+    toggleEpisodeFields();
+    const type = document.getElementById('map-type').value;
+    const query = document.getElementById('map-query').value.trim();
+    const box = document.getElementById('map-results');
+    selectedId = null;
+    document.getElementById('map-confirm').disabled = true;
+    if (!query) { box.innerHTML = ''; return; }
+    box.innerHTML = '<p class="text-xs text-text-secondary">Searching…</p>';
+    try {
+      const res = await fetch(`/api/media/rescan/search?media_type=${encodeURIComponent(type)}&query=${encodeURIComponent(query)}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Search failed');
+      const results = data.results || [];
+      if (!results.length) { box.innerHTML = '<p class="text-xs text-text-secondary">No results.</p>'; return; }
+      box.innerHTML = results.map(function (r, i) {
+        const id = r.selected_id || r.imdb_id || (r.tmdb_id ? String(r.tmdb_id) : '');
+        const year = r.year || r.release_year || '';
+        const poster = r.poster || '';
+        return `<button type="button" class="w-full text-left surface-card p-3 flex items-center gap-3 hover:opacity-90"
+                  onclick="pickResult(this)" data-id="${esc(id)}">
+          ${poster ? `<img src="${esc(poster)}" alt="" style="width:42px;height:62px;object-fit:cover;border-radius:.5rem">` : ''}
+          <span class="min-w-0">
+            <span class="block text-sm font-bold truncate">${esc(r.title || r.name || 'Unknown')}</span>
+            <span class="block text-xs text-text-secondary">${esc(year)} · ${esc(id)}</span>
+          </span>
+        </button>`;
+      }).join('');
+    } catch (e) {
+      box.innerHTML = `<p class="text-xs text-red-400">${esc(e.message || e)}</p>`;
+    }
+  };
+
+  window.pickResult = function (el) {
+    const id = el ? el.dataset.id : '';
+    selectedId = id;
+    document.querySelectorAll('#map-results [data-id]').forEach(function (n) {
+      n.style.outline = '';
+    });
+    if (el) el.style.outline = '2px solid var(--primary)';
+    document.getElementById('map-confirm').disabled = !id;
+  };
+
+  window.confirmMap = async function () {
+    if (!currentId || !selectedId) return;
+    const btn = document.getElementById('map-confirm');
+    btn.disabled = true;
+    btn.textContent = 'Mapping…';
+    try {
+      const seasonRaw = document.getElementById('map-season').value;
+      const episodeRaw = document.getElementById('map-episode').value;
+      const body = {
+        selected_id: selectedId,
+        media_type: document.getElementById('map-type').value,
+        season: seasonRaw === '' ? null : Number(seasonRaw),
+        episode: episodeRaw === '' ? null : Number(episodeRaw),
+        quality: (mapQuality || '').trim() || null
+      };
+      const res = await fetch(`/api/admin/imports/${encodeURIComponent(currentId)}/map`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Mapping failed');
+      closeMap();
+      loadImports();
+    } catch (e) {
+      alert(e.message || String(e));
+      btn.disabled = false;
+      btn.textContent = 'Map this file';
+    }
+  };
+
+  window.ignoreImport = async function (btn) {
+    const id = btn.dataset.id;
+    if (!id || !confirm('Ignore this import?')) return;
+    try {
+      const res = await fetch(`/api/admin/imports/${encodeURIComponent(id)}/ignore`, { method: 'POST' });
+      if (!res.ok) {
+        const data = await res.json().catch(function () { return {}; });
+        throw new Error(data.detail || 'Request failed');
+      }
+      loadImports();
+    } catch (e) {
+      alert(e.message || String(e));
+    }
+  };
+
+  window.openQuality = function (btn) {
+    qualityItemId = btn.dataset.id;
+    document.getElementById('quality-file').textContent = btn.dataset.label || '';
+    document.getElementById('quality-input').value = btn.dataset.quality || '';
+    document.getElementById('quality-edit-caption').checked = true;
+    document.getElementById('quality-hint').textContent =
+      'After saving we retry the automatic match with this quality.';
+    const modal = document.getElementById('quality-modal');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    document.getElementById('quality-input').focus();
+  };
+
+  window.closeQuality = function () {
+    const modal = document.getElementById('quality-modal');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+    qualityItemId = null;
+  };
+
+  window.pickQuality = function (value) {
+    document.getElementById('quality-input').value = value;
+  };
+
+  window.confirmQuality = async function () {
+    const quality = document.getElementById('quality-input').value.trim();
+    if (!qualityItemId || !quality) return;
+    const btn = document.getElementById('quality-confirm');
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
+    try {
+      const res = await fetch(`/api/admin/imports/${encodeURIComponent(qualityItemId)}/quality`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          quality: quality,
+          edit_caption: document.getElementById('quality-edit-caption').checked,
+          retry: true
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Could not save the quality');
+      closeQuality();
+      loadImports();
+      if (data.mapped) {
+        alert(`Mapped automatically to ${data.media_type} #${data.tmdb_id}.`);
+      } else {
+        alert('Quality saved. The title still needs manual mapping — use Map.');
+      }
+    } catch (e) {
+      alert(e.message || String(e));
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Save quality';
+    }
+  };
+
+  document.getElementById('status-filter').addEventListener('change', function () { page = 1; loadImports(); });
+  document.getElementById('search-input').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { page = 1; loadImports(); }
+  });
+  document.getElementById('map-modal').addEventListener('click', function (e) {
+    if (e.target === this) closeMap();
+  });
+  document.getElementById('quality-modal').addEventListener('click', function (e) {
+    if (e.target === this) closeQuality();
+  });
+
+  loadImports();
+})();
+</script>
+{% endblock %}

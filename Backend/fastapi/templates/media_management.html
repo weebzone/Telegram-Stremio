@@ -280,10 +280,12 @@
                     <i class="fa-solid fa-layer-group"></i> <span class="cov-pct">…</span>
                 </span>` : ''}
             </a>
+            {% if permissions is not defined or 'media.delete' in permissions %}
             <button onclick="deleteMedia(this)" data-tmdb-id="${escapeHtml(item.tmdb_id)}" data-db-index="${escapeHtml(item.db_index ?? '')}" data-title="${title}"
                     class="m-del" aria-label="Delete ${title}" title="Delete">
                 <i class="fa-solid fa-trash-can"></i>
             </button>
+            {% endif %}
             <a href="${href}" class="block mt-2 min-w-0">
                 <h3 class="text-sm font-medium leading-snug truncate" title="${title}">${title}</h3>
                 <p class="text-xs text-text-secondary truncate">${meta}</p>

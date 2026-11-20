@@ -1,16 +1,20 @@
 {%- macro rgb(h) -%}{{ h[1:3]|int(base=16) }} {{ h[3:5]|int(base=16) }} {{ h[5:7]|int(base=16) }}{%- endmacro -%}
 {%- set path = request.url.path -%}
-{%- set nav = [
-    ('/', 'Home', 'fa-house', '/'),
-    ('/media/manage', 'Media', 'fa-clapperboard', '/media'),
-    ('/catalogs', 'Catalogs', 'fa-layer-group', '/catalogs'),
-    ('/admin/dashboard', 'Admin', 'fa-chart-simple', '/admin/dashboard'),
-    ('/admin/subscriptions', 'Plans', 'fa-credit-card', '/admin/subscriptions'),
-    ('/admin/access', 'Tokens', 'fa-key', '/admin/access'),
-    ('/admin/requests', 'Requests', 'fa-inbox', '/admin/requests'),
-    ('/admin/tools', 'Tools', 'fa-screwdriver-wrench', '/admin/tools'),
-    ('/admin/settings', 'Settings', 'fa-gear', '/admin/settings'),
-] -%}
+{%- set nav = [] -%}
+{%- set perms = permissions if permissions is defined else none -%}
+{%- if perms is none or 'staff' in perms %}{%- set _ = nav.append(('/', 'Home', 'fa-house', '/')) %}{%- endif -%}
+{%- if perms is none or 'media.read' in perms -%}
+{%- set _ = nav.append(('/media/manage', 'Media', 'fa-clapperboard', '/media')) -%}
+{%- set _ = nav.append(('/media/incomplete', 'Incomplete', 'fa-circle-half-stroke', '/media/incomplete')) -%}
+{%- endif -%}
+{%- if perms is none or 'catalog.read' in perms %}{%- set _ = nav.append(('/catalogs', 'Catalogs', 'fa-layer-group', '/catalogs')) %}{%- endif -%}
+{%- if perms is none or 'imports.read' in perms %}{%- set _ = nav.append(('/admin/imports', 'Imports', 'fa-file-import', '/admin/imports')) %}{%- endif -%}
+{%- if perms is none or 'staff' in perms %}{%- set _ = nav.append(('/admin/dashboard', 'Admin', 'fa-chart-simple', '/admin/dashboard')) %}{%- endif -%}
+{%- if perms is none or 'sub.write' in perms %}{%- set _ = nav.append(('/admin/subscriptions', 'Plans', 'fa-credit-card', '/admin/subscriptions')) %}{%- endif -%}
+{%- if perms is none or 'token.write' in perms %}{%- set _ = nav.append(('/admin/access', 'Tokens', 'fa-key', '/admin/access')) %}{%- endif -%}
+{%- if perms is none or 'request.write' in perms %}{%- set _ = nav.append(('/admin/requests', 'Requests', 'fa-inbox', '/admin/requests')) %}{%- endif -%}
+{%- if perms is none or 'tools.read' in perms %}{%- set _ = nav.append(('/admin/tools', 'Tools', 'fa-screwdriver-wrench', '/admin/tools')) %}{%- endif -%}
+{%- if perms is none or 'settings.read' in perms %}{%- set _ = nav.append(('/admin/settings', 'Settings', 'fa-gear', '/admin/settings')) %}{%- endif -%}
 {%- set dock_count = 4 -%}
 {%- macro is_active(prefix) -%}{{ 'true' if (prefix == '/' and path == '/') or (prefix != '/' and path.startswith(prefix)) else '' }}{%- endmacro -%}
 <!DOCTYPE html>
@@ -572,9 +576,12 @@ if (!navigator.clipboard) Object.defineProperty(navigator, 'clipboard', { value:
     <div class="flex items-center justify-between gap-3 pt-3 border-t border-border">
         <div class="min-w-0">
             <p class="text-sm font-medium truncate">{{ current_user }}</p>
-            <p class="text-xs text-text-secondary">Signed in</p>
+            <p class="text-xs text-text-secondary">{{ current_role or 'member' }}</p>
         </div>
-        <a href="/logout" class="btn-danger px-4 py-2 text-sm"><i class="fa-solid fa-arrow-right-from-bracket"></i>Log out</a>
+        <div class="flex items-center gap-2">
+            <button type="button" class="btn px-3 py-2 text-sm" onclick="changeMyPassword()"><i class="fa-solid fa-key"></i> Password</button>
+            <a href="/logout" class="btn-danger px-4 py-2 text-sm"><i class="fa-solid fa-arrow-right-from-bracket"></i>Log out</a>
+        </div>
     </div>
 </div>
 
@@ -641,6 +648,23 @@ function showToast(message, type = 'info', title = '', duration = 2600) {
         toast.style.animation = 'toast-out .18s ease-in forwards';
         setTimeout(() => toast.remove(), 190);
     }, duration);
+}
+
+async function changeMyPassword() {
+    const pw = prompt('New password');
+    if (!pw) return;
+    try {
+        const res = await fetch('/api/admin/me/password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ new_password: pw })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) { alert(data.detail || 'Could not update password'); return; }
+        alert('Password updated');
+    } catch (e) {
+        alert('Request failed');
+    }
 }
 
 function applyTheme(key) {

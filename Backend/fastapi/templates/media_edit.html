@@ -517,7 +517,9 @@
                 <div class="file-actions">
                     <button type="button" class="icon-act" data-id="{{ quality.id }}" data-name="{{ quality.name }}" onclick="copyStreamLink(this.dataset.id, this.dataset.name)" title="Copy stream link" aria-label="Copy stream link"><i class="fa-solid fa-link"></i></button>
                     <button type="button" class="icon-act" data-id="{{ quality.id }}" data-q="{{ quality.quality }}" onclick="runSpeedTest(this.dataset.id, 'movie', this.dataset.q)" title="Speed test" aria-label="Speed test"><i class="fa-solid fa-gauge-high"></i></button>
+                    {% if permissions is not defined or 'media.delete' in permissions %}
                     <button type="button" class="icon-act danger" data-id="{{ quality.id }}" onclick="deleteQuality(this.dataset.id, this)" title="Delete file" aria-label="Delete file"><i class="fa-solid fa-trash-can"></i></button>
+                    {% endif %}
                 </div>
             </div>
             {% endfor %}
@@ -538,9 +540,11 @@
                         <h4 class="font-semibold whitespace-nowrap">{{ 'Specials' if season.season_number == 0 else 'Season ' ~ season.season_number }}</h4>
                         <p class="muted text-sm" data-ep-count>{{ season.episodes|length }} episode{{ 's' if season.episodes|length != 1 else '' }}</p>
                     </div>
+                    {% if permissions is not defined or 'media.delete' in permissions %}
                     <button type="button" onclick="deleteTVSeason({{ season.season_number }}, this)" class="btn-ui btn-danger text-sm py-2 shrink-0" title="Delete season {{ season.season_number }}" aria-label="Delete season {{ season.season_number }}">
                         <i class="fa-solid fa-trash-can text-xs"></i><span class="hidden sm:inline">Delete season</span>
                     </button>
+                    {% endif %}
                 </div>
 
                 <div class="ep-list" data-episodes>
@@ -560,7 +564,9 @@
                                     <h5 class="ep-title">
                                         {%- if ep_title and ep_title|lower != 'episode ' ~ episode.episode_number -%}{{ ep_title }}{%- else -%}Episode {{ episode.episode_number }}{%- endif -%}
                                     </h5>
+                                    {% if permissions is not defined or 'media.delete' in permissions %}
                                     <button type="button" onclick="deleteTVEpisode({{ season.season_number }}, {{ episode.episode_number }}, this)" class="icon-act danger shrink-0" title="Delete episode" aria-label="Delete episode {{ episode.episode_number }}"><i class="fa-solid fa-trash-can"></i></button>
+                                    {% endif %}
                                 </div>
                                 <p class="ep-meta">
                                     S{{ '%02d'|format(season.season_number) }}E{{ '%02d'|format(episode.episode_number) }}
@@ -582,7 +588,9 @@
                 <div class="file-actions">
                     <button type="button" class="icon-act" data-id="{{ quality.id }}" data-name="{{ quality.name }}" onclick="copyStreamLink(this.dataset.id, this.dataset.name)" title="Copy stream link" aria-label="Copy stream link"><i class="fa-solid fa-link"></i></button>
                     <button type="button" class="icon-act" data-id="{{ quality.id }}" data-q="{{ quality.quality }}" onclick="runSpeedTest(this.dataset.id, 'tv', this.dataset.q)" title="Speed test" aria-label="Speed test"><i class="fa-solid fa-gauge-high"></i></button>
+                    {% if permissions is not defined or 'media.delete' in permissions %}
                     <button type="button" class="icon-act danger" data-id="{{ quality.id }}" onclick="deleteTVQuality({{ season.season_number }}, {{ episode.episode_number }}, this.dataset.id, this)" title="Delete file" aria-label="Delete file"><i class="fa-solid fa-trash-can"></i></button>
+                    {% endif %}
                 </div>
             </div>
                             {% endfor %}
