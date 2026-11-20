@@ -666,6 +666,46 @@ async def _rebuild_auto_catalogs(db, catalog_items: Dict[str, List[dict]], enabl
     )
 
 
+async def ensure_auto_catalog_docs(db) -> None:
+    """Create missing documents for enabled auto catalogs so they always show up."""
+    try:
+        if not await has_auto_catalog_settings(db):
+            return
+        enabled_names = await _enabled_catalog_names(db)
+        if not enabled_names:
+            return
+        collection = db.dbs["tracking"]["custom_catalogs"]
+        now = datetime.utcnow()
+        for name in enabled_names:
+            key = _catalog_key(name)
+            if await collection.find_one({"auto_key": key}, {"_id": 1}):
+                continue
+            await collection.update_one(
+                {"auto_key": key},
+                {
+                    "$set": {
+                        "name": name,
+                        "visible": True,
+                        "auto": True,
+                        "auto_key": key,
+                        "updated_at": now,
+                        "last_auto_sync": now,
+                    },
+                    "$setOnInsert": {
+                        "items": [],
+                        "item_count": 0,
+                        "created_at": now,
+                        "visibility": "public",
+                        "allowed_tokens": [],
+                    },
+                },
+                upsert=True,
+            )
+        LOGGER.info(f"Auto catalog docs ensured for: {sorted(enabled_names)}")
+    except Exception as exc:
+        LOGGER.warning(f"Auto catalog doc ensure failed: {exc}")
+
+
 async def _write_status(db, data: dict) -> None:
     await db.dbs["tracking"]["state"].update_one(
         {"_id": "auto_catalog_sync"},

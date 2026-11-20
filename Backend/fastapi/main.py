@@ -185,6 +185,16 @@ async def _startup():
     from Backend.helper.version_check import version_check_loop
     asyncio.create_task(version_check_loop())
 
+    #----- Make sure enabled auto catalogs have documents (they drive the UI lists)
+    async def _ensure_auto_catalogs():
+        try:
+            from Backend.helper.auto_catalog import ensure_auto_catalog_docs
+            await ensure_auto_catalog_docs(db)
+        except Exception as e:
+            print(f"[STARTUP] ensure_auto_catalog_docs skipped: {e}")
+
+    asyncio.create_task(_ensure_auto_catalogs())
+
 
 #----- Streaming and Stremio routers
 app.include_router(stream_router)
