@@ -26,7 +26,7 @@
     </div>
   </div>
 
-  <div id="incomplete-list" class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4"></div>
+  <div id="incomplete-list" class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-x-3 gap-y-5 mb-8"></div>
   <div class="flex items-center justify-between px-1">
     <button id="prev-btn" class="btn-ghost px-4 py-2 text-sm" onclick="changePage(-1)">Previous</button>
     <span id="page-label" class="text-xs text-text-secondary"></span>
@@ -65,6 +65,8 @@
     return 'text-red-300';
   }
 
+  let warmRetries = 0;
+
   window.loadIncomplete = async function (refresh) {
     const box = document.getElementById('incomplete-list');
     const search = document.getElementById('search-input').value.trim();
@@ -77,6 +79,14 @@
       if (!res.ok) throw new Error(data.detail || 'Request failed');
       total = data.total || 0;
       render(data.items || []);
+      // Coverage for some shows is still being computed in the background.
+      if (data.warming && warmRetries < 3) {
+        warmRetries++;
+        document.getElementById('page-label').textContent += ' · calculating…';
+        setTimeout(function () { loadIncomplete(false); }, 3500);
+      } else if (!data.warming) {
+        warmRetries = 0;
+      }
     } catch (e) {
       box.innerHTML = `<div class="glass-panel rounded-2xl p-6 text-sm text-red-400">${esc(e.message || e)}</div>`;
     }
@@ -85,26 +95,24 @@
   function render(items) {
     const box = document.getElementById('incomplete-list');
     if (!items.length) {
-      box.innerHTML = '<div class="glass-panel rounded-2xl p-6 text-sm text-text-secondary col-span-2 lg:col-span-3 xl:col-span-4">No incomplete series found.</div>';
+      box.innerHTML = '<div class="glass-panel rounded-2xl p-6 text-sm text-text-secondary col-span-3 sm:col-span-4 md:col-span-5 lg:col-span-6 xl:col-span-7">No incomplete series found.</div>';
     } else {
       box.innerHTML = items.map(function (item) {
-        return `<div class="glass-panel rounded-2xl overflow-hidden flex flex-col">
-          ${item.poster ? `<img src="${esc(item.poster)}" alt="" style="width:100%;aspect-ratio:2/3;object-fit:cover">` : ''}
-          <div class="p-4 flex-1 flex flex-col">
-            <h3 class="font-bold text-sm text-text line-clamp-2" title="${esc(item.title)}">${esc(item.title)}</h3>
-            <div class="mt-2 flex items-center justify-between text-xs">
-              <span class="${covClass(item.coverage_pct)} font-bold">${esc(item.coverage_pct)}% complete</span>
-              <span class="text-text-secondary">${esc(item.total_have)}/${esc(item.total_expected)}</span>
-            </div>
-            <div class="mt-3 flex flex-wrap gap-2">
-              <button class="btn-ghost px-3 py-2 text-xs" data-title="${esc(item.title)}" data-body='${esc(JSON.stringify(item.missing || []))}' onclick="showMissing(this)">
-                <i class="fa-solid fa-list-check"></i> Missing episodes
-              </button>
-              <a class="btn-primary px-3 py-2 text-xs"
-                 href="/media/edit?tmdb_id=${encodeURIComponent(item.tmdb_id)}&db_index=${encodeURIComponent(item.db_index ?? 1)}&media_type=tv">
-                <i class="fa-solid fa-pen-to-square"></i> Edit
-              </a>
-            </div>
+        return `<div class="min-w-0 flex flex-col">
+          <div class="relative rounded-xl overflow-hidden" style="aspect-ratio:2/3;background:var(--card-high)">
+            ${item.poster ? `<img src="${esc(item.poster)}" alt="" loading="lazy" decoding="async" class="w-full h-full object-cover" onerror="this.remove()">` : ''}
+            <span class="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-full bg-black/70 text-white text-[10px] font-bold">${esc(item.coverage_pct)}%</span>
+          </div>
+          <h3 class="mt-2 text-[13px] font-medium leading-snug line-clamp-2" title="${esc(item.title)}">${esc(item.title)}</h3>
+          <p class="text-[11px] text-text-secondary tabular">${esc(item.total_have)}/${esc(item.total_expected)} · <span class="${covClass(item.coverage_pct)} font-semibold">${esc(item.coverage_pct)}%</span></p>
+          <div class="mt-1.5 flex flex-wrap gap-1">
+            <button class="btn-ghost px-2 py-1 text-[11px]" data-title="${esc(item.title)}" data-body='${esc(JSON.stringify(item.missing || []))}' onclick="showMissing(this)" title="Missing episodes">
+              <i class="fa-solid fa-list-check"></i> Missing
+            </button>
+            <a class="btn-primary px-2 py-1 text-[11px]"
+               href="/media/edit?tmdb_id=${encodeURIComponent(item.tmdb_id)}&db_index=${encodeURIComponent(item.db_index ?? 1)}&media_type=tv" title="Edit">
+              <i class="fa-solid fa-pen-to-square"></i> Edit
+            </a>
           </div>
         </div>`;
       }).join('');

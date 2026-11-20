@@ -30,7 +30,10 @@ _PROJECTION = {
     "coverage_map": 1,
 }
 
-_CONCURRENCY = 8
+_CONCURRENCY = 16
+# Answers are returned within this budget; slower Cinemeta lookups keep running
+# in the background and land in the per-document `coverage_map` cache.
+_TIME_BUDGET = 3.0
 
 
 async def _load_docs(search: str) -> List[dict]:
@@ -98,8 +101,25 @@ async def list_incomplete(
 ):
     docs = await _load_docs(search.strip())
     sem = asyncio.Semaphore(_CONCURRENCY)
-    results = await asyncio.gather(*(_coverage_item(doc, refresh, sem) for doc in docs))
-    items = [item for item in results if item]
+
+    # Return quickly: whatever finishes inside the budget is shown now, and the
+    # remaining lookups keep running in the background to warm the cache.
+    tasks = [asyncio.create_task(_coverage_item(doc, refresh, sem)) for doc in docs]
+    if tasks:
+        done, still_running = await asyncio.wait(tasks, timeout=_TIME_BUDGET)
+    else:
+        done, still_running = set(), set()
+
+    items = []
+    for task in done:
+        if task.cancelled():
+            continue
+        try:
+            item = task.result()
+        except Exception:
+            continue
+        if item:
+            items.append(item)
 
     items.sort(key=lambda x: (x["coverage_pct"], -x["missing_count"], (x["title"] or "").lower()))
     total = len(items)
@@ -110,4 +130,6 @@ async def list_incomplete(
         "total": total,
         "page": page,
         "page_size": page_size,
+        "warming": len(still_running) > 0,
+        "pending": len(still_running),
     }

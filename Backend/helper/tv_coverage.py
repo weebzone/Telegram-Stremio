@@ -6,7 +6,7 @@ even without a TMDB key configured. Results are cached on the media doc under
 """
 from typing import Dict, List, Optional
 
-from Backend.helper.metadata.providers.cinemeta import get_detail
+from Backend.helper.metadata.providers.cinemeta import cached_detail
 from Backend.logger import LOGGER
 
 
@@ -14,10 +14,11 @@ async def _cinemeta_season_episodes(imdb_id: str) -> Dict[int, List[int]]:
     """Return {season_number: sorted list of episode numbers} from Cinemeta.
 
     Specials (season 0) are excluded. Returns {} on any failure.
+    Uses the in-process cache so repeated views do not re-hit Cinemeta.
     """
     out: Dict[int, List[int]] = {}
     try:
-        detail = await get_detail(imdb_id=imdb_id, media_type="series")
+        detail = await cached_detail(imdb_id, "series")
         videos = (detail or {}).get("videos") or []
         for v in videos:
             try:
