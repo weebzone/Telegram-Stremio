@@ -47,34 +47,23 @@ def parse_split_info(filename: str) -> Optional[Tuple[str, int]]:
 
 
 #----- Split-part identity from a Telegram file name: (base_key, part_number)
-_PART_SUFFIX_RE = re.compile(r"\.(\d{2,3})\s*$")
-
-
 def part_info(file_name: str) -> Optional[Tuple[str, int]]:
     """Stable split-part identity that never depends on the caption.
 
-    The caption can omit the quality, repeat the wrong part number or be empty,
-    so grouping and part numbering must come from the file name Telegram stores.
-    Some uploads also drop the video extension ("...vip.003"), so a bare trailing
-    number is accepted and the base is normalized without the video extension.
+    A part is only recognised as ``<video extension>.<NNN>`` (e.g. ``.mkv.001``),
+    using the declared video formats. The caption can omit the quality, repeat the
+    wrong part number or be empty, so the file name is the only trustworthy source.
     """
     if not file_name:
         return None
 
-    name = file_name.strip()
-    match = _find_split_match(name)
-    if match:
-        start, end, part_num, ext = match
-    else:
-        bare = _PART_SUFFIX_RE.search(name)
-        if not bare:
-            return None
-        start, end, part_num, ext = bare.start(), bare.end(), int(bare.group(1)), None
+    match = _find_split_match(file_name.strip())
+    if not match:
+        return None
 
-    remainder = (name[:start] + "." + ext) if ext else name[:start]
-    base = _normalize(remainder)
-    # The same upload may name parts "file.mkv.001" and "file.001"; drop the media
-    # extension from the base so both land on the same group.
+    start, end, part_num, ext = match
+    base = _normalize(file_name.strip()[:start] + "." + ext)
+    # Drop the media extension from the base so ".MKV.001" and ".mkv.001" match.
     base = re.sub(rf"\.(?:{_VIDEO_EXTENSIONS}|{_ARCHIVE_EXTENSIONS})$", "", base)
     return base, part_num
 
@@ -137,12 +126,8 @@ def strip_part_suffix(filename: str) -> str:
 
     name = filename.strip()
     match = _find_split_match(name)
-    if match:
-        start, end, _part_num, ext = match
-        return (name[:start] + '.' + ext) if ext else (name[:start] + name[end:])
+    if not match:
+        return filename
 
-    # Uploads that drop the video extension ("...vip.003")
-    bare = _PART_SUFFIX_RE.search(name)
-    if bare:
-        return name[:bare.start()]
-    return filename
+    start, end, _part_num, ext = match
+    return (name[:start] + '.' + ext) if ext else (name[:start] + name[end:])
