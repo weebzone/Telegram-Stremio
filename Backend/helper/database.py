@@ -1705,6 +1705,15 @@ class Database:
                     existing_season["episodes"].append(episode)
                     continue
 
+                try:
+                    LOGGER.info(
+                        f"[TV] {title} S{int(season['season_number']):02d}"
+                        f"E{int(episode['episode_number']):02d} already exists — adding the file "
+                        f"as another quality instead of a new episode"
+                    )
+                except (TypeError, ValueError):
+                    pass
+
                 if episode.get("absolute_episode") is not None and not existing_episode.get("absolute_episode"):
                     existing_episode["absolute_episode"] = episode["absolute_episode"]
 

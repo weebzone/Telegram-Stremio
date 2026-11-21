@@ -61,6 +61,13 @@ def _db_uploaded_episodes(doc: dict) -> Dict[int, set]:
     return out
 
 
+def _have_signature(have: Dict[int, set]) -> str:
+    """Stable fingerprint of the uploaded episodes, used to invalidate the cache."""
+    return "|".join(
+        f"{s}:{','.join(str(e) for e in sorted(eps))}" for s, eps in sorted(have.items())
+    )
+
+
 async def compute_coverage(doc: dict, *, refresh: bool = False) -> dict:
     """Compute episode coverage for a TV doc.
 
@@ -71,19 +78,28 @@ async def compute_coverage(doc: dict, *, refresh: bool = False) -> dict:
             "total_have": int,
             "seasons": [{"n": int, "total": int, "have": int, "missing": [int, ...]}],
         }
-    Cached in doc["coverage_map"] unless refresh=True.
+    Cached in doc["coverage_map"] unless refresh=True or the uploaded episodes
+    changed since the cache was written.
     """
     imdb_id = doc.get("imdb_id") or ""
     if not imdb_id:
         return {"coverage_pct": 0.0, "total_expected": 0, "total_have": 0, "seasons": []}
 
-    # Serve from cache unless a refresh was requested.
+    have = _db_uploaded_episodes(doc)
+    signature = _have_signature(have)
+
+    # Serve from cache unless a refresh was requested or the uploads changed
+    # (a new episode must never keep showing the old percentage).
     cached = doc.get("coverage_map") or {}
-    if not refresh and cached.get("imdb_id") == imdb_id and cached.get("seasons"):
-        return {k: v for k, v in cached.items() if k != "imdb_id"}
+    if (
+        not refresh
+        and cached.get("imdb_id") == imdb_id
+        and cached.get("seasons")
+        and cached.get("have_signature") == signature
+    ):
+        return {k: v for k, v in cached.items() if k not in ("imdb_id", "have_signature")}
 
     full = await _cinemeta_season_episodes(imdb_id)
-    have = _db_uploaded_episodes(doc)
 
     seasons_out: List[dict] = []
     total_expected = 0
@@ -115,7 +131,7 @@ async def compute_coverage(doc: dict, *, refresh: bool = False) -> dict:
         from Backend import db
         await db.dbs[f"storage_{int(doc.get('db_index', 1))}"]["tv"].update_one(
             {"_id": doc.get("_id")},
-            {"$set": {"coverage_map": {**result, "imdb_id": imdb_id}}},
+            {"$set": {"coverage_map": {**result, "imdb_id": imdb_id, "have_signature": signature}}},
         )
     except Exception as e:
         LOGGER.warning(f"[COVERAGE] cache write failed for {imdb_id}: {e}")
