@@ -151,6 +151,12 @@ async def metadata(
     elif season and not episode:
         combined = {"season": season, "start": None, "end": None}
         episode = 1
+        # A season without an episode number would silently land on E01 and
+        # collide with other files. Make it visible in the log.
+        LOGGER.warning(
+            f"No episode parsed from '{filename}' (season={season}); defaulting to episode 1 "
+            f"— another file for the same season would collide on S{int(season):02d}E01"
+        )
 
     # Absolute / orphan episode (e.g. "One Piece 1223 720.mkv",
     # "Naruto Shippuden - 016 480p ...", "[Judas] One Piece - 1172.mkv")
